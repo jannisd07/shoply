@@ -1,0 +1,145 @@
+name: shoply
+description: "A modern shopping list app with shared lists, coupon finder, and recipe suggestions."
+publish_to: 'none'
+
+version: 1.1.4+30
+
+environment:
+  sdk: '>=3.9.2 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # UI & Icons
+  cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.9
+  adaptive_platform_ui: ^0.1.99  # iOS 26 Liquid Glass styling
+  # liquid_glass_renderer removed; AdaptiveAlertDialog handles native iOS26 styling
+  
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  
+  # Backend & Database
+  supabase_flutter: ^2.3.4
+  # hive: ^2.2.3  # Commented out - causes macOS build issues
+  # hive_flutter: ^1.1.0  # Commented out - causes macOS build issues
+  
+  # Navigation & Deep Linking
+  go_router: ^13.0.0
+  app_links: ^6.1.1
+  
+  # Storage
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+  
+  # Video
+  video_player: ^2.8.2
+
+  # Network & Images
+  cached_network_image: ^3.3.1
+  connectivity_plus: ^5.0.2
+  http: ^1.2.0
+  dio: ^5.4.0
+  html: ^0.15.4
+  
+  # QR & Barcode
+  qr_flutter: ^4.1.0
+  # mobile_scanner: ^5.0.06  # Disabled for iOS compatibility
+  
+  # Notifications
+  flutter_local_notifications: ^19.0.0
+  firebase_messaging: ^16.0.3  # Re-enabled for push notifications
+  
+  # Analytics
+  firebase_core: ^4.2.1
+  firebase_analytics: ^12.0.4
+  
+  # AI & Machine Learning
+  google_generative_ai: ^0.4.6  # Gemini AI für intelligente Zutatenerkennung
+  
+  # Utilities
+  share_plus: ^7.2.2
+  url_launcher: ^6.2.3
+  image_picker: ^1.0.7
+  image: ^4.0.17  # Image compression for background uploads
+  intl: ^0.20.2
+  uuid: ^4.3.3
+  
+  # In-App Purchases
+  in_app_purchase: ^3.1.13  # Apple & Google subscription management
+  in_app_review: ^2.0.9  # App Store review prompts
+  
+  # Authentication - Disabled iOS-specific implementations for macOS compatibility
+  google_sign_in: ^6.2.1  # Re-enabled for native Google Sign In
+  sign_in_with_apple: ^7.0.0
+  # local_auth: ^2.1.8  # Commented out - iOS/macOS darwin implementation issues
+  # webview_flutter: ^4.4.4  # Commented out - iOS/macOS implementation issues
+  # webview_flutter_wkwebview: ^3.9.4  # Commented out - iOS only
+
+  # PDF & Documents - Disabled for macOS compatibility
+  # flutter_pdfview: ^1.3.2  # Commented out - iOS implementation issues
+  
+  # Machine Learning
+  # tflite_flutter: ^0.10.4  # Commented out - pulls in sqflite which causes macOS build issues
+  
+  # OCR & PDF Processing
+  # flutter_tesseract_ocr: ^0.4.25  # Commented out - causes iOS build issues with SwiftyTesseract
+  pdfx: ^2.6.0
+  file_picker: ^8.0.0
+  path_provider: ^2.1.1
+  permission_handler: ^11.0.1
+  sqflite: ^2.3.0
+  
+  # String Matching for Product Recognition
+  string_similarity: ^2.0.0
+  
+  # Other
+  reorderables: ^0.6.0
+  equatable: ^2.0.5
+  json_annotation: ^4.8.1
+  flutter_app_badger: ^1.5.0
+  wakelock_plus: ^1.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.3.9
+  json_serializable: ^6.7.1
+  # hive_generator: ^2.0.1  # Commented out - causes macOS build issues
+  flutter_launcher_icons: ^0.13.1
+  flutter_gen: ^5.9.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/illustrations/
+    - assets/avo/
+    - assets/legal/
+    - prospekte_pdfs/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  macos:
+    generate: true
+    image_path: "assets/images/new_app_icon.png"
+  image_path: "assets/images/new_app_icon.png"
+  remove_alpha_ios: true
+  # iOS specific
+  ios_content_scaling: "aspect-fill"
+  # Android specific
+  adaptive_icon_background: "#2196F3" # Blue background matching the icon
+  adaptive_icon_foreground: "assets/images/new_app_icon.png"

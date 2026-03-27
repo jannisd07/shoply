@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ShoplyAI</string>
+    
+    <!-- Voice Action Items -->
+    <string name="item_milk">Milch</string>
+    <string name="item_bread">Brot</string>
+    <string name="item_eggs">Eier</string>
+    <string name="item_butter">Butter</string>
+    <string name="item_cheese">Käse</string>
+    <string name="item_apple">Apfel</string>
+    <string name="item_banana">Banane</string>
+    <string name="item_tomato">Tomate</string>
+    <string name="item_potato">Kartoffel</string>
+    <string name="item_onion">Zwiebel</string>
+    <string name="item_chicken">Hähnchen</string>
+    <string name="item_beef">Rindfleisch</string>
+    <string name="item_pasta">Nudeln</string>
+    <string name="item_rice">Reis</string>
+    <string name="item_water">Wasser</string>
+    <string name="item_juice">Saft</string>
+    <string name="item_coffee">Kaffee</string>
+    <string name="item_sugar">Zucker</string>
+    <string name="item_flour">Mehl</string>
+    <string name="item_oil">Öl</string>
+    
+    <!-- Voice Action Lists -->
+    <string name="list_shopping">Einkaufsliste</string>
+    <string name="list_groceries">Lebensmittel</string>
+    <string name="list_weekly">Wocheneinkauf</string>
+    <string name="list_household">Haushalt</string>
+    
+    <!-- Notification Strings -->
+    <string name="notification_channel_name">Shoply Benachrichtigungen</string>
+    <string name="notification_channel_description">Benachrichtigungen für Listen, Rezepte und Updates</string>
+    
+    <!-- Widget Strings -->
+    <string name="widget_shopping_list_name">Shopping List</string>
+    <string name="widget_shopping_list_description">View your shopping list items on your home screen</string>
+    <string name="widget_saved_recipes_name">Saved Recipes</string>
+    <string name="widget_saved_recipes_description">Quick access to your favorite recipes</string>
+</resources>

@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.dominik.shoply",
+      "sha256_cert_fingerprints": [
+        "74:48:50:5B:82:58:93:10:A6:42:45:F2:D4:EF:03:C2:2F:3C:38:EB:77:98:61:EE:AD:DE:82:BB:B3:23:26:85",
+        "REPLACE_WITH_RELEASE_SHA256_FINGERPRINT"
+      ]
+    }
+  }
+]

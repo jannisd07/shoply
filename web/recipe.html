@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recipe - Shoply</title>
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="">
+    <meta property="og:title" content="Check out this recipe on Shoply">
+    <meta property="og:description" content="Discover delicious recipes and create smart shopping lists with Shoply">
+    <meta property="og:image" content="https://shoplyai.app/images/og-recipe.png">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Check out this recipe on Shoply">
+    <meta name="twitter:description" content="Discover delicious recipes and create smart shopping lists with Shoply">
+    <meta name="twitter:image" content="https://shoplyai.app/images/og-recipe.png">
+    
+    <!-- iOS Smart App Banner -->
+    <meta name="apple-itunes-app" content="app-id=YOUR_APP_STORE_ID, app-argument=shoply://recipe/">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 24px;
+        }
+        
+        h1 {
+            color: #1a1a2e;
+            font-size: 28px;
+            margin-bottom: 12px;
+        }
+        
+        .recipe-name {
+            color: #667eea;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        
+        .description {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+        
+        .open-app-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            padding: 16px 48px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .open-app-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .divider {
+            color: #999;
+            margin: 24px 0;
+            font-size: 14px;
+        }
+        
+        .store-badges {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .store-badge {
+            height: 50px;
+        }
+        
+        .loading {
+            display: none;
+            color: #666;
+            margin-top: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="/images/app-icon.png" alt="Shoply" class="logo" onerror="this.style.display='none'">
+        
+        <h1>🍳 Recipe</h1>
+        <p class="recipe-name" id="recipeName">Loading...</p>
+        <p class="description" id="recipeDescription">
+            Open this recipe in the Shoply app to view ingredients, instructions, and add items to your shopping list.
+        </p>
+        
+        <a href="#" class="open-app-btn" id="openAppBtn">Open in Shoply</a>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Opening app...</p>
+        </div>
+        
+        <p class="divider">Don't have the app yet?</p>
+        
+        <div class="store-badges">
+            <a href="https://apps.apple.com/app/shoply/idYOUR_APP_ID" target="_blank">
+                <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on App Store" class="store-badge">
+            </a>
+            <a href="https://play.google.com/store/apps/details?id=com.dominik.shoply" target="_blank">
+                <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" class="store-badge">
+            </a>
+        </div>
+    </div>
+    
+    <script>
+        // Get recipe ID from URL
+        const pathParts = window.location.pathname.split('/');
+        const recipeId = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
+        
+        // Update deep link
+        const deepLink = `shoply://recipe/${recipeId}`;
+        const universalLink = `https://shoplyai.app/recipe/${recipeId}`;
+        
+        document.getElementById('openAppBtn').href = deepLink;
+        
+        // Update iOS Smart App Banner
+        const metaTag = document.querySelector('meta[name="apple-itunes-app"]');
+        if (metaTag) {
+            metaTag.content = `app-id=YOUR_APP_STORE_ID, app-argument=${deepLink}`;
+        }
+        
+        // Try to open app automatically on mobile
+        function tryOpenApp() {
+            const userAgent = navigator.userAgent || navigator.vendor;
+            const isMobile = /android|iphone|ipad|ipod/i.test(userAgent);
+            
+            if (isMobile) {
+                document.getElementById('loading').style.display = 'block';
+                
+                // Try deep link first
+                window.location.href = deepLink;
+                
+                // Fallback timeout - if app doesn't open, stay on page
+                setTimeout(() => {
+                    document.getElementById('loading').style.display = 'none';
+                }, 2500);
+            }
+        }
+        
+        // Fetch recipe details from API (optional)
+        async function fetchRecipeDetails() {
+            try {
+                const response = await fetch(`https://YOUR_SUPABASE_URL/rest/v1/recipes?id=eq.${recipeId}&select=name,description`, {
+                    headers: {
+                        'apikey': 'YOUR_SUPABASE_ANON_KEY',
+                        'Authorization': 'Bearer YOUR_SUPABASE_ANON_KEY'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.length > 0) {
+                        const recipe = data[0];
+                        document.getElementById('recipeName').textContent = recipe.name;
+                        if (recipe.description) {
+                            document.getElementById('recipeDescription').textContent = recipe.description;
+                        }
+                        
+                        // Update meta tags
+                        document.title = `${recipe.name} - Shoply Recipe`;
+                        document.querySelector('meta[property="og:title"]').content = recipe.name;
+                        document.querySelector('meta[property="og:description"]').content = recipe.description || 'Check out this recipe on Shoply';
+                    }
+                }
+            } catch (e) {
+                console.log('Could not fetch recipe details');
+            }
+        }
+        
+        // Initialize
+        document.getElementById('openAppBtn').addEventListener('click', () => {
+            document.getElementById('loading').style.display = 'block';
+        });
+        
+        // Uncomment to enable auto-open and API fetching
+        // tryOpenApp();
+        // fetchRecipeDetails();
+    </script>
+</body>
+</html>

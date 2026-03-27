@@ -1,0 +1,35 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "CTBGYBDPP4.com.dominik.shoply"
+        ],
+        "components": [
+          {
+            "/": "/recipe/*",
+            "comment": "Matches all recipe deep links"
+          },
+          {
+            "/": "/list/*",
+            "comment": "Matches all shopping list deep links"
+          },
+          {
+            "/": "/invite/*",
+            "comment": "Matches all list invite deep links"
+          },
+          {
+            "/": "/author/*",
+            "comment": "Matches all author profile deep links"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "CTBGYBDPP4.com.dominik.shoply"
+    ]
+  }
+}
