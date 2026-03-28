@@ -1,13 +1,26 @@
+import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 
-/// iOS-style success confirmation alert with Liquid Glass design
-/// On iOS 26+: frosted glass blur effect with translucent background
-/// On older iOS: clean Apple-style alert
+/// Success confirmation alert
+/// iOS 26+: Liquid Glass frosted blur design
+/// Older iOS: Native CupertinoAlertDialog
 class SuccessAlert {
+  static bool get _isIOS26OrLater {
+    if (!Platform.isIOS) return false;
+    final version = Platform.operatingSystemVersion; // e.g. "Version 26.0 ..."
+    final match = RegExp(r'Version (\d+)').firstMatch(version);
+    if (match != null) {
+      final major = int.tryParse(match.group(1)!) ?? 0;
+      return major >= 26;
+    }
+    return false;
+  }
+
   /// Show a success confirmation dialog
   static Future<void> show(
     BuildContext context, {
@@ -21,42 +34,73 @@ class SuccessAlert {
   }) async {
     HapticFeedback.heavyImpact();
 
-    await showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Dismiss',
-      barrierColor: Colors.black.withValues(alpha: 0.35),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim, secondAnim) => const SizedBox.shrink(),
-      transitionBuilder: (context, anim, secondAnim, child) {
-        final curvedAnim = CurvedAnimation(
-          parent: anim,
-          curve: Curves.easeOutBack,
-          reverseCurve: Curves.easeInCubic,
-        );
+    final btn = buttonText ?? context.tr('great');
 
-        return ScaleTransition(
-          scale: Tween<double>(begin: 0.85, end: 1.0).animate(curvedAnim),
-          child: FadeTransition(
-            opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-              CurvedAnimation(parent: anim, curve: Curves.easeOut),
+    if (_isIOS26OrLater) {
+      // ── iOS 26+ Liquid Glass ──
+      await showGeneralDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'Dismiss',
+        barrierColor: Colors.black.withValues(alpha: 0.3),
+        transitionDuration: const Duration(milliseconds: 180),
+        pageBuilder: (_, __, ___) => const SizedBox.shrink(),
+        transitionBuilder: (ctx, anim, _, __) {
+          final curved = CurvedAnimation(
+            parent: anim,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeIn,
+          );
+          return ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
+            child: FadeTransition(
+              opacity: curved,
+              child: _LiquidGlassAlert(
+                title: title,
+                subtitle: subtitle,
+                buttonText: btn,
+                icon: icon,
+                iconColor: iconColor,
+                onConfirm: onConfirm,
+              ),
             ),
-            child: _SuccessAlertContent(
-              title: title,
-              subtitle: subtitle,
-              buttonText: buttonText ?? context.tr('great'),
-              itemCount: itemCount,
-              icon: icon,
-              iconColor: iconColor,
-              onConfirm: onConfirm,
-            ),
+          );
+        },
+      );
+    } else {
+      // ── Pre-iOS 26: Native Apple CupertinoAlertDialog ──
+      await showCupertinoDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 22, color: iconColor ?? AppColors.success),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(title),
+              ),
+            ],
           ),
-        );
-      },
-    );
+          content: subtitle != null ? Text(subtitle) : null,
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () {
+                onConfirm?.call();
+                Navigator.of(ctx).pop();
+              },
+              child: Text(btn),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
-  /// Convenience method for single item added
+  /// Single item added
   static Future<void> showItemAdded(
     BuildContext context, {
     required String listName,
@@ -65,11 +109,10 @@ class SuccessAlert {
       context,
       title: context.tr('item_added_success'),
       subtitle: context.tr('added_to', params: {'listName': listName}),
-      icon: Icons.check_circle_rounded,
     );
   }
 
-  /// Convenience method for multiple items added
+  /// Multiple items added
   static Future<void> showItemsAdded(
     BuildContext context, {
     required int count,
@@ -80,207 +123,198 @@ class SuccessAlert {
       title: context.tr('items_added_success', params: {'count': count.toString()}),
       subtitle: context.tr('added_to', params: {'listName': listName}),
       itemCount: count,
-      icon: Icons.check_circle_rounded,
     );
   }
 }
 
-class _SuccessAlertContent extends StatefulWidget {
+// ─────────────────────────────────────────────
+// iOS 26 Liquid Glass Alert
+// ─────────────────────────────────────────────
+
+class _LiquidGlassAlert extends StatefulWidget {
   final String title;
   final String? subtitle;
   final String buttonText;
-  final int? itemCount;
   final IconData icon;
   final Color? iconColor;
   final VoidCallback? onConfirm;
 
-  const _SuccessAlertContent({
+  const _LiquidGlassAlert({
     required this.title,
     this.subtitle,
     required this.buttonText,
-    this.itemCount,
     required this.icon,
     this.iconColor,
     this.onConfirm,
   });
 
   @override
-  State<_SuccessAlertContent> createState() => _SuccessAlertContentState();
+  State<_LiquidGlassAlert> createState() => _LiquidGlassAlertState();
 }
 
-class _SuccessAlertContentState extends State<_SuccessAlertContent>
+class _LiquidGlassAlertState extends State<_LiquidGlassAlert>
     with SingleTickerProviderStateMixin {
-  late AnimationController _iconController;
+  late AnimationController _iconCtrl;
   late Animation<double> _iconScale;
-  late Animation<double> _iconBounce;
 
   @override
   void initState() {
     super.initState();
-    _iconController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+    _iconCtrl = AnimationController(
+      duration: const Duration(milliseconds: 400),
       vsync: this,
     );
     _iconScale = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _iconController,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack),
-      ),
+      CurvedAnimation(parent: _iconCtrl, curve: Curves.elasticOut),
     );
-    _iconBounce = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _iconController,
-        curve: const Interval(0.3, 1.0, curve: Curves.elasticOut),
-      ),
-    );
-
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) _iconController.forward();
-    });
+    // Start icon animation immediately – no delay
+    _iconCtrl.forward();
   }
 
   @override
   void dispose() {
-    _iconController.dispose();
+    _iconCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final green = widget.iconColor ?? AppColors.success;
+    final accentGreen = widget.iconColor ?? AppColors.success;
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 44),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF1C1C1E).withValues(alpha: 0.85)
-                    : Colors.white.withValues(alpha: 0.88),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
+        padding: const EdgeInsets.symmetric(horizontal: 48),
+        child: Material(
+          color: Colors.transparent,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  // Liquid glass: heavily translucent
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.18)
-                      : Colors.black.withValues(alpha: 0.06),
-                  width: 0.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
-                    blurRadius: 40,
-                    offset: const Offset(0, 10),
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.white.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.22)
+                        : Colors.white.withValues(alpha: 0.8),
+                    width: 0.5,
                   ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.1),
+                      blurRadius: 30,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 26),
 
-                  // Animated icon
-                  AnimatedBuilder(
-                    animation: _iconController,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: _iconScale.value,
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: green.withValues(alpha: isDark ? 0.2 : 0.12),
-                          ),
-                          child: Center(
-                            child: Transform.scale(
-                              scale: 0.8 + (_iconBounce.value * 0.2),
-                              child: Icon(
-                                widget.icon,
-                                size: 36,
-                                color: green,
+                    // Animated icon
+                    AnimatedBuilder(
+                      animation: _iconCtrl,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: _iconScale.value,
+                          child: Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: accentGreen.withValues(alpha: isDark ? 0.25 : 0.15),
+                              border: Border.all(
+                                color: accentGreen.withValues(alpha: 0.3),
+                                width: 1,
                               ),
                             ),
+                            child: Icon(
+                              widget.icon,
+                              size: 30,
+                              color: accentGreen,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  // Title
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Text(
-                      widget.title,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
-                        color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-                      ),
+                        );
+                      },
                     ),
-                  ),
 
-                  // Subtitle
-                  if (widget.subtitle != null) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 16),
+
+                    // Title
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      padding: const EdgeInsets.symmetric(horizontal: 22),
                       child: Text(
-                        widget.subtitle!,
+                        widget.title,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.55)
-                              : const Color(0xFF8E8E93),
-                          height: 1.3,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                          color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                        ),
+                      ),
+                    ),
+
+                    // Subtitle
+                    if (widget.subtitle != null) ...[
+                      const SizedBox(height: 5),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 22),
+                        child: Text(
+                          widget.subtitle!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.5)
+                                : const Color(0xFF8E8E93),
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 22),
+
+                    // Divider – glass-style
+                    Container(
+                      height: 0.5,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.15)
+                          : Colors.black.withValues(alpha: 0.08),
+                    ),
+
+                    // Button
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        widget.onConfirm?.call();
+                        Navigator.of(context).pop();
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        child: Text(
+                          widget.buttonText,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? AppColors.accentDark : AppColors.accent,
+                          ),
                         ),
                       ),
                     ),
                   ],
-
-                  const SizedBox(height: 24),
-
-                  // Divider
-                  Container(
-                    height: 0.5,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.15)
-                        : Colors.black.withValues(alpha: 0.1),
-                  ),
-
-                  // Button
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      widget.onConfirm?.call();
-                      Navigator.of(context).pop();
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      color: Colors.transparent,
-                      child: Text(
-                        widget.buttonText,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? AppColors.accentDark : AppColors.accent,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
