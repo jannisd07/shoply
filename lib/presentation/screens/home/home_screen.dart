@@ -26,6 +26,7 @@ import 'package:shoply/presentation/screens/home/widgets/list_card_with_animatio
 import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
+import 'package:shoply/presentation/widgets/common/success_alert.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -747,25 +748,20 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${items.length} ${context.tr('items_added_to')} $listName'),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
+        SuccessAlert.showItemsAdded(
+          context,
+          count: items.length,
+          listName: listName,
         );
       }
     } catch (e) {
       debugPrint('Add all items failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.tr('error_adding_items')),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
+        SuccessAlert.show(
+          context,
+          title: context.tr('error_adding_items'),
+          icon: Icons.error_outline_rounded,
+          iconColor: Colors.red,
         );
       }
     }
@@ -1151,19 +1147,25 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
         category: item.category,
       );
       debugPrint('✅ [History] Added "${item.name}" to list $_selectedListId');
+
+      if (mounted) {
+        final selectedList = widget.lists.firstWhere((l) => l.id == _selectedListId);
+        SuccessAlert.showItemAdded(
+          context,
+          listName: selectedList.name,
+        );
+      }
     } catch (e) {
       debugPrint('❌ [History] Add single item failed: $e');
       if (mounted) {
         setState(() {
           _addedItemIds.remove(item.id);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.tr('error_adding_items')),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
+        SuccessAlert.show(
+          context,
+          title: context.tr('error_adding_items'),
+          icon: Icons.error_outline_rounded,
+          iconColor: Colors.red,
         );
       }
     }
