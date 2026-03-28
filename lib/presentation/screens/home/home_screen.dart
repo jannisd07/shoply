@@ -1112,8 +1112,31 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
     }
   }
 
+  @override
+  void didUpdateWidget(covariant _HomeExpandedItemsContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Fix: when lists load after initial build, set selectedListId
+    if (_selectedListId == null && widget.lists.isNotEmpty) {
+      setState(() {
+        _selectedListId = widget.lists.first.id;
+      });
+    }
+    // Also fix: if previously selected list was removed, reset selection
+    if (_selectedListId != null && widget.lists.isNotEmpty) {
+      final stillExists = widget.lists.any((l) => l.id == _selectedListId);
+      if (!stillExists) {
+        setState(() {
+          _selectedListId = widget.lists.first.id;
+        });
+      }
+    }
+  }
+
   Future<void> _addSingleItem(ShoppingHistoryItem item) async {
-    if (_selectedListId == null) return;
+    if (_selectedListId == null) {
+      debugPrint('⚠️ [History] _selectedListId is null, cannot add item');
+      return;
+    }
 
     HapticFeedback.lightImpact();
     setState(() {
@@ -1127,32 +1150,58 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
         unit: item.unit,
         category: item.category,
       );
+      debugPrint('✅ [History] Added "${item.name}" to list $_selectedListId');
     } catch (e) {
-      debugPrint('Add single item failed: $e');
+      debugPrint('❌ [History] Add single item failed: $e');
       if (mounted) {
         setState(() {
           _addedItemIds.remove(item.id);
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.tr('error_adding_items')),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
       }
     }
   }
 
   Future<void> _addAllItems() async {
-    if (_selectedListId == null) return;
-    
+    if (_selectedListId == null) {
+      debugPrint('⚠️ [History] _selectedListId is null, cannot add all items');
+      return;
+    }
+
     setState(() {
       _isAddingAll = true;
       for (final item in widget.entry.items) {
         _addedItemIds.add(item.id);
       }
     });
-    
-    final selectedList = widget.lists.firstWhere((l) => l.id == _selectedListId);
-    await widget.onAddAllItems(widget.entry.items, _selectedListId!, selectedList.name);
-    
-    setState(() {
-      _isAddingAll = false;
-    });
+
+    try {
+      final selectedList = widget.lists.firstWhere((l) => l.id == _selectedListId);
+      await widget.onAddAllItems(widget.entry.items, _selectedListId!, selectedList.name);
+    } catch (e) {
+      debugPrint('❌ [History] Add all items failed: $e');
+      if (mounted) {
+        // Roll back added state on error
+        setState(() {
+          for (final item in widget.entry.items) {
+            _addedItemIds.remove(item.id);
+          }
+        });
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isAddingAll = false;
+      });
+    }
   }
 
   Widget _buildListCard(dynamic list, bool isSelected) {
