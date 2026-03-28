@@ -734,34 +734,41 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
   }
 
   Future<void> _addAllItemsToList(List<ShoppingHistoryItem> items, String listId, String listName) async {
-    // Show success immediately for better UX
     HapticFeedback.mediumImpact();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${items.length} ${context.tr('items_added_to')} $listName'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+
+    try {
+      await Future.wait(
+        items.map((item) => ref.read(itemsNotifierProvider(listId).notifier).addItem(
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          category: item.category,
+        )),
       );
-    }
-    
-    // Add items in background
-    Future.microtask(() async {
-      try {
-        await Future.wait(
-          items.map((item) => ref.read(itemsNotifierProvider(listId).notifier).addItem(
-            name: item.name,
-            quantity: item.quantity,
-            unit: item.unit,
-            category: item.category,
-          )),
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${items.length} ${context.tr('items_added_to')} $listName'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
-      } catch (e) {
-        debugPrint('Background add failed: $e');
       }
-    });
+    } catch (e) {
+      debugPrint('Add all items failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.tr('error_adding_items')),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -1107,26 +1114,27 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
 
   Future<void> _addSingleItem(ShoppingHistoryItem item) async {
     if (_selectedListId == null) return;
-    
-    // Show success immediately
+
     HapticFeedback.lightImpact();
     setState(() {
       _addedItemIds.add(item.id);
     });
-    
-    // Add in background
-    Future.microtask(() async {
-      try {
-        await ref.read(itemsNotifierProvider(_selectedListId!).notifier).addItem(
-          name: item.name,
-          quantity: item.quantity,
-          unit: item.unit,
-          category: item.category,
-        );
-      } catch (e) {
-        debugPrint('Background add failed: $e');
+
+    try {
+      await ref.read(itemsNotifierProvider(_selectedListId!).notifier).addItem(
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        category: item.category,
+      );
+    } catch (e) {
+      debugPrint('Add single item failed: $e');
+      if (mounted) {
+        setState(() {
+          _addedItemIds.remove(item.id);
+        });
       }
-    });
+    }
   }
 
   Future<void> _addAllItems() async {

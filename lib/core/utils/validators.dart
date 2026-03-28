@@ -58,20 +58,20 @@ class Validators {
     return null;
   }
   
-  /// Validates share code (6 digits)
+  /// Validates share code (6 alphanumeric characters)
   static String? validateShareCode(String? value) {
     if (value == null || value.isEmpty) {
       return 'Share code is required';
     }
-    
+
     if (value.length != 6) {
-      return 'Share code must be 6 digits';
+      return 'Share code must be 6 characters';
     }
-    
-    if (!RegExp(r'^[0-9]{6}$').hasMatch(value)) {
-      return 'Share code must contain only numbers';
+
+    if (!RegExp(r'^[A-Z0-9]{6}$').hasMatch(value.toUpperCase())) {
+      return 'Share code must contain only letters and numbers';
     }
-    
+
     return null;
   }
 }

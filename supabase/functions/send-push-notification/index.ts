@@ -3,7 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
-const FIREBASE_PROJECT_ID = "shoplyai-1554e"
+const FIREBASE_PROJECT_ID = "shoply-92f28"
 const FIREBASE_PRIVATE_KEY = Deno.env.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n')
 const FIREBASE_CLIENT_EMAIL = Deno.env.get('FIREBASE_CLIENT_EMAIL')
 
@@ -56,12 +56,18 @@ serve(async (req) => {
     log(`🔑 FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}`)
     log(`🔑 FIREBASE_PRIVATE_KEY set: ${!!FIREBASE_PRIVATE_KEY}`)
     log(`🔑 FIREBASE_PRIVATE_KEY length: ${FIREBASE_PRIVATE_KEY?.length || 0}`)
-    log(`🔑 Expected project: shoplyai-1554e`)
+    log(`🔑 Expected project: ${FIREBASE_PROJECT_ID}`)
 
     // Get OAuth2 access token for Firebase
     log('🔐 Getting Firebase access token...')
     const accessToken = await getFirebaseAccessToken()
     log(`✅ Got access token (length: ${accessToken?.length || 0})`)
+    log(`🔗 FCM URL: https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`)
+
+    // Verify token
+    const tokenInfoResp = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`)
+    const tokenInfo = await tokenInfoResp.json()
+    log(`🔍 Token info: scope=${tokenInfo.scope}, expires_in=${tokenInfo.expires_in}, error=${tokenInfo.error_description || 'none'}`)
 
     log(`📤 Sending to FCM token: ${token.substring(0, 40)}...`)
 

@@ -2,28 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>GIDClientID</key>
-	<string>595687303381-0lkcria4dis8m5u36iflej3alosaep1a.apps.googleusercontent.com</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>shoply</string>
-				<string>com.dominik.shoply</string>
-				<string>com.googleusercontent.apps.595687303381-0lkcria4dis8m5u36iflej3alosaep1a</string>
-			</array>
-		</dict>
-	</array>
-	
-	<key>FirebaseDynamicLinksCustomDomains</key>
-	<array>
-		<string>https://shoplyai.app</string>
-		<string>https://shoplyai.page.link</string>
-	</array>
-	
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -44,8 +22,34 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>shoply</string>
+				<string>com.dominik.shoply</string>
+				<string>com.googleusercontent.apps.595687303381-0lkcria4dis8m5u36iflej3alosaep1a</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
+	<key>FirebaseDynamicLinksCustomDomains</key>
+	<array>
+		<string>https://shoplyai.app</string>
+		<string>https://shoplyai.page.link</string>
+	</array>
+	<key>GIDClientID</key>
+	<string>595687303381-0lkcria4dis8m5u36iflej3alosaep1a.apps.googleusercontent.com</string>
+	<key>INIntentsSupported</key>
+	<array>
+		<string>Intent</string>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
@@ -82,8 +86,6 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
-	<key>FirebaseAppDelegateProxyEnabled</key>
 	<false/>
 </dict>
 </plist>

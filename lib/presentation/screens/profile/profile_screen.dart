@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
@@ -12,13 +13,15 @@ import 'package:shoply/presentation/screens/profile/settings/diet_preferences_sc
 import 'package:shoply/presentation/screens/profile/settings/theme_customization_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/help_support_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/notifications_screen.dart';
+import 'package:shoply/presentation/screens/profile/settings/language_screen.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/subscription/subscription_screen.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
-  
+
   @override
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
@@ -27,9 +30,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final backgroundColor = AppColors.background(context);
-    final separatorColor = AppColors.divider(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final userAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -44,7 +48,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.only(bottom: 32),
+              padding: const EdgeInsets.only(bottom: 28),
               child: Text(
                 context.tr('settings'),
                 style: TextStyle(
@@ -55,133 +59,137 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
             ),
-            
+
+            // Profile Card
+            _buildProfileCard(context, userAsync, isDark, textPrimary, textSecondary),
+
+            const SizedBox(height: 28),
+
             // Go Pro Banner
             _buildProBanner(context),
-            
+
             // SECTION: Account
-            _buildSectionHeader('Account', textSecondary),
-            _buildSettingsItem(
-              icon: Icons.person_outline_rounded,
-              title: context.tr('profile'),
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const DisplayNameScreen()),
-              ),
-            ),
-            _buildDivider(separatorColor),
-            _buildSettingsItem(
-              icon: Icons.badge_outlined,
-              title: context.tr('personal_information'),
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const PersonalInfoScreen()),
-              ),
-            ),
-            _buildDivider(separatorColor),
-            _buildSettingsItem(
-              icon: Icons.restaurant_outlined,
-              title: context.tr('diet_allergies'),
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const DietPreferencesScreen()),
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // SECTION: Preferences
-            _buildSectionHeader('Preferences', textSecondary),
-            _buildSettingsItem(
-              icon: Icons.palette_outlined,
-              title: context.tr('appearance'),
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ThemeCustomizationScreen()),
-              ),
-            ),
-            _buildDivider(separatorColor),
-            _buildSettingsItem(
-              icon: Icons.notifications_outlined,
-              title: context.tr('notifications'),
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () => Navigator.push(
-                context,
-                CupertinoPageRoute(builder: (context) => const NotificationsScreen()),
-              ),
+            _buildSectionHeader(context.tr('account'), textSecondary),
+            _buildSettingsGroup(
+              context,
+              isDark: isDark,
+              items: [
+                _SettingsItemData(
+                  icon: Icons.person_outline_rounded,
+                  title: context.tr('profile'),
+                  onTap: () => Navigator.push(
+                    context,
+                    CupertinoPageRoute(builder: (context) => const DisplayNameScreen()),
+                  ),
+                ),
+                _SettingsItemData(
+                  icon: Icons.badge_outlined,
+                  title: context.tr('personal_information'),
+                  onTap: () => Navigator.push(
+                    context,
+                    CupertinoPageRoute(builder: (context) => const PersonalInfoScreen()),
+                  ),
+                ),
+                _SettingsItemData(
+                  icon: Icons.restaurant_outlined,
+                  title: context.tr('diet_allergies'),
+                  onTap: () => Navigator.push(
+                    context,
+                    CupertinoPageRoute(builder: (context) => const DietPreferencesScreen()),
+                  ),
+                ),
+              ],
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
+
+            // SECTION: Preferences
+            _buildSectionHeader(context.tr('preferences'), textSecondary),
+            _buildSettingsGroup(
+              context,
+              isDark: isDark,
+              items: [
+                _SettingsItemData(
+                  icon: Icons.palette_outlined,
+                  title: context.tr('appearance'),
+                  onTap: () => Navigator.push(
+                    context,
+                    CupertinoPageRoute(builder: (context) => const ThemeCustomizationScreen()),
+                  ),
+                ),
+                _SettingsItemData(
+                  icon: Icons.notifications_outlined,
+                  title: context.tr('notifications'),
+                  onTap: () => Navigator.push(
+                    context,
+                    CupertinoPageRoute(builder: (context) => const NotificationsScreen()),
+                  ),
+                ),
+                _SettingsItemData(
+                  icon: Icons.language_rounded,
+                  title: context.tr('language'),
+                  onTap: () => Navigator.push(
+                    context,
+                    CupertinoPageRoute(builder: (context) => const LanguageScreen()),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 28),
 
             // SECTION: Support
-            _buildSectionHeader('Support', textSecondary),
-            _buildSettingsItem(
-              icon: Icons.help_outline_rounded,
-              title: context.tr('help_support'),
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HelpSupportScreen()),
-              ),
+            _buildSectionHeader(context.tr('support'), textSecondary),
+            _buildSettingsGroup(
+              context,
+              isDark: isDark,
+              items: [
+                _SettingsItemData(
+                  icon: Icons.help_outline_rounded,
+                  title: context.tr('help_support'),
+                  onTap: () => Navigator.push(
+                    context,
+                    CupertinoPageRoute(builder: (context) => const HelpSupportScreen()),
+                  ),
+                ),
+                _SettingsItemData(
+                  icon: Icons.school_outlined,
+                  title: context.tr('restart_tutorial'),
+                  onTap: () async {
+                    HapticFeedback.mediumImpact();
+                    await DynamicTutorialService.instance.restartTutorial();
+                    if (context.mounted) {
+                      context.go('/home');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.tr('tutorial_restarted')),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                _SettingsItemData(
+                  icon: Icons.shield_outlined,
+                  title: context.tr('privacy'),
+                  onTap: () => context.push('/privacy-policy'),
+                ),
+                _SettingsItemData(
+                  icon: Icons.description_outlined,
+                  title: context.tr('terms_of_service'),
+                  onTap: () => context.push('/terms-of-service'),
+                ),
+                _SettingsItemData(
+                  icon: Icons.info_outline_rounded,
+                  title: context.tr('app_version'),
+                  trailing: '1.0.0',
+                  showChevron: false,
+                ),
+              ],
             ),
-            _buildDivider(separatorColor),
-            _buildSettingsItem(
-              icon: Icons.school_outlined,
-              title: 'Restart Tutorial',
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () async {
-                HapticFeedback.mediumImpact();
-                await DynamicTutorialService.instance.restartTutorial();
-                if (context.mounted) {
-                  context.go('/home');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Tutorial neu gestartet! Folge Avos Anweisungen.'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
-            ),
-            _buildDivider(separatorColor),
-            _buildSettingsItem(
-              icon: Icons.shield_outlined,
-              title: context.tr('privacy'),
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () => context.push('/privacy-policy'),
-            ),
-            _buildDivider(separatorColor),
-            _buildSettingsItem(
-              icon: Icons.description_outlined,
-              title: context.tr('terms_of_service'),
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              onTap: () => context.push('/terms-of-service'),
-            ),
-            _buildDivider(separatorColor),
-            _buildSettingsItem(
-              icon: Icons.info_outline_rounded,
-              title: context.tr('app_version'),
-              trailing: '1.0.0',
-              showChevron: false,
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-            ),
-            
-            const SizedBox(height: 48),
-            
+
+            const SizedBox(height: 36),
+
             // Sign Out Button
             GestureDetector(
               onTap: () async {
@@ -193,12 +201,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               },
               child: Container(
                 width: double.infinity,
-                height: 56,
+                height: 52,
                 decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: Colors.red.withValues(alpha: 0.3),
+                    color: Colors.red.withValues(alpha: 0.25),
                     width: 1,
                   ),
                 ),
@@ -207,7 +214,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     context.tr('sign_out'),
                     style: const TextStyle(
                       color: Colors.red,
-                      fontSize: 17,
+                      fontSize: 16,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -220,74 +227,327 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
+  Widget _buildProfileCard(
+    BuildContext context,
+    AsyncValue userAsync,
+    bool isDark,
+    Color textPrimary,
+    Color textSecondary,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        Navigator.push(
+          context,
+          CupertinoPageRoute(builder: (context) => const DisplayNameScreen()),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.05),
+            width: 1,
+          ),
+        ),
+        child: userAsync.when(
+          data: (user) {
+            final displayName = user?.displayName ?? 'User';
+            final email = user?.email ?? '';
+            final avatarUrl = user?.avatarUrl;
+            final initials = displayName.isNotEmpty
+                ? displayName[0].toUpperCase()
+                : '?';
+
+            return Row(
+              children: [
+                // Avatar
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.black.withValues(alpha: 0.06),
+                  ),
+                  child: avatarUrl != null && avatarUrl.isNotEmpty
+                      ? ClipOval(
+                          child: CachedNetworkImage(
+                            imageUrl: avatarUrl,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Center(
+                              child: Text(
+                                initials,
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
+                                  color: textPrimary,
+                                ),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Center(
+                              child: Text(
+                                initials,
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
+                                  color: textPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Text(
+                            initials,
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 16),
+                // Name & Email
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      if (email.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          email,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: textSecondary,
+                            letterSpacing: -0.1,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: textSecondary,
+                  size: 22,
+                ),
+              ],
+            );
+          },
+          loading: () => Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.06),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 120,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 180,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.black.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          error: (_, __) => Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.06),
+                ),
+                child: Center(
+                  child: Text(
+                    '?',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      color: textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                'User',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: textPrimary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSettingsItem({
-    required IconData icon,
-    required String title,
-    String? trailing,
-    bool showChevron = true,
-    required Color textPrimary,
-    required Color textSecondary,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap?.call();
-      },
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: textPrimary,
-              size: 22,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  color: textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ),
-            if (trailing != null)
-              Text(
-                trailing,
-                style: TextStyle(
-                  color: textSecondary,
-                  fontSize: 16,
-                ),
-              ),
-            if (showChevron) ...[
-              const SizedBox(width: 8),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: textSecondary,
-                size: 20,
-              ),
-            ],
-          ],
+  Widget _buildSectionHeader(String title, Color textSecondary) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          color: textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
         ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsGroup(
+    BuildContext context, {
+    required bool isDark,
+    required List<_SettingsItemData> items,
+  }) {
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: List.generate(items.length, (index) {
+          final item = items[index];
+          final isLast = index == items.length - 1;
+
+          return Column(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  item.onTap?.call();
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.black.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          item.icon,
+                          color: textPrimary,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                      if (item.trailing != null)
+                        Text(
+                          item.trailing!,
+                          style: TextStyle(
+                            color: textSecondary,
+                            fontSize: 15,
+                          ),
+                        ),
+                      if (item.showChevron) ...[
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: textSecondary,
+                          size: 20,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              if (!isLast)
+                Padding(
+                  padding: const EdgeInsets.only(left: 62),
+                  child: Container(
+                    height: 0.5,
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.black.withValues(alpha: 0.06),
+                  ),
+                ),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -297,106 +557,132 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final isSubscribed = ref.watch(isSubscribedProvider);
     final fg = AppColors.textPrimary(context);
     final muted = AppColors.textSecondary(context);
-    
+
     if (isSubscribed) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 32),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 28),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.10)
-                : Colors.black.withValues(alpha: 0.06),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Text(
-              'Pro',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: fg,
-                letterSpacing: -0.5,
-              ),
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.black.withValues(alpha: 0.06),
+              width: 1,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                context.tr('subscription_success'),
-                style: TextStyle(
-                  fontSize: 14,
-                  color: muted,
-                  letterSpacing: -0.2,
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white : Colors.black,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'PRO',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.black : Colors.white,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-            ),
-            Icon(
-              Icons.check_circle_rounded,
-              color: fg,
-              size: 22,
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  context.tr('subscription_success'),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: muted,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.check_circle_rounded,
+                color: fg,
+                size: 20,
+              ),
+            ],
+          ),
         ),
       );
     }
-    
-    return GestureDetector(
-      onTap: () => showSubscriptionSheet(context),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 32),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white : Colors.black,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Text(
-              'Pro',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.black : Colors.white,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                context.tr('unlock_premium_features'),
-                style: TextStyle(
-                  fontSize: 14,
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 28),
+      child: GestureDetector(
+        onTap: () => showSubscriptionSheet(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white : Colors.black,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
                   color: isDark
-                      ? Colors.black.withValues(alpha: 0.6)
-                      : Colors.white.withValues(alpha: 0.7),
-                  letterSpacing: -0.2,
+                      ? Colors.black.withValues(alpha: 0.3)
+                      : Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'PRO',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : Colors.white,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-            ),
-            Icon(
-              Icons.arrow_forward_rounded,
-              color: isDark ? Colors.black : Colors.white,
-              size: 20,
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  context.tr('unlock_premium_features'),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.6)
+                        : Colors.white.withValues(alpha: 0.7),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_rounded,
+                color: isDark ? Colors.black : Colors.white,
+                size: 20,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildDivider(Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 38),
-      child: Container(
-        height: 0.5,
-        color: color,
-      ),
-    );
-  }
+class _SettingsItemData {
+  final IconData icon;
+  final String title;
+  final String? trailing;
+  final bool showChevron;
+  final VoidCallback? onTap;
+
+  const _SettingsItemData({
+    required this.icon,
+    required this.title,
+    this.trailing,
+    this.showChevron = true,
+    this.onTap,
+  });
 }
