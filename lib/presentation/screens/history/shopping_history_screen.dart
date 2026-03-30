@@ -7,6 +7,9 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/widgets/common/success_alert.dart';
 
 class ShoppingHistoryScreen extends ConsumerStatefulWidget {
   const ShoppingHistoryScreen({super.key});
@@ -89,10 +92,31 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
     }
   }
 
+  Future<void> _addAllItemsToList(List<ShoppingHistoryItem> items, String listId, String listName) async {
+    for (final item in items) {
+      await ref.read(itemsNotifierProvider(listId).notifier).addItem(
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        category: item.category,
+      );
+    }
+
+    if (mounted) {
+      SuccessAlert.showItemsAdded(
+        context,
+        count: items.length,
+        listName: listName,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final historyAsync = ref.watch(shoppingHistoryNotifierProvider);
+    final listsAsync = ref.watch(listsNotifierProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final lists = listsAsync.valueOrNull ?? [];
 
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
@@ -216,7 +240,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                       ),
                     ),
                   ),
-                  ...entries.map((entry) => _buildHistoryCard(entry, isDark)),
+                  ...entries.map((entry) => _buildHistoryCard(entry, isDark, lists)),
                 ],
               );
             },
@@ -276,7 +300,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
     );
   }
 
-  Widget _buildHistoryCard(ShoppingHistory entry, bool isDark) {
+  Widget _buildHistoryCard(ShoppingHistory entry, bool isDark, List<dynamic> lists) {
     final isExpanded = _expandedEntries.contains(entry.id);
 
     return Dismissible(
@@ -414,10 +438,15 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                 ),
               ),
 
-              // Expanded items
+              // Expanded items with add functionality
               AnimatedCrossFade(
                 firstChild: const SizedBox.shrink(),
-                secondChild: _buildItemsList(entry, isDark),
+                secondChild: _HistoryExpandedContent(
+                  entry: entry,
+                  lists: lists,
+                  isDark: isDark,
+                  onAddAllItems: _addAllItemsToList,
+                ),
                 crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
                 duration: const Duration(milliseconds: 200),
               ),
@@ -427,79 +456,358 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
       ),
     );
   }
+}
 
-  Widget _buildItemsList(ShoppingHistory entry, bool isDark) {
-    if (entry.items.isEmpty) {
+/// Expanded content with list selector, add all, and individual add buttons
+class _HistoryExpandedContent extends ConsumerStatefulWidget {
+  final ShoppingHistory entry;
+  final List<dynamic> lists;
+  final bool isDark;
+  final Future<void> Function(List<ShoppingHistoryItem> items, String listId, String listName) onAddAllItems;
+
+  const _HistoryExpandedContent({
+    required this.entry,
+    required this.lists,
+    required this.isDark,
+    required this.onAddAllItems,
+  });
+
+  @override
+  ConsumerState<_HistoryExpandedContent> createState() => _HistoryExpandedContentState();
+}
+
+class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent> {
+  String? _selectedListId;
+  final Set<String> _addedItemIds = {};
+  bool _isAddingAll = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.lists.isNotEmpty) {
+      _selectedListId = widget.lists.first.id;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _HistoryExpandedContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_selectedListId == null && widget.lists.isNotEmpty) {
+      setState(() {
+        _selectedListId = widget.lists.first.id;
+      });
+    }
+    if (_selectedListId != null && widget.lists.isNotEmpty) {
+      final stillExists = widget.lists.any((l) => l.id == _selectedListId);
+      if (!stillExists) {
+        setState(() {
+          _selectedListId = widget.lists.first.id;
+        });
+      }
+    }
+  }
+
+  Future<void> _addSingleItem(ShoppingHistoryItem item) async {
+    if (_selectedListId == null) return;
+
+    HapticFeedback.lightImpact();
+    setState(() {
+      _addedItemIds.add(item.id);
+    });
+
+    try {
+      await ref.read(itemsNotifierProvider(_selectedListId!).notifier).addItem(
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        category: item.category,
+      );
+
+      if (mounted) {
+        final selectedList = widget.lists.firstWhere((l) => l.id == _selectedListId);
+        SuccessAlert.showItemAdded(
+          context,
+          listName: selectedList.name,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _addedItemIds.remove(item.id);
+        });
+        SuccessAlert.show(
+          context,
+          title: context.tr('error_adding_items'),
+          icon: Icons.error_outline_rounded,
+          iconColor: Colors.red,
+        );
+      }
+    }
+  }
+
+  Future<void> _addAllItems() async {
+    if (_selectedListId == null) return;
+
+    setState(() {
+      _isAddingAll = true;
+      for (final item in widget.entry.items) {
+        _addedItemIds.add(item.id);
+      }
+    });
+
+    try {
+      final selectedList = widget.lists.firstWhere((l) => l.id == _selectedListId);
+      await widget.onAddAllItems(widget.entry.items, _selectedListId!, selectedList.name);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          for (final item in widget.entry.items) {
+            _addedItemIds.remove(item.id);
+          }
+        });
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isAddingAll = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.entry.items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         child: Text(
           context.tr('no_items'),
           style: TextStyle(
             fontSize: 13,
-            color: isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
+            color: widget.isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
           ),
         ),
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-      child: Column(
-        children: [
-          Container(
-            height: 0.5,
-            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
-          ),
-          const SizedBox(height: 10),
-          ...entry.items.take(15).map((item) {
-            final qty = item.quantity.truncateToDouble() == item.quantity
-                ? item.quantity.toInt().toString()
-                : item.quantity.toStringAsFixed(1);
-            final detail = item.unit != null ? '$qty ${item.unit}' : (item.quantity > 1 ? '${qty}x' : '');
+    return Column(
+      children: [
+        // Divider
+        Container(
+          height: 0.5,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          color: widget.isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+        ),
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.check_rounded,
-                    size: 14,
-                    color: isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC),
+        // List selector + add all button
+        if (widget.lists.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.tr('add_to_list').toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: widget.isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                    letterSpacing: 0.8,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      item.name,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF3C3C43),
-                      ),
+                ),
+                const SizedBox(height: 10),
+                // Horizontal scrolling list cards
+                SizedBox(
+                  height: 48,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: widget.lists.length,
+                    itemBuilder: (context, index) {
+                      final list = widget.lists[index];
+                      final isSelected = list.id == _selectedListId;
+                      return _buildListCard(list, isSelected);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Add all button
+                GestureDetector(
+                  onTap: _selectedListId == null || _isAddingAll ? null : _addAllItems,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _selectedListId == null
+                          ? (widget.isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02))
+                          : (widget.isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (_isAddingAll)
+                          CupertinoActivityIndicator(
+                            radius: 10,
+                            color: widget.isDark ? Colors.white70 : const Color(0xFF6B7280),
+                          )
+                        else
+                          Icon(
+                            Icons.add_rounded,
+                            size: 18,
+                            color: _selectedListId == null
+                                ? (widget.isDark ? const Color(0xFF4B4B4B) : const Color(0xFFD1D5DB))
+                                : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                          ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${context.tr('add_all')} (${widget.entry.items.length})',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: _selectedListId == null
+                                ? (widget.isDark ? const Color(0xFF4B4B4B) : const Color(0xFFD1D5DB))
+                                : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  if (detail.isNotEmpty)
-                    Text(
-                      detail,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
+                ),
+              ],
+            ),
+          ),
+
+        // Items list
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+          child: Column(
+            children: widget.entry.items.map((item) {
+              final isAdded = _addedItemIds.contains(item.id);
+              final qty = item.quantity.truncateToDouble() == item.quantity
+                  ? item.quantity.toInt().toString()
+                  : item.quantity.toStringAsFixed(1);
+              final detail = item.unit != null ? '$qty ${item.unit}' : (item.quantity > 1 ? '${qty}x' : '');
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isAdded
+                        ? (widget.isDark ? const Color(0xFF1A2E1A) : const Color(0xFFF0FDF4))
+                        : (widget.isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      // Check icon
+                      Icon(
+                        isAdded ? Icons.check_circle_rounded : Icons.check_rounded,
+                        size: 14,
+                        color: isAdded
+                            ? const Color(0xFF22C55E)
+                            : (widget.isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC)),
                       ),
-                    ),
-                ],
-              ),
-            );
-          }),
-          if (entry.items.length > 15)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                '+${entry.items.length - 15} ${context.tr('more_items')}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
+                      const SizedBox(width: 10),
+                      // Item name
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: widget.isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF3C3C43),
+                          ),
+                        ),
+                      ),
+                      // Quantity
+                      if (detail.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 10),
+                          child: Text(
+                            detail,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: widget.isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
+                            ),
+                          ),
+                        ),
+                      // Add button
+                      if (widget.lists.isNotEmpty && _selectedListId != null)
+                        GestureDetector(
+                          onTap: isAdded ? null : () => _addSingleItem(item),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: isAdded
+                                  ? const Color(0xFF22C55E)
+                                  : (widget.isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              isAdded ? Icons.check_rounded : Icons.add_rounded,
+                              size: 16,
+                              color: isAdded
+                                  ? Colors.white
+                                  : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildListCard(dynamic list, bool isSelected) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _selectedListId = list.id;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (widget.isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08))
+              : (widget.isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(
+                  Icons.check_rounded,
+                  size: 16,
+                  color: widget.isDark ? Colors.white : const Color(0xFF1A1A1A),
                 ),
               ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 100),
+              child: Text(
+                list.name,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: widget.isDark ? Colors.white : const Color(0xFF1A1A1A),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
