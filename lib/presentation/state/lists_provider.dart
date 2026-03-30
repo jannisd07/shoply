@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
+import 'package:shoply/data/services/widget_service.dart';
 
 /// List repository provider
 final listRepositoryProvider = Provider<ListRepository>((ref) {
@@ -46,6 +47,8 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
       state = AsyncValue.data(lists);
       // Cache for offline use
       OfflineCacheService.instance.cacheLists(lists);
+      // Update widget with available lists for configuration
+      _updateWidgetAvailableLists(lists);
     } catch (error, stackTrace) {
       // Try offline cache
       final cached = await OfflineCacheService.instance.getCachedLists();
@@ -57,6 +60,11 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
     }
   }
   
+  void _updateWidgetAvailableLists(List<ShoppingListModel> lists) {
+    final widgetLists = lists.map((l) => {'id': l.id, 'name': l.name}).toList();
+    WidgetService.updateAvailableLists(widgetLists);
+  }
+
   @override
   void dispose() {
     _repository.unsubscribeFromItemChanges();

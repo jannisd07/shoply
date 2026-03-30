@@ -79,6 +79,10 @@ import WidgetKit
         self.getPendingToggles(result: result)
       case "clearPendingToggles":
         self.clearPendingToggles(result: result)
+      case "updateAvailableLists":
+        self.updateAvailableLists(call.arguments as? [String: Any], result: result)
+      case "updateSupabaseCredentials":
+        self.updateSupabaseCredentials(call.arguments as? [String: Any], result: result)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -92,23 +96,29 @@ import WidgetKit
       result(FlutterError(code: "INVALID_DATA", message: "No data provided", details: nil))
       return
     }
-    
+
     // Save to App Group UserDefaults
     if let defaults = UserDefaults(suiteName: appGroupId) {
       if let jsonData = try? JSONSerialization.data(withJSONObject: data),
          let jsonString = String(data: jsonData, encoding: .utf8) {
+        // Save with per-list key (for configurable widget)
+        let listId = data["listId"] as? String ?? ""
+        if !listId.isEmpty {
+          defaults.set(jsonString, forKey: "widget_list_\(listId)")
+        }
+        // Also save as legacy key (backward compatibility / fallback)
         defaults.set(jsonString, forKey: "widget_shopping_list")
         defaults.synchronize()
-        print("✅ [Widget] Shopping list data saved to App Group")
+        print("✅ [Widget] Shopping list data saved to App Group (list: \(listId))")
       }
     }
-    
+
     // Reload widget timelines
     if #available(iOS 14.0, *) {
       WidgetCenter.shared.reloadTimelines(ofKind: "ShoppingListWidget")
       print("✅ [Widget] Shopping list widget timeline reloaded")
     }
-    
+
     result(true)
   }
   
@@ -183,6 +193,53 @@ import WidgetKit
       defaults.synchronize()
       print("✅ [Widget] Cleared pending toggles")
     }
+    result(true)
+  }
+
+  private func updateAvailableLists(_ data: [String: Any]?, result: FlutterResult) {
+    guard let data = data,
+          let lists = data["lists"] as? [[String: String]] else {
+      result(FlutterError(code: "INVALID_DATA", message: "No lists data", details: nil))
+      return
+    }
+
+    if let defaults = UserDefaults(suiteName: appGroupId) {
+      if let jsonData = try? JSONSerialization.data(withJSONObject: lists),
+         let jsonString = String(data: jsonData, encoding: .utf8) {
+        defaults.set(jsonString, forKey: "widget_available_lists")
+        defaults.synchronize()
+        print("✅ [Widget] Available lists saved: \(lists.count)")
+      }
+    }
+
+    // Reload widgets so they can pick up new list options
+    if #available(iOS 14.0, *) {
+      WidgetCenter.shared.reloadTimelines(ofKind: "ShoppingListWidget")
+    }
+
+    result(true)
+  }
+
+  private func updateSupabaseCredentials(_ data: [String: Any]?, result: FlutterResult) {
+    guard let data = data else {
+      result(FlutterError(code: "INVALID_DATA", message: "No credentials", details: nil))
+      return
+    }
+
+    if let defaults = UserDefaults(suiteName: appGroupId) {
+      if let url = data["url"] as? String {
+        defaults.set(url, forKey: "widget_supabase_url")
+      }
+      if let anonKey = data["anonKey"] as? String {
+        defaults.set(anonKey, forKey: "widget_supabase_anon")
+      }
+      if let token = data["accessToken"] as? String {
+        defaults.set(token, forKey: "widget_supabase_token")
+      }
+      defaults.synchronize()
+      print("✅ [Widget] Supabase credentials saved to App Group")
+    }
+
     result(true)
   }
   

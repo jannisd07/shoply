@@ -12,8 +12,11 @@ import AppIntents
 // MARK: - App Group Constants
 
 let kAppGroupId = "group.com.shoply.app"
-let kWidgetDataKey = "widget_shopping_list"
-let kPendingTogglesKey = "widget_pending_toggles"
+let kWidgetDataPrefix = "widget_list_"
+let kAvailableListsKey = "widget_available_lists"
+let kSupabaseUrlKey = "widget_supabase_url"
+let kSupabaseAnonKey = "widget_supabase_anon"
+let kSupabaseAccessTokenKey = "widget_supabase_token"
 
 // MARK: - Data Models
 
@@ -61,16 +64,59 @@ struct ShoppingItem: Identifiable {
     let isChecked: Bool
 }
 
+struct AvailableList: Hashable {
+    let id: String
+    let name: String
+}
+
 // MARK: - Data Loading Helpers
 
-func loadWidgetData() -> ShoppingListData {
+func loadAvailableLists() -> [AvailableList] {
     guard let defaults = UserDefaults(suiteName: kAppGroupId),
-          let jsonString = defaults.string(forKey: kWidgetDataKey),
+          let jsonString = defaults.string(forKey: kAvailableListsKey),
           let jsonData = jsonString.data(using: .utf8),
-          let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+          let array = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: String]] else {
+        return []
+    }
+    return array.compactMap { dict in
+        guard let id = dict["id"], let name = dict["name"] else { return nil }
+        return AvailableList(id: id, name: name)
+    }
+}
+
+func loadWidgetData(for listId: String?) -> ShoppingListData {
+    guard let defaults = UserDefaults(suiteName: kAppGroupId) else { return .empty }
+
+    // If a specific list is requested, load it
+    let key: String
+    if let listId = listId, !listId.isEmpty {
+        key = kWidgetDataPrefix + listId
+    } else {
+        // Fallback: load old-style single key or first available list
+        if let jsonString = defaults.string(forKey: "widget_shopping_list"),
+           let jsonData = jsonString.data(using: .utf8),
+           let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+            return parseListData(dict)
+        }
         return .empty
     }
 
+    guard let jsonString = defaults.string(forKey: key),
+          let jsonData = jsonString.data(using: .utf8),
+          let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+        // Fallback to old key
+        if let jsonString = defaults.string(forKey: "widget_shopping_list"),
+           let jsonData = jsonString.data(using: .utf8),
+           let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+            return parseListData(dict)
+        }
+        return .empty
+    }
+
+    return parseListData(dict)
+}
+
+func parseListData(_ dict: [String: Any]) -> ShoppingListData {
     let listId = dict["listId"] as? String ?? ""
     let listName = dict["listName"] as? String ?? "Einkaufsliste"
     let itemCount = dict["itemCount"] as? Int ?? 0
@@ -99,46 +145,154 @@ func loadWidgetData() -> ShoppingListData {
     )
 }
 
-func toggleItemInDefaults(itemId: String) {
+func toggleItemInDefaults(itemId: String, listId: String?) {
+    guard let defaults = UserDefaults(suiteName: kAppGroupId) else { return }
+
+    // Find the right key
+    let keys: [String]
+    if let listId = listId, !listId.isEmpty {
+        keys = [kWidgetDataPrefix + listId, "widget_shopping_list"]
+    } else {
+        keys = ["widget_shopping_list"]
+    }
+
+    for key in keys {
+        guard let jsonString = defaults.string(forKey: key),
+              let jsonData = jsonString.data(using: .utf8),
+              var dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+              var itemsArray = dict["items"] as? [[String: Any]] else {
+            continue
+        }
+
+        var found = false
+        var newIsChecked = false
+        for i in 0..<itemsArray.count {
+            if itemsArray[i]["id"] as? String == itemId {
+                let wasChecked = itemsArray[i]["isChecked"] as? Bool ?? false
+                newIsChecked = !wasChecked
+                itemsArray[i]["isChecked"] = newIsChecked
+                found = true
+                break
+            }
+        }
+
+        if !found { continue }
+
+        // Recalculate counts
+        let checkedCount = itemsArray.filter { $0["isChecked"] as? Bool ?? false }.count
+        let uncheckedCount = itemsArray.count - checkedCount
+
+        dict["items"] = itemsArray
+        dict["checkedCount"] = checkedCount
+        dict["uncheckedCount"] = uncheckedCount
+
+        // Save back
+        if let updatedData = try? JSONSerialization.data(withJSONObject: dict),
+           let updatedString = String(data: updatedData, encoding: .utf8) {
+            defaults.set(updatedString, forKey: key)
+        }
+        defaults.synchronize()
+
+        // Also update Supabase directly
+        Task {
+            await syncToggleToSupabase(itemId: itemId, isChecked: newIsChecked)
+        }
+
+        return
+    }
+}
+
+// MARK: - Supabase Direct Sync
+
+func syncToggleToSupabase(itemId: String, isChecked: Bool) async {
     guard let defaults = UserDefaults(suiteName: kAppGroupId),
-          let jsonString = defaults.string(forKey: kWidgetDataKey),
-          let jsonData = jsonString.data(using: .utf8),
-          var dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-          var itemsArray = dict["items"] as? [[String: Any]] else {
+          let supabaseUrl = defaults.string(forKey: kSupabaseUrlKey),
+          let anonKey = defaults.string(forKey: kSupabaseAnonKey),
+          let accessToken = defaults.string(forKey: kSupabaseAccessTokenKey),
+          !supabaseUrl.isEmpty, !anonKey.isEmpty, !accessToken.isEmpty else {
         return
     }
 
-    // Toggle the item
-    for i in 0..<itemsArray.count {
-        if itemsArray[i]["id"] as? String == itemId {
-            let wasChecked = itemsArray[i]["isChecked"] as? Bool ?? false
-            itemsArray[i]["isChecked"] = !wasChecked
-            break
+    let urlString = "\(supabaseUrl)/rest/v1/shopping_items?id=eq.\(itemId)"
+    guard let url = URL(string: urlString) else { return }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "PATCH"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(anonKey, forHTTPHeaderField: "apikey")
+    request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+    request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+
+    var body: [String: Any] = [
+        "is_checked": isChecked,
+    ]
+    if isChecked {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        body["checked_at"] = formatter.string(from: Date())
+    } else {
+        body["checked_at"] = NSNull()
+    }
+
+    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+    do {
+        let (_, response) = try await URLSession.shared.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse {
+            if httpResponse.statusCode >= 200 && httpResponse.statusCode < 300 {
+                print("✅ [Widget] Synced toggle for \(itemId) to Supabase")
+            } else {
+                print("⚠️ [Widget] Supabase toggle failed: HTTP \(httpResponse.statusCode)")
+            }
+        }
+    } catch {
+        print("⚠️ [Widget] Supabase toggle error: \(error)")
+    }
+}
+
+// MARK: - AppIntent Entity for List Selection
+
+struct ShoppingListEntity: AppEntity {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Shopping List"
+    static var defaultQuery = ShoppingListQuery()
+
+    var id: String
+    var name: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(name)")
+    }
+}
+
+struct ShoppingListQuery: EntityQuery {
+    func entities(for identifiers: [String]) async throws -> [ShoppingListEntity] {
+        let lists = loadAvailableLists()
+        return identifiers.compactMap { id in
+            guard let list = lists.first(where: { $0.id == id }) else { return nil }
+            return ShoppingListEntity(id: list.id, name: list.name)
         }
     }
 
-    // Recalculate counts
-    let checkedCount = itemsArray.filter { $0["isChecked"] as? Bool ?? false }.count
-    let uncheckedCount = itemsArray.count - checkedCount
-
-    dict["items"] = itemsArray
-    dict["checkedCount"] = checkedCount
-    dict["uncheckedCount"] = uncheckedCount
-
-    // Save back
-    if let updatedData = try? JSONSerialization.data(withJSONObject: dict),
-       let updatedString = String(data: updatedData, encoding: .utf8) {
-        defaults.set(updatedString, forKey: kWidgetDataKey)
+    func suggestedEntities() async throws -> [ShoppingListEntity] {
+        let lists = loadAvailableLists()
+        return lists.map { ShoppingListEntity(id: $0.id, name: $0.name) }
     }
 
-    // Store pending toggle for Flutter to sync
-    var pendingToggles = defaults.array(forKey: kPendingTogglesKey) as? [[String: Any]] ?? []
-    pendingToggles.append([
-        "itemId": itemId,
-        "timestamp": Date().timeIntervalSince1970,
-    ])
-    defaults.set(pendingToggles, forKey: kPendingTogglesKey)
-    defaults.synchronize()
+    func defaultResult() async -> ShoppingListEntity? {
+        let lists = loadAvailableLists()
+        guard let first = lists.first else { return nil }
+        return ShoppingListEntity(id: first.id, name: first.name)
+    }
+}
+
+// MARK: - Configuration Intent
+
+struct SelectListIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Select Shopping List"
+    static var description = IntentDescription("Choose which shopping list to display.")
+
+    @Parameter(title: "Shopping List")
+    var shoppingList: ShoppingListEntity?
 }
 
 // MARK: - Toggle Intent
@@ -150,36 +304,41 @@ struct ToggleItemIntent: AppIntent {
     @Parameter(title: "Item ID")
     var itemId: String
 
+    @Parameter(title: "List ID")
+    var listId: String
+
     init() {}
 
-    init(itemId: String) {
+    init(itemId: String, listId: String) {
         self.itemId = itemId
+        self.listId = listId
     }
 
     func perform() async throws -> some IntentResult {
-        toggleItemInDefaults(itemId: itemId)
+        toggleItemInDefaults(itemId: itemId, listId: listId)
         return .result()
     }
 }
 
 // MARK: - Timeline Provider
 
-struct ShoppingListProvider: TimelineProvider {
+struct ShoppingListProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> ShoppingListEntry {
         ShoppingListEntry(date: Date(), data: .placeholder)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (ShoppingListEntry) -> Void) {
-        let data = loadWidgetData()
-        completion(ShoppingListEntry(date: Date(), data: data))
+    func snapshot(for configuration: SelectListIntent, in context: Context) async -> ShoppingListEntry {
+        let listId = configuration.shoppingList?.id
+        let data = loadWidgetData(for: listId)
+        return ShoppingListEntry(date: Date(), data: data)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<ShoppingListEntry>) -> Void) {
-        let data = loadWidgetData()
+    func timeline(for configuration: SelectListIntent, in context: Context) async -> Timeline<ShoppingListEntry> {
+        let listId = configuration.shoppingList?.id
+        let data = loadWidgetData(for: listId)
         let entry = ShoppingListEntry(date: Date(), data: data)
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
-        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
-        completion(timeline)
+        return Timeline(entries: [entry], policy: .after(nextUpdate))
     }
 }
 
@@ -199,6 +358,7 @@ private let itemSpacing: CGFloat = 2
 
 struct ItemRowView: View {
     let item: ShoppingItem
+    let listId: String
     let fontSize: CGFloat
     let showQuantity: Bool
     @Environment(\.colorScheme) var colorScheme
@@ -209,7 +369,7 @@ struct ItemRowView: View {
     private var green: Color { Color(red: 0.3, green: 0.75, blue: 0.4) }
 
     var body: some View {
-        Button(intent: ToggleItemIntent(itemId: item.id)) {
+        Button(intent: ToggleItemIntent(itemId: item.id, listId: listId)) {
             HStack(spacing: 10) {
                 // Checkbox
                 ZStack {
@@ -289,7 +449,7 @@ struct SmallWidgetView: View {
                         Image(systemName: "checkmark.circle")
                             .font(.system(size: 20))
                             .foregroundColor(muted)
-                        Text("All done!")
+                        Text("Alles erledigt!")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(muted)
                     }
@@ -297,21 +457,20 @@ struct SmallWidgetView: View {
                 }
                 Spacer()
             } else {
-                // Show unchecked first, then checked — max items that fit
                 let unchecked = entry.data.items.filter { !$0.isChecked }
                 let checked = entry.data.items.filter { $0.isChecked }
                 let allSorted = unchecked + checked
                 let visibleItems = Array(allSorted.prefix(5))
 
                 ForEach(visibleItems, id: \.id) { item in
-                    ItemRowView(item: item, fontSize: 12, showQuantity: false)
+                    ItemRowView(item: item, listId: entry.data.listId, fontSize: 12, showQuantity: false)
                 }
 
                 Spacer(minLength: 0)
 
                 let remaining = entry.data.itemCount - visibleItems.count
                 if remaining > 0 {
-                    Text("+\(remaining) more")
+                    Text("+\(remaining) mehr")
                         .font(.system(size: 9, weight: .medium))
                         .foregroundColor(muted)
                 }
@@ -369,7 +528,7 @@ struct MediumWidgetView: View {
                         Image(systemName: "checkmark.circle")
                             .font(.system(size: 22))
                             .foregroundColor(muted)
-                        Text("All done!")
+                        Text("Alles erledigt!")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(muted)
                     }
@@ -390,7 +549,7 @@ struct MediumWidgetView: View {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(leftItems, id: \.id) { item in
-                            ItemRowView(item: item, fontSize: 12, showQuantity: true)
+                            ItemRowView(item: item, listId: entry.data.listId, fontSize: 12, showQuantity: true)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -398,7 +557,7 @@ struct MediumWidgetView: View {
                     if !rightItems.isEmpty {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(rightItems, id: \.id) { item in
-                                ItemRowView(item: item, fontSize: 12, showQuantity: true)
+                                ItemRowView(item: item, listId: entry.data.listId, fontSize: 12, showQuantity: true)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -409,7 +568,7 @@ struct MediumWidgetView: View {
 
                 let remaining = entry.data.itemCount - visibleItems.count
                 if remaining > 0 {
-                    Text("+\(remaining) more")
+                    Text("+\(remaining) mehr")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(muted)
                 }
@@ -486,10 +645,10 @@ struct LargeWidgetView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 36))
                             .foregroundColor(green)
-                        Text("All done!")
+                        Text("Alles erledigt!")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(fg)
-                        Text("Your list is empty")
+                        Text("Deine Liste ist leer")
                             .font(.system(size: 12))
                             .foregroundColor(muted)
                     }
@@ -497,7 +656,6 @@ struct LargeWidgetView: View {
                 }
                 Spacer()
             } else {
-                // Show unchecked first, then checked
                 let unchecked = entry.data.items.filter { !$0.isChecked }
                 let checked = entry.data.items.filter { $0.isChecked }
                 let allSorted = unchecked + checked
@@ -505,14 +663,14 @@ struct LargeWidgetView: View {
                 let visibleItems = Array(allSorted.prefix(maxItems))
 
                 ForEach(visibleItems, id: \.id) { item in
-                    ItemRowView(item: item, fontSize: 14, showQuantity: true)
+                    ItemRowView(item: item, listId: entry.data.listId, fontSize: 14, showQuantity: true)
                 }
 
                 Spacer(minLength: 0)
 
                 let remaining = entry.data.itemCount - visibleItems.count
                 if remaining > 0 {
-                    Text("+\(remaining) more items")
+                    Text("+\(remaining) weitere")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(muted)
                         .padding(.top, 2)
@@ -564,7 +722,7 @@ struct ShoppingListWidget: Widget {
     let kind: String = "ShoppingListWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: ShoppingListProvider()) { entry in
+        AppIntentConfiguration(kind: kind, intent: SelectListIntent.self, provider: ShoppingListProvider()) { entry in
             if #available(iOS 17.0, *) {
                 ShoppingListWidgetEntryView(entry: entry)
                     .containerBackground(.clear, for: .widget)
@@ -572,8 +730,8 @@ struct ShoppingListWidget: Widget {
                 ShoppingListWidgetEntryView(entry: entry)
             }
         }
-        .configurationDisplayName("Shopping List")
-        .description("View and check off your shopping list items.")
+        .configurationDisplayName("Einkaufsliste")
+        .description("Wähle eine Einkaufsliste und hake Produkte direkt ab.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
