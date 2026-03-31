@@ -75,14 +75,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               isDark: isDark,
               items: [
                 _SettingsItemData(
-                  icon: Icons.person_outline_rounded,
-                  title: context.tr('profile'),
-                  onTap: () => Navigator.push(
-                    context,
-                    CupertinoPageRoute(builder: (context) => const DisplayNameScreen()),
-                  ),
-                ),
-                _SettingsItemData(
                   icon: Icons.badge_outlined,
                   title: context.tr('personal_information'),
                   onTap: () => Navigator.push(

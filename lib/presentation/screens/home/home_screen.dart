@@ -845,7 +845,7 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
@@ -950,10 +950,10 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeInOutCubic,
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
@@ -981,9 +981,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                 }
               });
             },
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
               child: Row(
                 children: [
                   // Content - no icon, just text
@@ -1075,16 +1075,20 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
           ),
 
           // Expanded items section
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: _HomeExpandedItemsContent(
-              entry: entry,
-              lists: lists,
-              onAddAllItems: _addAllItemsToList,
-              isDark: isDark,
+          ClipRect(
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              alignment: Alignment.topCenter,
+              child: isExpanded 
+                ? _HomeExpandedItemsContent(
+                    entry: entry,
+                    lists: lists,
+                    onAddAllItems: _addAllItemsToList,
+                    isDark: isDark,
+                  )
+                : const SizedBox(width: double.infinity, height: 0),
             ),
-            crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 200),
           ),
         ],
       ),
@@ -1235,8 +1239,8 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? (widget.isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08))
-              : (widget.isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
+              ? (widget.isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.10))
+              : (widget.isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -1276,7 +1280,7 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
         // Subtle divider
         Container(
           height: 0.5,
-          color: widget.isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+          color: widget.isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
         ),
         
         // Horizontal scroll list selector
@@ -1317,9 +1321,9 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: _selectedListId == null 
-                          ? (widget.isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02))
-                          : (widget.isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                      color: _selectedListId == null
+                          ? (widget.isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03))
+                          : (widget.isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.07)),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -1332,9 +1336,9 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                           Icon(
                             Icons.add_rounded,
                             size: 18,
-                            color: _selectedListId == null 
-                                ? (widget.isDark ? const Color(0xFF4B4B4B) : const Color(0xFFD1D5DB))
-                                : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                            color: _selectedListId == null
+                                ? (widget.isDark ? const Color(0xFF505050) : const Color(0xFFD0D0D0))
+                                : (widget.isDark ? const Color(0xFFC0C0C0) : const Color(0xFF6B7280)),
                           ),
                         const SizedBox(width: 8),
                         Text(
@@ -1342,9 +1346,9 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: _selectedListId == null 
-                                ? (widget.isDark ? const Color(0xFF4B4B4B) : const Color(0xFFD1D5DB))
-                                : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                            color: _selectedListId == null
+                                ? (widget.isDark ? const Color(0xFF505050) : const Color(0xFFD0D0D0))
+                                : (widget.isDark ? const Color(0xFFC0C0C0) : const Color(0xFF6B7280)),
                           ),
                         ),
                       ],
@@ -1368,37 +1372,41 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
-                      color: isAdded 
+                      color: isAdded
                           ? (widget.isDark ? const Color(0xFF1A2E1A) : const Color(0xFFF0FDF4))
-                          : (widget.isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02)),
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       children: [
-                        // Item name and quantity
+                        // Item name
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.name,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: widget.isDark ? Colors.white : const Color(0xFF1A1A1A),
-                                ),
-                              ),
-                              if (item.quantity > 1 || item.unit != null)
-                                Text(
-                                  '${item.quantity.toStringAsFixed(item.quantity.truncateToDouble() == item.quantity ? 0 : 1)}${item.unit != null ? ' ${item.unit}' : ''}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: widget.isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
-                                  ),
-                                ),
-                            ],
+                          child: Text(
+                            item.name,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: widget.isDark ? Colors.white : const Color(0xFF1A1A1A),
+                            ),
                           ),
                         ),
+                        // Quantity (inline, left of + button)
+                        if (item.unit != null || item.quantity > 1)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: Text(
+                              () {
+                                final qty = item.quantity.truncateToDouble() == item.quantity
+                                    ? item.quantity.toInt().toString()
+                                    : item.quantity.toStringAsFixed(1);
+                                return item.unit != null ? '$qty ${item.unit}' : '${qty}x';
+                              }(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: widget.isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                              ),
+                            ),
+                          ),
                         // Add button
                         if (widget.lists.isNotEmpty && _selectedListId != null)
                           GestureDetector(

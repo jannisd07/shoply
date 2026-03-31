@@ -69,11 +69,11 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
     final locale = Localizations.localeOf(context).languageCode;
 
     if (entryDate == today) {
-      return '${context.tr('today')}, ${_formatTime(date)}';
+      return context.tr('today');
     } else if (entryDate == yesterday) {
-      return '${context.tr('yesterday')}, ${_formatTime(date)}';
+      return context.tr('yesterday');
     } else {
-      return DateFormat('d. MMM, HH:mm', locale).format(date);
+      return DateFormat('d. MMM', locale).format(date);
     }
   }
 
@@ -118,10 +118,16 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final lists = listsAsync.valueOrNull ?? [];
 
+    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final inputFill = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05);
+    final iconColor = isDark ? Colors.white70 : const Color(0xFF6B7280);
+
     return Scaffold(
-      backgroundColor: isDark ? Colors.black : Colors.white,
+      backgroundColor: isDark ? const Color(0xFF262626) : Colors.white,
       appBar: AppBar(
-        backgroundColor: isDark ? Colors.black : Colors.white,
+        backgroundColor: isDark ? const Color(0xFF262626) : Colors.white,
         surfaceTintColor: Colors.transparent,
         centerTitle: true,
         title: Text(
@@ -130,14 +136,14 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
             fontSize: 18,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.3,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+            color: textPrimary,
           ),
         ),
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_ios_new_rounded,
             size: 20,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+            color: textPrimary,
           ),
           onPressed: () => Navigator.pop(context),
         ),
@@ -147,27 +153,27 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
               icon: Icon(
                 Icons.delete_sweep_rounded,
                 size: 22,
-                color: isDark ? Colors.white54 : const Color(0xFF9CA3AF),
+                color: textSecondary,
               ),
               onPressed: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                    backgroundColor: cardColor,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     title: Text(
                       context.tr('clear_history'),
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                        color: textPrimary,
                       ),
                     ),
                     content: Text(
                       context.tr('clear_history_confirm'),
                       style: TextStyle(
                         fontSize: 13,
-                        color: isDark ? Colors.white60 : const Color(0xFF8E8E93),
+                        color: textSecondary,
                       ),
                     ),
                     actions: [
@@ -201,10 +207,10 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
         loading: () => Center(
           child: CupertinoActivityIndicator(color: isDark ? Colors.white38 : Colors.black26, radius: 10),
         ),
-        error: (error, _) => _buildEmptyState(isDark, isError: true),
+        error: (error, _) => _buildEmptyState(isDark, textPrimary, textSecondary, inputFill, isError: true),
         data: (history) {
           if (history.isEmpty) {
-            return _buildEmptyState(isDark);
+            return _buildEmptyState(isDark, textPrimary, textSecondary, inputFill);
           }
 
           final grouped = _groupHistoryByDate(history);
@@ -235,12 +241,12 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC),
+                        color: textSecondary,
                         letterSpacing: 0.8,
                       ),
                     ),
                   ),
-                  ...entries.map((entry) => _buildHistoryCard(entry, isDark, lists)),
+                  ...entries.map((entry) => _buildHistoryCard(entry, isDark, lists, textPrimary, textSecondary, cardColor, inputFill, iconColor)),
                 ],
               );
             },
@@ -250,7 +256,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
     );
   }
 
-  Widget _buildEmptyState(bool isDark, {bool isError = false}) {
+  Widget _buildEmptyState(bool isDark, Color textPrimary, Color textSecondary, Color inputFill, {bool isError = false}) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -258,7 +264,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
           Icon(
             isError ? Icons.wifi_off_rounded : Icons.receipt_long_rounded,
             size: 48,
-            color: isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC),
+            color: textSecondary,
           ),
           const SizedBox(height: 16),
           Text(
@@ -266,7 +272,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+              color: textPrimary,
             ),
           ),
           const SizedBox(height: 6),
@@ -274,7 +280,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
             isError ? context.tr('retry') : context.tr('completed_trips_appear_here'),
             style: TextStyle(
               fontSize: 14,
-              color: isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
+              color: textSecondary,
             ),
           ),
           if (isError) ...[
@@ -284,13 +290,13 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                  color: inputFill,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   Icons.refresh_rounded,
                   size: 20,
-                  color: isDark ? Colors.white70 : const Color(0xFF8E8E93),
+                  color: isDark ? Colors.white70 : const Color(0xFF6B7280),
                 ),
               ),
             ),
@@ -300,7 +306,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
     );
   }
 
-  Widget _buildHistoryCard(ShoppingHistory entry, bool isDark, List<dynamic> lists) {
+  Widget _buildHistoryCard(ShoppingHistory entry, bool isDark, List<dynamic> lists, Color textPrimary, Color textSecondary, Color cardColor, Color inputFill, Color iconColor) {
     final isExpanded = _expandedEntries.contains(entry.id);
 
     return Dismissible(
@@ -311,21 +317,21 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
         return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+            backgroundColor: cardColor,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             title: Text(
               context.tr('delete_entry'),
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                color: textPrimary,
               ),
             ),
             content: Text(
               context.tr('delete_entry_confirm'),
               style: TextStyle(
                 fontSize: 13,
-                color: isDark ? Colors.white60 : const Color(0xFF8E8E93),
+                color: textSecondary,
               ),
             ),
             actions: [
@@ -370,8 +376,15 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7),
+            color: cardColor,
             borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             children: [
@@ -390,18 +403,35 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                              color: textPrimary,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 3),
-                          Text(
-                            _formatDate(entry.completedAt, context),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                _formatDate(entry.completedAt, context),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: textSecondary,
+                                ),
+                              ),
+                              if (entry.completedByName != null) ...[
+                                Text(
+                                  ' • ',
+                                  style: TextStyle(fontSize: 13, color: textSecondary),
+                                ),
+                                Flexible(
+                                  child: Text(
+                                    entry.completedByName!,
+                                    style: TextStyle(fontSize: 13, color: textSecondary),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),
@@ -410,9 +440,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.06)
-                            : Colors.black.withValues(alpha: 0.04),
+                        color: inputFill,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -420,7 +448,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white54 : const Color(0xFF8E8E93),
+                          color: textSecondary,
                         ),
                       ),
                     ),
@@ -430,7 +458,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                       duration: const Duration(milliseconds: 200),
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC),
+                        color: textSecondary,
                         size: 22,
                       ),
                     ),
@@ -439,16 +467,24 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
               ),
 
               // Expanded items with add functionality
-              AnimatedCrossFade(
-                firstChild: const SizedBox.shrink(),
-                secondChild: _HistoryExpandedContent(
-                  entry: entry,
-                  lists: lists,
-                  isDark: isDark,
-                  onAddAllItems: _addAllItemsToList,
+              ClipRect(
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.topCenter,
+                  child: isExpanded
+                    ? _HistoryExpandedContent(
+                        entry: entry,
+                        lists: lists,
+                        isDark: isDark,
+                        textPrimary: textPrimary,
+                        textSecondary: textSecondary,
+                        inputFill: inputFill,
+                        iconColor: iconColor,
+                        onAddAllItems: _addAllItemsToList,
+                      )
+                    : const SizedBox(width: double.infinity, height: 0),
                 ),
-                crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                duration: const Duration(milliseconds: 200),
               ),
             ],
           ),
@@ -463,12 +499,20 @@ class _HistoryExpandedContent extends ConsumerStatefulWidget {
   final ShoppingHistory entry;
   final List<dynamic> lists;
   final bool isDark;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color inputFill;
+  final Color iconColor;
   final Future<void> Function(List<ShoppingHistoryItem> items, String listId, String listName) onAddAllItems;
 
   const _HistoryExpandedContent({
     required this.entry,
     required this.lists,
     required this.isDark,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.inputFill,
+    required this.iconColor,
     required this.onAddAllItems,
   });
 
@@ -584,7 +628,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
           context.tr('no_items'),
           style: TextStyle(
             fontSize: 13,
-            color: widget.isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
+            color: widget.textSecondary,
           ),
         ),
       );
@@ -596,7 +640,9 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
         Container(
           height: 0.5,
           margin: const EdgeInsets.symmetric(horizontal: 16),
-          color: widget.isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+          color: widget.isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
         ),
 
         // List selector + add all button
@@ -611,7 +657,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: widget.isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                    color: widget.textSecondary,
                     letterSpacing: 0.8,
                   ),
                 ),
@@ -638,8 +684,8 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color: _selectedListId == null
-                          ? (widget.isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02))
-                          : (widget.isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                          ? widget.inputFill.withValues(alpha: widget.isDark ? 0.04 : 0.03)
+                          : widget.inputFill,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -648,15 +694,15 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                         if (_isAddingAll)
                           CupertinoActivityIndicator(
                             radius: 10,
-                            color: widget.isDark ? Colors.white70 : const Color(0xFF6B7280),
+                            color: widget.iconColor,
                           )
                         else
                           Icon(
                             Icons.add_rounded,
                             size: 18,
                             color: _selectedListId == null
-                                ? (widget.isDark ? const Color(0xFF4B4B4B) : const Color(0xFFD1D5DB))
-                                : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                                ? widget.textSecondary.withValues(alpha: 0.5)
+                                : widget.iconColor,
                           ),
                         const SizedBox(width: 8),
                         Text(
@@ -665,8 +711,8 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: _selectedListId == null
-                                ? (widget.isDark ? const Color(0xFF4B4B4B) : const Color(0xFFD1D5DB))
-                                : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                                ? widget.textSecondary.withValues(alpha: 0.5)
+                                : widget.iconColor,
                           ),
                         ),
                       ],
@@ -695,7 +741,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                   decoration: BoxDecoration(
                     color: isAdded
                         ? (widget.isDark ? const Color(0xFF1A2E1A) : const Color(0xFFF0FDF4))
-                        : (widget.isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02)),
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -706,7 +752,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                         size: 14,
                         color: isAdded
                             ? const Color(0xFF22C55E)
-                            : (widget.isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC)),
+                            : widget.textSecondary,
                       ),
                       const SizedBox(width: 10),
                       // Item name
@@ -716,7 +762,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w500,
-                            color: widget.isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF3C3C43),
+                            color: widget.textPrimary,
                           ),
                         ),
                       ),
@@ -728,7 +774,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                             detail,
                             style: TextStyle(
                               fontSize: 13,
-                              color: widget.isDark ? const Color(0xFF636366) : const Color(0xFF8E8E93),
+                              color: widget.textSecondary,
                             ),
                           ),
                         ),
@@ -741,7 +787,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                             decoration: BoxDecoration(
                               color: isAdded
                                   ? const Color(0xFF22C55E)
-                                  : (widget.isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                                  : widget.inputFill,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(
@@ -749,7 +795,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                               size: 16,
                               color: isAdded
                                   ? Colors.white
-                                  : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                                  : widget.iconColor,
                             ),
                           ),
                         ),
@@ -778,8 +824,10 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? (widget.isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08))
-              : (widget.isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
+              ? (widget.isDark
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : Colors.black.withValues(alpha: 0.10))
+              : widget.inputFill,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -791,7 +839,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                 child: Icon(
                   Icons.check_rounded,
                   size: 16,
-                  color: widget.isDark ? Colors.white : const Color(0xFF1A1A1A),
+                  color: widget.textPrimary,
                 ),
               ),
             ConstrainedBox(
@@ -801,7 +849,7 @@ class _HistoryExpandedContentState extends ConsumerState<_HistoryExpandedContent
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: widget.isDark ? Colors.white : const Color(0xFF1A1A1A),
+                  color: widget.textPrimary,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
