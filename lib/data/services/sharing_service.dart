@@ -19,7 +19,7 @@ class SharingService {
     
     return Share.shareWithResult(
       shareText,
-      subject: '🍳 ${recipe.name} - Shoply Recipe',
+      subject: '🍳 ${recipe.name} - Avo Recipe',
     );
   }
 
@@ -37,7 +37,7 @@ class SharingService {
     
     return Share.shareWithResult(
       shareText,
-      subject: '🛒 $listName - Shoply List',
+      subject: '🛒 $listName - Avo List',
     );
   }
 
@@ -50,7 +50,7 @@ class SharingService {
     final shareUrl = DeepLinkService.getListInviteUrl(listId, inviteCode: inviteCode);
     
     final shareText = '''
-Join my shopping list "$listName" on Shoply! 🛒
+Join my shopping list "$listName" on Avo! 🛒
 
 $shareUrl
 
@@ -62,7 +62,7 @@ Open the link to collaborate on shopping lists together!
     
     return Share.shareWithResult(
       shareText,
-      subject: '🛒 Join $listName on Shoply',
+      subject: '🛒 Join $listName on Avo',
     );
   }
 
@@ -74,7 +74,7 @@ Open the link to collaborate on shopping lists together!
   }) async {
     final shareUrl = DeepLinkService.getAuthorShareUrl(authorId);
     
-    String shareText = 'Check out $authorName on Shoply! 👨‍🍳\n\n';
+    String shareText = 'Check out $authorName on Avo! 👨‍🍳\n\n';
     if (recipeCount != null && recipeCount > 0) {
       shareText += '$recipeCount recipes to explore!\n\n';
     }
@@ -85,7 +85,7 @@ Open the link to collaborate on shopping lists together!
     
     return Share.shareWithResult(
       shareText,
-      subject: '👨‍🍳 $authorName on Shoply',
+      subject: '👨‍🍳 $authorName on Avo',
     );
   }
 

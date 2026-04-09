@@ -63,7 +63,7 @@ class TermsOfServiceScreen extends StatelessWidget {
             // Content
             const Text(
               'Our comprehensive terms of service are currently being finalized. '
-              'These terms will govern your use of the Shoply application and services.',
+              'These terms will govern your use of the Avo application and services.',
               style: TextStyle(fontSize: 16, height: 1.5),
             ),
             const SizedBox(height: 24),

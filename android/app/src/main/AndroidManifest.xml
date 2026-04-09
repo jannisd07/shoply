@@ -18,7 +18,7 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
     
     <application
-        android:label="ShoplyAI"
+        android:label="Avo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
@@ -75,11 +75,12 @@
                 <data android:scheme="https" android:host="shoplyai.page.link"/>
             </intent-filter>
             
-            <!-- HTTPS App Links for www.shoplyai.app -->
+            <!-- HTTPS App Links for shoplyai.app -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="shoplyai.app"/>
                 <data android:scheme="https" android:host="www.shoplyai.app"/>
             </intent-filter>
             

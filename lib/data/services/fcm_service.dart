@@ -176,7 +176,7 @@ class FCMService {
       // Show local notification when app is in foreground
       NotificationService.instance.showNotification(
         id: message.messageId.hashCode,
-        title: message.notification!.title ?? 'Shoply',
+        title: message.notification!.title ?? 'Avo',
         body: message.notification!.body ?? '',
         payload: message.data.toString(),
       );

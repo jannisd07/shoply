@@ -13,6 +13,7 @@ import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/saved_recipes_provider.dart';
 import 'package:shoply/presentation/state/recipes_provider.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
+import 'package:shoply/data/services/contextual_prompt_service.dart';
 // QuickFiltersRow removed - now using inline search
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -57,8 +58,20 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     super.initState();
     _searchController.addListener(_onSearchTextChanged);
     _loadAllData();
+    _maybeShowDietPrompt();
   }
   
+  /// Show diet preferences prompt once on first visit
+  Future<void> _maybeShowDietPrompt() async {
+    // Delay to let the screen render first
+    await Future.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+    final shouldShow = await ContextualPromptService.instance.shouldShowDietPrompt();
+    if (shouldShow && mounted) {
+      ContextualPromptService.instance.showDietPrompt(context);
+    }
+  }
+
   /// Check if data needs to be refreshed (e.g., after rating change)
   void _checkForRefresh() {
     final currentTrigger = ref.read(recipeRefreshTriggerProvider);

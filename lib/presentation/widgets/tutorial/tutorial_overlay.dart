@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:shoply/core/mascot/avo_mascot.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 
-/// A beautifully designed tutorial overlay that introduces users to the app.
-/// Features Avo mascot, glassmorphism cards, and smooth animations.
 class TutorialOverlay extends StatefulWidget {
   final Widget child;
 
@@ -28,34 +26,33 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   @override
   void initState() {
     super.initState();
-    
+
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
     );
-    
+
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _fadeAnimation = CurvedAnimation(
       parent: _fadeController,
       curve: Curves.easeOutCubic,
     );
-    
+
     _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await DynamicTutorialService.instance.initialize();
-      // Check if tutorial became active after initialization
       if (DynamicTutorialService.instance.isActive && mounted) {
         _fadeController.forward();
       }
     });
-    
+
     _startTargetRectRefresh();
     DynamicTutorialService.instance.addListener(_onTutorialChange);
   }
@@ -112,35 +109,27 @@ class _TutorialOverlayState extends State<TutorialOverlay>
         final step = tutorial.currentStep!;
         final targetKey = tutorial.currentTargetKey;
         Rect? targetRect = targetKey != null ? tutorial.getTargetRect(targetKey) : null;
-        
-        // Add small padding around target for the highlight
+
         final Rect? highlightRect = targetRect != null ? targetRect.inflate(4) : null;
 
-        final isFullScreenStep = step.id == TutorialStepId.welcome || 
+        final isFullScreenStep = step.id == TutorialStepId.welcome ||
                                   step.type == TutorialStepType.finish;
-        
-        // Check if this is a tab bar target
+
         final isTabBarTarget = step.id == TutorialStepId.navigateToRecipes;
 
         return Stack(
           children: [
             widget.child,
-            // Dark overlay with hole for target
             _buildOverlay(context, step, highlightRect),
-            // Pulsing ring around target (exactly around the highlight)
             if (highlightRect != null && step.type == TutorialStepType.click)
               _buildPulsingRing(highlightRect, isTabBarTarget: isTabBarTarget),
-            // Tap blocker (allows tap only on target)
             if (step.type == TutorialStepType.click && targetRect != null)
               _buildTapBlocker(context, targetRect),
-            // Main content (Avo + Message Card) - before skip button so skip is on top
             if (isFullScreenStep)
               _buildFullScreenContent(context, step)
             else
               _buildFloatingContent(context, step, highlightRect),
-            // Skip button - always on top
             _buildSkipButton(context, tutorial),
-            // Progress dots
             _buildProgressDots(context, step),
           ],
         );
@@ -150,40 +139,18 @@ class _TutorialOverlayState extends State<TutorialOverlay>
 
   Widget _buildOverlay(BuildContext context, TutorialStep step, Rect? targetRect) {
     final screenSize = MediaQuery.of(context).size;
-    final isInfoOrFinish = step.type == TutorialStepType.info || step.type == TutorialStepType.finish;
-    
-    // Check if this is a tab bar target (navigateToRecipes step)
     final isTabBarTarget = step.id == TutorialStepId.navigateToRecipes;
 
-    return Stack(
-      children: [
-        // Swipe gesture for info steps
-        if (isInfoOrFinish)
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragEnd: (details) {
-                final velocity = details.primaryVelocity ?? 0;
-                if (velocity < -200) {
-                  DynamicTutorialService.instance.nextStep();
-                }
-              },
-              child: const SizedBox.expand(),
-            ),
-          ),
-        // Dark overlay with cutout
-        IgnorePointer(
-          child: CustomPaint(
-            size: screenSize,
-            painter: _OverlayPainter(
-              targetRect: targetRect,
-              screenSize: screenSize,
-              overlayOpacity: step.id == TutorialStepId.welcome ? 0.85 : 0.7,
-              isTabBarTarget: isTabBarTarget,
-            ),
-          ),
+    return IgnorePointer(
+      child: CustomPaint(
+        size: screenSize,
+        painter: _OverlayPainter(
+          targetRect: targetRect,
+          screenSize: screenSize,
+          overlayOpacity: step.id == TutorialStepId.welcome ? 0.85 : 0.65,
+          isTabBarTarget: isTabBarTarget,
         ),
-      ],
+      ),
     );
   }
 
@@ -191,24 +158,21 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
-        final scale = 1.0 + (_pulseAnimation.value * 0.1);
-        final opacity = 0.7 - (_pulseAnimation.value * 0.5);
-        
-        // Calculate the center of the target rect
+        final scale = 1.0 + (_pulseAnimation.value * 0.08);
+        final opacity = 0.5 - (_pulseAnimation.value * 0.35);
+
         final centerX = targetRect.center.dx;
         final centerY = targetRect.center.dy;
-        
-        // Calculate border radius based on target type
+
         double borderRadius;
         if (isTabBarTarget || targetRect.width > targetRect.height * 2) {
-          // Pill shape for tab bar or wide targets
           borderRadius = (targetRect.height * scale) / 2;
         } else if (targetRect.shortestSide > 80) {
           borderRadius = 20;
         } else {
           borderRadius = 12;
         }
-        
+
         return Positioned(
           left: centerX - (targetRect.width / 2) * scale,
           top: centerY - (targetRect.height / 2) * scale,
@@ -219,8 +183,8 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(borderRadius),
                 border: Border.all(
-                  color: Color.fromRGBO(76, 175, 80, opacity),
-                  width: 3,
+                  color: Color.fromRGBO(255, 255, 255, opacity),
+                  width: 2,
                 ),
               ),
             ),
@@ -232,11 +196,10 @@ class _TutorialOverlayState extends State<TutorialOverlay>
 
   Widget _buildTapBlocker(BuildContext context, Rect holeRect) {
     final screenSize = MediaQuery.of(context).size;
-    
+
     return Positioned.fill(
       child: Stack(
         children: [
-          // Top blocker
           if (holeRect.top > 0)
             Positioned(
               top: 0,
@@ -249,7 +212,6 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                 child: const SizedBox.expand(),
               ),
             ),
-          // Bottom blocker
           if (holeRect.bottom < screenSize.height)
             Positioned(
               top: holeRect.bottom,
@@ -262,7 +224,6 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                 child: const SizedBox.expand(),
               ),
             ),
-          // Left blocker
           if (holeRect.left > 0)
             Positioned(
               top: holeRect.top,
@@ -275,7 +236,6 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                 child: const SizedBox.expand(),
               ),
             ),
-          // Right blocker
           if (holeRect.right < screenSize.width)
             Positioned(
               top: holeRect.top,
@@ -295,12 +255,11 @@ class _TutorialOverlayState extends State<TutorialOverlay>
 
   Widget _buildSkipButton(BuildContext context, DynamicTutorialService tutorial) {
     final safeTop = MediaQuery.of(context).padding.top;
-    
-    // Position skip button on the left side for recipe-related steps
+
     final isRecipeStep = tutorial.currentStepId == TutorialStepId.navigateToRecipes ||
                          tutorial.currentStepId == TutorialStepId.showRecipes ||
                          tutorial.currentStepId == TutorialStepId.showCreateRecipe;
-    
+
     return Positioned(
       top: safeTop + 12,
       left: isRecipeStep ? 16 : null,
@@ -312,17 +271,17 @@ class _TutorialOverlayState extends State<TutorialOverlay>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
-              color: const Color.fromRGBO(0, 0, 0, 0.5),
+              color: const Color.fromRGBO(0, 0, 0, 0.45),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const Color.fromRGBO(255, 255, 255, 0.15),
-                width: 1,
+                color: const Color.fromRGBO(255, 255, 255, 0.12),
+                width: 0.5,
               ),
             ),
             child: const Text(
-              'Überspringen',
+              'Uberspringen',
               style: TextStyle(
-                color: Color.fromRGBO(255, 255, 255, 0.8),
+                color: Color.fromRGBO(255, 255, 255, 0.7),
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -335,7 +294,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
 
   Widget _buildFullScreenContent(BuildContext context, TutorialStep step) {
     final isWelcome = step.id == TutorialStepId.welcome;
-    
+
     return Positioned.fill(
       child: FadeTransition(
         opacity: _fadeAnimation,
@@ -346,17 +305,15 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Spacer(flex: 2),
-                // Avo mascot - larger for welcome/finish
                 AvoMascot(
                   size: isWelcome ? 140 : 120,
                   expression: isWelcome ? AvoExpression.waving : AvoExpression.celebrating,
                   animate: true,
                 ),
-                const SizedBox(height: 28),
-                // Message card
+                const SizedBox(height: 32),
                 _buildMessageCard(
                   context: context,
-                  title: isWelcome ? 'Willkommen! 👋' : 'Geschafft! 🎉',
+                  title: isWelcome ? 'Willkommen' : 'Geschafft',
                   message: step.message,
                   buttonText: step.buttonText ?? 'Weiter',
                   onTap: () => DynamicTutorialService.instance.nextStep(),
@@ -374,60 +331,55 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     final screenSize = MediaQuery.of(context).size;
     final safeTop = MediaQuery.of(context).padding.top;
     final safeBottom = MediaQuery.of(context).padding.bottom;
-    
-    // Calculate best position for the card - avoid overlapping with target and skip button
-    final double skipButtonBottom = safeTop + 12 + 30; // skip button position + height
-    
+
+    final double skipButtonBottom = safeTop + 12 + 30;
+
     double cardTop;
-    
+
     if (targetRect == null) {
       cardTop = screenSize.height * 0.35;
     } else {
       final spaceBelow = screenSize.height - targetRect.bottom - safeBottom - 120;
       final spaceAbove = targetRect.top - skipButtonBottom - 40;
-      
+
       final showBelow = spaceBelow >= 200 || spaceAbove < 180;
-      
+
       if (showBelow) {
         cardTop = targetRect.bottom + 24;
       } else {
-        // Position above target, but below skip button
         cardTop = targetRect.top - 180;
       }
     }
-    
-    // Clamp to safe area, ensuring we don't overlap skip button
+
     cardTop = cardTop.clamp(skipButtonBottom + 20, screenSize.height - safeBottom - 200);
-    
+
     final isClickStep = step.type == TutorialStepType.click;
-    
+
     return Positioned(
       top: cardTop,
-      left: 16,
-      right: 16,
+      left: 20,
+      right: 20,
       child: FadeTransition(
         opacity: _fadeAnimation,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Avo mascot
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: AvoMascot(
-                size: 70,
+                size: 64,
                 expression: isClickStep ? AvoExpression.excited : AvoExpression.happy,
                 animate: true,
               ),
             ),
             const SizedBox(width: 12),
-            // Message card
             Expanded(
               child: _buildCompactMessageCard(
                 context: context,
                 message: step.message,
                 buttonText: step.type == TutorialStepType.info ? (step.buttonText ?? 'Weiter') : null,
                 isClickStep: isClickStep,
-                onTap: step.type == TutorialStepType.info 
+                onTap: step.type == TutorialStepType.info
                     ? () => DynamicTutorialService.instance.nextStep()
                     : null,
               ),
@@ -445,49 +397,60 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     required String buttonText,
     required VoidCallback onTap,
   }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color.fromRGBO(28, 28, 30, 0.85),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: const Color.fromRGBO(255, 255, 255, 0.1),
-              width: 1,
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color.fromRGBO(28, 28, 30, 0.92),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color.fromRGBO(255, 255, 255, 0.08),
+          width: 0.5,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: -0.3,
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 15,
+              color: Color.fromRGBO(255, 255, 255, 0.7),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: onTap,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 12),
-              Text(
-                message,
+              child: Text(
+                buttonText,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
+                  color: Color(0xFF1A1A1A),
                   fontSize: 15,
-                  color: Color.fromRGBO(255, 255, 255, 0.85),
-                  height: 1.5,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 20),
-              _buildPrimaryButton(
-                text: buttonText,
-                onTap: onTap,
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -499,109 +462,60 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     bool isClickStep = false,
     VoidCallback? onTap,
   }) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color.fromRGBO(28, 28, 30, 0.9),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: const Color.fromRGBO(255, 255, 255, 0.08),
-              width: 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                message,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color.fromRGBO(255, 255, 255, 0.95),
-                  height: 1.45,
-                ),
-              ),
-              if (buttonText != null && onTap != null) ...[
-                const SizedBox(height: 14),
-                _buildPrimaryButton(
-                  text: buttonText,
-                  onTap: onTap,
-                  compact: true,
-                ),
-              ] else if (isClickStep) ...[
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: const Color.fromRGBO(76, 175, 80, 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(
-                        Icons.touch_app_rounded,
-                        size: 14,
-                        color: Color(0xFF4CAF50),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Tippe auf das markierte Element',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Color.fromRGBO(255, 255, 255, 0.5),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color.fromRGBO(28, 28, 30, 0.92),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color.fromRGBO(255, 255, 255, 0.08),
+          width: 0.5,
         ),
       ),
-    );
-  }
-
-  Widget _buildPrimaryButton({
-    required String text,
-    required VoidCallback onTap,
-    bool compact = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: compact ? null : double.infinity,
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 20 : 24,
-          vertical: compact ? 10 : 12,
-        ),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF4CAF50), Color(0xFF66BB6A)],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color.fromRGBO(255, 255, 255, 0.9),
+              height: 1.45,
+            ),
           ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
-            BoxShadow(
-              color: Color.fromRGBO(76, 175, 80, 0.35),
-              blurRadius: 10,
-              offset: Offset(0, 3),
+          if (buttonText != null && onTap != null) ...[
+            const SizedBox(height: 14),
+            GestureDetector(
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  buttonText,
+                  style: const TextStyle(
+                    color: Color(0xFF1A1A1A),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ] else if (isClickStep) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Tippe auf das markierte Element',
+              style: TextStyle(
+                fontSize: 11,
+                color: const Color.fromRGBO(255, 255, 255, 0.4),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
-        ),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: compact ? 13 : 15,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -610,11 +524,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     final safeBottom = MediaQuery.of(context).padding.bottom;
     final allSteps = TutorialStepId.values;
     final currentIndex = allSteps.indexOf(step.id);
-    
-    // Use higher bottom padding to avoid iOS 26 navbar overlap
-    // iOS 26 navbar is taller, so we add extra padding (70 instead of 30)
+
     final bottomPadding = safeBottom + 70;
-    
+
     return Positioned(
       bottom: bottomPadding,
       left: 0,
@@ -626,7 +538,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
           children: List.generate(allSteps.length, (index) {
             final isActive = index == currentIndex;
             final isPast = index < currentIndex;
-            
+
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -634,10 +546,10 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               height: 6,
               decoration: BoxDecoration(
                 color: isActive
-                    ? const Color(0xFF4CAF50)
+                    ? Colors.white
                     : isPast
-                        ? const Color.fromRGBO(255, 255, 255, 0.45)
-                        : const Color.fromRGBO(255, 255, 255, 0.15),
+                        ? const Color.fromRGBO(255, 255, 255, 0.4)
+                        : const Color.fromRGBO(255, 255, 255, 0.12),
                 borderRadius: BorderRadius.circular(3),
               ),
             );
@@ -657,7 +569,7 @@ class _OverlayPainter extends CustomPainter {
   _OverlayPainter({
     this.targetRect,
     required this.screenSize,
-    this.overlayOpacity = 0.7,
+    this.overlayOpacity = 0.65,
     this.isTabBarTarget = false,
   });
 
@@ -667,26 +579,22 @@ class _OverlayPainter extends CustomPainter {
     final fullRect = Rect.fromLTWH(0, 0, size.width, size.height);
 
     if (targetRect != null && targetRect!.width > 0 && targetRect!.height > 0) {
-      // Clamp to screen bounds
       final clampedRect = Rect.fromLTRB(
         targetRect!.left.clamp(0, screenSize.width),
         targetRect!.top.clamp(0, screenSize.height),
         targetRect!.right.clamp(0, screenSize.width),
         targetRect!.bottom.clamp(0, screenSize.height),
       );
-      
-      // For tab bar targets, use pill/stadium shape (fully rounded)
-      // For other targets, use appropriate corner radius
+
       double borderRadius;
       if (isTabBarTarget || clampedRect.width > clampedRect.height * 2) {
-        // Pill shape - radius is half the height
         borderRadius = clampedRect.height / 2;
       } else if (clampedRect.shortestSide > 80) {
         borderRadius = 20.0;
       } else {
         borderRadius = 12.0;
       }
-      
+
       if (clampedRect.width > 0 && clampedRect.height > 0) {
         final path = Path()
           ..addRect(fullRect)

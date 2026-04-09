@@ -24,7 +24,7 @@ class AppLocalizations {
       AppTranslations.get(key, locale.languageCode, params: params);
 
   // Common
-  String get appName => 'Shoply';
+  String get appName => 'Avo';
   String get cancel => _get('cancel');
   String get save => _get('save');
   String get delete => _get('delete');

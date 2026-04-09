@@ -24,6 +24,7 @@ import 'package:shoply/presentation/screens/lists/list_background_selection_scre
 import 'package:shoply/presentation/screens/lists/list_background_picker_screen.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/screens/onboarding/unified_setup_screen.dart';
+import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart' show OnboardingScreen, hasCompletedOnboarding;
 import 'package:shoply/presentation/screens/legal/privacy_policy_screen.dart';
 import 'package:shoply/presentation/screens/legal/terms_of_service_screen.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -70,11 +71,18 @@ final routerProvider = Provider<GoRouter>((ref) {
   }
   
   return GoRouter(
-    initialLocation: '/welcome',
+    initialLocation: '/onboarding',
     refreshListenable: GoRouterRefreshStream(supabase.authStateChanges),
     observers: observers,
     routes: [
-      // Welcome / Auth Entry (new ChatGPT-style)
+      // Onboarding (first-time users)
+      GoRoute(
+        path: '/onboarding',
+        name: 'onboarding',
+        builder: (context, state) => const OnboardingScreen(),
+      ),
+
+      // Welcome / Auth Entry (returning users who completed onboarding)
       GoRoute(
         path: '/welcome',
         name: 'welcome',
@@ -308,10 +316,24 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
     redirect: (context, state) async {
       final isLoggedIn = SupabaseService.instance.currentUser != null;
+      final uri = state.uri;
+
+      // Convert shoply:// deep links to proper paths
+      if (uri.scheme == 'shoply') {
+        final host = uri.host; // e.g. 'recipe', 'list'
+        final segments = uri.pathSegments;
+        if (host == 'recipe' && segments.isNotEmpty) return '/recipe/${segments[0]}';
+        if (host == 'list' && segments.isNotEmpty) return '/list/${segments[0]}';
+        if (host == 'invite' && segments.isNotEmpty) return '/invite/${segments[0]}';
+        if (host == 'author' && segments.isNotEmpty) return '/author/${segments[0]}';
+        return '/home';
+      }
+
       final location = state.matchedLocation;
-      
+
       // Public routes that don't require authentication
-      final isPublicRoute = location == '/welcome' || 
+      final isPublicRoute = location == '/onboarding' ||
+                           location == '/welcome' ||
                            location == '/login' ||
                            location == '/signup' ||
                            location == '/reset-password' ||
@@ -320,20 +342,43 @@ final routerProvider = Provider<GoRouter>((ref) {
                            location.startsWith('/recipe/') ||
                            location.startsWith('/list/') ||
                            location.startsWith('/invite/');
-      
+
       final isSetup = location == '/setup';
       final isNamePrompt = location == '/name-prompt';
-      
+      final isOnboarding = location == '/onboarding';
+
+      // Check if onboarding has been completed (cached after first check)
+      final onboardingDone = await hasCompletedOnboarding();
+
+      // First-time user: show onboarding unless on a public deep link
+      if (!onboardingDone && !isOnboarding && !isLoggedIn) {
+        // Allow deep links and auth sub-routes through
+        if (location.startsWith('/recipe/') ||
+            location.startsWith('/list/') ||
+            location.startsWith('/invite/') ||
+            location == '/login' ||
+            location == '/signup' ||
+            location == '/reset-password') {
+          return null;
+        }
+        return '/onboarding';
+      }
+
+      // Onboarding done but not logged in: show welcome (not onboarding again)
+      if (onboardingDone && isOnboarding && !isLoggedIn) {
+        return '/welcome';
+      }
+
       // Not logged in - redirect to welcome screen only if trying to access private route
       if (!isLoggedIn && !isPublicRoute) {
         return '/welcome';
       }
 
-      // Allow access to reset password page if we are there (e.g. via deep link + listener)
+      // Allow access to reset password page
       if (location == '/reset-password') {
         return null;
       }
-      
+
       // Logged in - check if name prompt or setup is needed
       if (isLoggedIn) {
         try {
@@ -344,18 +389,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                 .select('display_name, onboarding_completed')
                 .eq('id', user.id)
                 .maybeSingle();
-            
+
             final displayName = response?['display_name'] as String?;
             final needsName = DisplayNameHelper.needsNamePrompt(displayName);
-            
+
             // If user needs to set their name, redirect to name prompt
             if (needsName && !isNamePrompt && !isSetup) {
               return '/name-prompt';
             }
-            
-            // If name is set and trying to access auth routes, go to home
-            if (!needsName && 
-               (location == '/welcome' || location == '/login' || location == '/signup' || isNamePrompt)) {
+
+            // If name is set and trying to access auth/onboarding routes, go to home
+            if (!needsName &&
+               (location == '/welcome' || location == '/login' || location == '/signup' || isNamePrompt || isOnboarding)) {
               return '/home';
             }
           }
@@ -363,7 +408,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           // On error, allow navigation to continue
         }
       }
-      
+
       return null;
     },
   );

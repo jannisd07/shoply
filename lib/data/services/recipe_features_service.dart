@@ -249,7 +249,7 @@ class RecipeFeaturesService {
       descriptionDE: 'Kreiere ein leckeres Gericht mit nur 5 Zutaten!',
       startDate: now.subtract(Duration(days: now.weekday - 1)),
       endDate: now.add(Duration(days: 7 - now.weekday)),
-      hashtag: '#Shoply5Ingredients',
+      hashtag: '#Avo5Ingredients',
       isActive: true,
     );
   }

@@ -60,7 +60,7 @@ void main() async {
   // Launch the app immediately - everything else initializes in background
   runApp(
     const ProviderScope(
-      child: ShoplyAIApp(),
+      child: AvoApp(),
     ),
   );
 

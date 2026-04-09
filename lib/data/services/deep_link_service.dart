@@ -10,7 +10,7 @@ class DeepLinkService {
   DeepLinkService._();
 
   // Domain for universal links
-  static const String webDomain = 'www.shoplyai.app';
+  static const String webDomain = 'shoplyai.app';
   static const String webScheme = 'https';
   
   // Custom URL scheme for fallback
@@ -127,7 +127,7 @@ class DeepLinkService {
         
       case 'list':
         if (segments.length >= 2) {
-          return '/lists/${segments[1]}';
+          return '/list/${segments[1]}';
         }
         return '/home';
         
@@ -163,7 +163,7 @@ class DeepLinkService {
         
       case 'list':
         if (segments.isNotEmpty) {
-          return '/lists/${segments[0]}';
+          return '/list/${segments[0]}';
         }
         return '/home';
         

@@ -271,7 +271,7 @@ class SiriService {
           message = 'Opening saved recipes';
           break;
         default:
-          message = 'Opening Shoply';
+          message = 'Opening Avo';
       }
       
       return {

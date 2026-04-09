@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
@@ -184,279 +185,198 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF2F2F7);
-    final cardColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
-    final secondaryText = isDark ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93);
+    final backgroundColor = AppColors.background(context);
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
+    final separatorColor = AppColors.divider(context);
 
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: bgColor,
-        surfaceTintColor: Colors.transparent,
-        centerTitle: true,
+        backgroundColor: backgroundColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         title: Text(
           context.tr('list_settings'),
           style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.3,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+            color: textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
           ),
         ),
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 20,
-            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-          ),
+          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: _isLoading
           ? const Center(child: CupertinoActivityIndicator())
           : ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 8,
+                bottom: 60 + MediaQuery.of(context).padding.bottom,
+              ),
               children: [
-                const SizedBox(height: 8),
-
-                // List info header
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemBlue.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.cart_fill,
-                          color: CupertinoColors.systemBlue,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.listName,
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${_members.length} ${context.tr('members')}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: secondaryText,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 28),
-
-                // Members section header
+                // List name
                 Padding(
-                  padding: const EdgeInsets.only(left: 16, bottom: 8),
+                  padding: const EdgeInsets.only(bottom: 8, left: 4),
                   child: Text(
-                    context.tr('members').toUpperCase(),
+                    widget.listName,
                     style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: secondaryText,
-                      letterSpacing: 0.5,
+                      fontSize: 15,
+                      color: textSecondary,
                     ),
                   ),
                 ),
 
-                // Members list
-                Container(
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: List.generate(_members.length, (index) {
-                      final member = _members[index];
-                      final isOwner = member['is_owner'] == true;
-                      final isCurrentUser = member['user_id'] == _currentUserId;
-                      final displayName = member['display_name'] as String;
-                      final avatarUrl = member['avatar_url'] as String?;
-                      final userId = member['user_id'] as String;
+                const SizedBox(height: 24),
 
-                      return Column(
-                        children: [
-                          if (index > 0)
-                            Divider(
-                              height: 0.5,
-                              indent: 68,
-                              color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
-                            ),
-                          CupertinoButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () {
-                              context.push('/author/$userId', extra: {'authorName': displayName});
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              child: Row(
-                                children: [
-                                  // Avatar
-                                  SizedBox(
-                                    width: 40,
-                                    height: 40,
-                                    child: ClipOval(
-                                      child: avatarUrl != null && avatarUrl.isNotEmpty
-                                          ? Image.network(
-                                              avatarUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => _buildAvatarFallback(displayName, isDark),
-                                            )
-                                          : _buildAvatarFallback(displayName, isDark),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Name + role
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          displayName + (isCurrentUser ? ' (${context.tr('you')})' : ''),
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-                                          ),
-                                        ),
-                                        if (isOwner)
-                                          Text(
-                                            context.tr('creator'),
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: secondaryText,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Remove button
-                                  if (_isCreator && !isOwner)
-                                    CupertinoButton(
-                                      padding: EdgeInsets.zero,
-                                      minSize: 32,
-                                      onPressed: () => _removeMember(member['user_id'] as String, displayName),
-                                      child: Icon(
-                                        CupertinoIcons.minus_circle_fill,
-                                        color: CupertinoColors.systemRed,
-                                        size: 22,
+                // Members section
+                _buildSectionHeader(context.tr('members'), textSecondary),
+                ...List.generate(_members.length, (index) {
+                  final member = _members[index];
+                  final isOwner = member['is_owner'] == true;
+                  final isCurrentUser = member['user_id'] == _currentUserId;
+                  final displayName = member['display_name'] as String;
+                  final avatarUrl = member['avatar_url'] as String?;
+                  final userId = member['user_id'] as String;
+
+                  return Column(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          context.push('/author/$userId', extra: {'authorName': displayName});
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: ClipOval(
+                                  child: avatarUrl != null && avatarUrl.isNotEmpty
+                                      ? Image.network(
+                                          avatarUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => _buildAvatarFallback(displayName, textPrimary, textSecondary),
+                                        )
+                                      : _buildAvatarFallback(displayName, textPrimary, textSecondary),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      displayName + (isCurrentUser ? ' (${context.tr('you')})' : ''),
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w400,
+                                        color: textPrimary,
                                       ),
-                                    )
-                                  else
-                                    Icon(
-                                      CupertinoIcons.chevron_right,
-                                      size: 14,
-                                      color: isDark ? Colors.white.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.15),
                                     ),
-                                ],
+                                    if (isOwner)
+                                      Text(
+                                        context.tr('creator'),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
+                              if (_isCreator && !isOwner)
+                                GestureDetector(
+                                  onTap: () => _removeMember(member['user_id'] as String, displayName),
+                                  child: Icon(
+                                    CupertinoIcons.minus_circle_fill,
+                                    color: CupertinoColors.systemRed,
+                                    size: 20,
+                                  ),
+                                )
+                              else
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: textSecondary.withOpacity(0.4),
+                                  size: 20,
+                                ),
+                            ],
                           ),
-                        ],
-                      );
-                    }),
-                  ),
-                ),
-
-                const SizedBox(height: 28),
-
-                // Danger zone
-                Padding(
-                  padding: const EdgeInsets.only(left: 16, bottom: 8),
-                  child: Text(
-                    context.tr('actions').toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: secondaryText,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-
-                Container(
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      if (!_isCreator)
-                        _buildActionRow(
-                          icon: CupertinoIcons.arrow_right_square,
-                          label: context.tr('leave_list'),
-                          isDestructive: true,
-                          onTap: _leaveList,
-                          isDark: isDark,
                         ),
-                      if (_isCreator) ...[
-                        _buildActionRow(
-                          icon: CupertinoIcons.trash,
-                          label: context.tr('delete_list'),
-                          isDestructive: true,
-                          onTap: _deleteList,
-                          isDark: isDark,
-                        ),
-                      ],
+                      ),
+                      if (index < _members.length - 1)
+                        Container(height: 0.5, color: separatorColor),
                     ],
+                  );
+                }),
+
+                const SizedBox(height: 32),
+
+                // Actions section
+                _buildSectionHeader(context.tr('actions'), textSecondary),
+                if (!_isCreator)
+                  _buildActionRow(
+                    label: context.tr('leave_list'),
+                    textPrimary: textPrimary,
+                    isDestructive: true,
+                    onTap: _leaveList,
                   ),
-                ),
+                if (_isCreator)
+                  _buildActionRow(
+                    label: context.tr('delete_list'),
+                    textPrimary: textPrimary,
+                    isDestructive: true,
+                    onTap: _deleteList,
+                  ),
 
                 if (_isCreator)
                   Padding(
-                    padding: const EdgeInsets.only(left: 16, top: 8),
+                    padding: const EdgeInsets.only(left: 4, top: 12),
                     child: Text(
                       context.tr('delete_list_hint'),
                       style: TextStyle(
                         fontSize: 13,
-                        color: secondaryText,
+                        color: textSecondary,
                       ),
                     ),
                   ),
-
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 32),
               ],
             ),
     );
   }
 
-  Widget _buildAvatarFallback(String name, bool isDark) {
+  Widget _buildSectionHeader(String title, Color textSecondary) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          color: textSecondary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback(String name, Color textPrimary, Color textSecondary) {
     return Container(
-      color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE5E5EA),
+      color: textSecondary.withOpacity(0.1),
       child: Center(
         child: Text(
           name.isNotEmpty ? name[0].toUpperCase() : '?',
           style: TextStyle(
-            fontSize: 17,
+            fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white60 : const Color(0xFF8E8E93),
+            color: textSecondary,
           ),
         ),
       ),
@@ -464,34 +384,28 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
   }
 
   Widget _buildActionRow({
-    required IconData icon,
     required String label,
+    required Color textPrimary,
     required bool isDestructive,
     required VoidCallback onTap,
-    required bool isDark,
   }) {
-    final color = isDestructive ? CupertinoColors.systemRed : (isDark ? Colors.white : const Color(0xFF1A1A1A));
+    final color = isDestructive ? CupertinoColors.systemRed : textPrimary;
 
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: onTap,
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: color),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  color: color,
-                ),
-              ),
-            ),
-          ],
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w400,
+            color: color,
+          ),
         ),
       ),
     );

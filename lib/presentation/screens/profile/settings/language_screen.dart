@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,9 +16,9 @@ class _LanguageScreenState extends ConsumerState<LanguageScreen> {
   String _selectedLanguage = 'system';
 
   final List<Map<String, String>> _languages = [
-    {'code': 'system', 'name': 'System', 'flag': '📱'},
-    {'code': 'de', 'name': 'Deutsch', 'flag': '🇩🇪'},
-    {'code': 'en', 'name': 'English', 'flag': '🇬🇧'},
+    {'code': 'system', 'name': 'System'},
+    {'code': 'de', 'name': 'Deutsch'},
+    {'code': 'en', 'name': 'English'},
   ];
 
   @override
@@ -33,7 +32,7 @@ class _LanguageScreenState extends ConsumerState<LanguageScreen> {
     final backgroundColor = AppColors.background(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final separatorColor = AppColors.divider(context);
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -58,11 +57,10 @@ class _LanguageScreenState extends ConsumerState<LanguageScreen> {
         padding: EdgeInsets.only(
           left: 24,
           right: 24,
-          top: 16,
+          top: 8,
           bottom: 60 + MediaQuery.of(context).padding.bottom,
         ),
         children: [
-          // Description
           Padding(
             padding: const EdgeInsets.only(bottom: 24, left: 4),
             child: Text(
@@ -73,75 +71,82 @@ class _LanguageScreenState extends ConsumerState<LanguageScreen> {
               ),
             ),
           ),
-          // Language options
-          ..._languages.map((language) {
+
+          _buildSectionHeader(context.tr('language'), textSecondary),
+
+          ...List.generate(_languages.length, (index) {
+            final language = _languages[index];
             final isSelected = _selectedLanguage == language['code'];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: GestureDetector(
-                onTap: () async {
-                  HapticFeedback.selectionClick();
-                  setState(() => _selectedLanguage = language['code']!);
-                  await ref.read(languageProvider.notifier).setLanguage(language['code']!);
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05))
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isSelected
-                          ? (isDark ? Colors.white.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.15))
-                          : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        language['flag']!,
-                        style: const TextStyle(fontSize: 24),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              language['name']!,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                color: textPrimary,
-                              ),
-                            ),
-                            if (language['code'] == 'system')
+            return Column(
+              children: [
+                GestureDetector(
+                  onTap: () async {
+                    HapticFeedback.selectionClick();
+                    setState(() => _selectedLanguage = language['code']!);
+                    await ref.read(languageProvider.notifier).setLanguage(language['code']!);
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                context.tr('follows_system_language'),
+                                language['name']!,
                                 style: TextStyle(
-                                  fontSize: 13,
-                                  color: textSecondary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w400,
+                                  color: textPrimary,
                                 ),
                               ),
-                          ],
+                              if (language['code'] == 'system')
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    context.tr('follows_system_language'),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: textSecondary,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                      if (isSelected)
-                        Icon(
-                          Icons.check_rounded,
-                          color: isDark ? Colors.white : Colors.black,
-                          size: 22,
-                        ),
-                    ],
+                        if (isSelected)
+                          Icon(
+                            Icons.check_rounded,
+                            color: textPrimary,
+                            size: 22,
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+                if (index < _languages.length - 1)
+                  Container(height: 0.5, color: separatorColor),
+              ],
             );
           }),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, Color textSecondary) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          color: textSecondary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }

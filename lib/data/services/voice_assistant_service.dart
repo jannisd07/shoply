@@ -346,7 +346,7 @@ class VoiceAssistantService {
       final destination = args?['destination'] as String?;
 
       String route = '/home';
-      String message = 'Opening Shoply';
+      String message = 'Opening Avo';
 
       if (destination != null) {
         switch (destination.toLowerCase()) {

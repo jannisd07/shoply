@@ -210,6 +210,32 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
             pinned: true,
             stretch: true,
             backgroundColor: scaffoldBg,
+            automaticallyImplyLeading: false,
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: ClipOval(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        } else {
+                          context.go('/home');
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -889,9 +915,13 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
 
   void _shareRecipe() async {
     final shareText = _recipeService.getShareText(_recipe!);
+    final box = context.findRenderObject() as RenderBox?;
     await Share.share(
       shareText,
       subject: '🍳 ${_recipe!.name}',
+      sharePositionOrigin: box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : const Rect.fromLTWH(0, 0, 100, 100),
     );
   }
 

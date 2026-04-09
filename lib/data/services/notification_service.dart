@@ -1,4 +1,4 @@
-/// Push and local notification service for Shoply
+/// Push and local notification service for Avo
 ///
 /// **AI: Critical Constraints**:
 /// - ⚠️ Platform: iOS/Android only (check Platform.isIOS before using)
@@ -457,7 +457,7 @@ class NotificationService {
     
     const androidDetails = AndroidNotificationDetails(
       'shoply_channel',
-      'Shoply Notifications',
+      'Avo Notifications',
       channelDescription: 'Notifications for lists, recipes, and updates',
       importance: Importance.high,
       priority: Priority.high,

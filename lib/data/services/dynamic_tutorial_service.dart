@@ -140,81 +140,81 @@ class DynamicTutorialService extends ChangeNotifier {
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.info,
-          message: 'Ich bin Avo, dein Einkaufshelfer! Lass mich dir kurz zeigen, wie Shoply funktioniert.',
+          message: 'Ich bin Avo, dein Einkaufshelfer! Lass mich dir kurz zeigen, wie Avo funktioniert.',
           nextStep: TutorialStepId.openShoppingList,
-          buttonText: "Los geht's!",
+          buttonText: "Los geht's",
         );
-        
+
       case TutorialStepId.openShoppingList:
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.click,
-          message: _hasLists 
-              ? 'Hier sind deine Einkaufslisten. Tippe auf eine, um sie zu öffnen!'
-              : 'Hier ist deine erste Einkaufsliste. Tippe drauf!',
+          message: _hasLists
+              ? 'Hier sind deine Einkaufslisten. Tippe auf eine, um sie zu offnen.'
+              : 'Hier ist deine erste Einkaufsliste. Tippe drauf.',
           targetKey: firstListCardKey,
           nextStep: TutorialStepId.showListItems,
         );
-        
+
       case TutorialStepId.showListItems:
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.info,
           message: _listHasItems
-              ? 'Super! Hier siehst du deine Artikel. Tippe zum Abhaken!'
-              : 'Hier erscheinen deine Artikel – nach Kategorie sortiert.',
+              ? 'Hier siehst du deine Artikel. Tippe zum Abhaken.'
+              : 'Hier erscheinen deine Artikel, nach Kategorie sortiert.',
           targetKey: listItemsAreaKey,
           nextStep: TutorialStepId.showInputField,
           buttonText: 'Verstanden',
         );
-        
+
       case TutorialStepId.showInputField:
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.info,
-          message: 'Hier fügst du neue Artikel hinzu. Ich sortiere sie automatisch in Kategorien! 🪄',
+          message: 'Hier fugst du neue Artikel hinzu. Sie werden automatisch in Kategorien sortiert.',
           targetKey: addItemInputKey,
           nextStep: TutorialStepId.navigateToRecipes,
-          buttonText: 'Cool!',
+          buttonText: 'Weiter',
         );
-        
+
       case TutorialStepId.navigateToRecipes:
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.click,
-          message: 'Jetzt zeig ich dir die Rezepte! Tippe auf das Symbol unten.',
+          message: 'Jetzt zeig ich dir die Rezepte. Tippe auf das Symbol unten.',
           targetKey: recipesTabKey,
           nextStep: TutorialStepId.showRecipes,
         );
-        
+
       case TutorialStepId.showRecipes:
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.info,
           message: _hasRecipes
-              ? 'Hier findest du Rezepte! Die Zutaten kannst du direkt zur Liste hinzufügen.'
-              : 'Hier findest du Rezepte von der Community. Probier mal eins aus!',
+              ? 'Hier findest du Rezepte. Die Zutaten kannst du direkt zur Liste hinzufugen.'
+              : 'Hier findest du Rezepte von der Community.',
           targetKey: recipesAreaKey,
           nextStep: TutorialStepId.showCreateRecipe,
           buttonText: 'Weiter',
         );
-        
+
       case TutorialStepId.showCreateRecipe:
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.info,
-          message: 'Hier kannst du eigene Rezepte erstellen und teilen!',
+          message: 'Hier kannst du eigene Rezepte erstellen und teilen.',
           targetKey: addRecipeButtonKey,
           nextStep: TutorialStepId.tutorialComplete,
-          buttonText: 'Alles klar!',
+          buttonText: 'Weiter',
         );
-        
+
       case TutorialStepId.tutorialComplete:
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.finish,
-          message: 'Du bist startklar! Viel Spaß beim Einkaufen. Bei Fragen findest du mich in den Einstellungen. 🥑',
-          buttonText: 'Loslegen!',
+          message: 'Du bist startklar. Viel Spass beim Einkaufen!',
+          buttonText: 'Loslegen',
         );
     }
   }

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,23 +41,16 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
     try {
       final authService = ref.read(authServiceProvider);
       await authService.updateDisplayName(_nameController.text.trim());
-      
-      // Refresh user data
+
       ref.invalidate(currentUserProvider);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.tr('name_updated')),
-            backgroundColor: AppColors.success,
-          ),
-        );
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     } finally {
@@ -68,77 +60,122 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
 
   void _showProfilePictureOptions() {
     final user = ref.read(currentUserProvider).value;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    showModalBottomSheet(
+    final backgroundColor = AppColors.background(context);
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
+    final separatorColor = AppColors.divider(context);
+
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        margin: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library_rounded),
-                title: Text(context.tr('choose_from_gallery')),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_rounded),
-                title: Text(context.tr('take_photo')),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-              if (user?.avatarUrl != null)
-                ListTile(
-                  leading: const Icon(Icons.delete_rounded, color: Colors.red),
-                  title: Text(
-                    context.tr('remove_photo'),
-                    style: const TextStyle(color: Colors.red),
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: backgroundColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.tr('change_profile_picture'),
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
+                ),
+                const SizedBox(height: 20),
+                _buildOptionRow(
+                  label: context.tr('choose_from_gallery'),
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
                   onTap: () {
-                    Navigator.pop(context);
-                    _deleteProfilePicture();
+                    Navigator.pop(dialogContext);
+                    _pickImage(ImageSource.gallery);
                   },
                 ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: TextButton.styleFrom(
-                      backgroundColor: isDark 
-                          ? Colors.white.withOpacity(0.1)
-                          : Colors.black.withOpacity(0.05),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      context.tr('cancel'),
-                      style: TextStyle(
-                        color: isDark ? Colors.white : Colors.black87,
-                        fontWeight: FontWeight.w600,
+                Container(height: 0.5, color: separatorColor),
+                _buildOptionRow(
+                  label: context.tr('take_photo'),
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
+                  onTap: () {
+                    Navigator.pop(dialogContext);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+                if (user?.avatarUrl != null) ...[
+                  Container(height: 0.5, color: separatorColor),
+                  _buildOptionRow(
+                    label: context.tr('remove_photo'),
+                    textColor: CupertinoColors.systemRed,
+                    textPrimary: textPrimary,
+                    textSecondary: textSecondary,
+                    onTap: () {
+                      Navigator.pop(dialogContext);
+                      _deleteProfilePicture();
+                    },
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(dialogContext),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                      child: Text(
+                        context.tr('cancel'),
+                        style: TextStyle(
+                          color: textSecondary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOptionRow({
+    required String label,
+    required Color textPrimary,
+    required Color textSecondary,
+    Color? textColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: textColor ?? textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: textColor ?? textSecondary.withOpacity(0.4),
+              size: 20,
+            ),
+          ],
         ),
       ),
     );
@@ -147,7 +184,7 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: source, maxWidth: 512, maxHeight: 512);
-    
+
     if (image != null) {
       await _uploadProfilePicture(image.path);
     }
@@ -155,26 +192,16 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
 
   Future<void> _uploadProfilePicture(String filePath) async {
     setState(() => _isUploadingImage = true);
-    
+
     try {
       final service = ProfilePictureService();
       await service.uploadProfilePicture(filePath);
-      
-      // Refresh user data
+
       ref.invalidate(currentUserProvider);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.tr('profile_picture_updated')),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     } finally {
@@ -184,26 +211,16 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
 
   Future<void> _deleteProfilePicture() async {
     setState(() => _isUploadingImage = true);
-    
+
     try {
       final service = ProfilePictureService();
       await service.deleteProfilePicture();
-      
-      // Refresh user data
+
       ref.invalidate(currentUserProvider);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.tr('profile_picture_removed')),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     } finally {
@@ -220,7 +237,7 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
     final textSecondary = AppColors.textSecondary(context);
     final inputFill = AppColors.inputFill(context);
     final borderColor = AppColors.border(context);
-    
+
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
@@ -239,110 +256,82 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
           icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          TextButton(
+            onPressed: _isLoading ? null : _saveName,
+            child: _isLoading
+                ? CupertinoActivityIndicator(radius: 10, color: textPrimary)
+                : Text(
+                    context.tr('save'),
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
+            left: 24,
+            right: 24,
             top: 16,
             bottom: 100 + MediaQuery.of(context).padding.bottom,
           ),
           children: [
-            // Profile Picture Section
+            // Profile Picture
             Center(
-              child: Stack(
-                children: [
-                  GestureDetector(
-                    onTap: _isUploadingImage ? null : _showProfilePictureOptions,
-                    child: CircleAvatar(
-                      radius: 60,
+              child: GestureDetector(
+                onTap: _isUploadingImage ? null : _showProfilePictureOptions,
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
                       backgroundColor: inputFill,
                       backgroundImage: user?.avatarUrl != null
                           ? NetworkImage(user!.avatarUrl!)
                           : null,
                       child: _isUploadingImage
-                          ? CupertinoActivityIndicator(color: AppColors.accent)
+                          ? CupertinoActivityIndicator(color: textPrimary)
                           : user?.avatarUrl == null
                               ? Text(
                                   displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
                                   style: TextStyle(
-                                    fontSize: 40,
+                                    fontSize: 32,
                                     fontWeight: FontWeight.w600,
                                     color: textPrimary,
                                   ),
                                 )
                               : null,
                     ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: GestureDetector(
-                      onTap: _isUploadingImage ? null : _showProfilePictureOptions,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: backgroundColor,
-                            width: 3,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt_rounded,
-                          size: 20,
-                          color: Colors.white,
-                        ),
+                    const SizedBox(height: 12),
+                    Text(
+                      context.tr('change_profile_picture'),
+                      style: TextStyle(
+                        color: textSecondary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 8),
-            
-            // Tap to change text
-            Center(
-              child: TextButton(
-                onPressed: _isUploadingImage ? null : _showProfilePictureOptions,
-                child: Text(
-                  context.tr('change_profile_picture'),
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  ],
                 ),
               ),
             ),
-            
-            const SizedBox(height: 24),
-            
-            // Divider
-            Divider(color: borderColor),
-            
-            const SizedBox(height: 16),
-            
-            Text(
-              context.tr('how_to_be_called'),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: textPrimary,
+
+            const SizedBox(height: 32),
+
+            // Name section
+            _buildSectionHeader(context.tr('how_to_be_called'), textSecondary),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16, left: 4),
+              child: Text(
+                context.tr('name_shown_to_others'),
+                style: TextStyle(color: textSecondary, fontSize: 14),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              context.tr('name_shown_to_others'),
-              style: TextStyle(color: textSecondary, fontSize: 14),
-            ),
-            const SizedBox(height: 24),
-            
-            // Name input field
+
             Container(
               decoration: BoxDecoration(
                 color: inputFill,
@@ -355,7 +344,6 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
                 decoration: InputDecoration(
                   hintText: context.tr('display_name'),
                   hintStyle: TextStyle(color: textSecondary),
-                  prefixIcon: Icon(Icons.person_rounded, color: textSecondary),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.all(16),
                 ),
@@ -371,34 +359,22 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
                 },
               ),
             ),
-            const SizedBox(height: 24),
-            
-            // Save button
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _saveName,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: _isLoading
-                    ? CupertinoActivityIndicator(radius: 10, color: Colors.white)
-                    : Text(
-                        context.tr('save'),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-              ),
-            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, Color textSecondary) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          color: textSecondary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
         ),
       ),
     );

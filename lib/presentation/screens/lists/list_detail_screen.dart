@@ -22,6 +22,8 @@ import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/purchase_tracking_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
+import 'package:shoply/data/services/contextual_prompt_service.dart';
+import 'package:shoply/data/services/app_review_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
@@ -81,6 +83,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   
   // Key counter for forcing popup menu rebuild after navigation
   int _popupMenuKeyCounter = 0;
+
+  // Review prompt state — ensures we only fire rating prompt once per session
+  // when the user completes an entire list (all items checked off).
+  bool _listCompletionReviewFired = false;
+  int? _lastCheckedCount;
 
   /// Start the auto-scroll timer
   void _startAutoScrollTimer() {
@@ -271,6 +278,31 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   Widget build(BuildContext context) {
     final itemsAsync = ref.watch(itemsNotifierProvider(widget.listId));
 
+    // Detect when the user completes an entire shopping list (all items checked).
+    // This is a genuine positive moment — the perfect time to ask for a rating.
+    ref.listen<AsyncValue<List<ShoppingItemModel>>>(
+      itemsNotifierProvider(widget.listId),
+      (previous, next) {
+        final items = next.asData?.value;
+        if (items == null || items.isEmpty) return;
+        final checked = items.where((i) => i.isChecked).length;
+        final allChecked = checked == items.length;
+        final prevCount = _lastCheckedCount;
+        _lastCheckedCount = checked;
+
+        if (allChecked && prevCount != null && prevCount < items.length &&
+            !_listCompletionReviewFired) {
+          _listCompletionReviewFired = true;
+          // Fire and forget — respects AppReviewService throttling internally.
+          AppReviewService.instance.trackPositiveAction('completed_list');
+          Future.delayed(const Duration(milliseconds: 800), () {
+            AppReviewService.instance
+                .maybeRequestReview(reason: 'completed_list');
+          });
+        }
+      },
+    );
+
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
@@ -300,14 +332,26 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                       minSize: const Size(36, 36),
                       padding: EdgeInsets.zero,
                       useSmoothRectangleBorder: false,
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        } else {
+                          context.go('/home');
+                        }
+                      },
                     ),
                   ),
                 ),
               )
             : IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  } else {
+                    context.go('/home');
+                  }
+                },
               ),
         actions: [
           // Settings button
@@ -522,6 +566,31 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                     color: Theme.of(context).brightness == Brightness.light
                         ? AppColors.lightTextSecondary
                         : AppColors.darkTextSecondary,
+                  ),
+                ),
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      final prefill = _searchController.text.trim();
+                      _searchController.clear();
+                      _focusNode.unfocus();
+                      _showAddItemDialog(context, prefill: prefill);
+                    },
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.accentColor(context),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.add_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
                   ),
                 ),
                 border: InputBorder.none,
@@ -946,11 +1015,13 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     final notesController = TextEditingController();
     String? selectedUnit;
 
-    final sheetColor = AppColors.surface(context);
-    final inputFillColor = AppColors.inputFill(context);
-    final borderColor = AppColors.border(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+    final fillColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
+    final fg = AppColors.textPrimary(context);
+    final muted = AppColors.textSecondary(context);
 
     showDialog(
       context: context,
@@ -965,11 +1036,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                 right: 24,
               ),
               child: Material(
-                color: sheetColor,
-                borderRadius: BorderRadius.circular(24),
+                color: bgColor,
+                borderRadius: BorderRadius.circular(20),
                 clipBehavior: Clip.antiAlias,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                   child: StatefulBuilder(
                     builder: (context, setDialogState) {
                       return Column(
@@ -983,9 +1054,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                           Text(
                             AppLocalizations.of(context).addItem,
                             style: TextStyle(
-                              color: textPrimary,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
+                              color: fg,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.5,
                             ),
                           ),
                           GestureDetector(
@@ -994,70 +1066,70 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                               width: 32,
                               height: 32,
                               decoration: BoxDecoration(
-                                color: textSecondary.withOpacity(0.12),
+                                color: muted.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
                                 Icons.close_rounded,
-                                size: 18,
-                                color: textSecondary,
+                                size: 16,
+                                color: muted,
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       
                       TextField(
                         controller: nameController,
-                        style: TextStyle(color: textPrimary),
+                        style: TextStyle(color: fg, fontSize: 16),
                         decoration: InputDecoration(
-                          labelText: AppLocalizations.of(context).itemName,
-                          labelStyle: TextStyle(color: textSecondary),
-                          hintText: 'z.B. Milch, Brot, Äpfel',
-                          hintStyle: TextStyle(color: textSecondary.withOpacity(0.6)),
+                          hintText: AppLocalizations.of(context).itemName,
+                          hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
                           filled: true,
-                          fillColor: inputFillColor,
+                          fillColor: fillColor,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: borderColor),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: borderColor),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: AppColors.accent),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                         ),
-                        autofocus: false,
+                        autofocus: prefill.isEmpty,
                         textCapitalization: TextCapitalization.sentences,
                       ),
                       
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       
                       // Quantity field
                       TextField(
                         controller: quantityController,
-                        style: TextStyle(color: textPrimary),
+                        style: TextStyle(color: fg, fontSize: 16),
                         decoration: InputDecoration(
-                          labelText: 'Quantity',
-                          labelStyle: TextStyle(color: textSecondary),
+                          hintText: AppLocalizations.of(context).quantity,
+                          hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
                           filled: true,
-                          fillColor: inputFillColor,
+                          fillColor: fillColor,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: borderColor),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: borderColor),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: AppColors.accent),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                         ),
                         keyboardType: TextInputType.number,
                       ),
@@ -1065,15 +1137,6 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                       const SizedBox(height: 12),
                       
                       // Unit pill selector
-                      Text(
-                        'Unit',
-                        style: TextStyle(
-                          color: textSecondary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -1084,26 +1147,23 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                               setDialogState(() {
                                 selectedUnit = isSelected ? null : unit;
                               });
+                              HapticFeedback.selectionClick();
                             },
                             child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? AppColors.accent.withOpacity(0.15)
-                                    : inputFillColor,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? AppColors.accent
-                                      : borderColor,
-                                  width: isSelected ? 1.5 : 1,
-                                ),
+                                    ? (isDark ? Colors.white : Colors.black)
+                                    : fillColor,
+                                borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
                                 unit,
                                 style: TextStyle(
-                                  color: isSelected ? AppColors.accent : textPrimary,
+                                  color: isSelected
+                                      ? (isDark ? Colors.black : Colors.white)
+                                      : muted,
                                   fontSize: 14,
                                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                                 ),
@@ -1113,30 +1173,29 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         }).toList(),
                       ),
                       
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       
                       TextField(
                         controller: notesController,
-                        style: TextStyle(color: textPrimary),
+                        style: TextStyle(color: fg, fontSize: 16),
                         decoration: InputDecoration(
-                          labelText: AppLocalizations.of(context).notes,
-                          labelStyle: TextStyle(color: textSecondary),
-                          hintText: 'z.B. Bio, Vollmilch, 1l',
-                          hintStyle: TextStyle(color: textSecondary.withOpacity(0.6)),
+                          hintText: AppLocalizations.of(context).notes,
+                          hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
                           filled: true,
-                          fillColor: inputFillColor,
+                          fillColor: fillColor,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: borderColor),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: borderColor),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: AppColors.accent),
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
                           ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                         ),
                         maxLines: 2,
                         textCapitalization: TextCapitalization.sentences,
@@ -1144,10 +1203,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                       
                       const SizedBox(height: 24),
                       
-                      SizedBox(
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: () async {
+                      // Monochrome CTA
+                      GestureDetector(
+                        onTap: () async {
                             if (nameController.text.trim().isEmpty) return;
 
                             final name = nameController.text.trim();
@@ -1179,20 +1237,23 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                 ),
                               );
                             }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white : Colors.black,
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          child: Text(
-                            AppLocalizations.of(context).addItem,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
+                          child: Center(
+                            child: Text(
+                              AppLocalizations.of(context).addItem,
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.black : Colors.white,
+                                letterSpacing: -0.3,
+                              ),
                             ),
                           ),
                         ),
@@ -1227,7 +1288,6 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
   void _showEditItemDialog(BuildContext context, ShoppingItemModel item) {
     final nameController = TextEditingController(text: item.name);
-    // Display quantity as whole number if it's a whole number
     final quantityText = item.quantity % 1 == 0 
         ? item.quantity.toInt().toString() 
         : item.quantity.toString();
@@ -1235,300 +1295,355 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     final notesController = TextEditingController(text: item.notes ?? '');
     String selectedUnit = item.unit ?? 'pcs';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+    final fillColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
+    final fg = AppColors.textPrimary(context);
+    final muted = AppColors.textSecondary(context);
+
     showDialog(
       context: context,
-      barrierDismissible: true,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1C1C1E)
-            : Colors.white,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 400),
+      barrierColor: Colors.black54,
+      builder: (context) {
+        return Center(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(16), // Reduziert von 20 auf 16
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Header
-                  Text(
-                    AppLocalizations.of(context).editItem,
-                    style: AppTextStyles.h2.copyWith(fontSize: 20),
-                    textAlign: TextAlign.center,
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Added By Section
-                  if (item.addedBy != null && item.addedBy!.isNotEmpty)
-                    FutureBuilder<Map<String, dynamic>?>(
-                      future: _fetchUserInfo(item.addedBy),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Center(
-                              child: CupertinoActivityIndicator(radius: 10, color: AppColors.textSecondary(context),
-                              ),
-                            ),
-                          );
-                        }
-                        
-                        final userInfo = snapshot.data;
-                        final displayName = userInfo?['display_name'] as String? ?? context.tr('unknown_user');
-                        final avatarUrl = userInfo?['avatar_url'] as String?;
-                        final isDark = Theme.of(context).brightness == Brightness.dark;
-                        final userId = item.addedBy!;
-                        
-                        return GestureDetector(
-                          onTap: () {
-                            // Close dialog and navigate to user's recipe page
-                            Navigator.pop(context);
-                            context.push('/author/$userId', extra: {'authorName': displayName});
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isDark 
-                                  ? Colors.white.withValues(alpha: 0.05)
-                                  : Colors.grey.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                // Profile picture
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: AppColors.accentColor(context).withValues(alpha: 0.2),
-                                  backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
-                                      ? NetworkImage(avatarUrl)
-                                      : null,
-                                  child: avatarUrl == null || avatarUrl.isEmpty
-                                      ? Text(
-                                          displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.accentColor(context),
-                                          ),
-                                        )
-                                      : null,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 24,
+                right: 24,
+              ),
+              child: Material(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(20),
+                clipBehavior: Clip.antiAlias,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                  child: StatefulBuilder(
+                    builder: (context, setDialogState) {
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Header row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                AppLocalizations.of(context).editItem,
+                                style: TextStyle(
+                                  color: fg,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
                                 ),
-                                const SizedBox(width: 10),
-                                // Name and "Added by" label
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        context.tr('added_by'),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: AppColors.textSecondary(context),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 1),
-                                      Text(
-                                        displayName,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.textPrimary(context),
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
+                              ),
+                              GestureDetector(
+                                onTap: () => Navigator.pop(context),
+                                child: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: muted.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    size: 16,
+                                    color: muted,
                                   ),
                                 ),
-                                // Arrow indicator
-                                Icon(
-                                  Icons.chevron_right_rounded,
-                                  color: AppColors.textSecondary(context),
-                                  size: 20,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  
-                  // Name Field
-                  TextField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context).itemName,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : Colors.grey.withValues(alpha: 0.05),
-                    ),
-                    textCapitalization: TextCapitalization.sentences,
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Quantity and Unit Row
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: quantityController,
-                          decoration: InputDecoration(
-                            labelText: AppLocalizations.of(context).quantity,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white.withValues(alpha: 0.05)
-                                : Colors.grey.withValues(alpha: 0.05),
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: StatefulBuilder(
-                          builder: (context, setState) => DropdownButtonFormField<String>(
-                            value: selectedUnit,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: AppLocalizations.of(context).unit,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
                               ),
-                              filled: true,
-                              fillColor: Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.white.withValues(alpha: 0.05)
-                                  : Colors.grey.withValues(alpha: 0.05),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          // Added By Section
+                          if (item.addedBy != null && item.addedBy!.isNotEmpty)
+                            FutureBuilder<Map<String, dynamic>?>(
+                              future: _fetchUserInfo(item.addedBy),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Center(
+                                      child: CupertinoActivityIndicator(radius: 10, color: muted),
+                                    ),
+                                  );
+                                }
+                                
+                                final userInfo = snapshot.data;
+                                final displayName = userInfo?['display_name'] as String? ?? context.tr('unknown_user');
+                                final avatarUrl = userInfo?['avatar_url'] as String?;
+                                final userId = item.addedBy!;
+                                
+                                return GestureDetector(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    context.push('/author/$userId', extra: {'authorName': displayName});
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: fillColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 16,
+                                          backgroundColor: muted.withValues(alpha: 0.15),
+                                          backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+                                              ? NetworkImage(avatarUrl)
+                                              : null,
+                                          child: avatarUrl == null || avatarUrl.isEmpty
+                                              ? Text(
+                                                  displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: fg,
+                                                  ),
+                                                )
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                context.tr('added_by'),
+                                                style: TextStyle(fontSize: 11, color: muted),
+                                              ),
+                                              const SizedBox(height: 1),
+                                              Text(
+                                                displayName,
+                                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: fg),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Icon(Icons.chevron_right_rounded, color: muted, size: 20),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                            items: Categories.units.map((unit) {
-                              return DropdownMenuItem(
-                                value: unit,
-                                child: Text(unit, overflow: TextOverflow.ellipsis),
+                          
+                          // Name Field
+                          TextField(
+                            controller: nameController,
+                            style: TextStyle(color: fg, fontSize: 16),
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context).itemName,
+                              hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
+                              filled: true,
+                              fillColor: fillColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            ),
+                            textCapitalization: TextCapitalization.sentences,
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          // Quantity field
+                          TextField(
+                            controller: quantityController,
+                            style: TextStyle(color: fg, fontSize: 16),
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context).quantity,
+                              hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
+                              filled: true,
+                              fillColor: fillColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          // Unit pill selector
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: Categories.units.map((unit) {
+                              final isSelected = selectedUnit == unit;
+                              return GestureDetector(
+                                onTap: () {
+                                  setDialogState(() {
+                                    selectedUnit = isSelected ? 'pcs' : unit;
+                                  });
+                                  HapticFeedback.selectionClick();
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? (isDark ? Colors.white : Colors.black)
+                                        : fillColor,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    unit,
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? (isDark ? Colors.black : Colors.white)
+                                          : muted,
+                                      fontSize: 14,
+                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
                               );
                             }).toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                selectedUnit = value ?? 'pcs';
-                              });
-                            },
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Notes Field
-                  TextField(
-                    controller: notesController,
-                    decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context).notes,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : Colors.grey.withValues(alpha: 0.05),
-                    ),
-                    maxLines: 2,
-                    textCapitalization: TextCapitalization.sentences,
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Action Buttons - iOS 26 Style
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Delete Button
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            await ref
-                                .read(itemsNotifierProvider(widget.listId).notifier)
-                                .deleteItem(item.id);
-                            ref.invalidate(listsNotifierProvider);
-                            if (context.mounted) {
-                              Navigator.pop(context);
-                            }
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                          
+                          const SizedBox(height: 12),
+                          
+                          // Notes Field
+                          TextField(
+                            controller: notesController,
+                            style: TextStyle(color: fg, fontSize: 16),
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context).notes,
+                              hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
+                              filled: true,
+                              fillColor: fillColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                             ),
-                            side: BorderSide(color: Colors.red.shade400),
-                            foregroundColor: Colors.red.shade600,
+                            maxLines: 2,
+                            textCapitalization: TextCapitalization.sentences,
                           ),
-                          child: Text(
-                            AppLocalizations.of(context).delete,
-                            overflow: TextOverflow.ellipsis,
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Action Buttons
+                          Row(
+                            children: [
+                              // Delete Button
+                              GestureDetector(
+                                onTap: () async {
+                                  await ref
+                                      .read(itemsNotifierProvider(widget.listId).notifier)
+                                      .deleteItem(item.id);
+                                  ref.invalidate(listsNotifierProvider);
+                                  if (context.mounted) {
+                                    Navigator.pop(context);
+                                  }
+                                },
+                                child: Container(
+                                  height: 52,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: Colors.red.shade400,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              
+                              const SizedBox(width: 10),
+                              
+                              // Save Button
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    final quantity = double.tryParse(quantityController.text) ?? 1.0;
+                                    ref
+                                        .read(itemsNotifierProvider(widget.listId).notifier)
+                                        .updateItem(item.id, {
+                                      'name': nameController.text.trim(),
+                                      'quantity': quantity,
+                                      'unit': selectedUnit,
+                                      'notes': notesController.text.trim().isEmpty
+                                          ? null
+                                          : notesController.text.trim(),
+                                    });
+                                    ref.invalidate(listsNotifierProvider);
+                                    Navigator.pop(context);
+                                  },
+                                  child: Container(
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                      color: isDark ? Colors.white : Colors.black,
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        AppLocalizations.of(context).save,
+                                        style: TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark ? Colors.black : Colors.white,
+                                          letterSpacing: -0.3,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ),
-                      
-                      const SizedBox(width: 8),
-                      
-                      // Save Button
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            final quantity = double.tryParse(quantityController.text) ?? 1.0;
-                            ref
-                                .read(itemsNotifierProvider(widget.listId).notifier)
-                                .updateItem(item.id, {
-                              'name': nameController.text.trim(),
-                              'quantity': quantity,
-                              'unit': selectedUnit,
-                              'notes': notesController.text.trim().isEmpty
-                                  ? null
-                                  : notesController.text.trim(),
-                            });
-                            
-                            // Refresh to update home screen
-                            ref.invalidate(listsNotifierProvider);
-                            
-                            Navigator.pop(context);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            backgroundColor: AppColors.accentColor(context),
-                            foregroundColor: Colors.white,
-                          ),
-                          child: Text(
-                            AppLocalizations.of(context).save,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1541,6 +1656,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       if (!mounted) return;
       
       final isDark = Theme.of(context).brightness == Brightness.dark;
+      final fg = AppColors.textPrimary(context);
+      final muted = AppColors.textSecondary(context);
+      final dim = AppColors.textTertiary(context);
       
       showDialog(
         context: context,
@@ -1550,45 +1668,34 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           ),
           backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Icon
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentColor(context).withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.ios_share,
-                    size: 32,
-                    color: AppColors.accentColor(context),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                
-                // Title
                 Text(
                   AppLocalizations.of(context).shareCodeTitle,
-                  style: AppTextStyles.h2.copyWith(fontSize: 20),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: fg,
+                    letterSpacing: -0.5,
+                  ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 
-                // Message
                 Text(
                   AppLocalizations.of(context).shareCodeMessage,
                   style: TextStyle(
-                    color: AppColors.textSecondary(context),
+                    color: muted,
                     fontSize: 14,
+                    letterSpacing: -0.2,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
                 
-                // Code display with copy button
+                // Code display
                 GestureDetector(
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: code));
@@ -1602,13 +1709,12 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                     );
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
-                      ),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1617,56 +1723,104 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                           code,
                           style: TextStyle(
                             fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 4,
-                            color: AppColors.textPrimary(context),
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 6,
+                            color: fg,
                           ),
                         ),
                         const SizedBox(width: 12),
                         Icon(
                           Icons.copy_rounded,
-                          size: 20,
-                          color: AppColors.textSecondary(context),
+                          size: 18,
+                          color: dim,
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 
                 Text(
                   context.tr('tap_to_copy'),
-                  style: TextStyle(
-                    color: AppColors.textSecondary(context),
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: dim, fontSize: 12),
                 ),
                 const SizedBox(height: 24),
                 
-                // Share button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _shareListViaSystem(code);
-                    },
-                    icon: const Icon(Icons.ios_share, color: Colors.white),
-                    label: Text(
-                      AppLocalizations.of(context).share,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                // Share buttons row
+                Row(
+                  children: [
+                    // Share Code button
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                          _shareListViaSystem(code);
+                        },
+                        child: Container(
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.numbers_rounded, size: 18, color: fg),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Code',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: fg,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentColor(context),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    const SizedBox(width: 10),
+                    // Share Link button
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                          _shareListViaLink();
+                        },
+                        child: Container(
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white : Colors.black,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.link_rounded, size: 18, color: isDark ? Colors.black : Colors.white),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Link',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.black : Colors.white,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -1725,6 +1879,14 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
   Future<void> _onShareSelected() async {
     try {
+      // Ask for notification permission the first time a list is shared.
+      // Users want to know when collaborators update the list.
+      if (await ContextualPromptService.instance.shouldShowNotifPrompt()) {
+        if (!mounted) return;
+        await ContextualPromptService.instance.showNotifPrompt(context);
+        if (!mounted) return;
+      }
+
       final code = await ref
           .read(listsNotifierProvider.notifier)
           .generateShareCode(widget.listId);
@@ -2337,24 +2499,37 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                 ),
               ),
             ),
-            // RIGHT ZONE: Tap to edit quantity
+            // RIGHT ZONE: Tap to edit item
             GestureDetector(
               onTap: () {
                 HapticFeedback.selectionClick();
-                _showQuickEditPopup(context, item);
+                _showEditItemDialog(context, item);
               },
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(4, 10, 16, 10),
-                child: Text(
-                  '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity}${item.unit != null && item.unit!.isNotEmpty ? ' ${item.unit}' : ''}',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: item.isChecked
-                        ? (isDark ? Colors.grey.shade600 : Colors.grey.shade400)
-                        : (isDark ? Colors.white60 : const Color(0xFF8E8E93)),
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity}${item.unit != null && item.unit!.isNotEmpty ? ' ${item.unit}' : ''}',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: item.isChecked
+                            ? (isDark ? Colors.grey.shade600 : Colors.grey.shade400)
+                            : (isDark ? Colors.white60 : const Color(0xFF8E8E93)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.edit_rounded,
+                      size: 16,
+                      color: item.isChecked
+                          ? (isDark ? Colors.grey.shade700 : Colors.grey.shade400)
+                          : (isDark ? Colors.white38 : const Color(0xFFC7C7CC)),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -2477,13 +2652,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   }
 
   void _showBackgroundSelectionDialog() {
-    // Show Apple-style bottom sheet for background selection
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => BackgroundSelectionSheet(listId: widget.listId),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => BackgroundSelectionSheet(listId: widget.listId),
+      ),
     );
   }
 
@@ -2523,11 +2695,27 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   void _shareListViaSystem([String? code]) {
     final base = 'Schau dir meine Einkaufsliste "${widget.listName}" an!';
     final withCode = code != null && code.isNotEmpty
-        ? '\n\nTrete mit diesem Code bei: $code\nÖffne ShoplyAI und tippe auf "Liste beitreten".'
-        : '\n\nLade ShoplyAI herunter und trete meiner Liste bei.';
+        ? '\n\nTrete mit diesem Code bei: $code\nÖffne Avo und tippe auf "Liste beitreten".'
+        : '\n\nLade Avo herunter und trete meiner Liste bei.';
+    final box = context.findRenderObject() as RenderBox?;
     Share.share(
       '$base$withCode',
-      subject: 'Meine ShoplyAI Einkaufsliste',
+      subject: 'Meine Avo Einkaufsliste',
+      sharePositionOrigin: box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : const Rect.fromLTWH(0, 0, 100, 100),
+    );
+  }
+
+  void _shareListViaLink() {
+    final webLink = 'https://shoplyai.app/list/${widget.listId}';
+    final box = context.findRenderObject() as RenderBox?;
+    Share.share(
+      '🛒 ${widget.listName}\n\n$webLink',
+      subject: widget.listName,
+      sharePositionOrigin: box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : const Rect.fromLTWH(0, 0, 100, 100),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -213,7 +214,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                                 children: [
                                   Expanded(
                                     child: _ImageNavTabButton(
-                                      activeAsset: 'assets/icons/home_filled.png',
+                                      activeAsset: 'assets/icons/home_unfilled.png',
                                       inactiveAsset: 'assets/icons/home_unfilled.png',
                                       label: 'Home',
                                       index: 0,
@@ -227,9 +228,9 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                                     ),
                                   ),
                                   Expanded(
-                                    child: _ImageNavTabButton(
-                                      activeAsset: 'assets/icons/recipe_filled.png',
-                                      inactiveAsset: 'assets/icons/recipe_filled.png',
+                                    child: _NavTabButton(
+                                      icon: LucideIcons.chefHat,
+                                      iconSize: 28,
                                       label: 'Recipes',
                                       index: 1,
                                       currentIndex: _currentIndex,
@@ -242,13 +243,14 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                                     ),
                                   ),
                                   Expanded(
-                                    child: _ProfileNavTab(
+                                    child: _NavTabButton(
+                                      icon: LucideIcons.user,
+                                      iconSize: 28,
+                                      label: 'Profile',
                                       index: 2,
                                       currentIndex: _currentIndex,
                                       isDark: isDark,
                                       dimmed: avo,
-                                      avatarUrl: ref.watch(currentUserProvider).value?.avatarUrl,
-                                      displayName: ref.watch(currentUserProvider).value?.displayName,
                                       onTap: () => _onTab(context, 2),
                                       onPressStart: () => _onTabPressStart(2),
                                       onPressEnd: _onTabPressEnd,
@@ -485,6 +487,7 @@ class _NavTabButton extends StatelessWidget {
   final VoidCallback? onPressStart;
   final VoidCallback? onPressEnd;
   final Key? itemKey;
+  final double? iconSize;
 
   const _NavTabButton({
     required this.icon,
@@ -498,6 +501,7 @@ class _NavTabButton extends StatelessWidget {
     this.onPressEnd,
     this.dimmed = false,
     this.itemKey,
+    this.iconSize,
   });
 
   @override
@@ -515,12 +519,12 @@ class _NavTabButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
+        key: itemKey,
         height: MainScaffold._pillHeight,
         child: Center(
           child: Icon(
             isActive ? (activeIcon ?? icon) : icon,
-            key: itemKey,
-            size: MainScaffold._iconSize,
+            size: iconSize ?? MainScaffold._iconSize,
             color: isActive ? activeColor : inactiveColor,
             semanticLabel: label,
           ),

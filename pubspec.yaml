@@ -2,7 +2,7 @@ name: shoply
 description: "A modern shopping list app with shared lists, coupon finder, and recipe suggestions."
 publish_to: 'none'
 
-version: 1.1.4+30
+version: 1.1.4+31
 
 environment:
   sdk: '>=3.9.2 <4.0.0'
@@ -15,6 +15,7 @@ dependencies:
 
   # UI & Icons
   cupertino_icons: ^1.0.8
+  lucide_icons: ^0.257.0
   flutter_svg: ^2.0.9
   adaptive_platform_ui: ^0.1.99  # iOS 26 Liquid Glass styling
   # liquid_glass_renderer removed; AdaptiveAlertDialog handles native iOS26 styling

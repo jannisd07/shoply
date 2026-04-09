@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
@@ -84,7 +83,6 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Personal information updated')),
         );
-        // Refresh user data
         ref.invalidate(currentUserProvider);
       }
     } catch (e) {
@@ -114,6 +112,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     final textSecondary = AppColors.textSecondary(context);
     final inputFill = AppColors.inputFill(context);
     final borderColor = AppColors.border(context);
+    final separatorColor = AppColors.divider(context);
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -138,11 +137,11 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
             TextButton(
               onPressed: _isLoading ? null : _saveChanges,
               child: _isLoading
-                  ? CupertinoActivityIndicator(radius: 10, color: AppColors.accent)
+                  ? CupertinoActivityIndicator(radius: 10, color: textPrimary)
                   : Text(
                       context.tr('save'),
                       style: TextStyle(
-                        color: AppColors.accent,
+                        color: textPrimary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -152,22 +151,14 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
       body: ListView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: EdgeInsets.only(
-          left: AppDimensions.screenHorizontalPadding,
-          right: AppDimensions.screenHorizontalPadding,
-          top: AppDimensions.screenHorizontalPadding,
+          left: 24,
+          right: 24,
+          top: 8,
           bottom: 100 + MediaQuery.of(context).padding.bottom,
         ),
         children: [
           // Age section
-          Text(
-            context.tr('age'),
-            style: TextStyle(
-              color: textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
+          _buildSectionHeader(context.tr('age'), textSecondary),
           Container(
             decoration: BoxDecoration(
               color: inputFill,
@@ -194,29 +185,17 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
 
           // Height section
-          Text(
-            context.tr('height'),
-            style: TextStyle(
-              color: textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
+          _buildSectionHeader(context.tr('height'), textSecondary),
 
-          // Unit selector
+          // Unit toggle
           Row(
             children: [
-              Expanded(
-                child: _buildUnitButton(context, 'cm', 'Centimeters'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildUnitButton(context, 'ft', 'Feet'),
-              ),
+              _buildUnitOption(context, 'cm', textPrimary, textSecondary, separatorColor),
+              const SizedBox(width: 24),
+              _buildUnitOption(context, 'ft', textPrimary, textSecondary, separatorColor),
             ],
           ),
           const SizedBox(height: 12),
@@ -246,75 +225,29 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
 
           // Gender section
-          Text(
-            context.tr('gender'),
-            style: TextStyle(
-              color: textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          _buildGenderCard(
-            context,
-            gender: 'male',
-            icon: Icons.male_rounded,
-            label: context.tr('male'),
-          ),
-          const SizedBox(height: 12),
-          _buildGenderCard(
-            context,
-            gender: 'female',
-            icon: Icons.female_rounded,
-            label: context.tr('female'),
-          ),
-          const SizedBox(height: 12),
-          _buildGenderCard(
-            context,
-            gender: 'other',
-            icon: Icons.transgender_rounded,
-            label: context.tr('other'),
-          ),
-          const SizedBox(height: 12),
-          _buildGenderCard(
-            context,
-            gender: 'prefer_not_to_say',
-            icon: Icons.help_outline_rounded,
-            label: context.tr('prefer_not_to_say'),
-          ),
+          _buildSectionHeader(context.tr('gender'), textSecondary),
+          _buildGenderRow(context, 'male', context.tr('male'), textPrimary, textSecondary),
+          Container(height: 0.5, color: separatorColor),
+          _buildGenderRow(context, 'female', context.tr('female'), textPrimary, textSecondary),
+          Container(height: 0.5, color: separatorColor),
+          _buildGenderRow(context, 'other', context.tr('other'), textPrimary, textSecondary),
+          Container(height: 0.5, color: separatorColor),
+          _buildGenderRow(context, 'prefer_not_to_say', context.tr('prefer_not_to_say'), textPrimary, textSecondary),
 
           const SizedBox(height: 32),
 
           // Info text
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.accent.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  color: AppColors.accent,
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    context.tr('personal_info_hint'),
-                    style: TextStyle(
-                      color: textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              context.tr('personal_info_hint'),
+              style: TextStyle(
+                color: textSecondary,
+                fontSize: 13,
+              ),
             ),
           ),
         ],
@@ -322,119 +255,86 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     );
   }
 
-  Widget _buildUnitButton(BuildContext context, String unit, String label) {
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final inputFill = AppColors.inputFill(context);
-    final borderColor = AppColors.border(context);
+  Widget _buildSectionHeader(String title, Color textSecondary) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          color: textSecondary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnitOption(BuildContext context, String unit, Color textPrimary, Color textSecondary, Color separatorColor) {
     final isSelected = _selectedHeightUnit == unit;
 
-    return InkWell(
+    return GestureDetector(
       onTap: () {
+        HapticFeedback.selectionClick();
         setState(() {
           _selectedHeightUnit = unit;
           _heightController.clear();
           _hasChanges = true;
         });
       },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.accent.withOpacity(0.1) : inputFill,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.accent : borderColor,
-            width: isSelected ? 2 : 1,
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        children: [
+          Icon(
+            isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+            color: isSelected ? textPrimary : textSecondary.withOpacity(0.4),
+            size: 20,
           ),
-        ),
-        child: Column(
-          children: [
-            Text(
-              unit.toUpperCase(),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: isSelected ? AppColors.accent : textPrimary,
-              ),
+          const SizedBox(width: 8),
+          Text(
+            unit.toUpperCase(),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              color: isSelected ? textPrimary : textSecondary,
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: textSecondary,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildGenderCard(
-    BuildContext context, {
-    required String gender,
-    required IconData icon,
-    required String label,
-  }) {
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final inputFill = AppColors.inputFill(context);
-    final borderColor = AppColors.border(context);
+  Widget _buildGenderRow(BuildContext context, String gender, String label, Color textPrimary, Color textSecondary) {
     final isSelected = _selectedGender == gender;
 
-    return InkWell(
+    return GestureDetector(
       onTap: () {
+        HapticFeedback.selectionClick();
         setState(() {
           _selectedGender = gender;
           _hasChanges = true;
         });
       },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.accent.withOpacity(0.1) : inputFill,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.accent : borderColor,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: isSelected 
-                    ? AppColors.accent.withOpacity(0.2) 
-                    : AppColors.surface(context),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                icon,
-                size: 24,
-                color: isSelected ? AppColors.accent : textSecondary,
-              ),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 15,
-                  color: isSelected ? AppColors.accent : textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                  color: textPrimary,
                 ),
               ),
             ),
             if (isSelected)
               Icon(
-                Icons.check_circle_rounded,
-                color: AppColors.accent,
-                size: 24,
+                Icons.check_rounded,
+                color: textPrimary,
+                size: 22,
               ),
           ],
         ),

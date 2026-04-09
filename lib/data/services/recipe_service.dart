@@ -867,12 +867,11 @@ class RecipeService {
 
   /// Get share text with recipe details
   String getShareText(Recipe recipe) {
-    final deepLink = getDeepLink(recipe.id);
+    final webLink = 'https://shoplyai.app/recipe/${recipe.id}';
     return '🍳 Check out this recipe: ${recipe.name}\n\n'
            '⏱ Ready in ${recipe.totalTimeMinutes} min\n'
            '⭐ ${recipe.averageRating.toStringAsFixed(1)} rating\n\n'
-           '📱 Open in Shoply:\n$deepLink\n\n'
-           '💡 Don\'t have Shoply? Download it from the App Store!';
+           '$webLink';
   }
 
   /// Upload recipe image

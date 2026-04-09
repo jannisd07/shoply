@@ -19,7 +19,7 @@ class AvoAssistantService {
   final _supabase = Supabase.instance.client;
 
   static const String _systemPrompt = '''
-You are Avo, a friendly avocado mascot for the Shoply shopping list app.
+You are Avo, a friendly avocado mascot for the Avo shopping list app.
 
 Personality: warm, concise, helpful. Occasionally use a food pun. Keep replies to 1-3 sentences unless asked for detail.
 

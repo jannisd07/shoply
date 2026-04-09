@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ShoplyAI</string>
+    <string name="app_name">Avo</string>
     
     <!-- Voice Action Items -->
     <string name="item_milk">Milch</string>
@@ -31,7 +31,7 @@
     <string name="list_household">Haushalt</string>
     
     <!-- Notification Strings -->
-    <string name="notification_channel_name">Shoply Benachrichtigungen</string>
+    <string name="notification_channel_name">Avo Benachrichtigungen</string>
     <string name="notification_channel_description">Benachrichtigungen für Listen, Rezepte und Updates</string>
     
     <!-- Widget Strings -->

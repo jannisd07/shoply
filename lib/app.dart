@@ -15,14 +15,14 @@ import 'package:shoply/routes/app_router.dart';
 import 'package:shoply/data/services/deep_link_service.dart';
 import 'package:shoply/data/services/navigation_service.dart';
 
-class ShoplyAIApp extends ConsumerStatefulWidget {
-  const ShoplyAIApp({super.key});
+class AvoApp extends ConsumerStatefulWidget {
+  const AvoApp({super.key});
 
   @override
-  ConsumerState<ShoplyAIApp> createState() => _ShoplyAIAppState();
+  ConsumerState<AvoApp> createState() => _AvoAppState();
 }
 
-class _ShoplyAIAppState extends ConsumerState<ShoplyAIApp> {
+class _AvoAppState extends ConsumerState<AvoApp> {
   late final StreamSubscription<AuthState> _authSubscription;
 
   @override
@@ -74,7 +74,7 @@ class _ShoplyAIAppState extends ConsumerState<ShoplyAIApp> {
 
     return AdaptiveApp.router(
       key: ValueKey('$themeMode-$languageCode'),
-      title: 'Shoply',
+      title: 'Avo',
       materialLightTheme: AppTheme.lightTheme,
       materialDarkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
