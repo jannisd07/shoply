@@ -259,12 +259,11 @@ class RecipeLabelingService {
   Set<String> _detectTimeLabels(int totalMinutes) {
     final labels = <String>{};
 
-    if (totalMinutes <= 15) {
+    if (totalMinutes <= 35) {
       labels.add('quick');
-    } else if (totalMinutes <= 30) {
+    } else if (totalMinutes <= 45) {
       labels.add('30min');
     } else {
-      // Everything over 30 min gets 'under-hour' (even if it's over 60)
       labels.add('under-hour');
     }
 
@@ -279,11 +278,11 @@ class RecipeLabelingService {
     final stepCount = recipe.instructions.length;
     final totalTime = recipe.totalTimeMinutes;
 
-    // Easy: Few ingredients, few steps, quick
-    if (ingredientCount <= 7 && stepCount <= 5 && totalTime <= 30) {
+    // Easy: Few ingredients and few steps (time not used — unreliable for imported recipes)
+    if (ingredientCount <= 6 && stepCount <= 5) {
       labels.add('easy');
     }
-    // Advanced: Many ingredients or many steps or long time
+    // Advanced: Many ingredients or many steps or very long time
     else if (ingredientCount > 12 || stepCount > 10 || totalTime > 90) {
       labels.add('advanced');
     }

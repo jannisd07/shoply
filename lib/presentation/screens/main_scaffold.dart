@@ -37,6 +37,19 @@ class MainScaffold extends ConsumerStatefulWidget {
     return safeBottom + _pillHeight + 16.0;
   }
 
+  /// Y offset (from the bottom of the screen) of the top edge of the pill navbar,
+  /// mirroring the positioning math in _MainScaffoldState.build.
+  /// Use this when a widget needs to sit flush with (or just above) the navbar.
+  static double getNavbarTopOffset(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final safeBot = mq.padding.bottom;
+    final screenW = mq.size.width;
+    final onePercent = screenW * 0.02;
+    final baseBottom = safeBot > 20 ? safeBot - 5 : 10.0;
+    final navBottom = (baseBottom - onePercent).clamp(0.0, double.infinity);
+    return navBottom + _pillHeight;
+  }
+
   @override
   ConsumerState<MainScaffold> createState() => _MainScaffoldState();
 }

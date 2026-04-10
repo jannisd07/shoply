@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,60 +11,28 @@ import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
-import 'package:shoply/data/services/recipe_service.dart';
+import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
-import 'package:shoply/presentation/state/shopping_history_provider.dart';
 
 // ════════════════════════════════════════════════════════
-// RICH MESSAGE MODEL
+// CHAT MESSAGE MODEL
 // ════════════════════════════════════════════════════════
-
-/// Attachment types for rich inline content
-enum RichContentType { recipes, listItems, lists, history, pickList }
-
-class RichContent {
-  final RichContentType type;
-  final List<Recipe>? recipes;
-  final List<ShoppingItemModel>? items;
-  final String? listId;
-  final String? listName;
-  final List<ShoppingListModel>? lists;
-  final List<ShoppingHistory>? history;
-  final PickListData? pickListData;
-
-  RichContent({
-    required this.type,
-    this.recipes,
-    this.items,
-    this.listId,
-    this.listName,
-    this.lists,
-    this.history,
-    this.pickListData,
-  });
-}
-
-class PickListData {
-  final String itemName;
-  final double quantity;
-  final String? unit;
-  PickListData({required this.itemName, this.quantity = 1, this.unit});
-}
 
 class ChatMessage {
   final String text;
   final bool isUser;
   final AvoExpressionType? avoExpression;
-  final RichContent? richContent;
+  final List<AvoWidgetPayload> payloads;
   final DateTime timestamp;
 
   ChatMessage({
     required this.text,
     required this.isUser,
     this.avoExpression,
-    this.richContent,
+    this.payloads = const [],
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 }
@@ -159,16 +126,20 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
     });
     _scrollToBottom();
 
-    final ctx = await _buildContext();
-    final response = await AvoAssistantService.instance.chat(text, context: ctx);
-    final richContent = await _processActions(response.actions);
+    final ctx = _buildContext();
+    final response = await AvoAssistantService.instance.chat(
+      text,
+      ref: ref,
+      context: ctx,
+    );
 
+    if (!mounted) return;
     setState(() {
       _messages.add(ChatMessage(
         text: response.message,
         isUser: false,
         avoExpression: response.expression,
-        richContent: richContent,
+        payloads: response.payloads,
       ));
       _isTyping = false;
     });
@@ -180,25 +151,11 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
     _send();
   }
 
-  // ── Build context ──
+  // ── Build context (profile + lists) ─────────────────────────
 
-  Future<AvoContext> _buildContext() async {
+  AvoContext _buildContext() {
     final listsAsync = ref.read(listsNotifierProvider);
     final lists = listsAsync.hasValue ? listsAsync.value! : <ShoppingListModel>[];
-
-    List<Recipe> recipes = [];
-    try { recipes = await RecipeService.instance.getPopularRecipes(limit: 8); }
-    catch (_) {}
-
-    List<String> historyItems = [];
-    final historyAsync = ref.read(recentHistoryProvider);
-    if (historyAsync.hasValue) {
-      for (final h in historyAsync.value!) {
-        for (final item in h.items.take(5)) {
-          if (!historyItems.contains(item.name)) historyItems.add(item.name);
-        }
-      }
-    }
 
     final allItems = <String, List<ShoppingItemModel>>{};
     for (final list in lists.take(3)) {
@@ -206,155 +163,97 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
       if (itemsAsync.hasValue) allItems[list.id] = itemsAsync.value!;
     }
 
+    final userAsync = ref.read(currentUserProvider);
+    final user = userAsync.hasValue ? userAsync.value : null;
+
     return AvoContext(
       lists: lists,
-      currentListItems: allItems.isNotEmpty ? allItems.values.first : [],
       currentListId: lists.isNotEmpty ? lists.first.id : null,
-      recentRecipes: recipes,
-      recentHistoryItems: historyItems.take(10).toList(),
       allListItems: allItems,
+      dietPreferences: user?.dietPreferences,
+      allergies: user?.allergies,
+      userName: user?.displayName,
     );
   }
 
-  // ── Process actions → return rich content ──
+  // ── Callbacks used by rich widgets ──────────────────────────
 
-  Future<RichContent?> _processActions(List<AvoAction> actions) async {
-    for (final action in actions) {
-      switch (action.type) {
-        case AvoActionType.addItem:
-          if (action.params.length >= 2) {
-            final listId = action.params[0];
-            final itemName = action.params[1];
-            final qty = action.params.length > 2 ? double.tryParse(action.params[2]) ?? 1 : 1.0;
-            final unit = action.params.length > 3 ? action.params[3] : null;
-            try {
-              await ref.read(itemsNotifierProvider(listId).notifier)
-                  .addItem(name: itemName, quantity: qty, unit: unit);
-              HapticFeedback.mediumImpact();
-            } catch (_) {}
-          }
-          break;
-
-        case AvoActionType.showListItems:
-          if (action.params.isNotEmpty) {
-            final listId = action.params[0];
-            final items = await AvoAssistantService.instance.getListItems(listId);
-            final listsAsync = ref.read(listsNotifierProvider);
-            final lists = listsAsync.hasValue ? listsAsync.value! : <ShoppingListModel>[];
-            String name = 'Shopping List';
-            for (final l in lists) { if (l.id == listId) { name = l.name; break; } }
-            return RichContent(type: RichContentType.listItems, items: items, listId: listId, listName: name);
-          }
-          break;
-
-        case AvoActionType.showListOverview:
-          final listsAsync = ref.read(listsNotifierProvider);
-          final lists = listsAsync.hasValue ? listsAsync.value! : <ShoppingListModel>[];
-          return RichContent(type: RichContentType.lists, lists: lists);
-
-        case AvoActionType.showRecipes:
-        case AvoActionType.searchRecipes:
-          if (action.params.isNotEmpty) {
-            final query = action.params[0];
-            final recipes = await RecipeService.instance.searchRecipes(query);
-            if (recipes.isNotEmpty) {
-              return RichContent(type: RichContentType.recipes, recipes: recipes.take(5).toList());
-            }
-          }
-          break;
-
-        case AvoActionType.showSavedRecipes:
-          try {
-            final saved = await RecipeService.instance.getSavedRecipes();
-            return RichContent(type: RichContentType.recipes, recipes: saved.take(5).toList());
-          } catch (_) {}
-          break;
-
-        case AvoActionType.showHistory:
-          try {
-            final historyService = ref.read(shoppingHistoryServiceProvider);
-            final history = await historyService.getRecentHistory(limit: 5);
-            return RichContent(type: RichContentType.history, history: history);
-          } catch (_) {}
-          break;
-
-        case AvoActionType.showRecipe:
-          if (action.params.isNotEmpty && mounted) {
-            context.push('/recipes/${action.params[0]}');
-          }
-          break;
-
-        case AvoActionType.navigate:
-          if (action.params.isNotEmpty && mounted) {
-            final route = action.params[0];
-            if (route.startsWith('/')) context.go(route);
-          }
-          break;
-
-        case AvoActionType.pickList:
-          if (action.params.isNotEmpty) {
-            final itemName = action.params[0];
-            final qty = action.params.length > 1 ? double.tryParse(action.params[1]) ?? 1 : 1.0;
-            final unit = action.params.length > 2 ? action.params[2] : null;
-            return RichContent(
-              type: RichContentType.pickList,
-              pickListData: PickListData(itemName: itemName, quantity: qty, unit: unit),
-            );
-          }
-          break;
-
-        case AvoActionType.checkItem:
-          if (action.params.length >= 2) {
-            final itemId = action.params[0];
-            final listId = action.params[1];
-            try {
-              await ref.read(itemsNotifierProvider(listId).notifier)
-                  .toggleItemChecked(itemId, true);
-              HapticFeedback.lightImpact();
-            } catch (_) {}
-          }
-          break;
-
-        case AvoActionType.deleteItem:
-          if (action.params.length >= 2) {
-            final itemId = action.params[0];
-            final listId = action.params[1];
-            try {
-              await ref.read(itemsNotifierProvider(listId).notifier).deleteItem(itemId);
-              HapticFeedback.lightImpact();
-            } catch (_) {}
-          }
-          break;
-
-        default:
-          break;
-      }
-    }
-    return null;
-  }
-
-  Future<void> _addItemToList(String listId, PickListData data) async {
+  Future<void> _addItemToListFromPicker(String listId, AvoPickListData data) async {
     try {
-      await ref.read(itemsNotifierProvider(listId).notifier)
+      await ref
+          .read(itemsNotifierProvider(listId).notifier)
           .addItem(name: data.itemName, quantity: data.quantity, unit: data.unit);
       HapticFeedback.mediumImpact();
       final listsAsync = ref.read(listsNotifierProvider);
       final lists = listsAsync.hasValue ? listsAsync.value! : <ShoppingListModel>[];
       String name = 'your list';
-      for (final l in lists) { if (l.id == listId) { name = l.name; break; } }
+      for (final l in lists) {
+        if (l.id == listId) {
+          name = l.name;
+          break;
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _messages.add(ChatMessage(
-          text: 'Added "${data.itemName}" to "$name"!',
+          text: 'Added "${data.itemName}" to "$name".',
           isUser: false,
           avoExpression: AvoExpressionType.celebrating,
         ));
       });
       _scrollToBottom();
     } catch (_) {
+      if (!mounted) return;
       setState(() {
-        _messages.add(ChatMessage(text: 'Failed to add item. Try again!', isUser: false, avoExpression: AvoExpressionType.confused));
+        _messages.add(ChatMessage(
+          text: 'Failed to add item. Try again!',
+          isUser: false,
+          avoExpression: AvoExpressionType.confused,
+        ));
       });
     }
+  }
+
+  Future<void> _onCheckItem(String itemId, String listId, bool currentlyChecked) async {
+    try {
+      await ref
+          .read(itemsNotifierProvider(listId).notifier)
+          .toggleItemChecked(itemId, !currentlyChecked);
+      HapticFeedback.lightImpact();
+      setState(() {});
+    } catch (_) {}
+  }
+
+  Future<void> _onAddHistoryItem(ShoppingHistory entry, ShoppingHistoryItem? item) async {
+    final listsAsync = ref.read(listsNotifierProvider);
+    final lists = listsAsync.hasValue ? listsAsync.value! : <ShoppingListModel>[];
+    if (lists.isEmpty) return;
+    // Add to the first list by default — keeps the interaction one-tap.
+    final targetList = lists.first;
+    final notifier = ref.read(itemsNotifierProvider(targetList.id).notifier);
+    try {
+      if (item == null) {
+        for (final i in entry.items) {
+          await notifier.addItem(name: i.name, quantity: i.quantity, unit: i.unit, category: i.category);
+        }
+        HapticFeedback.mediumImpact();
+      } else {
+        await notifier.addItem(name: item.name, quantity: item.quantity, unit: item.unit, category: item.category);
+        HapticFeedback.lightImpact();
+      }
+      if (!mounted) return;
+      final label = item == null
+          ? 'Added ${entry.items.length} items to "${targetList.name}".'
+          : 'Added "${item.name}" to "${targetList.name}".';
+      setState(() {
+        _messages.add(ChatMessage(
+          text: label,
+          isUser: false,
+          avoExpression: AvoExpressionType.celebrating,
+        ));
+      });
+      _scrollToBottom();
+    } catch (_) {}
   }
 
   // ════════════════════════════════════════════════════════
@@ -364,9 +263,16 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final kbdOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-    final navClearance = MainScaffold.getNavbarClearance(context);
-    final inputPad = kbdOpen ? 2.0 : navClearance;
+    // Raw window insets — Scaffold resizes the body on keyboard open so
+    // MediaQuery.viewInsets.bottom reads 0. View.of(context) gives the
+    // untouched platform inset.
+    final view = View.of(context);
+    final rawKbd = view.viewInsets.bottom / view.devicePixelRatio;
+    final kbdOpen = rawKbd > 0;
+    // Closed: sit just above the pill navbar (8px breathing room).
+    // Open: minimal gap above the keyboard (Scaffold already resized body).
+    final inputPad =
+        kbdOpen ? 6.0 : MainScaffold.getNavbarTopOffset(context) + 8.0;
 
     return Scaffold(
       backgroundColor: AppColors.background(context),
@@ -379,26 +285,54 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
           children: [
             // ── Header ──
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(20, 10, 16, 8),
               child: Row(
                 children: [
-                  const AvoMascot(size: 32, expression: AvoExpression.happy),
+                  const AvoMascot(size: 30, expression: AvoExpression.happy),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Avo', style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w700,
+                          fontSize: 17, fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary(context),
+                          letterSpacing: -0.2,
                         )),
-                        if (_isTyping)
-                          Text('thinking...', style: TextStyle(
-                            fontSize: 12, color: AppColors.textTertiary(context),
-                          )),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: _isTyping
+                              ? Text(
+                                  'thinking…',
+                                  key: const ValueKey('thinking'),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textTertiary(context),
+                                  ),
+                                )
+                              : const SizedBox.shrink(key: ValueKey('idle')),
+                        ),
                       ],
                     ),
                   ),
+                  if (kbdOpen) ...[
+                    GestureDetector(
+                      onTap: () => FocusScope.of(context).unfocus(),
+                      child: Container(
+                        width: 34, height: 34,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0F0F3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.keyboard_hide_rounded,
+                          size: 17,
+                          color: AppColors.textSecondary(context),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   GestureDetector(
                     onTap: () {
                       HapticFeedback.mediumImpact();
@@ -408,38 +342,17 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
                     child: Container(
                       width: 34, height: 34,
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.04),
+                        color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0F0F3),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.add_rounded, size: 20, color: AppColors.textSecondary(context)),
+                      child: Icon(Icons.add_rounded, size: 19, color: AppColors.textSecondary(context)),
                     ),
                   ),
-                  if (kbdOpen) ...[
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => FocusScope.of(context).unfocus(),
-                      child: Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.07)
-                              : Colors.black.withValues(alpha: 0.04),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.keyboard_hide_rounded,
-                          size: 18,
-                          color: AppColors.textSecondary(context),
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
 
-            Divider(height: 1, color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04)),
+            const SizedBox(height: 2),
 
             // ── Messages ──
             Expanded(
@@ -458,15 +371,9 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
                           msg: msg,
                           onListTap: (listId) => context.push('/lists/$listId?name=List'),
                           onRecipeTap: (recipeId) => context.push('/recipes/$recipeId'),
-                          onPickList: _addItemToList,
-                          onCheckItem: (itemId, listId, checked) async {
-                            try {
-                              await ref.read(itemsNotifierProvider(listId).notifier)
-                                  .toggleItemChecked(itemId, !checked);
-                              HapticFeedback.lightImpact();
-                              setState(() {}); // refresh
-                            } catch (_) {}
-                          },
+                          onPickList: _addItemToListFromPicker,
+                          onCheckItem: _onCheckItem,
+                          onAddHistoryItem: _onAddHistoryItem,
                         );
                       },
                     ),
@@ -474,15 +381,22 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
 
             // ── Input ──
             Container(
-              padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: inputPad),
+              padding: EdgeInsets.only(left: 16, right: 16, top: 6, bottom: inputPad),
               child: Container(
-                constraints: const BoxConstraints(maxHeight: 120),
+                constraints: const BoxConstraints(maxHeight: 140),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.07) : const Color(0xFFF5F5F5),
-                  borderRadius: BorderRadius.circular(24),
+                  color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                  borderRadius: BorderRadius.circular(26),
                   border: Border.all(
-                    color: isDark ? Colors.white.withValues(alpha: 0.10) : const Color(0xFFE5E5E5),
+                    color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE2E2E2),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.07),
+                      blurRadius: 16,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -495,33 +409,37 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
                         textInputAction: TextInputAction.newline,
                         onChanged: (_) => setState(() {}),
                         onSubmitted: (_) => _send(),
-                        style: TextStyle(fontSize: 15, color: AppColors.textPrimary(context), height: 1.4),
+                        style: TextStyle(fontSize: 15, color: AppColors.textPrimary(context), height: 1.45),
                         decoration: InputDecoration(
                           hintText: context.tr('ask_avo_anything'),
-                          hintStyle: TextStyle(color: AppColors.textTertiary(context), fontSize: 15),
+                          hintStyle: TextStyle(
+                            color: isDark ? const Color(0xFF5A5A5E) : const Color(0xFFAEAEB2),
+                            fontSize: 15,
+                          ),
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                          contentPadding: const EdgeInsets.fromLTRB(20, 13, 14, 13),
                         ),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(right: 5, bottom: 5),
+                      padding: const EdgeInsets.only(right: 6, bottom: 6),
                       child: GestureDetector(
                         onTap: _send,
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
+                          duration: const Duration(milliseconds: 180),
                           curve: Curves.easeInOut,
                           width: 36, height: 36,
                           decoration: BoxDecoration(
                             color: _controller.text.trim().isNotEmpty
                                 ? AppColors.accentColor(context)
-                                : isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                                : Colors.transparent,
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
-                            Icons.arrow_upward_rounded, size: 20,
+                            Icons.arrow_upward_rounded, size: 19,
                             color: _controller.text.trim().isNotEmpty
-                                ? Colors.white : AppColors.textTertiary(context),
+                                ? Colors.white
+                                : isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC),
                           ),
                         ),
                       ),
@@ -539,7 +457,7 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
 }
 
 // ════════════════════════════════════════════════════════
-// EMPTY STATE — centered Avo + chips
+// EMPTY STATE — centered Avo + suggestion cards
 // ════════════════════════════════════════════════════════
 
 class _EmptyState extends StatelessWidget {
@@ -552,37 +470,76 @@ class _EmptyState extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const AvoMascot(size: 72, expression: AvoExpression.waving),
-            const SizedBox(height: 16),
-            Text('How can I help?', style: TextStyle(
-              fontSize: 24, fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary(context),
-            )),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 8, runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: chips.map((c) => GestureDetector(
-                onTap: () => onTap(c),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  child: Text(c, style: TextStyle(
-                    fontSize: 13, color: AppColors.textSecondary(context),
-                  )),
-                ),
-              )).toList(),
+            const AvoMascot(size: 64, expression: AvoExpression.waving),
+            const SizedBox(height: 14),
+            Text(
+              'How can I help?',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary(context),
+                letterSpacing: -0.3,
+              ),
             ),
+            const SizedBox(height: 28),
+            // 2-column suggestion card grid
+            Row(
+              children: [
+                Expanded(child: _SuggestionCard(text: chips[0], onTap: onTap, isDark: isDark)),
+                const SizedBox(width: 10),
+                Expanded(child: _SuggestionCard(text: chips[1], onTap: onTap, isDark: isDark)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (chips.length > 2)
+              _SuggestionCard(text: chips[2], onTap: onTap, isDark: isDark, wide: true),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestionCard extends StatelessWidget {
+  final String text;
+  final void Function(String) onTap;
+  final bool isDark;
+  final bool wide;
+  const _SuggestionCard({
+    required this.text,
+    required this.onTap,
+    required this.isDark,
+    this.wide = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onTap(text),
+      child: Container(
+        width: wide ? double.infinity : null,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF5F5F7),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE8E8ED),
+          ),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary(context),
+            height: 1.35,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );
@@ -626,12 +583,17 @@ class _AvoMessage extends StatelessWidget {
   final ChatMessage msg;
   final void Function(String listId) onListTap;
   final void Function(String recipeId) onRecipeTap;
-  final Future<void> Function(String listId, PickListData data) onPickList;
+  final Future<void> Function(String listId, AvoPickListData data) onPickList;
   final Future<void> Function(String itemId, String listId, bool isChecked) onCheckItem;
+  final Future<void> Function(ShoppingHistory entry, ShoppingHistoryItem? item) onAddHistoryItem;
 
   const _AvoMessage({
-    required this.msg, required this.onListTap, required this.onRecipeTap,
-    required this.onPickList, required this.onCheckItem,
+    required this.msg,
+    required this.onListTap,
+    required this.onRecipeTap,
+    required this.onPickList,
+    required this.onCheckItem,
+    required this.onAddHistoryItem,
   });
 
   @override
@@ -641,37 +603,54 @@ class _AvoMessage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Text
           if (msg.text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 32),
-              child: SelectableText(msg.text, style: TextStyle(
-                fontSize: 15, color: AppColors.textPrimary(context), height: 1.55,
-              )),
+              child: SelectableText(
+                msg.text,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: AppColors.textPrimary(context),
+                  height: 1.55,
+                ),
+              ),
             ),
-
-          // Rich content
-          if (msg.richContent != null) ...[
-            if (msg.text.isNotEmpty) const SizedBox(height: 12),
-            _buildRichContent(context, msg.richContent!),
+          for (var i = 0; i < msg.payloads.length; i++) ...[
+            if (msg.text.isNotEmpty || i > 0) const SizedBox(height: 12),
+            _buildPayload(context, msg.payloads[i]),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildRichContent(BuildContext context, RichContent rc) {
-    switch (rc.type) {
-      case RichContentType.recipes:
-        return _RecipeCards(recipes: rc.recipes ?? [], onTap: onRecipeTap);
-      case RichContentType.listItems:
-        return _ListItemsView(items: rc.items ?? [], listName: rc.listName ?? '', listId: rc.listId ?? '', onCheck: onCheckItem);
-      case RichContentType.lists:
-        return _ListOverview(lists: rc.lists ?? [], onTap: onListTap);
-      case RichContentType.history:
-        return _HistoryView(history: rc.history ?? []);
-      case RichContentType.pickList:
-        return _PickListView(data: rc.pickListData!, onPick: onPickList);
+  Widget _buildPayload(BuildContext context, AvoWidgetPayload p) {
+    switch (p.kind) {
+      case AvoPayloadKind.recipes:
+        return _RecipeCards(recipes: p.recipes ?? [], onTap: onRecipeTap);
+      case AvoPayloadKind.listItems:
+        return _ListItemsView(
+          items: p.items ?? [],
+          listName: p.listName ?? '',
+          listId: p.listId ?? '',
+          onCheck: onCheckItem,
+        );
+      case AvoPayloadKind.lists:
+        return _ListOverview(lists: p.lists ?? [], onTap: onListTap);
+      case AvoPayloadKind.history:
+        return _HistoryView(
+          history: p.history ?? [],
+          onAddAll: (entry) => onAddHistoryItem(entry, null),
+          onAddOne: (entry, item) => onAddHistoryItem(entry, item),
+        );
+      case AvoPayloadKind.pickList:
+        return _PickListView(data: p.pickListData!, onPick: onPickList);
+      case AvoPayloadKind.nutrition:
+        return _NutritionCard(data: p.nutrition!);
+      case AvoPayloadKind.settingChange:
+        return _SettingChangeCard(result: p.settingChange!);
+      case AvoPayloadKind.appInfo:
+        return _AppInfoCard(data: p.appInfo!);
     }
   }
 }
@@ -888,25 +867,36 @@ class _ListOverview extends StatelessWidget {
 
 class _HistoryView extends StatelessWidget {
   final List<ShoppingHistory> history;
-  const _HistoryView({required this.history});
+  final Future<void> Function(ShoppingHistory entry) onAddAll;
+  final Future<void> Function(ShoppingHistory entry, ShoppingHistoryItem item) onAddOne;
+  const _HistoryView({
+    required this.history,
+    required this.onAddAll,
+    required this.onAddOne,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     if (history.isEmpty) {
-      return Text('No shopping history yet.', style: TextStyle(color: AppColors.textTertiary(context), fontSize: 14));
+      return Text(
+        'No shopping history yet.',
+        style: TextStyle(color: AppColors.textTertiary(context), fontSize: 14),
+      );
     }
     return Column(
       children: history.take(5).map((h) {
         final date = '${h.completedAt.day}/${h.completedAt.month}/${h.completedAt.year}';
         return Container(
           width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
           decoration: BoxDecoration(
             color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFFAFAFA),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -914,16 +904,94 @@ class _HistoryView extends StatelessWidget {
               Row(children: [
                 Icon(Icons.receipt_long_rounded, size: 16, color: AppColors.accentColor(context)),
                 const SizedBox(width: 8),
-                Expanded(child: Text(h.listName, style: TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textPrimary(context),
-                ))),
-                Text(date, style: TextStyle(fontSize: 11, color: AppColors.textTertiary(context))),
+                Expanded(
+                  child: Text(
+                    h.listName,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary(context),
+                    ),
+                  ),
+                ),
+                Text(date,
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.textTertiary(context))),
               ]),
-              const SizedBox(height: 6),
-              Text(
-                h.items.take(5).map((i) => i.name).join(', ') + (h.items.length > 5 ? ' +${h.items.length - 5} more' : ''),
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
-                maxLines: 2, overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: h.items.take(12).map((item) {
+                  return GestureDetector(
+                    onTap: () => onAddOne(h, item),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.10)
+                              : const Color(0xFFE5E5E5),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_rounded,
+                              size: 12,
+                              color: AppColors.accentColor(context)),
+                          const SizedBox(width: 4),
+                          Text(
+                            item.name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textPrimary(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              if (h.items.length > 12)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('+ ${h.items.length - 12} more',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textTertiary(context))),
+                ),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () => onAddAll(h),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentColor(context).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.playlist_add_rounded,
+                          size: 16, color: AppColors.accentColor(context)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Add all ${h.items.length} items',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.accentColor(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -938,8 +1006,8 @@ class _HistoryView extends StatelessWidget {
 // ════════════════════════════════════════════════════════
 
 class _PickListView extends ConsumerWidget {
-  final PickListData data;
-  final Future<void> Function(String, PickListData) onPick;
+  final AvoPickListData data;
+  final Future<void> Function(String, AvoPickListData) onPick;
   const _PickListView({required this.data, required this.onPick});
 
   @override
@@ -976,6 +1044,224 @@ class _PickListView extends ConsumerWidget {
           ]),
         ),
       )).toList(),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// RICH: Nutrition Card
+// ════════════════════════════════════════════════════════
+
+class _NutritionCard extends StatelessWidget {
+  final AvoNutritionData data;
+  const _NutritionCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.local_fire_department_rounded,
+                size: 16, color: AppColors.accentColor(context)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                data.recipeName,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary(context),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text('per serving',
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.textTertiary(context))),
+          ]),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _macro(context, 'kcal',
+                  data.calories != null ? '${data.calories}' : '—'),
+              _macro(context, 'protein',
+                  data.proteinG != null ? '${data.proteinG!.round()}g' : '—'),
+              _macro(context, 'carbs',
+                  data.carbsG != null ? '${data.carbsG!.round()}g' : '—'),
+              _macro(context, 'fat',
+                  data.fatG != null ? '${data.fatG!.round()}g' : '—'),
+            ],
+          ),
+          if (data.estimated) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Estimated from ingredients',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textTertiary(context),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _macro(BuildContext context, String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: AppColors.textTertiary(context)),
+        ),
+      ],
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// RICH: Setting Change Confirmation
+// ════════════════════════════════════════════════════════
+
+class _SettingChangeCard extends StatelessWidget {
+  final SettingChangeResult result;
+  const _SettingChangeCard({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = result.success
+        ? AppColors.accentColor(context)
+        : Colors.red.shade400;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? accent.withValues(alpha: 0.08)
+            : accent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            result.success
+                ? Icons.check_circle_rounded
+                : Icons.error_outline_rounded,
+            size: 18,
+            color: accent,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  result.success
+                      ? '${result.displayName} updated'
+                      : "Couldn't change ${result.displayName}",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  result.success
+                      ? (result.oldValue != null
+                          ? '${result.oldValue}  →  ${result.newValue}'
+                          : result.newValue)
+                      : (result.error ?? 'Unknown error'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// RICH: App Info Card
+// ════════════════════════════════════════════════════════
+
+class _AppInfoCard extends StatelessWidget {
+  final AvoAppInfoData data;
+  const _AppInfoCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.info_outline_rounded,
+                size: 14, color: AppColors.accentColor(context)),
+            const SizedBox(width: 6),
+            Text(
+              data.topic,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+                color: AppColors.accentColor(context),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Text(
+            data.answer,
+            style: TextStyle(
+              fontSize: 13.5,
+              height: 1.5,
+              color: AppColors.textPrimary(context),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

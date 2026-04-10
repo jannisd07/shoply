@@ -267,83 +267,90 @@ class RecipeFeaturesService {
   }
 
   // =============================================
-  // RECIPE OF THE DAY
+  // RECIPE OF THE WEEK
   // =============================================
 
-  /// Get today's featured recipe
-  /// Uses the recipe_of_the_day table if available, otherwise picks from top-rated recipes
-  /// Algorithm: Randomly selects from top 1% of recipes (by rating), changes daily
-  Future<Recipe?> getRecipeOfTheDay() async {
+  /// Get this week's featured recipe.
+  /// Algorithm:
+  ///   1. Try ratings from last 7 days → top 5.
+  ///   2. If fewer than 5 found, expand window to 30 days.
+  ///   3. If still fewer than 5, use all-time ratings from recipe_ratings.
+  ///   4. Use a week-stable seed (days since fixed epoch ÷ 7) to pick one
+  ///      consistently for the entire week, changing automatically each Monday.
+  Future<Recipe?> getRecipeOfTheWeek() async {
     try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
-      
-      // First try to get from recipe_of_the_day table (manual selection)
-      final response = await _supabase
-          .from('recipe_of_the_day')
-          .select()
-          .eq('date', today)
-          .maybeSingle();
-
-      if (response != null) {
-        final recipeId = response['recipe_id'] as String;
-        // Get recipe from database
-        try {
-          final recipe = await RecipeService.instance.getRecipeById(recipeId);
-          return recipe;
-        } catch (e) {
-          print('⚠️ [FEATURES] Recipe of day not found in DB: $recipeId');
-        }
+      // Try progressively wider windows until we have at least 1 candidate
+      List<String> topIds = await _getTopIdsByRatings(days: 7, limit: 5);
+      if (topIds.isEmpty) {
+        topIds = await _getTopIdsByRatings(days: 30, limit: 5);
       }
-      
-      // Fallback: Get a random recipe from top-rated recipes
-      // This ensures high quality while providing variety
-      return await _getTopRatedRecipeOfDay();
+      if (topIds.isEmpty) {
+        topIds = await _getTopIdsByRatings(days: null, limit: 5); // all-time
+      }
+      // Last resort: pick by view_count (always populated)
+      if (topIds.isEmpty) {
+        final fallback = await _supabase
+            .from('recipes')
+            .select('id')
+            .order('view_count', ascending: false)
+            .limit(5);
+        topIds = (fallback as List).map((r) => r['id'] as String).toList();
+      }
+
+      if (topIds.isEmpty) return null;
+
+      // Week-stable seed: number of complete weeks since 2020-01-06 (a Monday)
+      final daysSinceEpoch =
+          DateTime.now().difference(DateTime(2020, 1, 6)).inDays;
+      final weekSeed = daysSinceEpoch ~/ 7;
+      final selectedId = topIds[weekSeed % topIds.length];
+
+      print(
+          '🏆 [FEATURES] Recipe of the Week: $selectedId (week $weekSeed, top ${topIds.length})');
+      return await RecipeService.instance.getRecipeById(selectedId);
     } catch (e) {
-      print('⚠️ [FEATURES] Error fetching recipe of day: $e');
-      return await _getTopRatedRecipeOfDay();
-    }
-  }
-  
-  /// Get a "recipe of the day" from available recipes
-  /// Uses a seeded random based on the date for consistency throughout the day
-  /// Rotates through ALL recipes to ensure variety, prioritizing higher-rated ones
-  Future<Recipe?> _getTopRatedRecipeOfDay() async {
-    try {
-      // Get ALL recipes sorted by a weighted score
-      final allRecipesResponse = await _supabase
-          .from('recipes')
-          .select('id, average_rating, rating_count')
-          .order('average_rating', ascending: false)
-          .order('rating_count', ascending: false);
-      
-      final allRecipes = allRecipesResponse as List;
-      if (allRecipes.isEmpty) return null;
-      
-      // Get all recipe IDs - we rotate through ALL of them
-      final allRecipeIds = allRecipes
-          .map((r) => r['id'] as String)
-          .toList();
-      
-      // Use day of year + year as seed for deterministic daily selection
-      // This ensures the same recipe shows all day but changes each day
-      final now = DateTime.now();
-      final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
-      
-      // Simple rotation: use day of year modulo recipe count
-      // This guarantees every recipe gets shown and it changes daily
-      final index = dayOfYear % allRecipeIds.length;
-      final selectedId = allRecipeIds[index];
-      
-      print('🌟 [FEATURES] Recipe of the Day: selected recipe $selectedId (day $dayOfYear, index $index of ${allRecipeIds.length})');
-      
-      // Get full recipe data
-      final recipe = await RecipeService.instance.getRecipeById(selectedId);
-      return recipe;
-    } catch (e) {
-      print('⚠️ [FEATURES] Error getting top-rated recipe of day: $e');
+      print('⚠️ [FEATURES] Error fetching recipe of the week: $e');
       return null;
     }
   }
+
+  /// Returns the top [limit] recipe IDs ranked by rating activity.
+  /// [days] = null means all-time. Uses recipe_ratings aggregation (no
+  /// dependency on computed columns that may not exist on the recipes table).
+  Future<List<String>> _getTopIdsByRatings({int? days, required int limit}) async {
+    var query = _supabase
+        .from('recipe_ratings')
+        .select('recipe_id, rating');
+
+    if (days != null) {
+      final since = DateTime.now().subtract(Duration(days: days));
+      query = query.gte('created_at', since.toIso8601String());
+    }
+
+    final response = await query;
+    if ((response as List).isEmpty) return [];
+
+    final ratings = <String, List<int>>{};
+    for (final r in response) {
+      final id = r['recipe_id'] as String;
+      final rating = r['rating'] as int;
+      ratings.putIfAbsent(id, () => []).add(rating);
+    }
+
+    final sorted = ratings.entries.toList()
+      ..sort((a, b) {
+        final countCmp = b.value.length.compareTo(a.value.length);
+        if (countCmp != 0) return countCmp;
+        final avgA = a.value.reduce((x, y) => x + y) / a.value.length;
+        final avgB = b.value.reduce((x, y) => x + y) / b.value.length;
+        return avgB.compareTo(avgA);
+      });
+
+    return sorted.take(limit).map((e) => e.key).toList();
+  }
+
+  // Kept for backwards compatibility (push_notification_service uses it)
+  Future<Recipe?> getRecipeOfTheDay() => getRecipeOfTheWeek();
 
   // =============================================
   // NUTRITION INFO

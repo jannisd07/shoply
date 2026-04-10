@@ -22,6 +22,10 @@ class Recipe extends Equatable {
   final List<String> labels; // ML-generated labels for filtering (diet, meal type, cuisine, etc.)
   final String language; // 'en' or 'de' - auto-detected from recipe content
   final NutritionInfo? nutrition; // Nutrition info per serving
+  // Set for recipes imported from a third-party source. When present, the
+  // detail screen shows a "Source" link at the bottom instead of an author.
+  final String? sourceUrl;
+  final String? sourceName; // e.g. 'wikibooks'
 
   const Recipe({
     required this.id,
@@ -44,7 +48,11 @@ class Recipe extends Equatable {
     this.labels = const [],
     this.language = 'de', // Default to German for backward compatibility
     this.nutrition,
+    this.sourceUrl,
+    this.sourceName,
   });
+
+  bool get isImported => sourceUrl != null && sourceUrl!.isNotEmpty;
 
   int get totalTimeMinutes => prepTimeMinutes + cookTimeMinutes;
 
@@ -69,6 +77,8 @@ class Recipe extends Equatable {
     List<String>? labels,
     String? language,
     NutritionInfo? nutrition,
+    String? sourceUrl,
+    String? sourceName,
   }) {
     return Recipe(
       id: id ?? this.id,
@@ -91,6 +101,8 @@ class Recipe extends Equatable {
       labels: labels ?? this.labels,
       language: language ?? this.language,
       nutrition: nutrition ?? this.nutrition,
+      sourceUrl: sourceUrl ?? this.sourceUrl,
+      sourceName: sourceName ?? this.sourceName,
     );
   }
 
@@ -115,6 +127,8 @@ class Recipe extends Equatable {
       'labels': labels,
       'language': language,
       'nutrition': nutrition?.toJson(),
+      'source_url': sourceUrl,
+      'source_name': sourceName,
     };
   }
 
@@ -141,9 +155,11 @@ class Recipe extends Equatable {
       viewCount: json['view_count'] as int? ?? 0,
       labels: json['labels'] != null ? List<String>.from(json['labels'] as List) : [],
       language: json['language'] as String? ?? 'de', // Default to German for backward compatibility
-      nutrition: json['nutrition'] != null 
+      nutrition: json['nutrition'] != null
           ? NutritionInfo.fromJson(json['nutrition'] as Map<String, dynamic>)
           : null,
+      sourceUrl: json['source_url'] as String?,
+      sourceName: json['source_name'] as String?,
     );
   }
 
@@ -169,6 +185,8 @@ class Recipe extends Equatable {
         labels,
         language,
         nutrition,
+        sourceUrl,
+        sourceName,
       ];
 }
 

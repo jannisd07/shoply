@@ -171,8 +171,9 @@ class AppTranslations {
     'ai_recommendations': 'AI Recommendations',
     'based_on_purchases': 'Based on your purchases',
     
-    // Recipe of the Day
+    // Recipe of the Week
     'recipe_of_the_day': 'Recipe of the Day',
+    'recipe_of_the_week': 'Recipe of the Week',
     'start_cooking': 'Start Cooking',
     
     // Recipe Details
@@ -479,7 +480,22 @@ class AppTranslations {
     'category_soup': 'Soups',
     'category_vegan': 'Vegan',
     'category_gluten_free': 'Gluten Free',
-    
+
+    // Recipe filter chips
+    'filter_quick': 'Quick',
+    'filter_30min': '30 Min',
+    'filter_easy': 'Easy',
+    'filter_medium': 'Medium',
+    'filter_advanced': 'Advanced',
+    'filter_vegetarian': 'Vegetarian',
+    'filter_vegan': 'Vegan',
+    'filter_gluten_free': 'Gluten-Free',
+    'filter_healthy': 'Healthy',
+    'filter_soup': 'Soups',
+    'filter_breakfast': 'Breakfast',
+    'filter_snack': 'Desserts',
+    'clear_filters': 'Clear Filters',
+
     // Multi-step recipe creation
     'basic_info': 'Basic Info',
     'time_servings': 'Time & Servings',
@@ -704,8 +720,9 @@ class AppTranslations {
     'ai_recommendations': 'KI-Empfehlungen',
     'based_on_purchases': 'Basierend auf deinen Einkäufen',
     
-    // Recipe of the Day
+    // Recipe of the Week
     'recipe_of_the_day': 'Rezept des Tages',
+    'recipe_of_the_week': 'Rezept der Woche',
     'start_cooking': 'Kochen starten',
     
     // Recipe Details
@@ -1012,7 +1029,22 @@ class AppTranslations {
     'category_soup': 'Suppen',
     'category_vegan': 'Vegan',
     'category_gluten_free': 'Glutenfrei',
-    
+
+    // Recipe filter chips
+    'filter_quick': 'Schnell',
+    'filter_30min': '30 Min',
+    'filter_easy': 'Einfach',
+    'filter_medium': 'Mittel',
+    'filter_advanced': 'Aufwändig',
+    'filter_vegetarian': 'Vegetarisch',
+    'filter_vegan': 'Vegan',
+    'filter_gluten_free': 'Glutenfrei',
+    'filter_healthy': 'Gesund',
+    'filter_soup': 'Suppen',
+    'filter_breakfast': 'Frühstück',
+    'filter_snack': 'Desserts',
+    'clear_filters': 'Filter zurücksetzen',
+
     // Multi-step recipe creation
     'basic_info': 'Grundinfos',
     'time_servings': 'Zeit & Portionen',

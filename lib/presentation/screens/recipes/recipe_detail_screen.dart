@@ -18,6 +18,7 @@ import 'package:shoply/presentation/state/recipes_provider.dart';
 import 'package:shoply/presentation/widgets/recipes/star_rating_widget.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/select_list_bottom_sheet.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/screens/recipes/cooking_mode_screen.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
@@ -284,58 +285,57 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        GestureDetector(
-                          onTap: () {
-                            if (_recipe!.authorId != null) {
+                        if (!_recipe!.isImported)
+                          GestureDetector(
+                            onTap: () {
                               context.push('/author/${_recipe!.authorId}', extra: {'authorName': _recipe!.authorName});
-                            }
-                          },
-                          child: Row(
-                            children: [
-                              // Author avatar
-                              if (_recipe!.authorAvatarUrl != null && _recipe!.authorAvatarUrl!.isNotEmpty)
-                                Container(
-                                  width: 22,
-                                  height: 22,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white54, width: 1),
-                                    image: DecorationImage(
-                                      image: NetworkImage(_recipe!.authorAvatarUrl!),
-                                      fit: BoxFit.cover,
+                            },
+                            child: Row(
+                              children: [
+                                // Author avatar
+                                if (_recipe!.authorAvatarUrl != null && _recipe!.authorAvatarUrl!.isNotEmpty)
+                                  Container(
+                                    width: 22,
+                                    height: 22,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white54, width: 1),
+                                      image: DecorationImage(
+                                        image: NetworkImage(_recipe!.authorAvatarUrl!),
+                                        fit: BoxFit.cover,
+                                      ),
                                     ),
-                                  ),
-                                )
-                              else
-                                Container(
-                                  width: 22,
-                                  height: 22,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white24,
-                                    border: Border.all(color: Colors.white54, width: 1),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      _recipe!.authorName.isNotEmpty ? _recipe!.authorName[0].toUpperCase() : '?',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
+                                  )
+                                else
+                                  Container(
+                                    width: 22,
+                                    height: 22,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white24,
+                                      border: Border.all(color: Colors.white54, width: 1),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        _recipe!.authorName.isNotEmpty ? _recipe!.authorName[0].toUpperCase() : '?',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     ),
                                   ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _recipe!.authorName,
+                                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                                 ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _recipe!.authorName,
-                                style: const TextStyle(color: Colors.white70, fontSize: 13),
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.chevron_right_rounded, size: 14, color: Colors.white54),
-                            ],
+                                const SizedBox(width: 4),
+                                const Icon(Icons.chevron_right_rounded, size: 14, color: Colors.white54),
+                              ],
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -799,9 +799,83 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
             ),
           ),
           
+          // Source attribution (only for imported recipes)
+          if (_recipe!.isImported)
+            SliverToBoxAdapter(
+              child: _buildSourceFooter(context),
+            ),
+
           // Bottom padding
           SliverToBoxAdapter(
             child: SizedBox(height: 100 + MediaQuery.of(context).padding.bottom),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSourceFooter(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final url = _recipe!.sourceUrl!;
+    final sourceLabel = _recipe!.sourceName == 'wikibooks'
+        ? 'Wikibooks Cookbook'
+        : 'external source';
+    final licenseLabel =
+        _recipe!.sourceName == 'wikibooks' ? 'CC BY-SA 4.0' : null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Divider(
+            height: 1,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: () async {
+              final uri = Uri.tryParse(url);
+              if (uri != null) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.link_rounded,
+                    size: 14,
+                    color: AppColors.textTertiary(context),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textTertiary(context),
+                        ),
+                        children: [
+                          const TextSpan(text: 'Source: '),
+                          TextSpan(
+                            text: sourceLabel,
+                            style: TextStyle(
+                              color: AppColors.textSecondary(context),
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                          if (licenseLabel != null) TextSpan(text: '  ·  $licenseLabel'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

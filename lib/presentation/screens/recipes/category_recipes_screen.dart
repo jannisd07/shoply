@@ -10,77 +10,113 @@ import 'package:shoply/presentation/state/saved_recipes_provider.dart';
 import 'package:shoply/presentation/state/recipes_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-/// Provider for recipes by category - auto-refreshes when recipeRefreshTriggerProvider changes
+/// Provider for recipes by category
 final categoryRecipesProvider = FutureProvider.family<List<Recipe>, String>((ref, category) async {
-  // Watch the refresh trigger to auto-reload when data changes
   ref.watch(recipeRefreshTriggerProvider);
   return RecipeService().getRecipesByCategory(category);
 });
 
-/// Category localization keys
-const Map<String, String> categoryLocalizationKeys = {
-  'italienisch': 'category_italian',
-  'asiatisch': 'category_asian',
-  'vegetarisch': 'category_vegetarian',
-  'vegan': 'category_vegan',
-  'dessert': 'category_desserts',
-  'frühstück': 'category_breakfast',
-  'schnell': 'category_quick',
-  'gesund': 'category_healthy',
-  'comfort-food': 'category_comfort',
-  'mexican': 'category_mexican',
+/// Active filter chips state per category
+final _categoryFiltersProvider =
+    StateProvider.family<Set<String>, String>((ref, categoryId) => {});
+
+/// Maps category label IDs (as stored in DB) to translation keys
+const Map<String, String> _categoryTrKeys = {
+  'italian':       'category_italian',
+  'asian':         'category_asian',
+  'vegetarian':    'category_vegetarian',
+  'vegan':         'category_vegan',
+  'snack':         'category_desserts',
+  'breakfast':     'category_breakfast',
+  'quick':         'category_quick',
+  'healthy':       'category_healthy',
+  'comfort-food':  'category_comfort',
+  'mexican':       'category_mexican',
   'mediterranean': 'category_mediterranean',
-  'seafood': 'category_seafood',
-  'soup': 'category_soup',
+  'seafood':       'category_seafood',
+  'soup':          'category_soup',
 };
 
-/// Format category ID to display name (fallback for missing translations)
-String _formatCategoryName(String categoryId) {
-  // Replace underscores and hyphens with spaces
-  String formatted = categoryId.replaceAll('_', ' ').replaceAll('-', ' ');
-  // Capitalize first letter of each word
-  return formatted.split(' ').map((word) {
-    if (word.isEmpty) return word;
-    return word[0].toUpperCase() + word.substring(1);
-  }).join(' ');
+/// Filter chip definition
+class _FilterChip {
+  final String labelId; // matches a recipe label in the DB
+  final String trKey;   // translation key
+  final IconData icon;
+
+  const _FilterChip({required this.labelId, required this.trKey, required this.icon});
 }
 
-/// Screen displaying recipes for a specific category
+/// All available filter chips shown at the top of every category page.
+/// Only chips whose label exists on at least some recipes in the category
+/// are shown — the rest are filtered out after the recipes load.
+const List<_FilterChip> _allFilterChips = [
+  _FilterChip(labelId: 'quick',       trKey: 'filter_quick',       icon: CupertinoIcons.bolt_fill),
+  _FilterChip(labelId: '30min',       trKey: 'filter_30min',       icon: CupertinoIcons.time),
+  _FilterChip(labelId: 'easy',        trKey: 'filter_easy',        icon: CupertinoIcons.star),
+  _FilterChip(labelId: 'medium',      trKey: 'filter_medium',      icon: CupertinoIcons.star_lefthalf_fill),
+  _FilterChip(labelId: 'advanced',    trKey: 'filter_advanced',    icon: CupertinoIcons.star_fill),
+  _FilterChip(labelId: 'vegetarian',  trKey: 'filter_vegetarian',  icon: CupertinoIcons.leaf_arrow_circlepath),
+  _FilterChip(labelId: 'vegan',       trKey: 'filter_vegan',       icon: CupertinoIcons.tree),
+  _FilterChip(labelId: 'gluten-free', trKey: 'filter_gluten_free', icon: CupertinoIcons.checkmark_shield),
+  _FilterChip(labelId: 'healthy',     trKey: 'filter_healthy',     icon: CupertinoIcons.heart_fill),
+];
+
+String _formatCategoryFallback(String categoryId) {
+  return categoryId
+      .replaceAll('_', ' ')
+      .replaceAll('-', ' ')
+      .split(' ')
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+      .join(' ');
+}
+
+String _getDisplayName(BuildContext context, String categoryId) {
+  final key = _categoryTrKeys[categoryId];
+  if (key != null) {
+    final translated = context.tr(key);
+    if (translated != key) return translated;
+  }
+  return _formatCategoryFallback(categoryId);
+}
+
+List<Recipe> _applyFilters(List<Recipe> recipes, Set<String> activeFilters) {
+  if (activeFilters.isEmpty) return recipes;
+  return recipes
+      .where((r) => activeFilters.every((f) => r.labels.contains(f)))
+      .toList();
+}
+
+/// Only show chips that are relevant to at least one recipe in this category.
+List<_FilterChip> _relevantChips(List<Recipe> recipes, String categoryId) {
+  final presentLabels = <String>{};
+  for (final r in recipes) {
+    presentLabels.addAll(r.labels);
+  }
+  return _allFilterChips
+      .where((c) => c.labelId != categoryId && presentLabels.contains(c.labelId))
+      .toList();
+}
+
 class CategoryRecipesScreen extends ConsumerWidget {
   final String categoryId;
 
-  const CategoryRecipesScreen({
-    super.key,
-    required this.categoryId,
-  });
-
-  String _getDisplayName(BuildContext context) {
-    final key = categoryLocalizationKeys[categoryId];
-    if (key != null) {
-      final translated = context.tr(key);
-      // If translation returns the key itself, use formatted name
-      if (translated != key) {
-        return translated;
-      }
-    }
-    // Use formatted fallback for missing translations or unknown categories
-    return _formatCategoryName(categoryId);
-  }
+  const CategoryRecipesScreen({super.key, required this.categoryId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recipesAsync = ref.watch(categoryRecipesProvider(categoryId));
-    final backgroundColor = AppColors.recipeBg(context);
+    final activeFilters = ref.watch(_categoryFiltersProvider(categoryId));
+    final bg = AppColors.recipeBg(context);
     final textPrimary = AppColors.textPrimary(context);
-    
+
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: bg,
       appBar: AppBar(
-        backgroundColor: backgroundColor,
+        backgroundColor: bg,
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          _getDisplayName(context),
+          _getDisplayName(context, categoryId),
           style: TextStyle(
             color: textPrimary,
             fontSize: 20,
@@ -109,53 +145,90 @@ class CategoryRecipesScreen extends ConsumerWidget {
             ],
           ),
         ),
-        data: (recipes) => recipes.isEmpty
-            ? _buildEmptyState(context)
-            : CustomScrollView(
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
+        data: (allRecipes) {
+          final chips = _relevantChips(allRecipes, categoryId);
+          final filtered = _applyFilters(allRecipes, activeFilters);
+          return Column(
+            children: [
+              // Filter chips bar — only shown when there are relevant chips
+              if (chips.isNotEmpty)
+                _FilterChipsBar(
+                  chips: chips,
+                  activeFilters: activeFilters,
+                  onToggle: (labelId) {
+                    final current = ref.read(_categoryFiltersProvider(categoryId));
+                    final updated = Set<String>.from(current);
+                    if (updated.contains(labelId)) {
+                      updated.remove(labelId);
+                    } else {
+                      updated.add(labelId);
+                    }
+                    ref.read(_categoryFiltersProvider(categoryId).notifier).state = updated;
+                  },
                 ),
-                slivers: [
-                  CupertinoSliverRefreshControl(
-                    onRefresh: () async {
-                      ref.invalidate(categoryRecipesProvider(categoryId));
-                    },
-                  ),
-                  SliverPadding(
-                    padding: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      top: 16,
-                      bottom: 100 + MediaQuery.of(context).padding.bottom,
-                    ),
-                    sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.75,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
+              Expanded(
+                child: filtered.isEmpty
+                    ? _buildEmptyState(
+                        context,
+                        ref,
+                        hasActiveFilters: activeFilters.isNotEmpty,
+                        categoryId: categoryId,
+                      )
+                    : CustomScrollView(
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        slivers: [
+                          CupertinoSliverRefreshControl(
+                            onRefresh: () async {
+                              ref.invalidate(categoryRecipesProvider(categoryId));
+                            },
+                          ),
+                          SliverPadding(
+                            padding: EdgeInsets.only(
+                              left: 16,
+                              right: 16,
+                              top: 16,
+                              bottom: 100 + MediaQuery.of(context).padding.bottom,
+                            ),
+                            sliver: SliverGrid(
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                childAspectRatio: 0.75,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                              ),
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final recipe = filtered[index];
+                                  return _CategoryRecipeCard(
+                                    recipe: recipe,
+                                    onTap: () =>
+                                        context.push('/recipes/${recipe.id}'),
+                                  );
+                                },
+                                childCount: filtered.length,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final recipe = recipes[index];
-                          return _CategoryRecipeCard(
-                            recipe: recipe,
-                            onTap: () => context.push('/recipes/${recipe.id}'),
-                          );
-                        },
-                        childCount: recipes.length,
-                      ),
-                    ),
-                  ),
-                ],
               ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool hasActiveFilters,
+    required String categoryId,
+  }) {
     final textSecondary = AppColors.textSecondary(context);
-    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -163,9 +236,11 @@ class CategoryRecipesScreen extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.search_off_rounded,
+              hasActiveFilters
+                  ? Icons.filter_list_off_rounded
+                  : Icons.search_off_rounded,
               size: 80,
-              color: textSecondary.withOpacity(0.5),
+              color: textSecondary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
@@ -182,7 +257,134 @@ class CategoryRecipesScreen extends ConsumerWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: textSecondary.withOpacity(0.7),
+                color: textSecondary.withValues(alpha: 0.7),
+              ),
+            ),
+            if (hasActiveFilters) ...[
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () => ref
+                    .read(_categoryFiltersProvider(categoryId).notifier)
+                    .state = {},
+                child: Text(
+                  context.tr('clear_filters'),
+                  style: TextStyle(
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter chips bar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FilterChipsBar extends StatelessWidget {
+  final List<_FilterChip> chips;
+  final Set<String> activeFilters;
+  final void Function(String labelId) onToggle;
+
+  const _FilterChipsBar({
+    required this.chips,
+    required this.activeFilters,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppColors.recipeBg(context),
+        border: Border(
+          bottom: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.07)
+                : Colors.black.withValues(alpha: 0.06),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final chip = chips[index];
+          final isActive = activeFilters.contains(chip.labelId);
+          return _Chip(
+            label: context.tr(chip.trKey),
+            icon: chip.icon,
+            isActive: isActive,
+            onTap: () => onToggle(chip.labelId),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _Chip({
+    required this.label,
+    required this.icon,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = AppColors.accent;
+
+    final bgColor = isActive
+        ? accent
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.09)
+            : Colors.black.withValues(alpha: 0.055));
+
+    final fgColor = isActive
+        ? Colors.white
+        : (isDark ? Colors.white.withValues(alpha: 0.75) : Colors.black.withValues(alpha: 0.6));
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: fgColor),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight:
+                    isActive ? FontWeight.w600 : FontWeight.w500,
+                color: fgColor,
+                letterSpacing: -0.1,
               ),
             ),
           ],
@@ -192,21 +394,21 @@ class CategoryRecipesScreen extends ConsumerWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Recipe card
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _CategoryRecipeCard extends ConsumerWidget {
   final Recipe recipe;
   final VoidCallback onTap;
 
-  const _CategoryRecipeCard({
-    required this.recipe,
-    required this.onTap,
-  });
+  const _CategoryRecipeCard({required this.recipe, required this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cardColor = AppColors.recipeSurface(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final borderColor = AppColors.recipeBorderColor(context);
     final isSaved = ref.watch(isRecipeSavedProvider(recipe.id));
 
     return GestureDetector(
@@ -220,7 +422,6 @@ class _CategoryRecipeCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image with bookmark
             Stack(
               children: [
                 CachedNetworkImage(
@@ -239,22 +440,25 @@ class _CategoryRecipeCard extends ConsumerWidget {
                     child: const Center(child: Icon(Icons.restaurant_rounded)),
                   ),
                 ),
-                // Bookmark button
                 Positioned(
                   top: 6,
                   right: 6,
                   child: GestureDetector(
-                    onTap: () {
-                      ref.read(savedRecipesProvider.notifier).toggleSave(recipe.id);
-                    },
+                    onTap: () => ref
+                        .read(savedRecipesProvider.notifier)
+                        .toggleSave(recipe.id),
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: isSaved ? Colors.white : Colors.black.withOpacity(0.5),
+                        color: isSaved
+                            ? Colors.white
+                            : Colors.black.withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                        isSaved
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
                         size: 16,
                         color: isSaved ? Colors.black : Colors.white,
                       ),
@@ -263,7 +467,6 @@ class _CategoryRecipeCard extends ConsumerWidget {
                 ),
               ],
             ),
-            // Content
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(10),
@@ -283,15 +486,19 @@ class _CategoryRecipeCard extends ConsumerWidget {
                     const Spacer(),
                     Row(
                       children: [
-                        Icon(Icons.schedule_rounded, size: 12, color: textSecondary),
+                        Icon(Icons.schedule_rounded,
+                            size: 12, color: textSecondary),
                         const SizedBox(width: 4),
                         Text(
                           '${recipe.totalTimeMinutes} min',
-                          style: TextStyle(color: textSecondary, fontSize: 11),
+                          style: TextStyle(
+                              color: textSecondary, fontSize: 11),
                         ),
                         if (recipe.averageRating > 0) ...[
                           const Spacer(),
-                          Icon(Icons.star_rounded, size: 12, color: AppColors.recipeStarColor(context)),
+                          Icon(Icons.star_rounded,
+                              size: 12,
+                              color: AppColors.recipeStarColor(context)),
                           const SizedBox(width: 2),
                           Text(
                             recipe.averageRating.toStringAsFixed(1),

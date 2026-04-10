@@ -7,6 +7,7 @@ import 'package:shoply/core/constants/recipe_categories.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/dietary_preference.dart';
 import 'package:shoply/data/services/recipe_service.dart';
+import 'package:shoply/data/services/recipe_features_service.dart';
 import 'package:shoply/data/services/ingredient_substitution_service.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
@@ -33,7 +34,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
   List<Recipe> _allRecipes = [];
   List<Recipe> _popularRecipes = [];
   List<Recipe> _recentRecipes = [];
-  List<Recipe> _featuredRecipe = []; // Recipe of the day
+  Recipe? _recipeOfTheWeek;
   List<Recipe> _forYouRecipes = []; // Personalized recommendations
   List<Map<String, dynamic>> _topAuthors = [];
   Map<String, int> _categoryCounts = {};
@@ -116,61 +117,77 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     try {
       final results = await Future.wait([
         _recipeService.getRecipes(),
-        _recipeService.getPopularRecipes(limit: 8, thisWeekOnly: true),
+        // Request 9 so we still have 8 after excluding recipe of the week
+        _recipeService.getPopularRecipes(limit: 9, thisWeekOnly: true),
         _recipeService.getRecentRecipes(limit: 10),
         _recipeService.getTopAuthors(limit: 8),
+        RecipeFeaturesService.instance.getRecipeOfTheWeek(),
       ]);
-      
+
       final allRecipes = results[0] as List<Recipe>;
+      final popularRaw = results[1] as List<Recipe>;
       final authors = results[3] as List<Map<String, dynamic>>;
-      
+      final weekRecipe = results[4] as Recipe?;
+
+      // Exclude recipe of the week from "Popular This Week"
+      final weekId = weekRecipe?.id;
+      final popular = popularRaw
+          .where((r) => r.id != weekId)
+          .take(8)
+          .toList();
+
+      // IDs already shown (recipe of week + popular) → exclude from "For You"
+      final shownIds = <String>{
+        if (weekId != null) weekId,
+        ...popular.map((r) => r.id),
+      };
+
       // Calculate category counts
       final counts = <String, int>{};
       for (final category in recipeCategories) {
-        counts[category.id] = allRecipes.where((r) => 
+        counts[category.id] = allRecipes.where((r) =>
           r.labels.any((l) => l.toLowerCase().contains(category.id.toLowerCase()))
         ).length;
       }
-      
-      // Get featured recipe (highest rated from popular)
-      final popular = results[1] as List<Recipe>;
-      final featured = popular.isNotEmpty ? [popular.first] : <Recipe>[];
-      
+
       // Get personalized "For You" recipes based on user diet preferences
+      // Excludes anything already shown in recipe of week or popular sections
+      final candidateRecipes =
+          allRecipes.where((r) => !shownIds.contains(r.id)).toList();
       final user = ref.read(currentUserProvider).value;
       List<Recipe> forYou = [];
       if (user != null && (user.dietPreferences.isNotEmpty || user.allergies.isNotEmpty)) {
         // Score recipes based on preference matches, rating, and engagement
         final scoredRecipes = <Recipe, double>{};
-        for (final recipe in allRecipes) {
+        for (final recipe in candidateRecipes) {
           double score = 0;
-          
+
           // Add points for matching diet preferences
           for (final pref in user.dietPreferences) {
             if (recipe.labels.any((l) => l.toLowerCase().contains(pref.toLowerCase()))) {
               score += 2.0;
             }
           }
-          
+
           // Subtract points for allergens
           for (final allergy in user.allergies) {
-            if (recipe.ingredients.any((ing) => 
+            if (recipe.ingredients.any((ing) =>
                 ing.name.toLowerCase().contains(allergy.toLowerCase()))) {
               score -= 5.0; // Heavy penalty for allergens
             }
           }
-          
+
           // Boost by rating (0-5 stars → 0-2.5 points)
           score += recipe.averageRating * 0.5;
-          
+
           // Boost by view count (logarithmic to not over-weight viral recipes)
           if (recipe.viewCount > 0) {
             score += (recipe.viewCount.toDouble()).clamp(0, 100) * 0.01;
           }
-          
+
           // Boost by rating count (social proof)
           score += (recipe.ratingCount * 0.2).clamp(0, 2);
-          
+
           // Freshness boost (recipes from last 7 days get bonus)
           final age = DateTime.now().difference(recipe.createdAt).inDays;
           if (age <= 7) {
@@ -178,43 +195,40 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
           } else if (age <= 30) {
             score += 0.5;
           }
-          
+
           if (score > 0) {
             scoredRecipes[recipe] = score;
           }
         }
-        
+
         // Sort by score and take appropriate amount based on total recipes
         final sorted = scoredRecipes.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value));
-        // For small recipe counts, show max half of recipes (min 1, max 6)
-        final forYouLimit = allRecipes.length <= 6 
-            ? (allRecipes.length / 2).ceil().clamp(1, 3)
+        final forYouLimit = candidateRecipes.length <= 6
+            ? (candidateRecipes.length / 2).ceil().clamp(1, 3)
             : 6;
         forYou = sorted.take(forYouLimit).map((e) => e.key).toList();
       }
-      // If no personalized matches, show top rated recipes with good engagement
+      // If no personalized matches, show top rated from candidates
       if (forYou.isEmpty) {
-        forYou = List<Recipe>.from(allRecipes)
+        forYou = List<Recipe>.from(candidateRecipes)
           ..sort((a, b) {
-            // Combined score: rating weight + engagement
             final scoreA = a.averageRating * 2 + (a.ratingCount * 0.1) + (a.viewCount * 0.01);
             final scoreB = b.averageRating * 2 + (b.ratingCount * 0.1) + (b.viewCount * 0.01);
             return scoreB.compareTo(scoreA);
           });
-        // For small recipe counts, show max half of recipes (min 1, max 6)
-        final forYouLimit = allRecipes.length <= 6 
-            ? (allRecipes.length / 2).ceil().clamp(1, 3)
+        final forYouLimit = candidateRecipes.length <= 6
+            ? (candidateRecipes.length / 2).ceil().clamp(1, 3)
             : 6;
         forYou = forYou.take(forYouLimit).toList();
       }
-      
+
       setState(() {
         _allRecipes = allRecipes;
         _popularRecipes = popular;
         _recentRecipes = results[2] as List<Recipe>;
         _topAuthors = authors;
-        _featuredRecipe = featured;
+        _recipeOfTheWeek = weekRecipe;
         _forYouRecipes = forYou;
         _categoryCounts = counts;
         _totalRecipes = allRecipes.length;
@@ -453,19 +467,19 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
             ),
           ),
         
-        // Featured Recipe of the Day
-        if (_featuredRecipe.isNotEmpty) ...[
+        // Featured Recipe of the Week
+        if (_recipeOfTheWeek != null) ...[
           _buildSectionHeader(
             context,
-            context.tr('recipe_of_the_day'),
+            context.tr('recipe_of_the_week'),
             Icons.auto_awesome_rounded,
           ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _FeaturedRecipeCard(
-                recipe: _featuredRecipe.first,
-                onTap: () => context.push('/recipes/${_featuredRecipe.first.id}'),
+                recipe: _recipeOfTheWeek!,
+                onTap: () => context.push('/recipes/${_recipeOfTheWeek!.id}'),
               ),
             ),
           ),

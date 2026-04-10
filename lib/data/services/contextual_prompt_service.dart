@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
+import 'package:shoply/presentation/screens/profile/settings/diet_preferences_screen.dart';
 
 /// Service for showing one-time contextual prompts at the right moment.
 class ContextualPromptService {
@@ -42,17 +43,15 @@ class ContextualPromptService {
     await prefs.setBool(_keyDietPromptShown, true);
   }
 
-  /// Show the diet preferences bottom sheet.
-  /// Returns selected preferences (empty list if dismissed).
+  /// Show the diet preferences dialog.
   Future<void> showDietPrompt(BuildContext context) async {
     await markDietPromptShown();
     if (!context.mounted) return;
 
-    await showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => const _DietPromptSheet(),
+      barrierDismissible: true,
+      builder: (ctx) => const _DietPromptDialog(),
     );
   }
 
@@ -83,167 +82,106 @@ class ContextualPromptService {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Diet Preferences Bottom Sheet
-// ═════════���═════════════════════════════════════════════════════════════
+// Diet Preferences Dialog
+// ═══════════════════════════════════════════════════════════════════════
 
-class _DietPromptSheet extends StatefulWidget {
-  const _DietPromptSheet();
-
-  @override
-  State<_DietPromptSheet> createState() => _DietPromptSheetState();
-}
-
-class _DietPromptSheetState extends State<_DietPromptSheet> {
-  final Set<String> _selected = {};
-
-  static const _diets = [
-    ('vegetarian', 'Vegetarisch', '🥬'),
-    ('vegan', 'Vegan', '🌱'),
-    ('gluten_free', 'Glutenfrei', '🌾'),
-    ('dairy_free', 'Laktosefrei', '🥛'),
-    ('keto', 'Keto', '🥑'),
-    ('pescatarian', 'Pescatarisch', '🐟'),
-    ('nut_free', 'Nussfrei', '🥜'),
-    ('halal', 'Halal', '☪️'),
-  ];
-
-  Future<void> _save() async {
-    if (_selected.isNotEmpty) {
-      final user = SupabaseService.instance.currentUser;
-      if (user != null) {
-        try {
-          await SupabaseService.instance.from('users').update({
-            'diet_preferences': _selected.toList(),
-            'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', user.id);
-        } catch (_) {}
-      }
-    }
-    if (mounted) Navigator.of(context).pop();
-  }
+class _DietPromptDialog extends StatelessWidget {
+  const _DietPromptDialog();
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF1C1C1E) : Colors.white;
-    final chipBg = isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF3F3F3);
-    final selectedBg = isDark ? const Color(0xFF34C759).withValues(alpha: 0.2) : const Color(0xFF34C759).withValues(alpha: 0.12);
     final textColor = isDark ? Colors.white : Colors.black87;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 20,
-        bottom: MediaQuery.of(context).padding.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag handle
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.88,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(16),
           ),
-          const SizedBox(height: 20),
-
-          Text(
-            'Hast du Ernährungspräferenzen?',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Wir zeigen dir passende Rezepte.',
-            style: TextStyle(
-              fontSize: 15,
-              color: textColor.withValues(alpha: 0.5),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Diet chips
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _diets.map((d) {
-              final isSelected = _selected.contains(d.$1);
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (isSelected) {
-                      _selected.remove(d.$1);
-                    } else {
-                      _selected.add(d.$1);
-                    }
-                  });
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isSelected ? selectedBg : chipBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFF34C759).withValues(alpha: 0.5)
-                          : Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row with X button
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Ernährungspräferenzen',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: textColor,
+                      ),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(d.$3, style: const TextStyle(fontSize: 16)),
-                      const SizedBox(width: 6),
-                      Text(
-                        d.$2,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: textColor,
-                        ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF2C2C2E)
+                            : const Color(0xFFF3F3F3),
+                        shape: BoxShape.circle,
                       ),
-                    ],
+                      child: Icon(
+                        CupertinoIcons.xmark,
+                        size: 13,
+                        color: textColor.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Passe deine Rezeptvorschläge an. Lege in den Einstellungen fest, ob du z.B. vegetarisch oder glutenfrei isst.',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: textColor.withValues(alpha: 0.55),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        builder: (_) => const DietPreferencesScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text(
+                    'Zu den Einstellungen',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
-              );
-            }).toList(),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Save button
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
               ),
-              child: Text(
-                _selected.isEmpty ? 'Überspringen' : 'Speichern',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

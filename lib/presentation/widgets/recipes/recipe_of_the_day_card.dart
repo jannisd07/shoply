@@ -7,15 +7,18 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/recipe_features_service.dart';
 
-/// Featured recipe of the day card
-class RecipeOfTheDayCard extends StatefulWidget {
-  const RecipeOfTheDayCard({super.key});
+/// Featured recipe of the week card
+class RecipeOfTheWeekCard extends StatefulWidget {
+  const RecipeOfTheWeekCard({super.key});
 
   @override
-  State<RecipeOfTheDayCard> createState() => _RecipeOfTheDayCardState();
+  State<RecipeOfTheWeekCard> createState() => _RecipeOfTheWeekCardState();
 }
 
-class _RecipeOfTheDayCardState extends State<RecipeOfTheDayCard> {
+// Keep old name as alias for backwards compat
+typedef RecipeOfTheDayCard = RecipeOfTheWeekCard;
+
+class _RecipeOfTheWeekCardState extends State<RecipeOfTheWeekCard> {
   final _service = RecipeFeaturesService.instance;
   Recipe? _recipe;
   bool _isLoading = true;
@@ -23,11 +26,11 @@ class _RecipeOfTheDayCardState extends State<RecipeOfTheDayCard> {
   @override
   void initState() {
     super.initState();
-    _loadRecipeOfTheDay();
+    _loadRecipeOfTheWeek();
   }
 
-  Future<void> _loadRecipeOfTheDay() async {
-    final recipe = await _service.getRecipeOfTheDay();
+  Future<void> _loadRecipeOfTheWeek() async {
+    final recipe = await _service.getRecipeOfTheWeek();
     if (mounted) {
       setState(() {
         _recipe = recipe;
@@ -57,7 +60,7 @@ class _RecipeOfTheDayCardState extends State<RecipeOfTheDayCard> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha:0.2),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -88,7 +91,7 @@ class _RecipeOfTheDayCardState extends State<RecipeOfTheDayCard> {
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.transparent,
-                    Colors.black.withOpacity(0.7),
+                    Colors.black.withValues(alpha:0.7),
                   ],
                   stops: const [0.3, 1.0],
                 ),
@@ -110,7 +113,7 @@ class _RecipeOfTheDayCardState extends State<RecipeOfTheDayCard> {
                     const Icon(Icons.star_rounded, size: 14, color: Colors.white),
                     const SizedBox(width: 4),
                     Text(
-                      context.tr('recipe_of_the_day'),
+                      context.tr('recipe_of_the_week'),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
@@ -142,12 +145,12 @@ class _RecipeOfTheDayCardState extends State<RecipeOfTheDayCard> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.schedule_rounded, size: 14, color: Colors.white.withOpacity(0.9)),
+                      Icon(Icons.schedule_rounded, size: 14, color: Colors.white.withValues(alpha:0.9)),
                       const SizedBox(width: 4),
                       Text(
                         '${_recipe!.totalTimeMinutes} min',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha:0.9),
                           fontSize: 12,
                         ),
                       ),
@@ -158,7 +161,7 @@ class _RecipeOfTheDayCardState extends State<RecipeOfTheDayCard> {
                         Text(
                           _recipe!.averageRating.toStringAsFixed(1),
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha:0.9),
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
