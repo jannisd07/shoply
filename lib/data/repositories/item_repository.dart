@@ -319,17 +319,18 @@ class ItemRepository {
     }
   }
 
-  /// Update sort order for items
+  /// Update sort order for items. Writes `order_index` – the column the read
+  /// path sorts on – so the new order is visible after a reload.
   Future<void> updateSortOrder(List<String> itemIds) async {
     if (itemIds.isEmpty) return;
-    
+
     for (var i = 0; i < itemIds.length; i++) {
       await _supabase
           .from('shopping_items')
-          .update({'sort_order': i})
+          .update({'order_index': i})
           .eq('id', itemIds[i]);
     }
-    
+
     // Touch list once (get listId from first item)
     try {
        final item = await _supabase.from('shopping_items').select('list_id').eq('id', itemIds[0]).single();

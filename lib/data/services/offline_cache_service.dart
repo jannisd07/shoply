@@ -194,6 +194,52 @@ class OfflineCacheService {
   }
 
   // =============================================
+  // USER PROFILE CACHING (for offline app start)
+  // =============================================
+
+  static const String _cachedProfileKey = 'cached_user_profile';
+
+  /// Cache the current user's profile fields needed for the router redirect.
+  /// Keyed by user id so a device with account switching stays consistent.
+  Future<void> cacheUserProfile({
+    required String userId,
+    String? displayName,
+    bool? onboardingCompleted,
+  }) async {
+    try {
+      final prefs = await _preferences;
+      final payload = jsonEncode({
+        'user_id': userId,
+        'display_name': displayName,
+        'onboarding_completed': onboardingCompleted,
+        'cached_at': DateTime.now().toIso8601String(),
+      });
+      await prefs.setString(_cachedProfileKey, payload);
+    } catch (e) {
+      print('❌ [OFFLINE] Error caching user profile: $e');
+    }
+  }
+
+  /// Read the cached profile for the given user. Returns null if nothing is
+  /// cached or the cache is for a different user.
+  Future<CachedUserProfile?> getCachedUserProfile(String userId) async {
+    try {
+      final prefs = await _preferences;
+      final raw = prefs.getString(_cachedProfileKey);
+      if (raw == null) return null;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      if (map['user_id'] != userId) return null;
+      return CachedUserProfile(
+        userId: userId,
+        displayName: map['display_name'] as String?,
+        onboardingCompleted: map['onboarding_completed'] as bool?,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // =============================================
   // CACHE MANAGEMENT
   // =============================================
 
@@ -275,6 +321,20 @@ class OfflineCacheService {
       return CacheInfo(recipeCount: 0, sizeBytes: 0, lastSync: null, isExpired: true);
     }
   }
+}
+
+/// Minimal user profile snapshot used by the router redirect when offline,
+/// so app entry never depends on a live Supabase query.
+class CachedUserProfile {
+  final String userId;
+  final String? displayName;
+  final bool? onboardingCompleted;
+
+  const CachedUserProfile({
+    required this.userId,
+    required this.displayName,
+    required this.onboardingCompleted,
+  });
 }
 
 /// Information about the cache

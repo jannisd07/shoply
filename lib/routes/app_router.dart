@@ -29,6 +29,8 @@ import 'package:shoply/presentation/screens/legal/privacy_policy_screen.dart';
 import 'package:shoply/presentation/screens/legal/terms_of_service_screen.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/analytics_service.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io' show Platform;
 
@@ -121,129 +123,159 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const UnifiedSetupScreen(),
       ),
       
-      // Main app with bottom navigation
-      ShellRoute(
-        builder: (context, state, child) => MainScaffold(child: child),
-        routes: [
-          GoRoute(
-            path: '/home',
-            name: 'home',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const HomeScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/lists/:listId',
-            name: 'list-detail',
-            pageBuilder: (context, state) {
-              final listId = state.pathParameters['listId']!;
-              final listName = state.uri.queryParameters['name'] ?? 'Shopping List';
-              return CupertinoPage(
-                key: state.pageKey,
-                child: ListDetailScreen(
-                  listId: listId,
-                  listName: listName,
-                ),
-              );
-            },
+      // Main app with bottom navigation – StatefulShellRoute keeps each tab's
+      // state alive (no rebuilds when switching tabs) and lets us render a
+      // smooth horizontal slide transition between branches.
+      StatefulShellRoute(
+        builder: (context, state, navigationShell) =>
+            MainScaffold(navigationShell: navigationShell),
+        navigatorContainerBuilder: (context, navigationShell, children) =>
+            SlidingTabsContainer(
+          currentIndex: navigationShell.currentIndex,
+          children: children,
+        ),
+        branches: [
+          // Branch 0: Home + list detail (sibling routes share the home branch)
+          StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'activities',
-                name: 'list-activities',
-                builder: (context, state) {
+                path: '/home',
+                name: 'home',
+                pageBuilder: (context, state) => NoTransitionPage(
+                  key: state.pageKey,
+                  child: const HomeScreen(),
+                ),
+              ),
+              GoRoute(
+                path: '/lists/:listId',
+                name: 'list-detail',
+                pageBuilder: (context, state) {
                   final listId = state.pathParameters['listId']!;
                   final listName = state.uri.queryParameters['name'] ?? 'Shopping List';
-                  return ListActivitiesScreen(
-                    listId: listId,
-                    listName: listName,
+                  return CupertinoPage(
+                    key: state.pageKey,
+                    child: ListDetailScreen(
+                      listId: listId,
+                      listName: listName,
+                    ),
                   );
                 },
+                routes: [
+                  GoRoute(
+                    path: 'activities',
+                    name: 'list-activities',
+                    builder: (context, state) {
+                      final listId = state.pathParameters['listId']!;
+                      final listName = state.uri.queryParameters['name'] ?? 'Shopping List';
+                      return ListActivitiesScreen(
+                        listId: listId,
+                        listName: listName,
+                      );
+                    },
+                  ),
+                ],
               ),
             ],
           ),
-          // Avo AI Chat
-          GoRoute(
-            path: '/avo',
-            name: 'avo-chat',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const AvoChatScreen(),
-            ),
-          ),
-          GoRoute(
-            path: '/recipes',
-            name: 'recipes',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const RecipesScreen(),
-            ),
+
+          // Branch 1: Recipes + nested routes
+          StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'add',
-                name: 'add-recipe',
-                builder: (context, state) {
-                  final extra = state.extra as Map<String, dynamic>?;
-                  final draftId = extra?['draftId'] as String?;
-                  final recipeId = extra?['recipeId'] as String?;
-                  return MultiStepRecipeScreen(draftId: draftId, recipeId: recipeId);
-                },
-              ),
-              GoRoute(
-                path: 'drafts',
-                name: 'recipe-drafts',
-                builder: (context, state) => const RecipeDraftsScreen(),
-              ),
-              GoRoute(
-                path: 'saved',
-                name: 'saved-recipes',
-                builder: (context, state) => const SavedRecipesScreen(),
-              ),
-              GoRoute(
-                path: 'my',
-                name: 'my-recipes',
-                builder: (context, state) => const MyRecipesScreen(),
-              ),
-              GoRoute(
-                path: 'creators',
-                name: 'creators',
-                builder: (context, state) => const CreatorsScreen(),
-              ),
-              GoRoute(
-                path: 'popular',
-                name: 'popular-recipes',
-                builder: (context, state) => const AllRecipesScreen(popularOnly: true),
-              ),
-              GoRoute(
-                path: 'all',
-                name: 'all-recipes',
-                builder: (context, state) => const AllRecipesScreen(),
-              ),
-              GoRoute(
-                path: 'category/:categoryId',
-                name: 'category-recipes',
-                builder: (context, state) {
-                  final categoryId = state.pathParameters['categoryId']!;
-                  return CategoryRecipesScreen(categoryId: categoryId);
-                },
-              ),
-              GoRoute(
-                path: ':recipeId',
-                name: 'recipe-detail',
-                builder: (context, state) {
-                  final recipeId = state.pathParameters['recipeId']!;
-                  return RecipeDetailScreen(recipeId: recipeId);
-                },
+                path: '/recipes',
+                name: 'recipes',
+                pageBuilder: (context, state) => NoTransitionPage(
+                  key: state.pageKey,
+                  child: const RecipesScreen(),
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'add',
+                    name: 'add-recipe',
+                    builder: (context, state) {
+                      final extra = state.extra as Map<String, dynamic>?;
+                      final draftId = extra?['draftId'] as String?;
+                      final recipeId = extra?['recipeId'] as String?;
+                      return MultiStepRecipeScreen(draftId: draftId, recipeId: recipeId);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'drafts',
+                    name: 'recipe-drafts',
+                    builder: (context, state) => const RecipeDraftsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'saved',
+                    name: 'saved-recipes',
+                    builder: (context, state) => const SavedRecipesScreen(),
+                  ),
+                  GoRoute(
+                    path: 'my',
+                    name: 'my-recipes',
+                    builder: (context, state) => const MyRecipesScreen(),
+                  ),
+                  GoRoute(
+                    path: 'creators',
+                    name: 'creators',
+                    builder: (context, state) => const CreatorsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'popular',
+                    name: 'popular-recipes',
+                    builder: (context, state) => const AllRecipesScreen(popularOnly: true),
+                  ),
+                  GoRoute(
+                    path: 'all',
+                    name: 'all-recipes',
+                    builder: (context, state) => const AllRecipesScreen(),
+                  ),
+                  GoRoute(
+                    path: 'category/:categoryId',
+                    name: 'category-recipes',
+                    builder: (context, state) {
+                      final categoryId = state.pathParameters['categoryId']!;
+                      return CategoryRecipesScreen(categoryId: categoryId);
+                    },
+                  ),
+                  GoRoute(
+                    path: ':recipeId',
+                    name: 'recipe-detail',
+                    builder: (context, state) {
+                      final recipeId = state.pathParameters['recipeId']!;
+                      return RecipeDetailScreen(recipeId: recipeId);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
-          GoRoute(
-            path: '/profile',
-            name: 'profile',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
-              child: const ProfileScreen(),
-            ),
+
+          // Branch 2: Avo AI Chat
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/avo',
+                name: 'avo-chat',
+                pageBuilder: (context, state) => NoTransitionPage(
+                  key: state.pageKey,
+                  child: const AvoChatScreen(),
+                ),
+              ),
+            ],
+          ),
+
+          // Branch 3: Profile
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/profile',
+                name: 'profile',
+                pageBuilder: (context, state) => NoTransitionPage(
+                  key: state.pageKey,
+                  child: const ProfileScreen(),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -379,33 +411,69 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      // Logged in - check if name prompt or setup is needed
+      // Logged in - check if name prompt or setup is needed.
+      // IMPORTANT: this must never block app entry when offline. We first try
+      // a cached profile snapshot, then – only if online – a short-timeout
+      // network query. If both fail we fall through and let the user into the
+      // app (they will land on /home as if fully set up).
       if (isLoggedIn) {
-        try {
-          final user = SupabaseService.instance.currentUser;
-          if (user != null) {
-            final response = await SupabaseService.instance
-                .from('users')
-                .select('display_name, onboarding_completed')
-                .eq('id', user.id)
-                .maybeSingle();
+        final user = SupabaseService.instance.currentUser;
+        if (user != null) {
+          String? displayName;
+          bool gotProfile = false;
 
-            final displayName = response?['display_name'] as String?;
+          // 1. Offline-safe cached profile
+          final cached = await OfflineCacheService.instance
+              .getCachedUserProfile(user.id);
+          if (cached != null) {
+            displayName = cached.displayName;
+            gotProfile = true;
+          }
+
+          // 2. Live refresh only when online – bounded so a flaky network
+          //    can't hang the redirect.
+          if (ConnectivityService.instance.isOnline) {
+            try {
+              final response = await SupabaseService.instance
+                  .from('users')
+                  .select('display_name, onboarding_completed')
+                  .eq('id', user.id)
+                  .maybeSingle()
+                  .timeout(const Duration(milliseconds: 1500));
+
+              if (response != null) {
+                displayName = response['display_name'] as String?;
+                gotProfile = true;
+                unawaited(OfflineCacheService.instance.cacheUserProfile(
+                  userId: user.id,
+                  displayName: displayName,
+                  onboardingCompleted:
+                      response['onboarding_completed'] as bool?,
+                ));
+              }
+            } catch (_) {
+              // Network/timeout error – keep whatever we have from cache.
+            }
+          }
+
+          // Only enforce the name-prompt flow when we actually know the
+          // current display name. Without a profile snapshot we optimistically
+          // treat the user as set up so offline start always succeeds.
+          if (gotProfile) {
             final needsName = DisplayNameHelper.needsNamePrompt(displayName);
-
-            // If user needs to set their name, redirect to name prompt
             if (needsName && !isNamePrompt && !isSetup) {
               return '/name-prompt';
             }
-
-            // If name is set and trying to access auth/onboarding routes, go to home
             if (!needsName &&
                (location == '/welcome' || location == '/login' || location == '/signup' || isNamePrompt || isOnboarding)) {
               return '/home';
             }
+          } else {
+            // No profile info at all: still bounce off auth screens into home.
+            if (location == '/welcome' || location == '/login' || location == '/signup' || isNamePrompt || isOnboarding) {
+              return '/home';
+            }
           }
-        } catch (e) {
-          // On error, allow navigation to continue
         }
       }
 

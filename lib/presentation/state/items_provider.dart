@@ -29,6 +29,10 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
   final ItemRepository _repository;
   final String listId;
 
+  /// When true, incoming realtime events are ignored so an in-flight
+  /// reorder batch-write does not get overwritten mid-way.
+  bool _isReordering = false;
+
   ItemsNotifier(this._repository, this.listId) : super(const AsyncValue.loading()) {
     loadItems();
     _setupRealtimeSubscription();
@@ -36,6 +40,7 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
 
   void _setupRealtimeSubscription() {
     _repository.subscribeToItemChanges(listId, () async {
+      if (_isReordering) return; // suppress reload while batch-writing
       await _loadItemsAndCheckForNew();
     });
   }
@@ -221,34 +226,87 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     }
   }
 
+  /// Core helper used by all reorder operations.
+  ///
+  /// Stamps every item in [items] with its index as [orderIndex], pushes an
+  /// optimistic state update, then writes ALL positions to the DB.
+  ///
+  /// Writing every item is important: items that have never been ordered
+  /// before carry a null orderIndex (≙ 999999 in sorts). If we only write
+  /// the moved items, unwritten neighbours stay at null and the next
+  /// loadItems() sorts them all to the end, causing the snap-back.
+  ///
+  /// We do NOT call loadItems() afterwards – the optimistic state is already
+  /// the correct target state. loadItems() would re-fetch and might briefly
+  /// show a loading flash. The realtime flag prevents race-condition reloads
+  /// during the write loop.
+  Future<void> _applyReorder(List<ShoppingItemModel> reorderedItems) async {
+    // Stamp every item with its new position.
+    final stamped = [
+      for (int i = 0; i < reorderedItems.length; i++)
+        reorderedItems[i].copyWith(orderIndex: i),
+    ];
+
+    // Optimistic UI update – visible immediately, no flash.
+    state = AsyncValue.data(stamped);
+
+    // Suppress realtime reloads during the write burst.
+    _isReordering = true;
+    try {
+      for (int i = 0; i < stamped.length; i++) {
+        await _repository.updateItem(stamped[i].id, {'order_index': i});
+      }
+    } catch (_) {
+      // On write failure roll back to a fresh DB load.
+      _isReordering = false;
+      await loadItems();
+      return;
+    }
+    _isReordering = false;
+    // No loadItems() here – the stamped optimistic state IS correct.
+  }
+
+  /// Move [fromItemId] just before [toItemId] in the global list.
+  Future<void> reorderItemToPosition(String fromItemId, String toItemId) async {
+    final currentState = state;
+    if (!currentState.hasValue) return;
+    final items = List<ShoppingItemModel>.from(currentState.value!);
+    final fromIndex = items.indexWhere((i) => i.id == fromItemId);
+    var toIndex = items.indexWhere((i) => i.id == toItemId);
+    if (fromIndex == -1 || toIndex == -1 || fromIndex == toIndex) return;
+
+    final item = items.removeAt(fromIndex);
+    if (fromIndex < toIndex) toIndex -= 1;
+    items.insert(toIndex, item);
+
+    await _applyReorder(items);
+  }
+
+  /// Move [fromItemId] right AFTER [afterItemId] in the global list.
+  Future<void> reorderItemAfter(String fromItemId, String afterItemId) async {
+    final currentState = state;
+    if (!currentState.hasValue) return;
+    final items = List<ShoppingItemModel>.from(currentState.value!);
+    final fromIndex = items.indexWhere((i) => i.id == fromItemId);
+    var afterIndex = items.indexWhere((i) => i.id == afterItemId);
+    if (fromIndex == -1 || afterIndex == -1 || fromIndex == afterIndex) return;
+
+    final item = items.removeAt(fromIndex);
+    if (fromIndex < afterIndex) afterIndex -= 1;
+    final insertAt = (afterIndex + 1).clamp(0, items.length);
+    items.insert(insertAt, item);
+
+    await _applyReorder(items);
+  }
+
   Future<void> reorderItems(int oldIndex, int newIndex) async {
     final currentState = state;
     if (!currentState.hasValue) return;
-    
     final items = List<ShoppingItemModel>.from(currentState.value!);
-    
-    // Adjust newIndex if moving down
-    if (oldIndex < newIndex) {
-      newIndex -= 1;
-    }
-    
-    // Move the item
+    if (oldIndex < newIndex) newIndex -= 1;
     final item = items.removeAt(oldIndex);
     items.insert(newIndex, item);
-    
-    // Update state immediately for smooth UI
-    state = AsyncValue.data(items);
-    
-    // Update order in database
-    try {
-      for (int i = 0; i < items.length; i++) {
-        await _repository.updateItem(items[i].id, {'order_index': i});
-      }
-    } catch (error) {
-      // Reload if update fails
-      await loadItems();
-      rethrow;
-    }
+    await _applyReorder(items);
   }
 }
 

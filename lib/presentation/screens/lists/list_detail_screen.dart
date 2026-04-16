@@ -844,13 +844,81 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   ),
                 )
               else
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: categoryItems.length,
-                  itemBuilder: (context, index) {
-                    return _buildDraggableItemTile(categoryItems[index], index, categoryId);
-                  },
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: categoryItems.length,
+                      itemBuilder: (context, index) {
+                        return _buildDraggableItemTile(categoryItems[index], index, categoryId);
+                      },
+                    ),
+                    // Drop zone AFTER the last item so users can move
+                    // items to the very end of a category.
+                    DragTarget<ShoppingItemModel>(
+                      onWillAcceptWithDetails: (details) {
+                        if (categoryItems.isEmpty) return true;
+                        // Accept if the dragged item isn't already last in this category
+                        return details.data.id != categoryItems.last.id;
+                      },
+                      onAcceptWithDetails: (details) async {
+                        final draggedItem = details.data;
+                        final fromCat = _draggedFromCategory;
+                        final notifier = ref.read(
+                            itemsNotifierProvider(widget.listId).notifier);
+
+                        if (fromCat != categoryId) {
+                          // Cross-category: change category first
+                          await notifier.updateItem(
+                              draggedItem.id, {'category_id': categoryId});
+                        }
+                        // Place after the last item in this category.
+                        if (categoryItems.isNotEmpty) {
+                          await notifier.reorderItemAfter(
+                              draggedItem.id, categoryItems.last.id);
+                        }
+                        HapticFeedback.lightImpact();
+                        setState(() {
+                          _isDragging = false;
+                          _draggedItem = null;
+                          _draggedFromCategory = null;
+                        });
+                      },
+                      builder: (context, candidateData, rejectedData) {
+                        final isHovering = candidateData.isNotEmpty;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          height: isHovering ? 40 : 20,
+                          margin: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: isHovering
+                              ? BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: AppColors.accentColor(context)
+                                        .withValues(alpha: 0.4),
+                                    width: 1.5,
+                                  ),
+                                )
+                              : null,
+                          child: isHovering
+                              ? Center(
+                                  child: Container(
+                                    width: 40,
+                                    height: 3,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentColor(context)
+                                          .withValues(alpha: 0.5),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        );
+                      },
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -2270,134 +2338,180 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   /// Build a draggable item tile with tap zones:
   /// - Left 2/3: tap to toggle check
   /// - Right 1/3: tap to edit (with pencil icon in quantity box)
-  /// - Long press: start drag to move to different category
+  /// - Long press: start drag to move to different category OR reorder
+  ///   within the same category (drop onto another item)
   Widget _buildDraggableItemTile(ShoppingItemModel item, int index, String categoryId) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return Listener(
-      onPointerMove: (event) {
-        // Track pointer position during drag for auto-scroll
-        if (_isDragging) {
-          _handleAutoScroll(event.position.dy);
-        }
-      },
-      child: LongPressDraggable<ShoppingItemModel>(
-        data: item,
-        delay: const Duration(milliseconds: 300),
-        onDragStarted: () {
-          debugPrint('🎯 [DRAG] Started dragging item: ${item.name}');
+
+    // Each item is also a DragTarget so we can reorder within a category
+    // AND accept cross-category drops directly onto an item position.
+    return DragTarget<ShoppingItemModel>(
+      onWillAcceptWithDetails: (details) => details.data.id != item.id,
+      onAcceptWithDetails: (details) async {
+        final draggedItem = details.data;
+        final fromCat = _draggedFromCategory;
+        if (fromCat == categoryId) {
+          // ── Same category → reorder ──
+          await ref.read(itemsNotifierProvider(widget.listId).notifier)
+              .reorderItemToPosition(draggedItem.id, item.id);
+          HapticFeedback.lightImpact();
+        } else {
+          // ── Different category → move to this category at this position ──
+          await ref.read(itemsNotifierProvider(widget.listId).notifier)
+              .updateItem(draggedItem.id, {'category_id': categoryId});
+          // Then reorder so it lands at this item's position
+          await ref.read(itemsNotifierProvider(widget.listId).notifier)
+              .reorderItemToPosition(draggedItem.id, item.id);
           HapticFeedback.mediumImpact();
-          setState(() {
-            _isDragging = true;
-            _draggedItem = item;
-            _draggedFromCategory = categoryId;
-          });
-        },
-        onDragUpdate: (details) {
-          // Also handle via onDragUpdate as backup
-          _handleAutoScroll(details.globalPosition.dy);
-        },
-        onDragEnd: (details) {
-          debugPrint('🎯 [DRAG] Drag ended');
-          _stopAutoScrollTimer();
-          setState(() {
-            _isDragging = false;
-            _draggedItem = null;
-            _draggedFromCategory = null;
-          });
-        },
-        onDraggableCanceled: (_, __) {
-          debugPrint('🎯 [DRAG] Drag cancelled');
-          _stopAutoScrollTimer();
-          setState(() {
-            _isDragging = false;
-            _draggedItem = null;
-            _draggedFromCategory = null;
-          });
-        },
-        feedback: Material(
-          elevation: 8,
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            width: MediaQuery.of(context).size.width - 64,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.accentColor(context).withValues(alpha: 0.95),
-              borderRadius: BorderRadius.circular(20),
+        }
+        setState(() {
+          _isDragging = false;
+          _draggedItem = null;
+          _draggedFromCategory = null;
+        });
+      },
+      builder: (context, candidateData, rejectedData) {
+        final isHovering = candidateData.isNotEmpty;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Insertion indicator line when another item hovers here
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              height: isHovering ? 3 : 0,
+              margin: isHovering
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 2)
+                  : EdgeInsets.zero,
+              decoration: BoxDecoration(
+                color: isHovering
+                    ? AppColors.accentColor(context).withValues(alpha: 0.7)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.drag_indicator_rounded, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    item.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+            Listener(
+              onPointerMove: (event) {
+                if (_isDragging) _handleAutoScroll(event.position.dy);
+              },
+              child: LongPressDraggable<ShoppingItemModel>(
+                data: item,
+                delay: const Duration(milliseconds: 300),
+                onDragStarted: () {
+                  debugPrint('🎯 [DRAG] Started dragging item: ${item.name}');
+                  HapticFeedback.mediumImpact();
+                  setState(() {
+                    _isDragging = true;
+                    _draggedItem = item;
+                    _draggedFromCategory = categoryId;
+                  });
+                },
+                onDragUpdate: (details) {
+                  _handleAutoScroll(details.globalPosition.dy);
+                },
+                onDragEnd: (details) {
+                  debugPrint('🎯 [DRAG] Drag ended');
+                  _stopAutoScrollTimer();
+                  setState(() {
+                    _isDragging = false;
+                    _draggedItem = null;
+                    _draggedFromCategory = null;
+                  });
+                },
+                onDraggableCanceled: (_, __) {
+                  debugPrint('🎯 [DRAG] Drag cancelled');
+                  _stopAutoScrollTimer();
+                  setState(() {
+                    _isDragging = false;
+                    _draggedItem = null;
+                    _draggedFromCategory = null;
+                  });
+                },
+                feedback: Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    width: MediaQuery.of(context).size.width - 64,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentColor(context).withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.drag_indicator_rounded, color: Colors.white, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} ${item.unit ?? ''}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                Text(
-                  '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} ${item.unit ?? ''}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white70,
+                childWhenDragging: Opacity(
+                  opacity: 0.3,
+                  child: _buildItemTileContent(item, isDark),
+                ),
+                child: Dismissible(
+                  key: Key(item.id),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.delete,
+                      color: Colors.white,
+                      size: 28,
+                    ),
                   ),
+                  confirmDismiss: (direction) async {
+                    HapticFeedback.heavyImpact();
+                    return true;
+                  },
+                  onDismissed: (direction) async {
+                    await ref.read(itemsNotifierProvider(widget.listId).notifier)
+                        .deleteItem(item.id);
+                    ref.invalidate(listsNotifierProvider);
+                    if (context.mounted) {
+                      HapticFeedback.lightImpact();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${item.name} ${context.tr('deleted')}'),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  child: _buildItemTileContent(item, isDark),
                 ),
-              ],
-            ),
-          ),
-        ),
-        childWhenDragging: Opacity(
-          opacity: 0.3,
-          child: _buildItemTileContent(item, isDark),
-        ),
-        child: Dismissible(
-          key: Key(item.id),
-          direction: DismissDirection.endToStart,
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            decoration: BoxDecoration(
-              color: Colors.red,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.delete,
-            color: Colors.white,
-            size: 28,
-          ),
-        ),
-        confirmDismiss: (direction) async {
-          HapticFeedback.heavyImpact();
-          return true;
-        },
-        onDismissed: (direction) async {
-          await ref.read(itemsNotifierProvider(widget.listId).notifier)
-            .deleteItem(item.id);
-          ref.invalidate(listsNotifierProvider);
-          
-          if (context.mounted) {
-            HapticFeedback.lightImpact();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${item.name} ${context.tr('deleted')}'),
-                duration: const Duration(seconds: 2),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
-          }
-        },
-        child: _buildItemTileContent(item, isDark),
-      ),
-      ), // Close LongPressDraggable
-    ); // Close Listener
+              ), // LongPressDraggable
+            ), // Listener
+          ],
+        );
+      },
+    ); // DragTarget
   }
   
   /// The actual content of an item tile with 2/3 check zone and 1/3 edit zone

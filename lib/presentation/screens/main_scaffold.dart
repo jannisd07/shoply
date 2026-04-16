@@ -5,18 +5,143 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
+
+// Branch index <-> visual pill tab index mapping.
+// Branches: 0=home, 1=recipes, 2=avo, 3=profile.
+// Pill tabs: 0=home, 1=recipes, 2=profile (avo is the floating circle).
+const int _kBranchHome = 0;
+const int _kBranchRecipes = 1;
+const int _kBranchAvo = 2;
+const int _kBranchProfile = 3;
+
+int _branchToPillIndex(int branch) {
+  switch (branch) {
+    case _kBranchHome:
+      return 0;
+    case _kBranchRecipes:
+      return 1;
+    case _kBranchProfile:
+      return 2;
+    default:
+      return 0;
+  }
+}
+
+int _pillToBranchIndex(int pill) {
+  switch (pill) {
+    case 0:
+      return _kBranchHome;
+    case 1:
+      return _kBranchRecipes;
+    case 2:
+      return _kBranchProfile;
+    default:
+      return _kBranchHome;
+  }
+}
+
+/// Container rendered by [StatefulShellRoute.navigatorContainerBuilder] that
+/// keeps every branch's navigator alive in the widget tree and slides
+/// horizontally between them on tab change. Because all children remain
+/// mounted, switching tabs is instant – there is no rebuild work.
+class SlidingTabsContainer extends StatefulWidget {
+  final int currentIndex;
+  final List<Widget> children;
+
+  const SlidingTabsContainer({
+    super.key,
+    required this.currentIndex,
+    required this.children,
+  });
+
+  @override
+  State<SlidingTabsContainer> createState() => _SlidingTabsContainerState();
+}
+
+class _SlidingTabsContainerState extends State<SlidingTabsContainer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late int _from;
+  late int _to;
+
+  @override
+  void initState() {
+    super.initState();
+    _from = widget.currentIndex;
+    _to = widget.currentIndex;
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+      value: 1.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant SlidingTabsContainer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.currentIndex != _to) {
+      _from = _to;
+      _to = widget.currentIndex;
+      _ctrl
+        ..stop()
+        ..forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return ClipRect(
+          child: AnimatedBuilder(
+            animation: _ctrl,
+            builder: (context, _) {
+              final t = Curves.easeOutCubic.transform(_ctrl.value);
+              final progress = _from + (_to - _from) * t;
+              final offset = progress * width;
+              return Stack(
+                children: [
+                  for (int i = 0; i < widget.children.length; i++)
+                    Positioned(
+                      left: i * width - offset,
+                      top: 0,
+                      width: width,
+                      height: constraints.maxHeight,
+                      child: TickerMode(
+                        // Pause animations in offscreen branches to save CPU.
+                        enabled: i == _to || _ctrl.isAnimating,
+                        child: widget.children[i],
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
 
 /// Main scaffold with floating Liquid Glass navigation islands (iOS 26 style).
 ///
 /// Layout: [ glass pill (Home · Recipes · Profile) ]  [ glass circle (Avo) ]
 /// The pill indicator is draggable – swipe horizontally to slide between tabs.
 class MainScaffold extends ConsumerStatefulWidget {
-  final Widget child;
+  final StatefulNavigationShell navigationShell;
 
-  const MainScaffold({super.key, required this.child});
+  const MainScaffold({super.key, required this.navigationShell});
 
   static const double _pillHeight = 66.0;
   static const double _indicatorPad = 5.0;
@@ -58,15 +183,16 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
     with SingleTickerProviderStateMixin {
   // Unbounded controller so value can be set directly during drag (0.0 … tabCount-1).
   AnimationController? _slideController;
-  AnimationController get _slide =>
-      _slideController ??= AnimationController.unbounded(vsync: this, value: 0.0);
-  int _currentIndex = 0;
+  AnimationController get _slide => _slideController ??=
+      AnimationController.unbounded(vsync: this, value: _currentIndex.toDouble());
+  late int _currentIndex;
   int? _pressedIndex;
   double _pillWidth = 0;
 
   @override
   void initState() {
     super.initState();
+    _currentIndex = _branchToPillIndex(widget.navigationShell.currentIndex);
     // Warm-up to guarantee availability before first frame.
     _slide;
   }
@@ -79,16 +205,11 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
 
   // ── Route helpers ──
 
-  int _selectedIndex(BuildContext context) {
-    final loc = GoRouterState.of(context).matchedLocation;
-    if (loc.startsWith('/home')) return 0;
-    if (loc.startsWith('/recipes')) return 1;
-    if (loc.startsWith('/profile')) return 2;
-    return 0;
-  }
+  int _selectedPillIndex() =>
+      _branchToPillIndex(widget.navigationShell.currentIndex);
 
-  bool _isAvoActive(BuildContext context) =>
-      GoRouterState.of(context).matchedLocation.startsWith('/avo');
+  bool _isAvoActive() =>
+      widget.navigationShell.currentIndex == _kBranchAvo;
 
   // ── Navigation ──
 
@@ -99,21 +220,29 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
     );
   }
 
-  void _navigateTo(BuildContext context, int index) {
-    setState(() => _currentIndex = index);
+  void _goBranch(int branch) {
+    widget.navigationShell.goBranch(
+      branch,
+      initialLocation: branch == widget.navigationShell.currentIndex,
+    );
     final t = DynamicTutorialService.instance;
-    switch (index) {
-      case 0: context.go('/home'); t.onRouteChanged('/home');
-      case 1: context.go('/recipes'); t.onRouteChanged('/recipes');
-      case 2: context.go('/profile');
+    switch (branch) {
+      case _kBranchHome:
+        t.onRouteChanged('/home');
+        break;
+      case _kBranchRecipes:
+        t.onRouteChanged('/recipes');
+        break;
     }
   }
 
-  void _onTab(BuildContext context, int index) {
-    if (index == _currentIndex && !_isAvoActive(context)) return;
+  void _onTab(int pillIndex) {
+    final wasAvo = _isAvoActive();
+    if (pillIndex == _currentIndex && !wasAvo) return;
     HapticFeedback.lightImpact();
-    _springTo(index);
-    _navigateTo(context, index);
+    setState(() => _currentIndex = pillIndex);
+    _springTo(pillIndex);
+    _goBranch(_pillToBranchIndex(pillIndex));
   }
 
   void _onTabPressStart(int index) {
@@ -126,9 +255,12 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
     setState(() => _pressedIndex = null);
   }
 
-  void _onAvo(BuildContext context) {
+  void _onAvo() {
     HapticFeedback.mediumImpact();
-    context.go('/avo');
+    widget.navigationShell.goBranch(
+      _kBranchAvo,
+      initialLocation: widget.navigationShell.currentIndex == _kBranchAvo,
+    );
   }
 
   // ── Drag gesture (slide between tabs) ──
@@ -142,7 +274,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
         .clamp(0.0, (MainScaffold._tabCount - 1).toDouble());
   }
 
-  void _onDragEnd(DragEndDetails details, BuildContext context) {
+  void _onDragEnd(DragEndDetails details) {
     final v = details.primaryVelocity ?? 0;
     final int nearest;
     if (v.abs() > 300) {
@@ -156,7 +288,8 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
     _springTo(nearest);
     if (nearest != _currentIndex) {
       HapticFeedback.lightImpact();
-      _navigateTo(context, nearest);
+      setState(() => _currentIndex = nearest);
+      _goBranch(_pillToBranchIndex(nearest));
     }
   }
 
@@ -165,10 +298,11 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
   @override
   Widget build(BuildContext context) {
     final kbd = MediaQuery.of(context).viewInsets.bottom > 0;
-    final routeIndex = _selectedIndex(context);
-    final avo = _isAvoActive(context);
+    final pillIndex = _selectedPillIndex();
+    final avo = _isAvoActive();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final safeBot = MediaQuery.of(context).padding.bottom;
+    final safeTop = MediaQuery.of(context).padding.top;
     final screenW = MediaQuery.of(context).size.width;
     final hPad = MainScaffold._horizontalPad(screenW);
     final onePercent = screenW * 0.02;
@@ -176,13 +310,14 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
     final baseBottom = safeBot > 20 ? safeBot - 5 : 10.0;
     final navBottom = (baseBottom - onePercent).clamp(0.0, double.infinity);
     final tut = DynamicTutorialService.instance;
+    final isOffline = ref.watch(isOfflineProvider);
 
     // Sync indicator when route changes externally (e.g. deep link, back).
-    if (!avo && routeIndex != _currentIndex) {
+    if (!avo && pillIndex != _currentIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && routeIndex != _currentIndex) {
-          _springTo(routeIndex);
-          setState(() => _currentIndex = routeIndex);
+        if (mounted && pillIndex != _currentIndex) {
+          _springTo(pillIndex);
+          setState(() => _currentIndex = pillIndex);
         }
       });
     }
@@ -191,7 +326,21 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
       backgroundColor: isDark ? Colors.black : Colors.white,
       body: Stack(
         children: [
-          widget.child,
+          widget.navigationShell,
+
+          // Floating offline banner – appears when the device loses
+          // connectivity and disappears as soon as it comes back online.
+          Positioned(
+            top: safeTop + 8,
+            left: hPad,
+            right: hPad,
+            child: IgnorePointer(
+              child: _OfflineBanner(
+                visible: isOffline,
+                isDark: isDark,
+              ),
+            ),
+          ),
 
           if (!kbd)
             Positioned(
@@ -234,7 +383,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                                       currentIndex: _currentIndex,
                                       isDark: isDark,
                                       dimmed: avo,
-                                      onTap: () => _onTab(context, 0),
+                                      onTap: () => _onTab(0),
                                       onPressStart: () => _onTabPressStart(0),
                                       onPressEnd: _onTabPressEnd,
                                       itemKey: tut.homeTabKey,
@@ -249,7 +398,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                                       currentIndex: _currentIndex,
                                       isDark: isDark,
                                       dimmed: avo,
-                                      onTap: () => _onTab(context, 1),
+                                      onTap: () => _onTab(1),
                                       onPressStart: () => _onTabPressStart(1),
                                       onPressEnd: _onTabPressEnd,
                                       itemKey: tut.recipesTabKey,
@@ -264,7 +413,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                                       currentIndex: _currentIndex,
                                       isDark: isDark,
                                       dimmed: avo,
-                                      onTap: () => _onTab(context, 2),
+                                      onTap: () => _onTab(2),
                                       onPressStart: () => _onTabPressStart(2),
                                       onPressEnd: _onTabPressEnd,
                                     ),
@@ -313,7 +462,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                                             behavior: HitTestBehavior.translucent,
                                             onHorizontalDragStart: _onDragStart,
                                             onHorizontalDragUpdate: _onDragUpdate,
-                                            onHorizontalDragEnd: (d) => _onDragEnd(d, context),
+                                            onHorizontalDragEnd: _onDragEnd,
                                             child: SizedBox(
                                               height: MainScaffold._pillHeight,
                                               child: child,
@@ -350,7 +499,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                           ],
                         ),
                         child: GestureDetector(
-                          onTap: () => _onAvo(context),
+                          onTap: _onAvo,
                           behavior: HitTestBehavior.opaque,
                           child: _AvoCircle(
                             size: MainScaffold._avoSize,
@@ -725,6 +874,75 @@ class _AvoCircle extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Offline banner ──
+class _OfflineBanner extends StatelessWidget {
+  final bool visible;
+  final bool isDark;
+
+  const _OfflineBanner({required this.visible, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      offset: visible ? Offset.zero : const Offset(0, -1.6),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 220),
+        opacity: visible ? 1.0 : 0.0,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF111827).withValues(alpha: 0.92)
+                  : Colors.white.withValues(alpha: 0.96),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.black.withValues(alpha: 0.06),
+                width: 0.6,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.cloud_off_rounded,
+                  size: 16,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.82)
+                      : const Color(0xFF0F172A).withValues(alpha: 0.78),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Offline',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.92)
+                        : const Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

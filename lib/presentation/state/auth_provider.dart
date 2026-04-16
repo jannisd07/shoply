@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/user_model.dart';
+import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,7 +9,9 @@ final authUserProvider = StreamProvider<User?>((ref) {
   return SupabaseService.instance.authStateChanges.map((state) => state.session?.user);
 });
 
-/// Provider for current user model
+/// Provider for current user model. Caches the display_name/onboarding flag
+/// in [OfflineCacheService] on every successful fetch so the router can still
+/// make redirect decisions when the device is offline.
 final currentUserProvider = FutureProvider<UserModel?>((ref) async {
   final authUser = await ref.watch(authUserProvider.future);
   if (authUser == null) return null;
@@ -37,11 +40,26 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
           .select()
           .single();
 
-      return UserModel.fromJson(created);
+      final model = UserModel.fromJson(created);
+      await OfflineCacheService.instance.cacheUserProfile(
+        userId: authUser.id,
+        displayName: model.displayName,
+        onboardingCompleted: created['onboarding_completed'] as bool?,
+      );
+      return model;
     }
 
-    return UserModel.fromJson(response);
+    final model = UserModel.fromJson(response);
+    await OfflineCacheService.instance.cacheUserProfile(
+      userId: authUser.id,
+      displayName: model.displayName,
+      onboardingCompleted: response['onboarding_completed'] as bool?,
+    );
+    return model;
   } catch (e) {
+    // Network/Supabase error: return null so existing consumers keep their
+    // current fallback behavior. The cached profile is still used directly by
+    // the router redirect – this provider is only for richer profile UI.
     return null;
   }
 });
