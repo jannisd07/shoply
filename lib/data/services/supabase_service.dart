@@ -120,54 +120,62 @@ class SupabaseService {
 
   // Sign in with Google
   Future<bool> signInWithGoogle() async {
+    debugPrint('🔵 [GOOGLE] signInWithGoogle() start');
     try {
-      // Get Google Client ID from env if available, otherwise use empty string
-      String? clientId;
-      try {
-        clientId = Env.googleClientId;
-      } catch (e) {
-        // If googleClientId doesn't exist in Env, leave it null
-        clientId = null;
-      }
-
+      // Pass the iOS OAuth client ID explicitly on iOS so the plugin does not
+      // silently rely on Info.plist GIDClientID lookup. This client ID MUST
+      // match what's configured in Supabase → Auth → Providers → Google.
+      // No serverClientId – Supabase validates against the iOS client directly.
+      const iosClientId = '595687303381-0lkcria4dis8m5u36iflej3alosaep1a.apps.googleusercontent.com';
       final GoogleSignIn googleSignIn = GoogleSignIn(
-        serverClientId: clientId, // Optional - only needed for backend auth
+        clientId: defaultTargetPlatform == TargetPlatform.iOS ? iosClientId : null,
       );
+      debugPrint('🔵 [GOOGLE] plugin configured, calling signIn()');
 
       // Trigger Google Sign In flow with timeout
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn().timeout(
-        const Duration(seconds: 30),
+        const Duration(seconds: 60),
         onTimeout: () {
-          throw Exception('Google Sign In timeout - bitte versuchen Sie es erneut');
+          debugPrint('❌ [GOOGLE] signIn() timed out after 60s');
+          throw TimeoutException('Google Sign In timeout', const Duration(seconds: 60));
         },
       );
-      
+      debugPrint('🔵 [GOOGLE] signIn() returned: ${googleUser?.email ?? "null (cancelled)"}');
+
       if (googleUser == null) {
         // User cancelled the sign-in
         return false;
       }
 
       // Get authentication details
+      debugPrint('🔵 [GOOGLE] fetching authentication tokens...');
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
+
       final String? accessToken = googleAuth.accessToken;
       final String? idToken = googleAuth.idToken;
+      debugPrint('🔵 [GOOGLE] accessToken: ${accessToken != null ? "present (${accessToken.length} chars)" : "NULL"}');
+      debugPrint('🔵 [GOOGLE] idToken: ${idToken != null ? "present (${idToken.length} chars)" : "NULL"}');
 
       if (accessToken == null || idToken == null) {
-        throw Exception('Failed to get Google credentials');
+        throw Exception('Failed to get Google credentials (accessToken=${accessToken != null}, idToken=${idToken != null})');
       }
 
       // Sign in to Supabase with Google credentials
+      debugPrint('🔵 [GOOGLE] posting idToken to Supabase...');
       await client.auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
         accessToken: accessToken,
       );
+      debugPrint('✅ [GOOGLE] Supabase signInWithIdToken OK');
 
       return true;
-    } on TimeoutException catch (e) {
+    } on TimeoutException catch (e, st) {
+      debugPrint('❌ [GOOGLE] TimeoutException: $e\n$st');
       throw Exception('Google Sign In hat zu lange gedauert. Bitte versuchen Sie es erneut.');
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('❌ [GOOGLE] raw error: ${e.runtimeType}: $e');
+      debugPrint('❌ [GOOGLE] stack: $st');
       if (e.toString().contains('validation_failed') || e.toString().contains('OAuth')) {
         throw Exception('Google Sign-In ist noch nicht konfiguriert. Bitte verwenden Sie Email/Passwort.');
       }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -27,6 +28,13 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  Future<void> _openExternal(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final backgroundColor = AppColors.background(context);
@@ -164,12 +172,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 _SettingsItemData(
                   icon: Icons.shield_outlined,
                   title: context.tr('privacy'),
-                  onTap: () => context.push('/privacy-policy'),
+                  onTap: () => _openExternal('https://joinavo.app/privacy'),
                 ),
                 _SettingsItemData(
                   icon: Icons.description_outlined,
-                  title: context.tr('terms_of_service'),
-                  onTap: () => context.push('/terms-of-service'),
+                  title: context.tr('imprint'),
+                  onTap: () => _openExternal('https://joinavo.app/impressum'),
                 ),
                 _SettingsItemData(
                   icon: Icons.info_outline_rounded,

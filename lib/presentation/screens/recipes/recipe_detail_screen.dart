@@ -1042,9 +1042,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
         width: double.infinity,
         child: ElevatedButton.icon(
           onPressed: () {
-            Navigator.push(
-              context,
+            Navigator.of(context, rootNavigator: true).push(
               MaterialPageRoute(
+                fullscreenDialog: true,
                 builder: (context) => CookingModeScreen(
                   recipe: _recipe!,
                   servings: _servings,
