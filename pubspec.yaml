@@ -129,7 +129,6 @@ flutter:
     - assets/illustrations/
     - assets/avo/
     - assets/legal/
-    - prospekte_pdfs/
 
 flutter_launcher_icons:
   android: true
