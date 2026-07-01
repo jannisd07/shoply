@@ -202,17 +202,49 @@ Color constants in `AppColors`, spacing in `AppDimensions`, text styles in `AppT
 ### Supabase Migrations
 Run SQL in Supabase dashboard SQL editor. Document in `database/migrations/`.
 
+> **Note on the auto-generated GitNexus section below:** it is rewritten by every `gitnexus analyze` run. Its MUST/NEVER rules apply **only when `gitnexus_*` MCP tools are actually connected in your session**. If they are not available (common), skip that section entirely — do NOT attempt the tool calls. Use Grep/Read instead: find all callers of a symbol before changing its signature, and review `git diff` before committing.
+
 <!-- gitnexus:start -->
-# GitNexus — Code Intelligence (optional)
+# GitNexus — Code Intelligence
 
-This project has a GitNexus index (`.gitnexus/`). **Only follow this section if `gitnexus_*` MCP tools are actually available in your session** — if they are not connected, skip GitNexus entirely and use Grep/Read for impact analysis instead (find all callers of a symbol before changing its signature).
+This project is indexed by GitNexus as **shoply** (13216 symbols, 29759 relationships, 256 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
-When the tools ARE available:
+> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
-- Before changing a symbol's signature or deleting it: `gitnexus_impact({target: "symbolName", direction: "upstream"})` — update all d=1 (WILL BREAK) callers.
-- To explore unfamiliar code: `gitnexus_query({query: "concept"})`; for one symbol's callers/callees: `gitnexus_context({name: "symbolName"})`.
-- For renames: `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})`, review, then `dry_run: false`.
-- After committing, the index goes stale — refresh with `npx gitnexus analyze` (a PostToolUse hook may handle this automatically).
+## Always Do
 
-Detailed skill files live in `.claude/skills/gitnexus/` (exploring, impact-analysis, debugging, refactoring, guide, cli).
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "main"})`.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `query({search_query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
+- For security review, `explain({target: "fileOrSymbol"})` lists taint findings (source→sink flows; needs `analyze --pdg`).
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
+- NEVER commit changes without running `detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/shoply/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/shoply/clusters` | All functional areas |
+| `gitnexus://repo/shoply/processes` | All execution flows |
+| `gitnexus://repo/shoply/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
 <!-- gitnexus:end -->
