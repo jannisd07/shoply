@@ -67,7 +67,9 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
       members.sort((a, b) {
         if (a['is_owner'] == true && b['is_owner'] != true) return -1;
         if (b['is_owner'] == true && a['is_owner'] != true) return 1;
-        return (a['display_name'] as String).compareTo(b['display_name'] as String);
+        return (a['display_name'] as String).compareTo(
+          b['display_name'] as String,
+        );
       });
       if (mounted) {
         setState(() {
@@ -86,7 +88,9 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
         title: Text(context.tr('remove_member')),
-        content: Text(context.tr('remove_member_confirm', params: {'name': displayName})),
+        content: Text(
+          context.tr('remove_member_confirm', params: {'name': displayName}),
+        ),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(ctx, false),
@@ -121,7 +125,9 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
         title: Text(context.tr('leave_list')),
-        content: Text(context.tr('leave_list_confirm', params: {'name': widget.listName})),
+        content: Text(
+          context.tr('leave_list_confirm', params: {'name': widget.listName}),
+        ),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(ctx, false),
@@ -157,7 +163,12 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
         title: Text(context.tr('delete_list_question')),
-        content: Text(context.tr('delete_list_confirm_message', params: {'name': widget.listName})),
+        content: Text(
+          context.tr(
+            'delete_list_message',
+            params: {'listName': widget.listName},
+          ),
+        ),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(ctx, false),
@@ -174,7 +185,9 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
 
     if (confirmed == true) {
       try {
-        await ref.read(listsNotifierProvider.notifier).deleteList(widget.listId);
+        await ref
+            .read(listsNotifierProvider.notifier)
+            .deleteList(widget.listId);
         HapticFeedback.heavyImpact();
         if (mounted) context.go('/home');
       } catch (e) {
@@ -205,7 +218,11 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
           ),
         ),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_rounded,
+            color: textPrimary,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -224,10 +241,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                   padding: const EdgeInsets.only(bottom: 8, left: 4),
                   child: Text(
                     widget.listName,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: textSecondary,
-                    ),
+                    style: TextStyle(fontSize: 15, color: textSecondary),
                   ),
                 ),
 
@@ -248,7 +262,10 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                       GestureDetector(
                         onTap: () {
                           HapticFeedback.selectionClick();
-                          context.push('/author/$userId', extra: {'authorName': displayName});
+                          context.push(
+                            '/author/$userId',
+                            extra: {'authorName': displayName},
+                          );
                         },
                         behavior: HitTestBehavior.opaque,
                         child: Padding(
@@ -259,13 +276,23 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                                 width: 36,
                                 height: 36,
                                 child: ClipOval(
-                                  child: avatarUrl != null && avatarUrl.isNotEmpty
+                                  child:
+                                      avatarUrl != null && avatarUrl.isNotEmpty
                                       ? Image.network(
                                           avatarUrl,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => _buildAvatarFallback(displayName, textPrimary, textSecondary),
+                                          errorBuilder: (_, __, ___) =>
+                                              _buildAvatarFallback(
+                                                displayName,
+                                                textPrimary,
+                                                textSecondary,
+                                              ),
                                         )
-                                      : _buildAvatarFallback(displayName, textPrimary, textSecondary),
+                                      : _buildAvatarFallback(
+                                          displayName,
+                                          textPrimary,
+                                          textSecondary,
+                                        ),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -274,7 +301,10 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      displayName + (isCurrentUser ? ' (${context.tr('you')})' : ''),
+                                      displayName +
+                                          (isCurrentUser
+                                              ? ' (${context.tr('you')})'
+                                              : ''),
                                       style: TextStyle(
                                         fontSize: 17,
                                         fontWeight: FontWeight.w400,
@@ -294,7 +324,10 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                               ),
                               if (_isCreator && !isOwner)
                                 GestureDetector(
-                                  onTap: () => _removeMember(member['user_id'] as String, displayName),
+                                  onTap: () => _removeMember(
+                                    member['user_id'] as String,
+                                    displayName,
+                                  ),
                                   child: Icon(
                                     CupertinoIcons.minus_circle_fill,
                                     color: CupertinoColors.systemRed,
@@ -341,10 +374,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                     padding: const EdgeInsets.only(left: 4, top: 12),
                     child: Text(
                       context.tr('delete_list_hint'),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: textSecondary,
-                      ),
+                      style: TextStyle(fontSize: 13, color: textSecondary),
                     ),
                   ),
               ],
@@ -367,7 +397,11 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
     );
   }
 
-  Widget _buildAvatarFallback(String name, Color textPrimary, Color textSecondary) {
+  Widget _buildAvatarFallback(
+    String name,
+    Color textPrimary,
+    Color textSecondary,
+  ) {
     return Container(
       color: textSecondary.withOpacity(0.1),
       child: Center(

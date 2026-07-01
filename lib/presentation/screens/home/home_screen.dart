@@ -39,21 +39,25 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _hasAutoOpened = false;
+  bool _isCreatingTutorialList = false;
   String? _lastUserId;
 
   @override
   void initState() {
     super.initState();
     _lastUserId = SupabaseService.instance.currentUser?.id;
-    
+
     // Lade Listen sofort beim Start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(listsNotifierProvider.notifier).loadLists();
       _autoOpenLastList();
       _checkSiriPendingItems();
       _syncWidgetCredentials();
+      unawaited(_ensureTutorialListExists());
     });
-    
+
+    DynamicTutorialService.instance.addListener(_handleTutorialChange);
+
     // Auth-Listener für User-Wechsel
     SupabaseService.instance.client.auth.onAuthStateChange.listen((data) {
       final newUserId = data.session?.user.id;
@@ -61,7 +65,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         setState(() {
           _lastUserId = newUserId;
         });
-        
+
         // Lade Listen neu
         ref.read(listsNotifierProvider.notifier).loadLists();
         _syncWidgetCredentials();
@@ -70,14 +74,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   @override
+  void dispose() {
+    DynamicTutorialService.instance.removeListener(_handleTutorialChange);
+    super.dispose();
+  }
+
+  void _handleTutorialChange() {
+    unawaited(_ensureTutorialListExists());
+  }
+
+  Future<void> _ensureTutorialListExists() async {
+    if (_isCreatingTutorialList || !mounted) return;
+
+    final tutorial = DynamicTutorialService.instance;
+    if (!tutorial.isActive ||
+        tutorial.currentStepId != TutorialStepId.openShoppingList) {
+      return;
+    }
+
+    var lists = ref.read(listsNotifierProvider).value;
+    if (lists == null) {
+      await ref.read(listsNotifierProvider.notifier).loadLists();
+      if (!mounted) return;
+      lists = ref.read(listsNotifierProvider).value;
+    }
+
+    if (lists == null) return;
+
+    if (lists.isNotEmpty) {
+      final sortedLists = [...lists]
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      tutorial.updateListsData(
+        hasLists: true,
+        firstListId: sortedLists.first.id,
+      );
+      return;
+    }
+
+    _isCreatingTutorialList = true;
+    try {
+      final list = await ref
+          .read(listsNotifierProvider.notifier)
+          .createList('Meine erste Liste');
+      tutorial.updateListsData(hasLists: true, firstListId: list.id);
+    } catch (e) {
+      debugPrint('Error creating tutorial list: $e');
+    } finally {
+      _isCreatingTutorialList = false;
+    }
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
+
     // Prüfe bei jeder Navigation ob sich der User geändert hat
     final currentUserId = SupabaseService.instance.currentUser?.id;
     if (_lastUserId != currentUserId) {
       _lastUserId = currentUserId;
-      
+
       // Lade Listen IMMER neu (auch bei null)
       Future.microtask(() {
         ref.read(listsNotifierProvider.notifier).loadLists();
@@ -116,17 +171,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       final siriService = SiriService();
       final pendingItems = await siriService.getPendingItems();
-      
+
       if (pendingItems.isEmpty) return;
-      
+
       String? targetListId;
       String? targetListName;
-      
+
       for (final item in pendingItems) {
         final itemName = item['itemName'] as String;
         final listName = item['listName'] as String;
         final quantity = item['quantity'] as double? ?? 1.0;
-        
+
         // Find or create the list
         final listsAsync = ref.read(listsNotifierProvider);
         await listsAsync.whenData((lists) async {
@@ -134,18 +189,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             (l) => l.name.toLowerCase() == listName.toLowerCase(),
             orElse: () => null,
           );
-          
+
           // Create list if it doesn't exist
           if (targetList == null) {
             await ref.read(listsNotifierProvider.notifier).createList(listName);
-            
+
             // Wait a moment for the list to be created
             await Future.delayed(const Duration(milliseconds: 500));
-            
+
             // Refresh and get the new list
             ref.invalidate(listsNotifierProvider);
             await Future.delayed(const Duration(milliseconds: 300));
-            
+
             final newLists = ref.read(listsNotifierProvider).value;
             if (newLists != null) {
               targetList = newLists.cast<dynamic>().firstWhere(
@@ -154,35 +209,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               );
             }
           }
-          
+
           if (targetList != null) {
             targetListId = targetList.id;
             targetListName = targetList.name;
-            
+
             // Detect category
             final category = await CategoryDetector.detectCategory(itemName);
-            
+
             // Add item to list
-            await ref.read(itemsNotifierProvider(targetList.id).notifier).addItem(
-              name: itemName,
-              quantity: quantity,
-              category: category,
-            );
+            await ref
+                .read(itemsNotifierProvider(targetList.id).notifier)
+                .addItem(
+                  name: itemName,
+                  quantity: quantity,
+                  category: category,
+                );
           }
         });
       }
-      
+
       // Refresh the lists view
       if (mounted) {
         ref.invalidate(listsNotifierProvider);
-        
+
         // Navigate to the list after a short delay
         if (targetListId != null && targetListName != null) {
           await Future.delayed(const Duration(milliseconds: 500));
           if (mounted) {
             final listId = targetListId!;
             final listName = targetListName!;
-            context.push('/lists/$listId?name=${Uri.encodeComponent(listName)}');
+            context.push(
+              '/lists/$listId?name=${Uri.encodeComponent(listName)}',
+            );
           }
         }
       }
@@ -206,7 +265,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             orElse: () => null,
           );
           if (list != null && mounted) {
-            context.push('/lists/$lastListId?name=${Uri.encodeComponent(list.name)}');
+            context.push(
+              '/lists/$lastListId?name=${Uri.encodeComponent(list.name)}',
+            );
           }
         });
       }
@@ -221,7 +282,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     double pulledExtent,
   ) {
     const Curve opacityCurve = Interval(0.4, 1.0, curve: Curves.easeInOut);
-    
+
     return Opacity(
       opacity: opacityCurve.transform(percentageComplete),
       child: AnimatedContainer(
@@ -265,55 +326,60 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return false;
         },
         child: CustomScrollView(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        slivers: [
-          // Native iOS Pull-to-Refresh - MUSS erstes Sliver sein!
-          CupertinoSliverRefreshControl(
-            refreshTriggerPullDistance: 100.0,
-            refreshIndicatorExtent: 60.0,
-            builder: (
-              BuildContext context,
-              RefreshIndicatorMode refreshState,
-              double pulledExtent,
-              double refreshTriggerPullDistance,
-              double refreshIndicatorExtent,
-            ) {
-              final double percentageComplete = (pulledExtent / refreshTriggerPullDistance).clamp(0.0, 1.0);
-              
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: pulledExtent > 0 ? pulledExtent - 40 : 0,
-                    child: Center(
-                      child: _buildRefreshIndicator(
-                        context,
-                        refreshState,
-                        percentageComplete,
-                        pulledExtent,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-            onRefresh: () async {
-              ref.invalidate(listsNotifierProvider);
-              await Future.delayed(const Duration(milliseconds: 800));
-            },
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
           ),
-          // Safe Area nach dem Refresh Control
-          SliverSafeArea(
-            top: true,
-            bottom: false,
-            sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
-          ),
-          // Collapsing Header (Hallo + Avatar)
-          SliverPersistentHeader(
+          slivers: [
+            // Native iOS Pull-to-Refresh - MUSS erstes Sliver sein!
+            CupertinoSliverRefreshControl(
+              refreshTriggerPullDistance: 100.0,
+              refreshIndicatorExtent: 60.0,
+              builder:
+                  (
+                    BuildContext context,
+                    RefreshIndicatorMode refreshState,
+                    double pulledExtent,
+                    double refreshTriggerPullDistance,
+                    double refreshIndicatorExtent,
+                  ) {
+                    final double percentageComplete =
+                        (pulledExtent / refreshTriggerPullDistance).clamp(
+                          0.0,
+                          1.0,
+                        );
+
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: pulledExtent > 0 ? pulledExtent - 40 : 0,
+                          child: Center(
+                            child: _buildRefreshIndicator(
+                              context,
+                              refreshState,
+                              percentageComplete,
+                              pulledExtent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+              onRefresh: () async {
+                ref.invalidate(listsNotifierProvider);
+                await Future.delayed(const Duration(milliseconds: 800));
+              },
+            ),
+            // Safe Area nach dem Refresh Control
+            SliverSafeArea(
+              top: true,
+              bottom: false,
+              sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
+            ),
+            // Collapsing Header (Hallo + Avatar)
+            SliverPersistentHeader(
               delegate: GreetingHeader(
                 displayName: displayName,
                 avatarUrl: avatarUrl,
@@ -343,29 +409,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         fontSize: 26,
                       ),
                     ),
-                    AdaptivePopupMenuButton.text<String>(
-                      label: '+ ${context.tr('new')}',
-                      buttonStyle: PopupButtonStyle.glass,
-                      shrinkWrap: true,
-                      items: [
-                        AdaptivePopupMenuItem(
-                          label: context.tr('create_new_list'),
-                          icon: PlatformInfo.isIOS26OrHigher() ? 'plus.circle.fill' : Icons.add_circle,
-                          value: 'new',
-                        ),
-                        AdaptivePopupMenuItem(
-                          label: context.tr('join_list'),
-                          icon: PlatformInfo.isIOS26OrHigher() ? 'person.2.fill' : Icons.group_add,
-                          value: 'join',
-                        ),
-                      ],
-                      onSelected: (index, item) {
-                        if (item.value == 'new') {
-                          _showCreateListDialog(context, ref);
-                        } else if (item.value == 'join') {
-                          _showJoinListDialog(context, ref);
-                        }
-                      },
+                    SizedBox(
+                      width: 92,
+                      child: AdaptivePopupMenuButton.text<String>(
+                        label: '+ ${context.tr('new')}',
+                        buttonStyle: PopupButtonStyle.glass,
+                        shrinkWrap: true,
+                        items: [
+                          AdaptivePopupMenuItem(
+                            label: context.tr('create_new_list'),
+                            icon: PlatformInfo.isIOS26OrHigher()
+                                ? 'plus.circle.fill'
+                                : Icons.add_circle,
+                            value: 'new',
+                          ),
+                          AdaptivePopupMenuItem(
+                            label: context.tr('join_list'),
+                            icon: PlatformInfo.isIOS26OrHigher()
+                                ? 'person.2.fill'
+                                : Icons.group_add,
+                            value: 'join',
+                          ),
+                        ],
+                        onSelected: (index, item) {
+                          if (item.value == 'new') {
+                            _showCreateListDialog(context, ref);
+                          } else if (item.value == 'join') {
+                            _showJoinListDialog(context, ref);
+                          }
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -381,22 +454,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: listsAsync.when(
                 data: (lists) {
                   final tutorial = DynamicTutorialService.instance;
-                  
+
                   if (lists.isEmpty) {
-                    // If tutorial is active and no lists, auto-create one
-                    if (tutorial.isActive && tutorial.currentStepId == TutorialStepId.openShoppingList) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) async {
-                        try {
-                          await ref.read(listsNotifierProvider.notifier).createList('Meine erste Liste');
-                        } catch (e) {
-                          debugPrint('Error creating tutorial list: $e');
-                        }
+                    if (tutorial.isActive &&
+                        tutorial.currentStepId ==
+                            TutorialStepId.openShoppingList) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        unawaited(_ensureTutorialListExists());
                       });
                     }
-                    
+
                     // Update tutorial that there are no lists
-                    tutorial.updateListsData(hasLists: false, firstListId: null);
-                    
+                    tutorial.updateListsData(
+                      hasLists: false,
+                      firstListId: null,
+                    );
+
                     return Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppDimensions.screenHorizontalPadding,
@@ -405,7 +478,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         height: 140,
                         decoration: BoxDecoration(
                           color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(AppDimensions.cardBorderRadius),
+                          borderRadius: BorderRadius.circular(
+                            AppDimensions.cardBorderRadius,
+                          ),
                         ),
                         child: Center(
                           child: Text(
@@ -419,8 +494,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     );
                   }
 
-                  final sortedLists = [...lists]..sort((a, b) =>
-                      b.updatedAt.compareTo(a.updatedAt));
+                  final sortedLists = [...lists]
+                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
                   return SizedBox(
                     height: 140 * 1.75,
@@ -434,12 +509,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         final list = sortedLists[index];
                         final tutorial = DynamicTutorialService.instance;
                         final isFirstList = index == 0;
-                        
+
                         // Update tutorial with user data
                         if (isFirstList) {
-                          tutorial.updateListsData(hasLists: true, firstListId: list.id);
+                          tutorial.updateListsData(
+                            hasLists: true,
+                            firstListId: list.id,
+                          );
                         }
-                        
+
                         return _buildListCard(
                           context,
                           ref,
@@ -451,14 +529,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           list.backgroundImageUrl,
                           list.updatedAt,
                           () {
-                            context.push('/lists/${list.id}?name=${Uri.encodeComponent(list.name)}');
+                            context.push(
+                              '/lists/${list.id}?name=${Uri.encodeComponent(list.name)}',
+                            );
                             // Complete tutorial step if this is the first list
-                            if (isFirstList && tutorial.isActive && 
-                                tutorial.currentStepId == TutorialStepId.openShoppingList) {
+                            if (isFirstList &&
+                                tutorial.isActive &&
+                                tutorial.currentStepId ==
+                                    TutorialStepId.openShoppingList) {
                               tutorial.completeCurrentStep();
                             }
                           },
-                          tutorialKey: isFirstList ? tutorial.firstListCardKey : null,
+                          tutorialKey: isFirstList
+                              ? tutorial.firstListCardKey
+                              : null,
                         );
                       },
                     ),
@@ -476,7 +560,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     height: 140,
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(AppDimensions.cardBorderRadius),
+                      borderRadius: BorderRadius.circular(
+                        AppDimensions.cardBorderRadius,
+                      ),
                     ),
                     child: const Center(child: Text('Fehler beim Laden')),
                   ),
@@ -489,9 +575,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
 
             // Einkaufshistorie - Matching full page design
-            SliverToBoxAdapter(
-              child: const _ShoppingHistorySection(),
-            ),
+            SliverToBoxAdapter(child: const _ShoppingHistorySection()),
 
             const SliverToBoxAdapter(
               child: SizedBox(height: AppDimensions.spacingXLarge),
@@ -517,7 +601,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       context: context,
       title: context.tr('create_new_list'),
       message: context.tr('enter_list_name_prompt'),
-      icon: PlatformInfo.isIOS26OrHigher() ? 'list.bullet.circle.fill' : Icons.list_alt,
+      icon: PlatformInfo.isIOS26OrHigher()
+          ? 'list.bullet.circle.fill'
+          : Icons.list_alt,
       input: AdaptiveAlertDialogInput(
         placeholder: context.tr('enter_list_name'),
         initialValue: '',
@@ -544,15 +630,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             .createList(result.trim());
 
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.tr('list_created'))),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.tr('list_created'))));
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${context.tr('error')}: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('${context.tr('error')}: $e')));
         }
       }
     }
@@ -585,20 +671,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     if (result != null && result.trim().isNotEmpty) {
       final shareCode = result.trim().toUpperCase();
-      
+
       try {
         final list = await ref
             .read(listsNotifierProvider.notifier)
             .joinListWithCode(shareCode);
-        
+
         if (!context.mounted) return;
-        
+
         if (list != null) {
           AdaptiveAlertDialog.show(
             context: context,
             title: context.tr('joined_successfully'),
-            message: context.tr('joined_list_message', params: {'listName': list.name}),
-            icon: PlatformInfo.isIOS26OrHigher() ? 'checkmark.circle.fill' : Icons.check_circle,
+            message: context.tr(
+              'joined_list_message',
+              params: {'listName': list.name},
+            ),
+            icon: PlatformInfo.isIOS26OrHigher()
+                ? 'checkmark.circle.fill'
+                : Icons.check_circle,
             iconColor: Colors.green,
             actions: [
               AlertAction(
@@ -613,7 +704,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             context: context,
             title: context.tr('error'),
             message: context.tr('invalid_share_code'),
-            icon: PlatformInfo.isIOS26OrHigher() ? 'xmark.circle.fill' : Icons.error,
+            icon: PlatformInfo.isIOS26OrHigher()
+                ? 'xmark.circle.fill'
+                : Icons.error,
             iconColor: Colors.red,
             actions: [
               AlertAction(
@@ -626,12 +719,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
       } catch (e) {
         if (!context.mounted) return;
-        
+
         AdaptiveAlertDialog.show(
           context: context,
           title: context.tr('error'),
           message: '${context.tr('join_error')}: $e',
-          icon: PlatformInfo.isIOS26OrHigher() ? 'exclamationmark.triangle.fill' : Icons.warning,
+          icon: PlatformInfo.isIOS26OrHigher()
+              ? 'exclamationmark.triangle.fill'
+              : Icons.warning,
           iconColor: Colors.orange,
           actions: [
             AlertAction(
@@ -647,10 +742,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // removed custom glass dialog helper in favor of AdaptiveAlertDialog.inputShow
 
-  Future<bool?> _showDeleteConfirmation(BuildContext context, String listName, WidgetRef ref) async {
+  Future<bool?> _showDeleteConfirmation(
+    BuildContext context,
+    String listName,
+    WidgetRef ref,
+  ) async {
     final localizations = AppLocalizations.of(context);
     final completer = Completer<bool?>();
-    
+
     AdaptiveAlertDialog.show(
       context: context,
       title: localizations.deleteListTitle,
@@ -679,7 +778,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ],
     );
-    
+
     return completer.future;
   }
 
@@ -709,10 +808,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onLongPress: () async {
         // 🎯 Haptisches Feedback
         HapticFeedback.mediumImpact();
-        
+
         // Zeige AdaptiveAlertDialog
         final shouldDelete = await _showDeleteConfirmation(context, name, ref);
-        
+
         if (shouldDelete == true) {
           ref.read(listsNotifierProvider.notifier).deleteList(listId);
         }
@@ -726,10 +825,12 @@ class _ShoppingHistorySection extends ConsumerStatefulWidget {
   const _ShoppingHistorySection();
 
   @override
-  ConsumerState<_ShoppingHistorySection> createState() => _ShoppingHistorySectionState();
+  ConsumerState<_ShoppingHistorySection> createState() =>
+      _ShoppingHistorySectionState();
 }
 
-class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection> {
+class _ShoppingHistorySectionState
+    extends ConsumerState<_ShoppingHistorySection> {
   final Set<String> _expandedEntries = {};
 
   /// Format date: Today, Yesterday, or d. MMM (e.g. 20. Nov)
@@ -739,7 +840,7 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
     final yesterday = today.subtract(const Duration(days: 1));
     final entryDate = DateTime(date.year, date.month, date.day);
     final locale = Localizations.localeOf(context).languageCode;
-    
+
     if (entryDate == today) {
       return context.tr('today');
     } else if (entryDate == yesterday) {
@@ -749,17 +850,25 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
     }
   }
 
-  Future<void> _addAllItemsToList(List<ShoppingHistoryItem> items, String listId, String listName) async {
+  Future<void> _addAllItemsToList(
+    List<ShoppingHistoryItem> items,
+    String listId,
+    String listName,
+  ) async {
     HapticFeedback.mediumImpact();
 
     try {
       await Future.wait(
-        items.map((item) => ref.read(itemsNotifierProvider(listId).notifier).addItem(
-          name: item.name,
-          quantity: item.quantity,
-          unit: item.unit,
-          category: item.category,
-        )),
+        items.map(
+          (item) => ref
+              .read(itemsNotifierProvider(listId).notifier)
+              .addItem(
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                category: item.category,
+              ),
+        ),
       );
 
       if (mounted) {
@@ -825,7 +934,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      color: isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                      color: isDark
+                          ? const Color(0xFF6B6B6B)
+                          : const Color(0xFF9CA3AF),
                     ),
                   ),
                 ),
@@ -838,7 +949,10 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
             loading: () => SizedBox(
               height: 80,
               child: Center(
-                child: CupertinoActivityIndicator(color: isDark ? Colors.white38 : Colors.black26, radius: 10),
+                child: CupertinoActivityIndicator(
+                  color: isDark ? Colors.white38 : Colors.black26,
+                  radius: 10,
+                ),
               ),
             ),
             error: (_, __) => Container(
@@ -858,14 +972,18 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                 children: [
                   Icon(
                     Icons.error_outline_rounded,
-                    color: isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                    color: isDark
+                        ? const Color(0xFF6B6B6B)
+                        : const Color(0xFF9CA3AF),
                     size: 20,
                   ),
                   const SizedBox(width: 12),
                   Text(
                     context.tr('loading_error'),
                     style: TextStyle(
-                      color: isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                      color: isDark
+                          ? const Color(0xFF6B6B6B)
+                          : const Color(0xFF9CA3AF),
                     ),
                   ),
                 ],
@@ -880,7 +998,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.3 : 0.06,
+                        ),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -891,14 +1011,16 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: isDark 
-                              ? Colors.white.withValues(alpha: 0.05) 
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.05)
                               : Colors.black.withValues(alpha: 0.04),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
                           Icons.receipt_long_rounded,
-                          color: isDark ? Colors.white38 : const Color(0xFF9CA3AF),
+                          color: isDark
+                              ? Colors.white38
+                              : const Color(0xFF9CA3AF),
                           size: 20,
                         ),
                       ),
@@ -911,7 +1033,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                               context.tr('no_shopping_history'),
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1A1A1A),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -919,7 +1043,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                               context.tr('completed_trips_appear_here'),
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                                color: isDark
+                                    ? const Color(0xFF6B6B6B)
+                                    : const Color(0xFF9CA3AF),
                               ),
                             ),
                           ],
@@ -933,9 +1059,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
               // Vertical list - limited to 3 entries
               final limitedHistory = history.take(3).toList();
               return Column(
-                children: limitedHistory.map((entry) => 
-                  _buildHistoryCard(entry, lists, isDark)
-                ).toList(),
+                children: limitedHistory
+                    .map((entry) => _buildHistoryCard(entry, lists, isDark))
+                    .toList(),
               );
             },
           ),
@@ -944,7 +1070,11 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
     );
   }
 
-  Widget _buildHistoryCard(ShoppingHistory entry, List<dynamic> lists, bool isDark) {
+  Widget _buildHistoryCard(
+    ShoppingHistory entry,
+    List<dynamic> lists,
+    bool isDark,
+  ) {
     final isExpanded = _expandedEntries.contains(entry.id);
 
     return AnimatedContainer(
@@ -997,7 +1127,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF1A1A1A),
                             letterSpacing: -0.3,
                           ),
                           maxLines: 1,
@@ -1012,7 +1144,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                               _formatDate(entry.completedAt, context),
                               style: TextStyle(
                                 fontSize: 13,
-                                color: isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                                color: isDark
+                                    ? const Color(0xFF6B6B6B)
+                                    : const Color(0xFF9CA3AF),
                               ),
                             ),
                             // Person name (if available)
@@ -1021,7 +1155,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                                 ' • ',
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                                  color: isDark
+                                      ? const Color(0xFF6B6B6B)
+                                      : const Color(0xFF9CA3AF),
                                 ),
                               ),
                               Flexible(
@@ -1029,7 +1165,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                                   entry.completedByName!,
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                                    color: isDark
+                                        ? const Color(0xFF6B6B6B)
+                                        : const Color(0xFF9CA3AF),
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -1043,10 +1181,13 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                   const SizedBox(width: 16),
                   // Item count - minimal badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: isDark 
-                          ? Colors.white.withValues(alpha: 0.08) 
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
                           : Colors.black.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -1055,7 +1196,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : const Color(0xFF6B7280),
+                        color: isDark
+                            ? Colors.white70
+                            : const Color(0xFF6B7280),
                       ),
                     ),
                   ),
@@ -1065,7 +1208,9 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
                     duration: const Duration(milliseconds: 200),
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
-                      color: isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                      color: isDark
+                          ? const Color(0xFF6B6B6B)
+                          : const Color(0xFF9CA3AF),
                       size: 20,
                     ),
                   ),
@@ -1080,14 +1225,14 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
               alignment: Alignment.topCenter,
-              child: isExpanded 
-                ? _HomeExpandedItemsContent(
-                    entry: entry,
-                    lists: lists,
-                    onAddAllItems: _addAllItemsToList,
-                    isDark: isDark,
-                  )
-                : const SizedBox(width: double.infinity, height: 0),
+              child: isExpanded
+                  ? _HomeExpandedItemsContent(
+                      entry: entry,
+                      lists: lists,
+                      onAddAllItems: _addAllItemsToList,
+                      isDark: isDark,
+                    )
+                  : const SizedBox(width: double.infinity, height: 0),
             ),
           ),
         ],
@@ -1100,7 +1245,12 @@ class _ShoppingHistorySectionState extends ConsumerState<_ShoppingHistorySection
 class _HomeExpandedItemsContent extends ConsumerStatefulWidget {
   final ShoppingHistory entry;
   final List<dynamic> lists;
-  final Future<void> Function(List<ShoppingHistoryItem> items, String listId, String listName) onAddAllItems;
+  final Future<void> Function(
+    List<ShoppingHistoryItem> items,
+    String listId,
+    String listName,
+  )
+  onAddAllItems;
   final bool isDark;
 
   const _HomeExpandedItemsContent({
@@ -1111,10 +1261,12 @@ class _HomeExpandedItemsContent extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_HomeExpandedItemsContent> createState() => _HomeExpandedItemsContentState();
+  ConsumerState<_HomeExpandedItemsContent> createState() =>
+      _HomeExpandedItemsContentState();
 }
 
-class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsContent> {
+class _HomeExpandedItemsContentState
+    extends ConsumerState<_HomeExpandedItemsContent> {
   String? _selectedListId;
   final Set<String> _addedItemIds = {};
   bool _isAddingAll = false;
@@ -1159,20 +1311,21 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
     });
 
     try {
-      await ref.read(itemsNotifierProvider(_selectedListId!).notifier).addItem(
-        name: item.name,
-        quantity: item.quantity,
-        unit: item.unit,
-        category: item.category,
-      );
+      await ref
+          .read(itemsNotifierProvider(_selectedListId!).notifier)
+          .addItem(
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            category: item.category,
+          );
       debugPrint('✅ [History] Added "${item.name}" to list $_selectedListId');
 
       if (mounted) {
-        final selectedList = widget.lists.firstWhere((l) => l.id == _selectedListId);
-        SuccessAlert.showItemAdded(
-          context,
-          listName: selectedList.name,
+        final selectedList = widget.lists.firstWhere(
+          (l) => l.id == _selectedListId,
         );
+        SuccessAlert.showItemAdded(context, listName: selectedList.name);
       }
     } catch (e) {
       debugPrint('❌ [History] Add single item failed: $e');
@@ -1204,8 +1357,14 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
     });
 
     try {
-      final selectedList = widget.lists.firstWhere((l) => l.id == _selectedListId);
-      await widget.onAddAllItems(widget.entry.items, _selectedListId!, selectedList.name);
+      final selectedList = widget.lists.firstWhere(
+        (l) => l.id == _selectedListId,
+      );
+      await widget.onAddAllItems(
+        widget.entry.items,
+        _selectedListId!,
+        selectedList.name,
+      );
     } catch (e) {
       debugPrint('❌ [History] Add all items failed: $e');
       if (mounted) {
@@ -1239,8 +1398,12 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? (widget.isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.10))
-              : (widget.isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+              ? (widget.isDark
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.black.withValues(alpha: 0.10))
+              : (widget.isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.05)),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -1280,9 +1443,11 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
         // Subtle divider
         Container(
           height: 0.5,
-          color: widget.isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+          color: widget.isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
         ),
-        
+
         // Horizontal scroll list selector
         if (widget.lists.isNotEmpty && widget.entry.items.isNotEmpty)
           Padding(
@@ -1295,7 +1460,9 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: widget.isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                    color: widget.isDark
+                        ? const Color(0xFF6B6B6B)
+                        : const Color(0xFF9CA3AF),
                     letterSpacing: 0.8,
                   ),
                 ),
@@ -1316,29 +1483,43 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                 const SizedBox(height: 14),
                 // Add all button - minimal style
                 GestureDetector(
-                  onTap: _selectedListId == null || _isAddingAll ? null : _addAllItems,
+                  onTap: _selectedListId == null || _isAddingAll
+                      ? null
+                      : _addAllItems,
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color: _selectedListId == null
-                          ? (widget.isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03))
-                          : (widget.isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.07)),
+                          ? (widget.isDark
+                                ? Colors.white.withValues(alpha: 0.04)
+                                : Colors.black.withValues(alpha: 0.03))
+                          : (widget.isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.black.withValues(alpha: 0.07)),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         if (_isAddingAll)
-                          CupertinoActivityIndicator(radius: 10, color: widget.isDark ? Colors.white70 : const Color(0xFF6B7280),
+                          CupertinoActivityIndicator(
+                            radius: 10,
+                            color: widget.isDark
+                                ? Colors.white70
+                                : const Color(0xFF6B7280),
                           )
                         else
                           Icon(
                             Icons.add_rounded,
                             size: 18,
                             color: _selectedListId == null
-                                ? (widget.isDark ? const Color(0xFF505050) : const Color(0xFFD0D0D0))
-                                : (widget.isDark ? const Color(0xFFC0C0C0) : const Color(0xFF6B7280)),
+                                ? (widget.isDark
+                                      ? const Color(0xFF505050)
+                                      : const Color(0xFFD0D0D0))
+                                : (widget.isDark
+                                      ? const Color(0xFFC0C0C0)
+                                      : const Color(0xFF6B7280)),
                           ),
                         const SizedBox(width: 8),
                         Text(
@@ -1347,8 +1528,12 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: _selectedListId == null
-                                ? (widget.isDark ? const Color(0xFF505050) : const Color(0xFFD0D0D0))
-                                : (widget.isDark ? const Color(0xFFC0C0C0) : const Color(0xFF6B7280)),
+                                ? (widget.isDark
+                                      ? const Color(0xFF505050)
+                                      : const Color(0xFFD0D0D0))
+                                : (widget.isDark
+                                      ? const Color(0xFFC0C0C0)
+                                      : const Color(0xFF6B7280)),
                           ),
                         ),
                       ],
@@ -1358,7 +1543,7 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
               ],
             ),
           ),
-        
+
         // Items list
         if (widget.entry.items.isNotEmpty)
           Padding(
@@ -1366,14 +1551,19 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
             child: Column(
               children: widget.entry.items.take(10).map((item) {
                 final isAdded = _addedItemIds.contains(item.id);
-                
+
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: isAdded
-                          ? (widget.isDark ? const Color(0xFF1A2E1A) : const Color(0xFFF0FDF4))
+                          ? (widget.isDark
+                                ? const Color(0xFF1A2E1A)
+                                : const Color(0xFFF0FDF4))
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -1386,7 +1576,9 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
-                              color: widget.isDark ? Colors.white : const Color(0xFF1A1A1A),
+                              color: widget.isDark
+                                  ? Colors.white
+                                  : const Color(0xFF1A1A1A),
                             ),
                           ),
                         ),
@@ -1396,14 +1588,20 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                             padding: const EdgeInsets.only(right: 10),
                             child: Text(
                               () {
-                                final qty = item.quantity.truncateToDouble() == item.quantity
+                                final qty =
+                                    item.quantity.truncateToDouble() ==
+                                        item.quantity
                                     ? item.quantity.toInt().toString()
                                     : item.quantity.toStringAsFixed(1);
-                                return item.unit != null ? '$qty ${item.unit}' : '${qty}x';
+                                return item.unit != null
+                                    ? '$qty ${item.unit}'
+                                    : '${qty}x';
                               }(),
                               style: TextStyle(
                                 fontSize: 13,
-                                color: widget.isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                                color: widget.isDark
+                                    ? const Color(0xFF6B6B6B)
+                                    : const Color(0xFF9CA3AF),
                               ),
                             ),
                           ),
@@ -1416,15 +1614,23 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
                               decoration: BoxDecoration(
                                 color: isAdded
                                     ? const Color(0xFF22C55E)
-                                    : (widget.isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+                                    : (widget.isDark
+                                          ? Colors.white.withValues(alpha: 0.1)
+                                          : Colors.black.withValues(
+                                              alpha: 0.06,
+                                            )),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(
-                                isAdded ? Icons.check_rounded : Icons.add_rounded,
+                                isAdded
+                                    ? Icons.check_rounded
+                                    : Icons.add_rounded,
                                 size: 16,
-                                color: isAdded 
-                                    ? Colors.white 
-                                    : (widget.isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                                color: isAdded
+                                    ? Colors.white
+                                    : (widget.isDark
+                                          ? Colors.white70
+                                          : const Color(0xFF6B7280)),
                               ),
                             ),
                           ),
@@ -1435,7 +1641,7 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
               }).toList(),
             ),
           ),
-        
+
         // Show more items indicator
         if (widget.entry.items.length > 10)
           Padding(
@@ -1444,11 +1650,13 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
               '+${widget.entry.items.length - 10} ${context.tr('more_items')}',
               style: TextStyle(
                 fontSize: 12,
-                color: widget.isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                color: widget.isDark
+                    ? const Color(0xFF6B6B6B)
+                    : const Color(0xFF9CA3AF),
               ),
             ),
           ),
-        
+
         // Empty state
         if (widget.entry.items.isEmpty)
           Padding(
@@ -1457,7 +1665,9 @@ class _HomeExpandedItemsContentState extends ConsumerState<_HomeExpandedItemsCon
               context.tr('no_items'),
               style: TextStyle(
                 fontSize: 13,
-                color: widget.isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF),
+                color: widget.isDark
+                    ? const Color(0xFF6B6B6B)
+                    : const Color(0xFF9CA3AF),
               ),
             ),
           ),

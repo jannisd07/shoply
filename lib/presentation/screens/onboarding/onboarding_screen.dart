@@ -1,14 +1,8 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/mascot/avo_mascot.dart';
-import 'package:shoply/presentation/screens/auth/widgets/social_button.dart';
-import 'package:shoply/data/services/supabase_service.dart';
 
 /// Key used to track onboarding completion in SharedPreferences
 const String kOnboardingCompleteKey = 'onboarding_complete_v1';
@@ -67,7 +61,14 @@ const _demoCategories = [
   ),
 ];
 
-const _allDemoItems = ['Milch', 'Brot', 'Tomaten', 'Äpfel', 'Hähnchen', 'Joghurt'];
+const _allDemoItems = [
+  'Milch',
+  'Brot',
+  'Tomaten',
+  'Äpfel',
+  'Hähnchen',
+  'Joghurt',
+];
 
 // ─── Main onboarding screen ─────────────────────────────────────────
 class OnboardingScreen extends StatefulWidget {
@@ -87,6 +88,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
+  Future<void> _finishOnboarding() async {
+    await markOnboardingComplete();
+    if (!mounted) return;
+    context.go('/welcome');
+  }
+
   void _nextPage() {
     if (_currentPage < 2) {
       _pageController.animateToPage(
@@ -94,15 +101,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOutCubic,
       );
+    } else {
+      unawaited(_finishOnboarding());
     }
   }
 
   void _skipToAuth() {
-    _pageController.animateToPage(
-      2,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-    );
+    unawaited(_finishOnboarding());
   }
 
   @override
@@ -118,21 +123,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             children: [
               _AIDemoPage(onNext: _nextPage),
               _SharedListsPage(onNext: _nextPage),
-              _AuthPage(
-                onComplete: () async {
-                  await markOnboardingComplete();
-                  if (mounted) context.go('/home');
-                },
-                onNeedName: () async {
-                  await markOnboardingComplete();
-                  if (mounted) context.go('/name-prompt');
-                },
-              ),
+              _IngredientSwapPage(onNext: _nextPage),
             ],
           ),
 
-          // Top: skip button (pages 0 and 1 only)
-          if (_currentPage < 2)
+          // Top: skip button (feature pages only)
+          if (_currentPage < 3)
             Positioned(
               top: MediaQuery.of(context).padding.top + 8,
               right: 16,
@@ -149,8 +145,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
 
-          // Bottom: page indicator (pages 0 and 1 only)
-          if (_currentPage < 2)
+          // Bottom: page indicator (feature pages only)
+          if (_currentPage < 3)
             Positioned(
               bottom: MediaQuery.of(context).padding.bottom + 24,
               left: 0,
@@ -189,7 +185,8 @@ class _AIDemoPage extends StatefulWidget {
   State<_AIDemoPage> createState() => _AIDemoPageState();
 }
 
-class _AIDemoPageState extends State<_AIDemoPage> with TickerProviderStateMixin {
+class _AIDemoPageState extends State<_AIDemoPage>
+    with TickerProviderStateMixin {
   // Phase tracking
   int _typedCount = 0; // how many items have "appeared"
   bool _sorted = false;
@@ -279,35 +276,29 @@ class _AIDemoPageState extends State<_AIDemoPage> with TickerProviderStateMixin 
           Expanded(
             child: AnimatedBuilder(
               animation: _sortAnimation,
-              builder: (context, _) => _sorted
-                  ? _buildSortedView()
-                  : _buildUnsortedList(),
+              builder: (context, _) =>
+                  _sorted ? _buildSortedView() : _buildUnsortedList(),
             ),
           ),
 
-          // Next button (appears after sort)
-          AnimatedOpacity(
-            opacity: _sorted && _sortAnimation.value > 0.5 ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 400),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 80),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _sorted ? widget.onNext : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 80),
+            child: SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: widget.onNext,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Text(
-                    'Weiter',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                  ),
+                ),
+                child: const Text(
+                  'Weiter',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -318,136 +309,231 @@ class _AIDemoPageState extends State<_AIDemoPage> with TickerProviderStateMixin 
   }
 
   Widget _buildUnsortedList() {
-    return ListView(
-      physics: const NeverScrollableScrollPhysics(),
-      children: List.generate(_typedCount, (i) {
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.0, end: 1.0),
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-          builder: (context, value, child) {
-            return Opacity(
-              opacity: value,
-              child: Transform.translate(
-                offset: Offset(0, 12 * (1 - value)),
-                child: child,
-              ),
-            );
-          },
-          child: _buildItemTile(_allDemoItems[i]),
-        );
-      }),
+    return _ShoppingListPreview(
+      child: Column(
+        children: List.generate(_typedCount, (i) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              builder: (context, value, child) {
+                return Opacity(
+                  opacity: value,
+                  child: Transform.translate(
+                    offset: Offset(0, 12 * (1 - value)),
+                    child: child,
+                  ),
+                );
+              },
+              child: _buildPlainItem(_allDemoItems[i]),
+            ),
+          );
+        }),
+      ),
     );
   }
 
   Widget _buildSortedView() {
-    return ListView(
-      physics: const NeverScrollableScrollPhysics(),
-      children: _demoCategories.map((cat) {
-        return FadeTransition(
-          opacity: _sortAnimation,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.15),
-              end: Offset.zero,
-            ).animate(_sortAnimation),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Container(
+    return _ShoppingListPreview(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        physics: const NeverScrollableScrollPhysics(),
+        children: _demoCategories.map((cat) {
+          return FadeTransition(
+            opacity: _sortAnimation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.15),
+                end: Offset.zero,
+              ).animate(_sortAnimation),
+              child: _buildCategorySection(cat),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildCategorySection(_DemoCategory cat) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
-                  color: cat.color.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(16),
+                  color: cat.color.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(cat.icon, size: 17, color: cat.color),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                cat.name,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: cat.color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...cat.items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: cat.color.withValues(alpha: 0.15),
+                    color: Colors.white.withValues(alpha: 0.07),
                   ),
                 ),
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    // Category header
-                    Row(
-                      children: [
-                        Icon(cat.icon, size: 18, color: cat.color),
-                        const SizedBox(width: 8),
-                        Text(
-                          cat.name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: cat.color,
-                            letterSpacing: 0.3,
-                          ),
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.28),
+                          width: 1.4,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    // Items
-                    ...cat.items.map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white24,
-                                width: 1.5,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            item,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ],
                       ),
-                    )),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      item,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
-        );
-      }).toList(),
+        ],
+      ),
     );
   }
 
-  Widget _buildItemTile(String name) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+  Widget _buildPlainItem(String name) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.28),
+                width: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            name,
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShoppingListPreview extends StatelessWidget {
+  final Widget child;
+
+  const _ShoppingListPreview({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 2),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(12),
+          color: const Color(0xFF171717),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.34),
+              blurRadius: 30,
+              offset: const Offset(0, 18),
+            ),
+          ],
         ),
-        child: Row(
+        child: Column(
           children: [
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white24, width: 1.5),
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: const Icon(
+                    Icons.shopping_bag_outlined,
+                    color: AppColors.accent,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Wocheneinkauf',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        '6 Artikel automatisch einsortiert',
+                        style: TextStyle(color: Colors.white38, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Text(
-              name,
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.white,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
+            const SizedBox(height: 16),
+            Expanded(child: child),
           ],
         ),
       ),
@@ -638,7 +724,10 @@ class _SharedListsPageState extends State<_SharedListsPage>
       decoration: BoxDecoration(
         color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
       ),
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -693,15 +782,21 @@ class _SharedListsPageState extends State<_SharedListsPage>
             FadeTransition(
               opacity: itemAnimation,
               child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 0.3),
-                  end: Offset.zero,
-                ).animate(CurvedAnimation(
-                  parent: itemAnimation,
-                  curve: Curves.easeOutBack,
-                )),
+                position:
+                    Tween<Offset>(
+                      begin: const Offset(0, 0.3),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: itemAnimation,
+                        curve: Curves.easeOutBack,
+                      ),
+                    ),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF4ADE80).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
@@ -774,260 +869,272 @@ class _SharedListsPageState extends State<_SharedListsPage>
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// PAGE 3: Name + Auth
+// PAGE 3: Ingredient Swap Demo
 // ═══════════════════════════════════════════════════════════════════════
-class _AuthPage extends StatefulWidget {
-  final VoidCallback onComplete;
-  final VoidCallback onNeedName;
-  const _AuthPage({required this.onComplete, required this.onNeedName});
+class _IngredientSwapPage extends StatefulWidget {
+  final VoidCallback onNext;
+  const _IngredientSwapPage({required this.onNext});
 
   @override
-  State<_AuthPage> createState() => _AuthPageState();
+  State<_IngredientSwapPage> createState() => _IngredientSwapPageState();
 }
 
-class _AuthPageState extends State<_AuthPage> with SingleTickerProviderStateMixin {
-  final _nameController = TextEditingController();
-  bool _isLoading = false;
-  String? _error;
-
-  late final AnimationController _fadeController;
-
-  @override
-  void initState() {
-    super.initState();
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) _fadeController.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _fadeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleAppleLogin() async {
-    setState(() { _isLoading = true; _error = null; });
-    try {
-      final success = await SupabaseService.instance.signInWithApple();
-      if (success && mounted) {
-        await _saveNameAndComplete();
-      }
-    } catch (e) {
-      if (e.toString().contains('canceled') || e.toString().contains('cancelled')) {
-        setState(() => _isLoading = false);
-        return;
-      }
-      setState(() {
-        _isLoading = false;
-        _error = 'Apple Sign In fehlgeschlagen';
-      });
-    }
-  }
-
-  Future<void> _handleGoogleLogin() async {
-    setState(() { _isLoading = true; _error = null; });
-    try {
-      final success = await SupabaseService.instance.signInWithGoogle();
-      if (success && mounted) {
-        await _saveNameAndComplete();
-      }
-    } catch (e) {
-      if (e.toString().contains('canceled') || e.toString().contains('cancelled')) {
-        setState(() => _isLoading = false);
-        return;
-      }
-      setState(() {
-        _isLoading = false;
-        _error = 'Google Sign In fehlgeschlagen';
-      });
-    }
-  }
-
-  Future<void> _saveNameAndComplete() async {
-    final name = _nameController.text.trim();
-    if (name.isNotEmpty) {
-      try {
-        final user = SupabaseService.instance.currentUser;
-        if (user != null) {
-          await SupabaseService.instance.client
-              .from('users')
-              .update({
-                'display_name': name,
-                'updated_at': DateTime.now().toIso8601String(),
-              })
-              .eq('id', user.id);
-        }
-      } catch (_) {}
-      widget.onComplete();
-    } else {
-      // No name entered, let router redirect to name-prompt
-      widget.onNeedName();
-    }
-  }
+class _IngredientSwapPageState extends State<_IngredientSwapPage> {
+  bool _swapEnabled = true;
 
   @override
   Widget build(BuildContext context) {
-    final bottomPad = MediaQuery.of(context).padding.bottom;
-
-    return FadeTransition(
-      opacity: _fadeController,
-      child: Padding(
-        padding: EdgeInsets.only(
-          top: MediaQuery.of(context).padding.top + 40,
-          left: 24,
-          right: 24,
-          bottom: bottomPad + 24,
-        ),
-        child: Column(
-          children: [
-            const Spacer(flex: 1),
-
-            // Avo mascot
-            const AvoMascot(
-              size: 100,
-              expression: AvoExpression.excited,
+    return Padding(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 60,
+        left: 24,
+        right: 24,
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Rezepte passen sich dir an.',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: -0.5,
             ),
-            const SizedBox(height: 20),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Avo kann Zutaten automatisch ersetzen.',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.white.withValues(alpha: 0.5),
+              fontWeight: FontWeight.w400,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 44),
 
-            // Speech bubble
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Hey! Ich bin Avo 🥑\nDein smarter Einkaufsbegleiter!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                  height: 1.4,
+          Expanded(
+            child: Center(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF171717),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.34),
+                      blurRadius: 30,
+                      offset: const Offset(0, 18),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                          child: const Icon(
+                            Icons.tune_rounded,
+                            color: AppColors.accent,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Automatisch ersetzen',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'nach deinen Ernährungspräferenzen',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch.adaptive(
+                          value: _swapEnabled,
+                          activeThumbColor: AppColors.accent,
+                          activeTrackColor: AppColors.accent.withValues(
+                            alpha: 0.35,
+                          ),
+                          onChanged: (value) =>
+                              setState(() => _swapEnabled = value),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 260),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: _swapEnabled
+                          ? const _SwapPreview(
+                              key: ValueKey('enabled'),
+                              rows: [
+                                _IngredientSwap('Sahne', 'Hafercuisine'),
+                                _IngredientSwap('Butter', 'Olivenöl'),
+                                _IngredientSwap('Parmesan', 'Hefeflocken'),
+                              ],
+                            )
+                          : const _SwapPreview(
+                              key: ValueKey('disabled'),
+                              rows: [
+                                _IngredientSwap('Sahne', null),
+                                _IngredientSwap('Butter', null),
+                                _IngredientSwap('Parmesan', null),
+                              ],
+                            ),
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
 
-            const SizedBox(height: 32),
-
-            // Name input
-            TextField(
-              controller: _nameController,
-              textCapitalization: TextCapitalization.words,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Dein Name',
-                hintStyle: const TextStyle(color: Colors.white30),
-                filled: true,
-                fillColor: const Color(0xFF1C1C1E),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-              ),
-            ),
-
-            const Spacer(flex: 1),
-
-            // Error message
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: Color(0xFFF87171), fontSize: 14),
-                ),
-              ),
-
-            // Apple sign in (iOS only)
-            if (Platform.isIOS) ...[
-              SocialButton(
-                text: 'Continue with Apple',
-                icon: Icons.apple,
-                backgroundColor: Colors.white,
-                textColor: Colors.black,
-                iconColor: Colors.black,
-                onPressed: _isLoading ? () {} : () => _handleAppleLogin(),
-              ),
-              const SizedBox(height: 10),
-            ],
-
-            // Google sign in
-            SocialButton(
-              text: 'Continue with Google',
-              customIcon: const GoogleLogo(size: 20),
-              backgroundColor: const Color(0xFF1C1C1E),
-              textColor: Colors.white,
-              iconColor: Colors.white,
-              onPressed: _isLoading ? () {} : () => _handleGoogleLogin(),
-            ),
-            const SizedBox(height: 10),
-
-            // Email sign up
-            SizedBox(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 80),
+            child: SizedBox(
               width: double.infinity,
-              height: 50,
-              child: OutlinedButton(
-                onPressed: _isLoading
-                    ? null
-                    : () async {
-                        await markOnboardingComplete();
-                        if (mounted) context.push('/signup');
-                      },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  side: const BorderSide(color: Colors.white12),
+              height: 52,
+              child: ElevatedButton(
+                onPressed: widget.onNext,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
                 child: const Text(
-                  'Sign up with Email',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  'Weiter',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-            // Already have account
-            TextButton(
-              onPressed: _isLoading
-                  ? null
-                  : () async {
-                      await markOnboardingComplete();
-                      if (mounted) context.push('/login');
-                    },
-              child: Text(
-                'Bereits ein Konto? Anmelden',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 14,
-                ),
+class _IngredientSwap {
+  final String original;
+  final String? replacement;
+
+  const _IngredientSwap(this.original, this.replacement);
+}
+
+class _SwapPreview extends StatelessWidget {
+  final List<_IngredientSwap> rows;
+
+  const _SwapPreview({super.key, required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: rows.map((row) => _SwapRow(row: row)).toList());
+  }
+}
+
+class _SwapRow extends StatelessWidget {
+  final _IngredientSwap row;
+
+  const _SwapRow({required this.row});
+
+  @override
+  Widget build(BuildContext context) {
+    final replacement = row.replacement;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              row.original,
+              style: TextStyle(
+                color: replacement == null
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.42),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                decoration: replacement == null
+                    ? null
+                    : TextDecoration.lineThrough,
+                decorationColor: Colors.white38,
               ),
             ),
-
-            if (_isLoading)
-              const Padding(
-                padding: EdgeInsets.only(top: 12),
-                child: CupertinoActivityIndicator(color: Colors.white54),
-              ),
-          ],
-        ),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: replacement == null
+                ? const SizedBox(width: 22, height: 22)
+                : Row(
+                    key: ValueKey(replacement),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        color: Colors.white30,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: AppColors.accent.withValues(alpha: 0.24),
+                          ),
+                        ),
+                        child: Text(
+                          replacement,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
       ),
     );
   }

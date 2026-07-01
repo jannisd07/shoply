@@ -60,27 +60,27 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   final _focusNode = FocusNode();
   final _scrollController = ScrollController();
   late String _listName;
-  
+
   // Drag and drop state
   ShoppingItemModel? _draggedItem;
   String? _draggedFromCategory;
   bool _isDragging = false;
-  
+
   // Auto-scroll state
   Timer? _autoScrollTimer;
   int _scrollDirection = 0; // -1 = up, 0 = none, 1 = down
   double _scrollSpeed = 0.0;
-  
+
   // Custom categories cache
   List<CustomCategory> _customCategories = [];
   bool _customCategoriesLoaded = false;
-  
+
   // Category order cache
   List<String> _categoryOrder = [];
-  
+
   // List owner info
   String? _ownerId;
-  
+
   // Key counter for forcing popup menu rebuild after navigation
   int _popupMenuKeyCounter = 0;
 
@@ -96,7 +96,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       _performAutoScroll();
     });
   }
-  
+
   /// Stop the auto-scroll timer
   void _stopAutoScrollTimer() {
     _autoScrollTimer?.cancel();
@@ -104,16 +104,16 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     _scrollDirection = 0;
     _scrollSpeed = 0.0;
   }
-  
+
   /// Perform the actual scrolling based on current direction and speed
   void _performAutoScroll() {
     if (!_scrollController.hasClients || _scrollDirection == 0) {
       return;
     }
-    
+
     final currentOffset = _scrollController.offset;
     final maxOffset = _scrollController.position.maxScrollExtent;
-    
+
     if (_scrollDirection < 0) {
       // Scrolling up
       if (currentOffset <= 0) return;
@@ -126,7 +126,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       _scrollController.jumpTo(newOffset);
     }
   }
-  
+
   /// Auto-scroll the list when dragging near edges
   /// This enables users to drag items between categories that are far apart
   void _handleAutoScroll(double globalY) {
@@ -135,38 +135,45 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       debugPrint('🔴 [AUTOSCROLL] No scroll clients!');
       return;
     }
-    
+
     final screenHeight = MediaQuery.of(context).size.height;
     final topPadding = MediaQuery.of(context).padding.top;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-    
+
     // Define scroll zones - larger zones for easier activation
     // Top zone starts right below status bar (not app bar, so we have more area)
     final topEdge = topPadding + 60; // Just below status bar + some margin
     // Bottom zone: above the bottom safe area
     final bottomEdge = screenHeight - bottomPadding - 100;
-    
+
     // Scroll zone threshold - how close to edge to start scrolling
     const scrollEdgeThreshold = 180.0; // Even larger zone
     // Maximum scroll speed - pixels per frame (at 60fps this is ~1500px/sec)
     const maxScrollSpeed = 25.0;
     // Minimum scroll speed for smooth start
     const minScrollSpeed = 8.0;
-    
+
     // Calculate distance from edges
     final distanceFromTop = globalY - topEdge;
     final distanceFromBottom = bottomEdge - globalY;
-    
-    debugPrint('🔵 [AUTOSCROLL] globalY=$globalY, topEdge=$topEdge, bottomEdge=$bottomEdge, distTop=$distanceFromTop, distBottom=$distanceFromBottom');
-    
+
+    debugPrint(
+      '🔵 [AUTOSCROLL] globalY=$globalY, topEdge=$topEdge, bottomEdge=$bottomEdge, distTop=$distanceFromTop, distBottom=$distanceFromBottom',
+    );
+
     // Top edge detection - scroll up when finger is near top
     if (distanceFromTop < scrollEdgeThreshold) {
       // Calculate speed based on proximity (closer = faster)
       // Use exponential curve for smoother acceleration
-      final normalizedDistance = (distanceFromTop / scrollEdgeThreshold).clamp(0.0, 1.0);
+      final normalizedDistance = (distanceFromTop / scrollEdgeThreshold).clamp(
+        0.0,
+        1.0,
+      );
       final proximity = 1.0 - normalizedDistance;
-      _scrollSpeed = minScrollSpeed + (maxScrollSpeed - minScrollSpeed) * proximity * proximity;
-      
+      _scrollSpeed =
+          minScrollSpeed +
+          (maxScrollSpeed - minScrollSpeed) * proximity * proximity;
+
       if (_scrollDirection != -1) {
         _scrollDirection = -1;
         debugPrint('🔼 [AUTOSCROLL] Starting UP scroll, speed=$_scrollSpeed');
@@ -179,10 +186,13 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     // Bottom edge detection - scroll down when finger is near bottom
     else if (distanceFromBottom < scrollEdgeThreshold) {
       // Calculate speed based on proximity (closer = faster)
-      final normalizedDistance = (distanceFromBottom / scrollEdgeThreshold).clamp(0.0, 1.0);
+      final normalizedDistance = (distanceFromBottom / scrollEdgeThreshold)
+          .clamp(0.0, 1.0);
       final proximity = 1.0 - normalizedDistance;
-      _scrollSpeed = minScrollSpeed + (maxScrollSpeed - minScrollSpeed) * proximity * proximity;
-      
+      _scrollSpeed =
+          minScrollSpeed +
+          (maxScrollSpeed - minScrollSpeed) * proximity * proximity;
+
       if (_scrollDirection != 1) {
         _scrollDirection = 1;
         debugPrint('🔽 [AUTOSCROLL] Starting DOWN scroll, speed=$_scrollSpeed');
@@ -210,20 +220,22 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(itemsNotifierProvider(widget.listId).notifier).loadItems();
       // Track this list as last accessed
-      ref.read(lastAccessedListProvider.notifier).setLastAccessedList(widget.listId);
+      ref
+          .read(lastAccessedListProvider.notifier)
+          .setLastAccessedList(widget.listId);
       _markAsRead(); // Mark as read & clear badge
-      
+
       // Notify tutorial that list was opened
       DynamicTutorialService.instance.onListOpened();
-      
+
       // Load custom categories
       _loadCustomCategories();
-      
+
       // Load list owner info
       _loadListOwner();
     });
   }
-  
+
   Future<void> _loadListOwner() async {
     try {
       final list = await ListRepository.instance.getListById(widget.listId);
@@ -234,7 +246,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       debugPrint('❌ Failed to load list owner: $e');
     }
   }
-  
+
   Future<void> _loadCustomCategories() async {
     final service = CategoryOrderService();
     final categories = await service.getCustomCategories(widget.listId);
@@ -251,16 +263,16 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   Future<void> _markAsRead() async {
     // 1. Internen Status (roter Punkt) löschen
     await UnreadService().markAsRead(widget.listId);
-    
+
     // 2. App Icon Badge löschen
     try {
-        if (await FlutterAppBadger.isAppBadgeSupported()) {
-            FlutterAppBadger.removeBadge();
-        }
+      if (await FlutterAppBadger.isAppBadgeSupported()) {
+        FlutterAppBadger.removeBadge();
+      }
     } catch (e) {
-        debugPrint('Failed to remove badge: $e');
+      debugPrint('Failed to remove badge: $e');
     }
-    
+
     // 3. Notifications löschen (für sauberes Notification Center)
     await NotificationService.instance.cancelAll();
   }
@@ -290,14 +302,17 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
         final prevCount = _lastCheckedCount;
         _lastCheckedCount = checked;
 
-        if (allChecked && prevCount != null && prevCount < items.length &&
+        if (allChecked &&
+            prevCount != null &&
+            prevCount < items.length &&
             !_listCompletionReviewFired) {
           _listCompletionReviewFired = true;
           // Fire and forget — respects AppReviewService throttling internally.
           AppReviewService.instance.trackPositiveAction('completed_list');
           Future.delayed(const Duration(milliseconds: 800), () {
-            AppReviewService.instance
-                .maybeRequestReview(reason: 'completed_list');
+            AppReviewService.instance.maybeRequestReview(
+              reason: 'completed_list',
+            );
           });
         }
       },
@@ -453,7 +468,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(CupertinoIcons.arrow_up_arrow_down, size: 20),
+                            const Icon(
+                              CupertinoIcons.arrow_up_arrow_down,
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
                             Text(context.tr('category_order')),
                           ],
@@ -528,7 +546,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
               color: Theme.of(context).brightness == Brightness.light
                   ? AppColors.lightCardBackground
                   : AppColors.darkCardBackground,
-              borderRadius: BorderRadius.circular(AppDimensions.cardBorderRadius),
+              borderRadius: BorderRadius.circular(
+                AppDimensions.cardBorderRadius,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: AppColors.lightShadow.withOpacity(0.08),
@@ -604,7 +624,8 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
               onSubmitted: (value) {
                 if (value.trim().isNotEmpty) {
                   final itemName = value.trim();
-                  _searchController.clear(); // Clear FIRST to prevent re-triggering
+                  _searchController
+                      .clear(); // Clear FIRST to prevent re-triggering
                   _quickAddItem(itemName);
                   // Keep focus in text field after adding
                   _focusNode.requestFocus();
@@ -619,12 +640,15 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             child: itemsAsync.when(
               data: (items) {
                 // Update tutorial with list items data
-                DynamicTutorialService.instance.updateListItemsData(hasItems: items.isNotEmpty);
+                DynamicTutorialService.instance.updateListItemsData(
+                  hasItems: items.isNotEmpty,
+                );
                 if (items.isEmpty) {
                   return EmptyState(
                     icon: Icons.shopping_cart,
                     title: AppLocalizations.of(context).emptyList,
-                    subtitle: 'Füge Produkte hinzu, um mit dem Einkaufen zu beginnen',
+                    subtitle:
+                        'Füge Produkte hinzu, um mit dem Einkaufen zu beginnen',
                     actionText: AppLocalizations.of(context).addItem,
                     onActionPressed: () => _showAddItemDialog(context),
                   );
@@ -643,70 +667,88 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   },
                   child: ListView.builder(
                     controller: _scrollController,
-                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: EdgeInsets.only(
                       left: AppDimensions.screenHorizontalPadding,
                       right: AppDimensions.screenHorizontalPadding,
-                      bottom: MainScaffold.getNavbarClearance(context), // Dynamic navbar clearance
+                      bottom: MainScaffold.getNavbarClearance(
+                        context,
+                      ), // Dynamic navbar clearance
                     ),
-                    itemCount: groupedItems.length + 2, // +1 for recommendations, +1 for Complete Button
-                  itemBuilder: (context, index) {
-                    // ML-powered AI Recommendations Section at the top
-                    if (index == 0) {
-                      return MLRecommendationsSection(
-                        listId: widget.listId,
-                        onAddItem: (itemName, category, quantity) {
-                          _addItemFromRecommendation(itemName, category, quantity);
-                        },
-                      );
-                    }
-                    
-                    // Complete Shopping Button am Ende
-                    if (index == groupedItems.length + 1) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 24, bottom: 24),
-                        child: ElevatedButton(
-                          onPressed: () => _completeShoppingTrip(context, ref, items),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accentColor(context),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppDimensions.buttonBorderRadius),
+                    itemCount:
+                        groupedItems.length +
+                        2, // +1 for recommendations, +1 for Complete Button
+                    itemBuilder: (context, index) {
+                      // ML-powered AI Recommendations Section at the top
+                      if (index == 0) {
+                        return MLRecommendationsSection(
+                          listId: widget.listId,
+                          onAddItem: (itemName, category, quantity) {
+                            _addItemFromRecommendation(
+                              itemName,
+                              category,
+                              quantity,
+                            );
+                          },
+                        );
+                      }
+
+                      // Complete Shopping Button am Ende
+                      if (index == groupedItems.length + 1) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 24, bottom: 24),
+                          child: ElevatedButton(
+                            onPressed: () =>
+                                _completeShoppingTrip(context, ref, items),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentColor(context),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppDimensions.buttonBorderRadius,
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              AppLocalizations.of(context).completeShopping,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            AppLocalizations.of(context).completeShopping,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                          ),
-                        ),
-                      );
-                    }
-                    
-                    final entry = groupedItems[index - 1]; // -1 because recommendations is at index 0
-                    final category = entry['category'] as String;
-                    final categoryId = entry['category_id'] as String;
-                    final categoryItems = entry['items'] as List<ShoppingItemModel>;
-                    final categoryColor = entry['category_color'] as Color;
-                    final categoryIcon = entry['category_icon'] as IconData;
-                    final isCustomCategory = entry['is_custom'] as bool;
+                        );
+                      }
 
-                    return _buildCategorySection(
-                      category: category,
-                      categoryId: categoryId,
-                      categoryItems: categoryItems,
-                      categoryColor: categoryColor,
-                      categoryIcon: categoryIcon,
-                      isCustomCategory: isCustomCategory,
-                    );
-                  },
+                      final entry =
+                          groupedItems[index -
+                              1]; // -1 because recommendations is at index 0
+                      final category = entry['category'] as String;
+                      final categoryId = entry['category_id'] as String;
+                      final categoryItems =
+                          entry['items'] as List<ShoppingItemModel>;
+                      final categoryColor = entry['category_color'] as Color;
+                      final categoryIcon = entry['category_icon'] as IconData;
+                      final isCustomCategory = entry['is_custom'] as bool;
+
+                      return _buildCategorySection(
+                        category: category,
+                        categoryId: categoryId,
+                        categoryItems: categoryItems,
+                        categoryColor: categoryColor,
+                        categoryIcon: categoryIcon,
+                        isCustomCategory: isCustomCategory,
+                      );
+                    },
                   ),
                 );
               },
-              loading: () => LoadingIndicator(message: context.tr('loading_items')),
-              error: (error, stack) => Center(
-                child: Text('Error: $error'),
-              ),
+              loading: () =>
+                  LoadingIndicator(message: context.tr('loading_items')),
+              error: (error, stack) => Center(child: Text('Error: $error')),
             ),
           ),
         ],
@@ -714,7 +756,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       // FloatingActionButton removed - add items via search bar
     );
   }
-  
+
   /// Build a category section with drag target for receiving items
   Widget _buildCategorySection({
     required String category,
@@ -725,7 +767,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     required bool isCustomCategory,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return DragTarget<ShoppingItemModel>(
       onWillAcceptWithDetails: (details) {
         // Accept if dragged from a different category
@@ -734,10 +776,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       onAcceptWithDetails: (details) async {
         final item = details.data;
         // Update item's category
-        await ref.read(itemsNotifierProvider(widget.listId).notifier).updateItem(
-          item.id,
-          {'category_id': categoryId},
-        );
+        await ref
+            .read(itemsNotifierProvider(widget.listId).notifier)
+            .updateItem(item.id, {'category_id': categoryId});
         // Record preference so AI learns the user's category choice
         CategoryDetector.recordUserCategoryChange(item.name, category);
         HapticFeedback.mediumImpact();
@@ -749,17 +790,19 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       },
       builder: (context, candidateData, rejectedData) {
         final isHovering = candidateData.isNotEmpty;
-        
+
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          decoration: isHovering ? BoxDecoration(
-            color: categoryColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: categoryColor.withValues(alpha: 0.5),
-              width: 2,
-            ),
-          ) : null,
+          decoration: isHovering
+              ? BoxDecoration(
+                  color: categoryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: categoryColor.withValues(alpha: 0.5),
+                    width: 2,
+                  ),
+                )
+              : null,
           padding: isHovering ? const EdgeInsets.all(8) : EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -795,9 +838,14 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: AppColors.accentColor(context).withValues(alpha: 0.12),
+                          color: AppColors.accentColor(
+                            context,
+                          ).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -820,7 +868,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                     color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                      color: isDark
+                          ? Colors.grey.shade800
+                          : Colors.grey.shade300,
                       style: BorderStyle.solid,
                     ),
                   ),
@@ -830,13 +880,17 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                       Icon(
                         Icons.drag_indicator_rounded,
                         size: 18,
-                        color: isDark ? Colors.grey.shade600 : Colors.grey.shade500,
+                        color: isDark
+                            ? Colors.grey.shade600
+                            : Colors.grey.shade500,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         context.tr('drag_items_here'),
                         style: TextStyle(
-                          color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                          color: isDark
+                              ? Colors.grey.shade500
+                              : Colors.grey.shade600,
                           fontSize: 14,
                         ),
                       ),
@@ -852,7 +906,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: categoryItems.length,
                       itemBuilder: (context, index) {
-                        return _buildDraggableItemTile(categoryItems[index], index, categoryId);
+                        return _buildDraggableItemTile(
+                          categoryItems[index],
+                          index,
+                          categoryId,
+                        );
                       },
                     ),
                     // Drop zone AFTER the last item so users can move
@@ -867,17 +925,21 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         final draggedItem = details.data;
                         final fromCat = _draggedFromCategory;
                         final notifier = ref.read(
-                            itemsNotifierProvider(widget.listId).notifier);
+                          itemsNotifierProvider(widget.listId).notifier,
+                        );
 
                         if (fromCat != categoryId) {
                           // Cross-category: change category first
-                          await notifier.updateItem(
-                              draggedItem.id, {'category_id': categoryId});
+                          await notifier.updateItem(draggedItem.id, {
+                            'category_id': categoryId,
+                          });
                         }
                         // Place after the last item in this category.
                         if (categoryItems.isNotEmpty) {
                           await notifier.reorderItemAfter(
-                              draggedItem.id, categoryItems.last.id);
+                            draggedItem.id,
+                            categoryItems.last.id,
+                          );
                         }
                         HapticFeedback.lightImpact();
                         setState(() {
@@ -896,8 +958,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                               ? BoxDecoration(
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: AppColors.accentColor(context)
-                                        .withValues(alpha: 0.4),
+                                    color: AppColors.accentColor(
+                                      context,
+                                    ).withValues(alpha: 0.4),
                                     width: 1.5,
                                   ),
                                 )
@@ -908,8 +971,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                     width: 40,
                                     height: 3,
                                     decoration: BoxDecoration(
-                                      color: AppColors.accentColor(context)
-                                          .withValues(alpha: 0.5),
+                                      color: AppColors.accentColor(
+                                        context,
+                                      ).withValues(alpha: 0.5),
                                       borderRadius: BorderRadius.circular(2),
                                     ),
                                   ),
@@ -927,28 +991,32 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     );
   }
 
-  List<Map<String, dynamic>> _groupItemsByCategory(List<ShoppingItemModel> items) {
+  List<Map<String, dynamic>> _groupItemsByCategory(
+    List<ShoppingItemModel> items,
+  ) {
     // Get user's language
     final locale = Localizations.localeOf(context);
     final languageCode = locale.languageCode;
-    
+
     // Group items by category ID (including custom categories)
     final Map<String, List<ShoppingItemModel>> categoryMap = {};
-    
+
     // First, add all custom categories (even empty ones) so they're always visible
     for (final customCat in _customCategories) {
       categoryMap[customCat.id] = [];
     }
-    
+
     for (final item in items) {
       // Prefer new category_id field, fallback to legacy category field
       String categoryId = item.categoryId ?? item.category ?? 'other';
-      
+
       // If it's not a valid built-in ID and not a custom ID, try to convert name → ID
-      if (!Categories.allIds.contains(categoryId) && !categoryId.startsWith('custom_')) {
-        categoryId = Categories.getIdByName(categoryId, languageCode) ?? 'other';
+      if (!Categories.allIds.contains(categoryId) &&
+          !categoryId.startsWith('custom_')) {
+        categoryId =
+            Categories.getIdByName(categoryId, languageCode) ?? 'other';
       }
-      
+
       if (!categoryMap.containsKey(categoryId)) {
         categoryMap[categoryId] = [];
       }
@@ -957,21 +1025,24 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
     // Build sorted list using saved category order
     final sortedCategories = <String>[];
-    
+
     // If we have a saved category order, use it
     if (_categoryOrder.isNotEmpty) {
       // Add categories in saved order (only if they have items or are custom)
       for (final categoryId in _categoryOrder) {
-        final hasItems = categoryMap.containsKey(categoryId) && categoryMap[categoryId]!.isNotEmpty;
+        final hasItems =
+            categoryMap.containsKey(categoryId) &&
+            categoryMap[categoryId]!.isNotEmpty;
         final isCustom = categoryId.startsWith('custom_');
         if (hasItems || isCustom) {
           sortedCategories.add(categoryId);
         }
       }
-      
+
       // Add any categories with items that weren't in the saved order (new categories)
       for (final categoryId in categoryMap.keys) {
-        if (!sortedCategories.contains(categoryId) && categoryMap[categoryId]!.isNotEmpty) {
+        if (!sortedCategories.contains(categoryId) &&
+            categoryMap[categoryId]!.isNotEmpty) {
           sortedCategories.add(categoryId);
         }
       }
@@ -982,10 +1053,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           sortedCategories.add(customCat.id);
         }
       }
-      
+
       // Then add built-in categories that have items
       for (final category in Categories.all) {
-        if (categoryMap.containsKey(category.id) && categoryMap[category.id]!.isNotEmpty) {
+        if (categoryMap.containsKey(category.id) &&
+            categoryMap[category.id]!.isNotEmpty) {
           sortedCategories.add(category.id);
         }
       }
@@ -1001,18 +1073,22 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
         final bIndex = b.orderIndex ?? b.sortOrder ?? 999;
         return aIndex.compareTo(bIndex);
       });
-      
+
       // Get category display info
       String categoryName;
       Color categoryColor;
       IconData categoryIcon;
       bool isCustom = false;
-      
+
       if (categoryId.startsWith('custom_')) {
         // Find the custom category
         final customCat = _customCategories.firstWhere(
           (c) => c.id == categoryId,
-          orElse: () => CustomCategory(id: categoryId, name: 'Unknown', color: Colors.grey),
+          orElse: () => CustomCategory(
+            id: categoryId,
+            name: 'Unknown',
+            color: Colors.grey,
+          ),
         );
         categoryName = customCat.name;
         categoryColor = customCat.color;
@@ -1024,7 +1100,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
         categoryColor = categoryData.color;
         categoryIcon = categoryData.icon;
       }
-      
+
       return {
         'category': categoryName,
         'category_id': categoryId,
@@ -1039,19 +1115,21 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   void _quickAddItem(String name) async {
     print('🚀🚀🚀 [LIST_DETAIL] _quickAddItem CALLED for "$name"');
     print('🚀 [LIST_DETAIL] listId: ${widget.listId}');
-    
+
     try {
       final user = ref.read(currentUserProvider).value;
-      
+
       // Let Gemini handle categorization automatically (category: null)
       // ItemRepository will call GeminiCategorizationService if category is null
-      
+
       final isDietWarning = user != null
           ? DietChecker.checkDietWarning(name, user.dietPreferences)
           : false;
 
       print('🚀 [LIST_DETAIL] Calling itemsNotifierProvider.addItem...');
-      await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
+      await ref
+          .read(itemsNotifierProvider(widget.listId).notifier)
+          .addItem(
             name: name,
             category: null, // Let Gemini categorize automatically
             isDietWarning: isDietWarning,
@@ -1063,7 +1141,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.tr('error_adding', params: {'error': e.toString()})),
+            content: Text(
+              context.tr('error_adding', params: {'error': e.toString()}),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1077,7 +1157,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   void _showAddItemDialog(BuildContext context, {String prefill = ''}) {
     // Dismiss keyboard from the search bar before opening the sheet
     FocusManager.instance.primaryFocus?.unfocus();
-    
+
     final nameController = TextEditingController(text: prefill);
     final quantityController = TextEditingController(text: '1');
     final notesController = TextEditingController();
@@ -1112,222 +1192,268 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   child: StatefulBuilder(
                     builder: (context, setDialogState) {
                       return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Header row with title and X button
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            AppLocalizations.of(context).addItem,
-                            style: TextStyle(
-                              color: fg,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: muted.withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
+                          // Header row with title and X button
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                AppLocalizations.of(context).addItem,
+                                style: TextStyle(
+                                  color: fg,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
+                                ),
                               ),
-                              child: Icon(
-                                Icons.close_rounded,
-                                size: 16,
-                                color: muted,
+                              GestureDetector(
+                                onTap: () => Navigator.pop(context),
+                                child: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: muted.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    size: 16,
+                                    color: muted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          TextField(
+                            controller: nameController,
+                            style: TextStyle(color: fg, fontSize: 16),
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context).itemName,
+                              hintStyle: TextStyle(
+                                color: muted.withValues(alpha: 0.5),
+                              ),
+                              filled: true,
+                              fillColor: fillColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
+                            ),
+                            autofocus: prefill.isEmpty,
+                            textCapitalization: TextCapitalization.sentences,
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Quantity field
+                          TextField(
+                            controller: quantityController,
+                            style: TextStyle(color: fg, fontSize: 16),
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context).quantity,
+                              hintStyle: TextStyle(
+                                color: muted.withValues(alpha: 0.5),
+                              ),
+                              filled: true,
+                              fillColor: fillColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Unit pill selector
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: ['pcs', 'kg', 'g', 'l', 'ml', 'pack'].map(
+                              (unit) {
+                                final isSelected = selectedUnit == unit;
+                                return GestureDetector(
+                                  onTap: () {
+                                    setDialogState(() {
+                                      selectedUnit = isSelected ? null : unit;
+                                    });
+                                    HapticFeedback.selectionClick();
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 150),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? (isDark
+                                                ? Colors.white
+                                                : Colors.black)
+                                          : fillColor,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      unit,
+                                      style: TextStyle(
+                                        color: isSelected
+                                            ? (isDark
+                                                  ? Colors.black
+                                                  : Colors.white)
+                                            : muted,
+                                        fontSize: 14,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ).toList(),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          TextField(
+                            controller: notesController,
+                            style: TextStyle(color: fg, fontSize: 16),
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context).notes,
+                              hintStyle: TextStyle(
+                                color: muted.withValues(alpha: 0.5),
+                              ),
+                              filled: true,
+                              fillColor: fillColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
+                            ),
+                            maxLines: 2,
+                            textCapitalization: TextCapitalization.sentences,
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Monochrome CTA
+                          GestureDetector(
+                            onTap: () async {
+                              if (nameController.text.trim().isEmpty) return;
+
+                              final name = nameController.text.trim();
+
+                              try {
+                                final user = ref
+                                    .read(currentUserProvider)
+                                    .value;
+
+                                final isDietWarning = user != null
+                                    ? DietChecker.checkDietWarning(
+                                        name,
+                                        user.dietPreferences,
+                                      )
+                                    : false;
+
+                                await ref
+                                    .read(
+                                      itemsNotifierProvider(
+                                        widget.listId,
+                                      ).notifier,
+                                    )
+                                    .addItem(
+                                      name: name,
+                                      quantity:
+                                          double.tryParse(
+                                            quantityController.text,
+                                          ) ??
+                                          1.0,
+                                      unit: selectedUnit,
+                                      category: null,
+                                      notes: notesController.text.trim().isEmpty
+                                          ? null
+                                          : notesController.text.trim(),
+                                      isDietWarning: isDietWarning,
+                                    );
+
+                                Navigator.pop(context);
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      context.tr(
+                                        'error_adding',
+                                        params: {'error': e.toString()},
+                                      ),
+                                    ),
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                );
+                              }
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white : Colors.black,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  AppLocalizations.of(context).addItem,
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.black : Colors.white,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      TextField(
-                        controller: nameController,
-                        style: TextStyle(color: fg, fontSize: 16),
-                        decoration: InputDecoration(
-                          hintText: AppLocalizations.of(context).itemName,
-                          hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
-                          filled: true,
-                          fillColor: fillColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        ),
-                        autofocus: prefill.isEmpty,
-                        textCapitalization: TextCapitalization.sentences,
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Quantity field
-                      TextField(
-                        controller: quantityController,
-                        style: TextStyle(color: fg, fontSize: 16),
-                        decoration: InputDecoration(
-                          hintText: AppLocalizations.of(context).quantity,
-                          hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
-                          filled: true,
-                          fillColor: fillColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Unit pill selector
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: ['pcs', 'kg', 'g', 'l', 'ml', 'pack'].map((unit) {
-                          final isSelected = selectedUnit == unit;
-                          return GestureDetector(
-                            onTap: () {
-                              setDialogState(() {
-                                selectedUnit = isSelected ? null : unit;
-                              });
-                              HapticFeedback.selectionClick();
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? (isDark ? Colors.white : Colors.black)
-                                    : fillColor,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                unit,
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? (isDark ? Colors.black : Colors.white)
-                                      : muted,
-                                  fontSize: 14,
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      TextField(
-                        controller: notesController,
-                        style: TextStyle(color: fg, fontSize: 16),
-                        decoration: InputDecoration(
-                          hintText: AppLocalizations.of(context).notes,
-                          hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
-                          filled: true,
-                          fillColor: fillColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        ),
-                        maxLines: 2,
-                        textCapitalization: TextCapitalization.sentences,
-                      ),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Monochrome CTA
-                      GestureDetector(
-                        onTap: () async {
-                            if (nameController.text.trim().isEmpty) return;
-
-                            final name = nameController.text.trim();
-                            
-                            try {
-                              final user = ref.read(currentUserProvider).value;
-                              
-                              final isDietWarning = user != null
-                                  ? DietChecker.checkDietWarning(name, user.dietPreferences)
-                                  : false;
-
-                              await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
-                                    name: name,
-                                    quantity: double.tryParse(quantityController.text) ?? 1.0,
-                                    unit: selectedUnit,
-                                    category: null,
-                                    notes: notesController.text.trim().isEmpty
-                                        ? null
-                                        : notesController.text.trim(),
-                                    isDietWarning: isDietWarning,
-                                  );
-
-                              Navigator.pop(context);
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(context.tr('error_adding', params: {'error': e.toString()})),
-                                  backgroundColor: AppColors.error,
-                                ),
-                              );
-                            }
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white : Colors.black,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Center(
-                            child: Text(
-                              AppLocalizations.of(context).addItem,
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.black : Colors.white,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
+                      );
                     },
                   ),
                 ),
@@ -1356,8 +1482,8 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
   void _showEditItemDialog(BuildContext context, ShoppingItemModel item) {
     final nameController = TextEditingController(text: item.name);
-    final quantityText = item.quantity % 1 == 0 
-        ? item.quantity.toInt().toString() 
+    final quantityText = item.quantity % 1 == 0
+        ? item.quantity.toInt().toString()
         : item.quantity.toString();
     final quantityController = TextEditingController(text: quantityText);
     final notesController = TextEditingController(text: item.notes ?? '');
@@ -1427,34 +1553,47 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                             ],
                           ),
                           const SizedBox(height: 24),
-                          
+
                           // Added By Section
                           if (item.addedBy != null && item.addedBy!.isNotEmpty)
                             FutureBuilder<Map<String, dynamic>?>(
                               future: _fetchUserInfo(item.addedBy),
                               builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 12),
                                     child: Center(
-                                      child: CupertinoActivityIndicator(radius: 10, color: muted),
+                                      child: CupertinoActivityIndicator(
+                                        radius: 10,
+                                        color: muted,
+                                      ),
                                     ),
                                   );
                                 }
-                                
+
                                 final userInfo = snapshot.data;
-                                final displayName = userInfo?['display_name'] as String? ?? context.tr('unknown_user');
-                                final avatarUrl = userInfo?['avatar_url'] as String?;
+                                final displayName =
+                                    userInfo?['display_name'] as String? ??
+                                    context.tr('unknown_user');
+                                final avatarUrl =
+                                    userInfo?['avatar_url'] as String?;
                                 final userId = item.addedBy!;
-                                
+
                                 return GestureDetector(
                                   onTap: () {
                                     Navigator.pop(context);
-                                    context.push('/author/$userId', extra: {'authorName': displayName});
+                                    context.push(
+                                      '/author/$userId',
+                                      extra: {'authorName': displayName},
+                                    );
                                   },
                                   child: Container(
                                     margin: const EdgeInsets.only(bottom: 12),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: fillColor,
                                       borderRadius: BorderRadius.circular(12),
@@ -1463,13 +1602,22 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                       children: [
                                         CircleAvatar(
                                           radius: 16,
-                                          backgroundColor: muted.withValues(alpha: 0.15),
-                                          backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+                                          backgroundColor: muted.withValues(
+                                            alpha: 0.15,
+                                          ),
+                                          backgroundImage:
+                                              avatarUrl != null &&
+                                                  avatarUrl.isNotEmpty
                                               ? NetworkImage(avatarUrl)
                                               : null,
-                                          child: avatarUrl == null || avatarUrl.isEmpty
+                                          child:
+                                              avatarUrl == null ||
+                                                  avatarUrl.isEmpty
                                               ? Text(
-                                                  displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                                                  displayName.isNotEmpty
+                                                      ? displayName[0]
+                                                            .toUpperCase()
+                                                      : '?',
                                                   style: TextStyle(
                                                     fontSize: 14,
                                                     fontWeight: FontWeight.w600,
@@ -1481,37 +1629,51 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                         const SizedBox(width: 10),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 context.tr('added_by'),
-                                                style: TextStyle(fontSize: 11, color: muted),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: muted,
+                                                ),
                                               ),
                                               const SizedBox(height: 1),
                                               Text(
                                                 displayName,
-                                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: fg),
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: fg,
+                                                ),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ],
                                           ),
                                         ),
-                                        Icon(Icons.chevron_right_rounded, color: muted, size: 20),
+                                        Icon(
+                                          Icons.chevron_right_rounded,
+                                          color: muted,
+                                          size: 20,
+                                        ),
                                       ],
                                     ),
                                   ),
                                 );
                               },
                             ),
-                          
+
                           // Name Field
                           TextField(
                             controller: nameController,
                             style: TextStyle(color: fg, fontSize: 16),
                             decoration: InputDecoration(
                               hintText: AppLocalizations.of(context).itemName,
-                              hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
+                              hintStyle: TextStyle(
+                                color: muted.withValues(alpha: 0.5),
+                              ),
                               filled: true,
                               fillColor: fillColor,
                               border: OutlineInputBorder(
@@ -1526,20 +1688,25 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                 borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide.none,
                               ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
                             ),
                             textCapitalization: TextCapitalization.sentences,
                           ),
-                          
+
                           const SizedBox(height: 12),
-                          
+
                           // Quantity field
                           TextField(
                             controller: quantityController,
                             style: TextStyle(color: fg, fontSize: 16),
                             decoration: InputDecoration(
                               hintText: AppLocalizations.of(context).quantity,
-                              hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
+                              hintStyle: TextStyle(
+                                color: muted.withValues(alpha: 0.5),
+                              ),
                               filled: true,
                               fillColor: fillColor,
                               border: OutlineInputBorder(
@@ -1554,13 +1721,18 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                 borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide.none,
                               ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
                             ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                           ),
-                          
+
                           const SizedBox(height: 12),
-                          
+
                           // Unit pill selector
                           Wrap(
                             spacing: 8,
@@ -1576,7 +1748,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                 },
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 150),
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: isSelected
                                         ? (isDark ? Colors.white : Colors.black)
@@ -1587,26 +1762,32 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                     unit,
                                     style: TextStyle(
                                       color: isSelected
-                                          ? (isDark ? Colors.black : Colors.white)
+                                          ? (isDark
+                                                ? Colors.black
+                                                : Colors.white)
                                           : muted,
                                       fontSize: 14,
-                                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
                                     ),
                                   ),
                                 ),
                               );
                             }).toList(),
                           ),
-                          
+
                           const SizedBox(height: 12),
-                          
+
                           // Notes Field
                           TextField(
                             controller: notesController,
                             style: TextStyle(color: fg, fontSize: 16),
                             decoration: InputDecoration(
                               hintText: AppLocalizations.of(context).notes,
-                              hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
+                              hintStyle: TextStyle(
+                                color: muted.withValues(alpha: 0.5),
+                              ),
                               filled: true,
                               fillColor: fillColor,
                               border: OutlineInputBorder(
@@ -1621,14 +1802,17 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                 borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide.none,
                               ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
                             ),
                             maxLines: 2,
                             textCapitalization: TextCapitalization.sentences,
                           ),
-                          
+
                           const SizedBox(height: 24),
-                          
+
                           // Action Buttons
                           Row(
                             children: [
@@ -1636,7 +1820,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                               GestureDetector(
                                 onTap: () async {
                                   await ref
-                                      .read(itemsNotifierProvider(widget.listId).notifier)
+                                      .read(
+                                        itemsNotifierProvider(
+                                          widget.listId,
+                                        ).notifier,
+                                      )
                                       .deleteItem(item.id);
                                   ref.invalidate(listsNotifierProvider);
                                   if (context.mounted) {
@@ -1645,7 +1833,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                 },
                                 child: Container(
                                   height: 52,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.red.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(14),
@@ -1659,31 +1849,44 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                   ),
                                 ),
                               ),
-                              
+
                               const SizedBox(width: 10),
-                              
+
                               // Save Button
                               Expanded(
                                 child: GestureDetector(
                                   onTap: () {
-                                    final quantity = double.tryParse(quantityController.text) ?? 1.0;
+                                    final quantity =
+                                        double.tryParse(
+                                          quantityController.text,
+                                        ) ??
+                                        1.0;
                                     ref
-                                        .read(itemsNotifierProvider(widget.listId).notifier)
+                                        .read(
+                                          itemsNotifierProvider(
+                                            widget.listId,
+                                          ).notifier,
+                                        )
                                         .updateItem(item.id, {
-                                      'name': nameController.text.trim(),
-                                      'quantity': quantity,
-                                      'unit': selectedUnit,
-                                      'notes': notesController.text.trim().isEmpty
-                                          ? null
-                                          : notesController.text.trim(),
-                                    });
+                                          'name': nameController.text.trim(),
+                                          'quantity': quantity,
+                                          'unit': selectedUnit,
+                                          'notes':
+                                              notesController.text
+                                                  .trim()
+                                                  .isEmpty
+                                              ? null
+                                              : notesController.text.trim(),
+                                        });
                                     ref.invalidate(listsNotifierProvider);
                                     Navigator.pop(context);
                                   },
                                   child: Container(
                                     height: 52,
                                     decoration: BoxDecoration(
-                                      color: isDark ? Colors.white : Colors.black,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black,
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                     child: Center(
@@ -1692,7 +1895,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                         style: TextStyle(
                                           fontSize: 17,
                                           fontWeight: FontWeight.w600,
-                                          color: isDark ? Colors.black : Colors.white,
+                                          color: isDark
+                                              ? Colors.black
+                                              : Colors.white,
                                           letterSpacing: -0.3,
                                         ),
                                       ),
@@ -1722,12 +1927,12 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           .generateShareCode(widget.listId);
 
       if (!mounted) return;
-      
+
       final isDark = Theme.of(context).brightness == Brightness.dark;
       final fg = AppColors.textPrimary(context);
       final muted = AppColors.textSecondary(context);
       final dim = AppColors.textTertiary(context);
-      
+
       showDialog(
         context: context,
         builder: (context) => Dialog(
@@ -1751,7 +1956,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                
+
                 Text(
                   AppLocalizations.of(context).shareCodeMessage,
                   style: TextStyle(
@@ -1762,7 +1967,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Code display
                 GestureDetector(
                   onTap: () {
@@ -1777,7 +1982,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                     );
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.06)
@@ -1797,23 +2005,19 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Icon(
-                          Icons.copy_rounded,
-                          size: 18,
-                          color: dim,
-                        ),
+                        Icon(Icons.copy_rounded, size: 18, color: dim),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 6),
-                
+
                 Text(
                   context.tr('tap_to_copy'),
                   style: TextStyle(color: dim, fontSize: 12),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Share buttons row
                 Row(
                   children: [
@@ -1836,7 +2040,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.numbers_rounded, size: 18, color: fg),
+                                Icon(
+                                  Icons.numbers_rounded,
+                                  size: 18,
+                                  color: fg,
+                                ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Code',
@@ -1871,7 +2079,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.link_rounded, size: 18, color: isDark ? Colors.black : Colors.white),
+                                Icon(
+                                  Icons.link_rounded,
+                                  size: 18,
+                                  color: isDark ? Colors.black : Colors.white,
+                                ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Link',
@@ -1898,7 +2110,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tr('error_generic', params: {'error': e.toString()}))),
+          SnackBar(
+            content: Text(
+              context.tr('error_generic', params: {'error': e.toString()}),
+            ),
+          ),
         );
       }
     }
@@ -1939,7 +2155,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tr('error_generic', params: {'error': e.toString()}))),
+          SnackBar(
+            content: Text(
+              context.tr('error_generic', params: {'error': e.toString()}),
+            ),
+          ),
         );
       }
     }
@@ -1963,7 +2183,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
         context: context,
         title: AppLocalizations.of(context).shareDialogTitle,
         message: AppLocalizations.of(context).shareDialogMessage(code),
-        icon: PlatformInfo.isIOS26OrHigher() ? 'square.and.arrow.up' : Icons.ios_share,
+        icon: PlatformInfo.isIOS26OrHigher()
+            ? 'square.and.arrow.up'
+            : Icons.ios_share,
         actions: [
           AlertAction(
             title: AppLocalizations.of(context).cancel,
@@ -1989,7 +2211,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tr('error_generic', params: {'error': e.toString()}))),
+          SnackBar(
+            content: Text(
+              context.tr('error_generic', params: {'error': e.toString()}),
+            ),
+          ),
         );
       }
     }
@@ -2001,17 +2227,19 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     double? quantity,
   ) async {
     if (itemName == null || itemName.isEmpty) return;
-    
+
     try {
-      await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
-        name: itemName,
-        quantity: quantity ?? 1.0,
-        category: category,
-      );
+      await ref
+          .read(itemsNotifierProvider(widget.listId).notifier)
+          .addItem(
+            name: itemName,
+            quantity: quantity ?? 1.0,
+            category: category,
+          );
 
       if (mounted) {
         // Note: No need to invalidate - the itemsNotifierProvider handles state updates
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('$itemName zur Liste hinzugefügt'),
@@ -2021,9 +2249,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Fehler: $e')));
       }
     }
   }
@@ -2035,13 +2263,15 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   ) async {
     // Filter only checked items
     final checkedItems = items.where((item) => item.isChecked).toList();
-    
+
     if (checkedItems.isEmpty) {
       AdaptiveAlertDialog.show(
         context: context,
         title: context.tr('no_checked_items'),
         message: context.tr('no_checked_items_message'),
-        icon: PlatformInfo.isIOS26OrHigher() ? 'exclamationmark.circle.fill' : Icons.info_outline,
+        icon: PlatformInfo.isIOS26OrHigher()
+            ? 'exclamationmark.circle.fill'
+            : Icons.info_outline,
         iconColor: Colors.orange,
         actions: [
           AlertAction(
@@ -2053,14 +2283,19 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       );
       return;
     }
-    
+
     // Show confirmation dialog
     bool confirmed = false;
     await AdaptiveAlertDialog.show(
       context: context,
       title: context.tr('complete_shopping_question'),
-      message: context.tr('complete_shopping_checked_message', params: {'count': checkedItems.length.toString()}),
-      icon: PlatformInfo.isIOS26OrHigher() ? 'checkmark.circle.fill' : Icons.check_circle_outline,
+      message: context.tr(
+        'complete_shopping_checked_message',
+        params: {'count': checkedItems.length.toString()},
+      ),
+      icon: PlatformInfo.isIOS26OrHigher()
+          ? 'checkmark.circle.fill'
+          : Icons.check_circle_outline,
       iconColor: AppColors.success,
       actions: [
         AlertAction(
@@ -2129,7 +2364,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${checkedItems.length} Artikel erfolgreich abgeschlossen!'),
+            content: Text(
+              '✅ ${checkedItems.length} Artikel erfolgreich abgeschlossen!',
+            ),
             backgroundColor: AppColors.success,
           ),
         );
@@ -2138,7 +2375,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.tr('error_completing', params: {'error': e.toString()})),
+            content: Text(
+              context.tr('error_completing', params: {'error': e.toString()}),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -2147,7 +2386,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   }
 
   void _showRenameListDialog() {
-    final nameController = TextEditingController(text: _listName ?? widget.listName);
+    final nameController = TextEditingController(
+      text: _listName ?? widget.listName,
+    );
 
     showCupertinoDialog(
       context: context,
@@ -2178,10 +2419,15 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
               final newName = nameController.text.trim();
               if (newName.isNotEmpty && newName != widget.listName) {
                 try {
-                  await ref.read(listsNotifierProvider.notifier).updateList(widget.listId, {'name': newName});
+                  await ref.read(listsNotifierProvider.notifier).updateList(
+                    widget.listId,
+                    {'name': newName},
+                  );
                   if (mounted) {
                     Navigator.pop(ctx);
-                    setState(() { _listName = newName; });
+                    setState(() {
+                      _listName = newName;
+                    });
                     ref.invalidate(listsNotifierProvider);
                   }
                 } catch (e) {
@@ -2204,7 +2450,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       builder: (context) => AlertDialog(
         title: Text(context.tr('delete_list_question')),
         content: Text(
-          context.tr('delete_list_confirm_message', params: {'name': widget.listName}),
+          context.tr(
+            'delete_list_message',
+            params: {'listName': widget.listName},
+          ),
         ),
         actions: [
           TextButton(
@@ -2215,30 +2464,37 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             onPressed: () async {
               // Close dialog first
               Navigator.pop(context);
-              
+
               try {
-                print('🗑️ Deleting list: ${widget.listName} (${widget.listId})');
-                
+                print(
+                  '🗑️ Deleting list: ${widget.listName} (${widget.listId})',
+                );
+
                 // Delete the list
                 await ref
                     .read(listsNotifierProvider.notifier)
                     .deleteList(widget.listId);
-                
+
                 print('✅ List deleted successfully');
-                
+
                 if (mounted) {
                   // Refresh the lists
                   ref.invalidate(listsNotifierProvider);
-                  
+
                   // Navigate to home page
                   context.go('/home');
-                  
+
                   print('✅ Navigated to home page');
-                  
+
                   // Show success message
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(context.tr('list_deleted', params: {'name': widget.listName})),
+                      content: Text(
+                        context.tr(
+                          'list_deleted',
+                          params: {'name': widget.listName},
+                        ),
+                      ),
                       backgroundColor: Colors.green,
                     ),
                   );
@@ -2248,7 +2504,12 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(context.tr('error_deleting', params: {'error': e.toString()})),
+                      content: Text(
+                        context.tr(
+                          'error_deleting',
+                          params: {'error': e.toString()},
+                        ),
+                      ),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -2272,7 +2533,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   ) async {
     try {
       debugPrint('🔔 [LIST_DETAIL] Sending shopping complete notifications...');
-      
+
       // Get all list members except the person who completed the shopping
       final membersResponse = await SupabaseService.instance
           .from('list_members')
@@ -2280,7 +2541,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           .eq('list_id', listId)
           .neq('user_id', completedByUserId);
 
-      debugPrint('🔔 [LIST_DETAIL] Found ${(membersResponse as List).length} members to notify');
+      debugPrint(
+        '🔔 [LIST_DETAIL] Found ${(membersResponse as List).length} members to notify',
+      );
 
       // Get the name of the person who completed the shopping
       final completerResponse = await SupabaseService.instance
@@ -2288,13 +2551,14 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           .select('display_name')
           .eq('id', completedByUserId)
           .single();
-      
-      final completerName = completerResponse['display_name'] as String? ?? 'Someone';
+
+      final completerName =
+          completerResponse['display_name'] as String? ?? 'Someone';
 
       // Send FCM push notification to each member
       for (final member in membersResponse) {
         final memberId = member['user_id'] as String;
-        
+
         try {
           // Get user's FCM token and display name
           final userResponse = await SupabaseService.instance
@@ -2302,9 +2566,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
               .select('fcm_token, display_name')
               .eq('id', memberId)
               .single();
-          
+
           final fcmToken = userResponse['fcm_token'] as String?;
-          
+
           if (fcmToken != null && fcmToken.isNotEmpty) {
             // Send via Supabase Edge Function
             await SupabaseService.instance.client.functions.invoke(
@@ -2315,21 +2579,20 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   'title': 'Shopping Complete!',
                   'body': '$completerName completed shopping for "$listName"',
                 },
-                'data': {
-                  'type': 'shopping_complete',
-                  'listId': listId,
-                },
+                'data': {'type': 'shopping_complete', 'listId': listId},
               },
             );
-            
+
             debugPrint('✅ [LIST_DETAIL] Sent push notification to member');
           }
         } catch (e) {
           debugPrint('⚠️ [LIST_DETAIL] Failed to send push to member: $e');
         }
       }
-      
-      debugPrint('✅ Sent shopping complete notifications to ${membersResponse.length} members');
+
+      debugPrint(
+        '✅ Sent shopping complete notifications to ${membersResponse.length} members',
+      );
     } catch (e) {
       debugPrint('❌ Failed to send shopping complete notifications: $e');
     }
@@ -2340,7 +2603,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   /// - Right 1/3: tap to edit (with pencil icon in quantity box)
   /// - Long press: start drag to move to different category OR reorder
   ///   within the same category (drop onto another item)
-  Widget _buildDraggableItemTile(ShoppingItemModel item, int index, String categoryId) {
+  Widget _buildDraggableItemTile(
+    ShoppingItemModel item,
+    int index,
+    String categoryId,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Each item is also a DragTarget so we can reorder within a category
@@ -2352,15 +2619,18 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
         final fromCat = _draggedFromCategory;
         if (fromCat == categoryId) {
           // ── Same category → reorder ──
-          await ref.read(itemsNotifierProvider(widget.listId).notifier)
+          await ref
+              .read(itemsNotifierProvider(widget.listId).notifier)
               .reorderItemToPosition(draggedItem.id, item.id);
           HapticFeedback.lightImpact();
         } else {
           // ── Different category → move to this category at this position ──
-          await ref.read(itemsNotifierProvider(widget.listId).notifier)
+          await ref
+              .read(itemsNotifierProvider(widget.listId).notifier)
               .updateItem(draggedItem.id, {'category_id': categoryId});
           // Then reorder so it lands at this item's position
-          await ref.read(itemsNotifierProvider(widget.listId).notifier)
+          await ref
+              .read(itemsNotifierProvider(widget.listId).notifier)
               .reorderItemToPosition(draggedItem.id, item.id);
           HapticFeedback.mediumImpact();
         }
@@ -2431,14 +2701,23 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
                     width: MediaQuery.of(context).size.width - 64,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     decoration: BoxDecoration(
-                      color: AppColors.accentColor(context).withValues(alpha: 0.95),
+                      color: AppColors.accentColor(
+                        context,
+                      ).withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.drag_indicator_rounded, color: Colors.white, size: 20),
+                        const Icon(
+                          Icons.drag_indicator_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -2487,14 +2766,17 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                     return true;
                   },
                   onDismissed: (direction) async {
-                    await ref.read(itemsNotifierProvider(widget.listId).notifier)
+                    await ref
+                        .read(itemsNotifierProvider(widget.listId).notifier)
                         .deleteItem(item.id);
                     ref.invalidate(listsNotifierProvider);
                     if (context.mounted) {
                       HapticFeedback.lightImpact();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('${item.name} ${context.tr('deleted')}'),
+                          content: Text(
+                            '${item.name} ${context.tr('deleted')}',
+                          ),
                           duration: const Duration(seconds: 2),
                           behavior: SnackBarBehavior.floating,
                           shape: RoundedRectangleBorder(
@@ -2513,7 +2795,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       },
     ); // DragTarget
   }
-  
+
   /// The actual content of an item tile with 2/3 check zone and 1/3 edit zone
   Widget _buildItemTileContent(ShoppingItemModel item, bool isDark) {
     return Container(
@@ -2523,7 +2805,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: isDark 
+            color: isDark
                 ? Colors.black.withValues(alpha: 0.3)
                 : Colors.black.withValues(alpha: 0.06),
             blurRadius: 10,
@@ -2543,8 +2825,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
               child: GestureDetector(
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  ref.read(itemsNotifierProvider(widget.listId).notifier)
-                    .toggleItemChecked(item.id, !item.isChecked);
+                  ref
+                      .read(itemsNotifierProvider(widget.listId).notifier)
+                      .toggleItemChecked(item.id, !item.isChecked);
                 },
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
@@ -2557,14 +2840,16 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         width: 26,
                         height: 26,
                         decoration: BoxDecoration(
-                          color: item.isChecked 
+                          color: item.isChecked
                               ? AppColors.accentColor(context)
                               : Colors.transparent,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: item.isChecked 
+                            color: item.isChecked
                                 ? AppColors.accentColor(context)
-                                : (isDark ? Colors.grey.shade600 : Colors.grey.shade400),
+                                : (isDark
+                                      ? Colors.grey.shade600
+                                      : Colors.grey.shade400),
                             width: 2,
                           ),
                         ),
@@ -2587,13 +2872,18 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
-                                decoration: item.isChecked ? TextDecoration.lineThrough : null,
-                                color: item.isChecked 
-                                    ? (isDark ? Colors.grey.shade500 : Colors.grey.shade500)
+                                decoration: item.isChecked
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                color: item.isChecked
+                                    ? (isDark
+                                          ? Colors.grey.shade500
+                                          : Colors.grey.shade500)
                                     : AppColors.textPrimary(context),
                               ),
                             ),
-                            if (item.notes != null && item.notes!.isNotEmpty) ...[
+                            if (item.notes != null &&
+                                item.notes!.isNotEmpty) ...[
                               const SizedBox(height: 3),
                               Text(
                                 item.notes!,
@@ -2601,7 +2891,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                                  color: isDark
+                                      ? Colors.grey.shade500
+                                      : Colors.grey.shade600,
                                 ),
                               ),
                             ],
@@ -2631,8 +2923,12 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                         color: item.isChecked
-                            ? (isDark ? Colors.grey.shade600 : Colors.grey.shade400)
-                            : (isDark ? Colors.white60 : const Color(0xFF8E8E93)),
+                            ? (isDark
+                                  ? Colors.grey.shade600
+                                  : Colors.grey.shade400)
+                            : (isDark
+                                  ? Colors.white60
+                                  : const Color(0xFF8E8E93)),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -2640,7 +2936,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                       Icons.edit_rounded,
                       size: 16,
                       color: item.isChecked
-                          ? (isDark ? Colors.grey.shade700 : Colors.grey.shade400)
+                          ? (isDark
+                                ? Colors.grey.shade700
+                                : Colors.grey.shade400)
                           : (isDark ? Colors.white38 : const Color(0xFFC7C7CC)),
                     ),
                   ],
@@ -2694,7 +2992,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                       child: Text(
                         '${quantity % 1 == 0 ? quantity.toInt() : quantity}',
                         style: const TextStyle(
-                            fontSize: 28, fontWeight: FontWeight.w600),
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     CupertinoButton(
@@ -2742,14 +3042,13 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
               onPressed: () {
                 Navigator.pop(ctx);
                 ref
-                    .read(
-                        itemsNotifierProvider(widget.listId).notifier)
+                    .read(itemsNotifierProvider(widget.listId).notifier)
                     .updateItem(item.id, {
-                  'quantity': quantity,
-                  'notes': notesController.text.trim().isEmpty
-                      ? null
-                      : notesController.text.trim(),
-                });
+                      'quantity': quantity,
+                      'notes': notesController.text.trim().isEmpty
+                          ? null
+                          : notesController.text.trim(),
+                    });
                 HapticFeedback.mediumImpact();
               },
               child: Text(context.tr('save')),
@@ -2777,13 +3076,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (context) => CategoryOrderScreen(
-          listId: widget.listId,
-          listName: _listName,
-        ),
+        builder: (context) =>
+            CategoryOrderScreen(listId: widget.listId, listName: _listName),
       ),
     );
-    
+
     // If categories were reordered, refresh the items list and reload custom categories
     if (result == true) {
       await _loadCustomCategories();
@@ -2791,10 +3088,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       setState(() {});
     }
   }
-  
+
   void _showListSettingsScreen() {
     if (_ownerId == null) return;
-    
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ListSettingsScreen(

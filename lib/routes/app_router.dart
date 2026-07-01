@@ -8,7 +8,6 @@ import 'package:shoply/presentation/screens/home/home_screen.dart';
 import 'package:shoply/presentation/screens/ai/avo_chat_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_detail_screen.dart';
-import 'package:shoply/presentation/screens/recipes/add_recipe_screen.dart';
 import 'package:shoply/presentation/screens/recipes/multi_step_recipe_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_author_page.dart';
 import 'package:shoply/presentation/screens/recipes/saved_recipes_screen.dart';
@@ -18,13 +17,15 @@ import 'package:shoply/presentation/screens/recipes/creators_screen.dart';
 import 'package:shoply/presentation/screens/recipes/all_recipes_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_drafts_screen.dart';
 import 'package:shoply/presentation/screens/profile/profile_screen.dart';
+import 'package:shoply/presentation/screens/profile/settings/diet_preferences_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_detail_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_activities_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_background_selection_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_background_picker_screen.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/screens/onboarding/unified_setup_screen.dart';
-import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart' show OnboardingScreen, hasCompletedOnboarding;
+import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart'
+    show OnboardingScreen, hasCompletedOnboarding;
 import 'package:shoply/presentation/screens/legal/privacy_policy_screen.dart';
 import 'package:shoply/presentation/screens/legal/terms_of_service_screen.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -35,20 +36,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io' show Platform;
 
 import 'package:shoply/presentation/screens/auth/login_screen.dart';
-import 'package:shoply/presentation/screens/auth/signup_screen.dart'; 
+import 'package:shoply/presentation/screens/auth/signup_screen.dart';
 import 'package:shoply/presentation/screens/auth/reset_password_screen.dart';
 import 'package:shoply/presentation/screens/auth/name_prompt_screen.dart';
-import 'package:shoply/core/utils/display_name_helper.dart';
 
 /// Helper class to refresh GoRouter when auth state changes
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<AuthState> stream) {
     notifyListeners();
-    _subscription = stream.asBroadcastStream().listen(
-      (AuthState _) {
-        notifyListeners();
-      },
-    );
+    _subscription = stream.asBroadcastStream().listen((AuthState _) {
+      notifyListeners();
+    });
   }
 
   late final StreamSubscription<AuthState> _subscription;
@@ -62,7 +60,7 @@ class GoRouterRefreshStream extends ChangeNotifier {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final supabase = SupabaseService.instance;
-  
+
   // Get analytics observer if available (iOS/Android only)
   final observers = <NavigatorObserver>[];
   if (Platform.isIOS || Platform.isAndroid) {
@@ -71,7 +69,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       observers.add(analyticsObserver);
     }
   }
-  
+
   return GoRouter(
     initialLocation: '/onboarding',
     refreshListenable: GoRouterRefreshStream(supabase.authStateChanges),
@@ -102,27 +100,27 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'signup',
         builder: (context, state) => const SignUpScreen(),
       ),
-      
+
       GoRoute(
         path: '/reset-password',
         name: 'reset-password',
         builder: (context, state) => const ResetPasswordScreen(),
       ),
-      
+
       // Name prompt route (after login if no display name)
       GoRoute(
         path: '/name-prompt',
         name: 'name-prompt',
         builder: (context, state) => const NamePromptScreen(),
       ),
-      
+
       // Setup route (mandatory after signup)
       GoRoute(
         path: '/setup',
         name: 'setup',
         builder: (context, state) => const UnifiedSetupScreen(),
       ),
-      
+
       // Main app with bottom navigation – StatefulShellRoute keeps each tab's
       // state alive (no rebuilds when switching tabs) and lets us render a
       // smooth horizontal slide transition between branches.
@@ -131,9 +129,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             MainScaffold(navigationShell: navigationShell),
         navigatorContainerBuilder: (context, navigationShell, children) =>
             SlidingTabsContainer(
-          currentIndex: navigationShell.currentIndex,
-          children: children,
-        ),
+              currentIndex: navigationShell.currentIndex,
+              children: children,
+            ),
         branches: [
           // Branch 0: Home + list detail (sibling routes share the home branch)
           StatefulShellBranch(
@@ -151,13 +149,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 name: 'list-detail',
                 pageBuilder: (context, state) {
                   final listId = state.pathParameters['listId']!;
-                  final listName = state.uri.queryParameters['name'] ?? 'Shopping List';
+                  final listName =
+                      state.uri.queryParameters['name'] ?? 'Shopping List';
                   return CupertinoPage(
                     key: state.pageKey,
-                    child: ListDetailScreen(
-                      listId: listId,
-                      listName: listName,
-                    ),
+                    child: ListDetailScreen(listId: listId, listName: listName),
                   );
                 },
                 routes: [
@@ -166,7 +162,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                     name: 'list-activities',
                     builder: (context, state) {
                       final listId = state.pathParameters['listId']!;
-                      final listName = state.uri.queryParameters['name'] ?? 'Shopping List';
+                      final listName =
+                          state.uri.queryParameters['name'] ?? 'Shopping List';
                       return ListActivitiesScreen(
                         listId: listId,
                         listName: listName,
@@ -196,7 +193,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                       final extra = state.extra as Map<String, dynamic>?;
                       final draftId = extra?['draftId'] as String?;
                       final recipeId = extra?['recipeId'] as String?;
-                      return MultiStepRecipeScreen(draftId: draftId, recipeId: recipeId);
+                      return MultiStepRecipeScreen(
+                        draftId: draftId,
+                        recipeId: recipeId,
+                      );
                     },
                   ),
                   GoRoute(
@@ -222,7 +222,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'popular',
                     name: 'popular-recipes',
-                    builder: (context, state) => const AllRecipesScreen(popularOnly: true),
+                    builder: (context, state) =>
+                        const AllRecipesScreen(popularOnly: true),
                   ),
                   GoRoute(
                     path: 'all',
@@ -288,10 +289,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           final authorName = state.extra != null && state.extra is Map
               ? (state.extra as Map)['authorName'] as String?
               : null;
-          return RecipeAuthorPage(
-            authorId: authorId,
-            authorName: authorName,
-          );
+          return RecipeAuthorPage(authorId: authorId, authorName: authorName);
         },
       ),
       GoRoute(
@@ -306,6 +304,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           final listId = state.pathParameters['listId']!;
           return ListBackgroundPickerScreen(listId: listId);
         },
+      ),
+      GoRoute(
+        path: '/diet-preferences',
+        name: 'diet-preferences',
+        builder: (context, state) => const DietPreferencesScreen(),
       ),
       GoRoute(
         path: '/privacy-policy',
@@ -354,29 +357,34 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (uri.scheme == 'shoply') {
         final host = uri.host; // e.g. 'recipe', 'list'
         final segments = uri.pathSegments;
-        if (host == 'recipe' && segments.isNotEmpty) return '/recipe/${segments[0]}';
-        if (host == 'list' && segments.isNotEmpty) return '/list/${segments[0]}';
-        if (host == 'invite' && segments.isNotEmpty) return '/invite/${segments[0]}';
-        if (host == 'author' && segments.isNotEmpty) return '/author/${segments[0]}';
+        if (host == 'recipe' && segments.isNotEmpty)
+          return '/recipe/${segments[0]}';
+        if (host == 'list' && segments.isNotEmpty)
+          return '/list/${segments[0]}';
+        if (host == 'invite' && segments.isNotEmpty)
+          return '/invite/${segments[0]}';
+        if (host == 'author' && segments.isNotEmpty)
+          return '/author/${segments[0]}';
         return '/home';
       }
 
       final location = state.matchedLocation;
 
       // Public routes that don't require authentication
-      final isPublicRoute = location == '/onboarding' ||
-                           location == '/welcome' ||
-                           location == '/login' ||
-                           location == '/signup' ||
-                           location == '/reset-password' ||
-                           location == '/privacy-policy' ||
-                           location == '/terms-of-service' ||
-                           location.startsWith('/recipe/') ||
-                           location.startsWith('/list/') ||
-                           location.startsWith('/invite/');
+      final isPublicRoute =
+          location == '/onboarding' ||
+          location == '/welcome' ||
+          location == '/login' ||
+          location == '/signup' ||
+          location == '/reset-password' ||
+          location == '/privacy-policy' ||
+          location == '/terms-of-service' ||
+          location.startsWith('/recipe/') ||
+          location.startsWith('/list/') ||
+          location.startsWith('/invite/');
 
-      final isSetup = location == '/setup';
       final isNamePrompt = location == '/name-prompt';
+      final isNewNamePrompt = isNamePrompt && uri.queryParameters['new'] == '1';
       final isOnboarding = location == '/onboarding';
 
       // Check if onboarding has been completed (cached after first check)
@@ -411,6 +419,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
+      if (isNamePrompt && !isNewNamePrompt) {
+        return isLoggedIn ? '/home' : '/welcome';
+      }
+
       // Logged in - check if name prompt or setup is needed.
       // IMPORTANT: this must never block app entry when offline. We first try
       // a cached profile snapshot, then – only if online – a short-timeout
@@ -419,14 +431,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (isLoggedIn) {
         final user = SupabaseService.instance.currentUser;
         if (user != null) {
-          String? displayName;
           bool gotProfile = false;
 
           // 1. Offline-safe cached profile
           final cached = await OfflineCacheService.instance
               .getCachedUserProfile(user.id);
           if (cached != null) {
-            displayName = cached.displayName;
             gotProfile = true;
           }
 
@@ -442,35 +452,31 @@ final routerProvider = Provider<GoRouter>((ref) {
                   .timeout(const Duration(milliseconds: 1500));
 
               if (response != null) {
-                displayName = response['display_name'] as String?;
+                final liveDisplayName = response['display_name'] as String?;
                 gotProfile = true;
-                unawaited(OfflineCacheService.instance.cacheUserProfile(
-                  userId: user.id,
-                  displayName: displayName,
-                  onboardingCompleted:
-                      response['onboarding_completed'] as bool?,
-                ));
+                unawaited(
+                  OfflineCacheService.instance.cacheUserProfile(
+                    userId: user.id,
+                    displayName: liveDisplayName,
+                    onboardingCompleted:
+                        response['onboarding_completed'] as bool?,
+                  ),
+                );
               }
             } catch (_) {
               // Network/timeout error – keep whatever we have from cache.
             }
           }
 
-          // Only enforce the name-prompt flow when we actually know the
-          // current display name. Without a profile snapshot we optimistically
-          // treat the user as set up so offline start always succeeds.
           if (gotProfile) {
-            final needsName = DisplayNameHelper.needsNamePrompt(displayName);
-            if (needsName && !isNamePrompt && !isSetup) {
-              return '/name-prompt';
-            }
-            if (!needsName &&
-               (location == '/welcome' || location == '/login' || location == '/signup' || isNamePrompt || isOnboarding)) {
+            if (location == '/welcome' || isOnboarding) {
               return '/home';
             }
           } else {
-            // No profile info at all: still bounce off auth screens into home.
-            if (location == '/welcome' || location == '/login' || location == '/signup' || isNamePrompt || isOnboarding) {
+            // No profile info at all: still bounce off passive entry screens.
+            // Login/signup complete their own async success routing, so forcing
+            // them here can race OTP verification and show a false error.
+            if (location == '/welcome' || isOnboarding) {
               return '/home';
             }
           }

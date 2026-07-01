@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 
 /// Shopping history service provider
 final shoppingHistoryServiceProvider = Provider<ShoppingHistoryService>((ref) {
@@ -8,29 +9,51 @@ final shoppingHistoryServiceProvider = Provider<ShoppingHistoryService>((ref) {
 });
 
 /// Provider for all shopping history
-final shoppingHistoryProvider = FutureProvider<List<ShoppingHistory>>((ref) async {
+final shoppingHistoryProvider = FutureProvider<List<ShoppingHistory>>((
+  ref,
+) async {
+  final authUser = await ref.watch(authUserProvider.future);
+  if (authUser == null) return [];
+
   final service = ref.watch(shoppingHistoryServiceProvider);
   return service.getShoppingHistory();
 });
 
 /// Provider for recent shopping history (for homepage)
-final recentHistoryProvider = FutureProvider<List<ShoppingHistory>>((ref) async {
+final recentHistoryProvider = FutureProvider<List<ShoppingHistory>>((
+  ref,
+) async {
+  final authUser = await ref.watch(authUserProvider.future);
+  if (authUser == null) return [];
+
   final service = ref.watch(shoppingHistoryServiceProvider);
   return service.getRecentHistory(limit: 5);
 });
 
 /// Provider for shopping history of a specific list
-final listHistoryProvider = FutureProvider.family<List<ShoppingHistory>, String>((ref, listId) async {
-  final service = ref.watch(shoppingHistoryServiceProvider);
-  return service.getHistoryForList(listId);
-});
+final listHistoryProvider =
+    FutureProvider.family<List<ShoppingHistory>, String>((ref, listId) async {
+      final authUser = await ref.watch(authUserProvider.future);
+      if (authUser == null) return [];
+
+      final service = ref.watch(shoppingHistoryServiceProvider);
+      return service.getHistoryForList(listId);
+    });
 
 /// State notifier for managing shopping history with mutations
-class ShoppingHistoryNotifier extends StateNotifier<AsyncValue<List<ShoppingHistory>>> {
+class ShoppingHistoryNotifier
+    extends StateNotifier<AsyncValue<List<ShoppingHistory>>> {
   final ShoppingHistoryService _service;
 
-  ShoppingHistoryNotifier(this._service) : super(const AsyncValue.loading()) {
-    loadHistory();
+  ShoppingHistoryNotifier(this._service, {required bool isAuthenticated})
+    : super(
+        isAuthenticated
+            ? const AsyncValue.loading()
+            : const AsyncValue.data([]),
+      ) {
+    if (isAuthenticated) {
+      loadHistory();
+    }
   }
 
   Future<void> loadHistory() async {
@@ -78,7 +101,14 @@ class ShoppingHistoryNotifier extends StateNotifier<AsyncValue<List<ShoppingHist
 
 /// Provider for the shopping history notifier
 final shoppingHistoryNotifierProvider =
-    StateNotifierProvider<ShoppingHistoryNotifier, AsyncValue<List<ShoppingHistory>>>((ref) {
-  final service = ref.watch(shoppingHistoryServiceProvider);
-  return ShoppingHistoryNotifier(service);
-});
+    StateNotifierProvider<
+      ShoppingHistoryNotifier,
+      AsyncValue<List<ShoppingHistory>>
+    >((ref) {
+      final authUser = ref.watch(authUserProvider).valueOrNull;
+      final service = ref.watch(shoppingHistoryServiceProvider);
+      return ShoppingHistoryNotifier(
+        service,
+        isAuthenticated: authUser != null,
+      );
+    });

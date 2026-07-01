@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -23,7 +24,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _otpController = TextEditingController();
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-  
+
   bool _isLoading = false;
   bool _isGoogleLoading = false;
   bool _obscurePassword = true;
@@ -71,16 +72,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
     try {
       final email = _emailController.text.trim();
       // Add timeout to prevent infinite loading
-      await SupabaseService.instance.signUpWithEmail(
-        email,
-        _passwordController.text,
-        emailRedirectTo: 'shoply://login',
-      ).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          throw Exception('Request timed out. Please check your internet connection and try again.');
-        },
-      );
+      await SupabaseService.instance
+          .signUpWithEmail(
+            email,
+            _passwordController.text,
+            emailRedirectTo: 'shoply://login',
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw Exception(
+                'Request timed out. Please check your internet connection and try again.',
+              );
+            },
+          );
 
       if (mounted) {
         setState(() {
@@ -94,8 +99,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
         String errorMessage = 'Failed to create account';
         SnackBarAction? action;
         final errorString = e.toString().toLowerCase();
-        
-        if (errorString.contains('user already registered') || errorString.contains('already exists')) {
+
+        if (errorString.contains('user already registered') ||
+            errorString.contains('already exists')) {
           errorMessage = 'An account with this email already exists.';
           action = SnackBarAction(
             label: 'Log In',
@@ -103,15 +109,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
             onPressed: () => context.go('/welcome'),
           );
         } else if (errorString.contains('weak')) {
-          errorMessage = 'Password is too weak. Use at least 8 characters with uppercase and numbers.';
-        } else if (errorString.contains('too many requests') || errorString.contains('rate limit') || errorString.contains('429')) {
-          errorMessage = 'Too many attempts. Please wait a moment and try again.';
-        } else if (errorString.contains('network') || errorString.contains('socket') || errorString.contains('connection') || errorString.contains('timed out')) {
-          errorMessage = 'Network error. Please check your internet connection.';
+          errorMessage =
+              'Password is too weak. Use at least 8 characters with uppercase and numbers.';
+        } else if (errorString.contains('too many requests') ||
+            errorString.contains('rate limit') ||
+            errorString.contains('429')) {
+          errorMessage =
+              'Too many attempts. Please wait a moment and try again.';
+        } else if (errorString.contains('network') ||
+            errorString.contains('socket') ||
+            errorString.contains('connection') ||
+            errorString.contains('timed out')) {
+          errorMessage =
+              'Network error. Please check your internet connection.';
         } else if (errorString.contains('invalid email')) {
           errorMessage = 'Please enter a valid email address.';
         }
-        
+
         _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -148,34 +162,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
         token: otp,
         type: OtpType.signup,
       );
-
-      if (mounted) {
-        // Save FCM token for push notifications
-        if (Platform.isIOS || Platform.isAndroid) {
-          await FCMService.instance.saveTokenForCurrentUser();
-        }
-        
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          const SnackBar(
-            content: Text('Email verified successfully!'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-        // Navigate to name prompt for new users
-        context.go('/name-prompt');
-      }
     } catch (e) {
       debugPrint('❌ [VERIFY_OTP] Error: $e');
       if (mounted) {
         String errorMessage = 'Verification failed';
         final errorString = e.toString().toLowerCase();
-        
-        if (errorString.contains('invalid') || errorString.contains('expired')) {
+
+        if (errorString.contains('invalid') ||
+            errorString.contains('expired')) {
           errorMessage = 'Invalid or expired code. Please try again.';
         } else if (errorString.contains('too many')) {
           errorMessage = 'Too many attempts. Please request a new code.';
         }
-        
+
         _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -183,16 +182,42 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         );
       }
+      return;
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+
+    if (!mounted) return;
+
+    // Push-token sync is a post-login side effect and must not turn a
+    // successful OTP verification into a visible verification error.
+    if (Platform.isIOS || Platform.isAndroid) {
+      unawaited(
+        FCMService.instance.saveTokenForCurrentUser().catchError((
+          Object error,
+          StackTrace stackTrace,
+        ) {
+          debugPrint('⚠️ [VERIFY_OTP] FCM token save skipped: $error');
+        }),
+      );
+    }
+
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(
+        content: Text('Email verified successfully!'),
+        backgroundColor: AppColors.success,
+      ),
+    );
+    if (!mounted) return;
+    // New accounts choose their display name on the dedicated name screen.
+    context.go('/name-prompt?new=1');
   }
 
   Future<void> _resendOtp() async {
     if (_pendingEmail == null) return;
-    
+
     setState(() => _isLoading = true);
 
     try {
@@ -214,11 +239,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (mounted) {
         String errorMessage = 'Failed to resend code';
         final errorString = e.toString().toLowerCase();
-        
-        if (errorString.contains('too many') || errorString.contains('rate limit')) {
+
+        if (errorString.contains('too many') ||
+            errorString.contains('rate limit')) {
           errorMessage = 'Please wait before requesting another code.';
         }
-        
+
         _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -239,31 +265,37 @@ class _SignUpScreenState extends State<SignUpScreen> {
     try {
       // Use native Google Sign-In for better reliability on Android
       final success = await SupabaseService.instance.signInWithGoogle();
-      
+
       if (success && mounted) {
         // Save FCM token for push notifications
         if (Platform.isIOS || Platform.isAndroid) {
           await FCMService.instance.saveTokenForCurrentUser();
         }
-        // Navigation will happen automatically via auth state listener
+        _routeAfterSocialSignIn();
       }
     } catch (e) {
       debugPrint('❌ [GOOGLE_SIGNIN] Error: $e');
       if (mounted) {
         String errorMessage = 'Google Sign-In failed';
         final errorString = e.toString().toLowerCase();
-        
-        if (errorString.contains('nicht konfiguriert') || errorString.contains('not configured')) {
-          errorMessage = 'Google Sign-In is not available. Please use email/password.';
-        } else if (errorString.contains('timeout') || errorString.contains('timed out')) {
+
+        if (errorString.contains('nicht konfiguriert') ||
+            errorString.contains('not configured')) {
+          errorMessage =
+              'Google Sign-In is not available. Please use email/password.';
+        } else if (errorString.contains('timeout') ||
+            errorString.contains('timed out')) {
           errorMessage = 'Connection timed out. Please try again.';
-        } else if (errorString.contains('network') || errorString.contains('connection')) {
-          errorMessage = 'Network error. Please check your internet connection.';
-        } else if (errorString.contains('cancelled') || errorString.contains('canceled')) {
+        } else if (errorString.contains('network') ||
+            errorString.contains('connection')) {
+          errorMessage =
+              'Network error. Please check your internet connection.';
+        } else if (errorString.contains('cancelled') ||
+            errorString.contains('canceled')) {
           // User cancelled - don't show error
           return;
         }
-        
+
         _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -278,11 +310,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
+  void _routeAfterSocialSignIn() {
+    final user = SupabaseService.instance.currentUser;
+    final createdAt = user != null ? DateTime.tryParse(user.createdAt) : null;
+    final isNewAuthUser =
+        createdAt != null &&
+        DateTime.now().difference(createdAt.toLocal()).inMinutes < 3;
+
+    if (isNewAuthUser) {
+      context.go('/name-prompt?new=1');
+    } else {
+      context.go('/home');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final backgroundColor = AppColors.background(context);
     final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
     final inputFillColor = AppColors.inputFill(context);
     final inputBorderColor = AppColors.border(context);
 
@@ -299,7 +344,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
             child: CircleAvatar(
               backgroundColor: inputFillColor,
               child: IconButton(
-                icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 18),
+                icon: Icon(
+                  Icons.arrow_back_ios_rounded,
+                  color: textPrimary,
+                  size: 18,
+                ),
                 onPressed: () => context.go('/welcome'),
               ),
             ),
@@ -313,7 +362,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 horizontal: AppDimensions.screenHorizontalPadding,
               ),
               child: _showOtpVerification
-                  ? _buildOtpVerificationView(context, inputFillColor, inputBorderColor)
+                  ? _buildOtpVerificationView(
+                      context,
+                      inputFillColor,
+                      inputBorderColor,
+                    )
                   : _buildSignUpForm(context, inputFillColor, inputBorderColor),
             ),
           ),
@@ -322,23 +375,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  Widget _buildSignUpForm(BuildContext context, Color inputFillColor, Color inputBorderColor) {
+  Widget _buildSignUpForm(
+    BuildContext context,
+    Color inputFillColor,
+    Color inputBorderColor,
+  ) {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    
+
     return Form(
       key: _formKey,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.person_add_outlined,
-            size: 64,
-            color: textPrimary,
-          ),
-          
+          Icon(Icons.person_add_outlined, size: 64, color: textPrimary),
+
           const SizedBox(height: 32),
-          
+
           Text(
             'Create your account',
             style: TextStyle(
@@ -348,9 +401,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ),
             textAlign: TextAlign.center,
           ),
-          
+
           const SizedBox(height: 40),
-          
+
           // Email Field
           TextFormField(
             controller: _emailController,
@@ -365,7 +418,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
               hintStyle: TextStyle(color: textSecondary.withOpacity(0.6)),
               filled: true,
               fillColor: inputFillColor,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 18,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: inputBorderColor),
@@ -381,9 +437,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ),
             validator: Validators.validateEmail,
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Password Field
           TextFormField(
             controller: _passwordController,
@@ -396,7 +452,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
               labelStyle: TextStyle(color: textSecondary),
               filled: true,
               fillColor: inputFillColor,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 18,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: inputBorderColor),
@@ -411,10 +470,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               suffixIcon: IconButton(
                 icon: Icon(
-                  _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  _obscurePassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
                   color: textSecondary,
                 ),
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
               ),
             ),
             validator: Validators.validatePassword,
@@ -434,7 +496,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
               labelStyle: TextStyle(color: textSecondary),
               filled: true,
               fillColor: inputFillColor,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 18,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: inputBorderColor),
@@ -449,21 +514,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               suffixIcon: IconButton(
                 icon: Icon(
-                  _obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  _obscureConfirmPassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
                   color: textSecondary,
                 ),
-                onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                onPressed: () => setState(
+                  () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                ),
               ),
             ),
             validator: (value) {
-              if (value == null || value.isEmpty) return 'Please confirm password';
-              if (value != _passwordController.text) return 'Passwords do not match';
+              if (value == null || value.isEmpty)
+                return 'Please confirm password';
+              if (value != _passwordController.text)
+                return 'Passwords do not match';
               return null;
             },
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Sign Up Button
           SizedBox(
             width: double.infinity,
@@ -489,9 +560,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Divider with "or"
           Row(
             children: [
@@ -503,9 +574,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
               Expanded(child: Divider(color: inputBorderColor)),
             ],
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Google Sign-In Button
           SizedBox(
             width: double.infinity,
@@ -525,7 +596,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       'https://www.google.com/favicon.ico',
                       height: 20,
                       width: 20,
-                      errorBuilder: (_, __, ___) => Icon(Icons.g_mobiledata, size: 24, color: textPrimary),
+                      errorBuilder: (_, __, ___) => Icon(
+                        Icons.g_mobiledata,
+                        size: 24,
+                        color: textPrimary,
+                      ),
                     ),
               label: Text(
                 _isGoogleLoading ? 'Signing in...' : 'Continue with Google',
@@ -537,19 +612,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Login Link
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text("Already have an account? ", style: TextStyle(color: textSecondary)),
+              Text(
+                "Already have an account? ",
+                style: TextStyle(color: textSecondary),
+              ),
               GestureDetector(
                 onTap: () => context.go('/welcome'),
                 child: Text(
                   "Log In",
-                  style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -559,21 +640,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  Widget _buildOtpVerificationView(BuildContext context, Color inputFillColor, Color inputBorderColor) {
+  Widget _buildOtpVerificationView(
+    BuildContext context,
+    Color inputFillColor,
+    Color inputBorderColor,
+  ) {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(
-          Icons.mark_email_read_outlined,
-          size: 64,
-          color: textPrimary,
-        ),
-        
+        Icon(Icons.mark_email_read_outlined, size: 64, color: textPrimary),
+
         const SizedBox(height: 32),
-        
+
         Text(
           'Verify your email',
           style: TextStyle(
@@ -583,32 +664,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
           textAlign: TextAlign.center,
         ),
-        
+
         const SizedBox(height: 12),
-        
+
         Text(
           'We sent a 6-digit code to\n$_pendingEmail',
-          style: TextStyle(
-            fontSize: 15,
-            color: textSecondary,
-            height: 1.5,
-          ),
+          style: TextStyle(fontSize: 15, color: textSecondary, height: 1.5),
           textAlign: TextAlign.center,
         ),
-        
+
         const SizedBox(height: 8),
-        
+
         Text(
           'Please also check your spam folder.',
-          style: TextStyle(
-            fontSize: 13,
-            color: textSecondary.withOpacity(0.7),
-          ),
+          style: TextStyle(fontSize: 13, color: textSecondary.withOpacity(0.7)),
           textAlign: TextAlign.center,
         ),
-        
+
         const SizedBox(height: 40),
-        
+
         // OTP Input Field
         TextFormField(
           controller: _otpController,
@@ -631,7 +705,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
             counterText: '',
             filled: true,
             fillColor: inputFillColor,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 18,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide(color: inputBorderColor),
@@ -646,9 +723,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ),
           ),
         ),
-        
+
         const SizedBox(height: 32),
-        
+
         // Verify Button
         SizedBox(
           width: double.infinity,
@@ -667,33 +744,36 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ? CupertinoActivityIndicator(radius: 10, color: Colors.white)
                 : const Text(
                     'Verify',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
           ),
         ),
-        
+
         const SizedBox(height: 24),
-        
+
         // Resend Code Link
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text("Didn't receive the code? ", style: TextStyle(color: textSecondary)),
+            Text(
+              "Didn't receive the code? ",
+              style: TextStyle(color: textSecondary),
+            ),
             GestureDetector(
               onTap: _isLoading ? null : _resendOtp,
               child: Text(
                 "Resend",
-                style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // Back to signup
         TextButton(
           onPressed: () {

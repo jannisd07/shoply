@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
@@ -24,11 +22,12 @@ class CookingModeScreen extends StatefulWidget {
   State<CookingModeScreen> createState() => _CookingModeScreenState();
 }
 
-class _CookingModeScreenState extends State<CookingModeScreen> with TickerProviderStateMixin {
+class _CookingModeScreenState extends State<CookingModeScreen>
+    with TickerProviderStateMixin {
   int _currentStep = 0;
   final Set<int> _checkedIngredients = {};
   late int _currentServings;
-  
+
   Timer? _timer;
   int _timerSeconds = 0;
   bool _timerRunning = false;
@@ -42,32 +41,48 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
 
   List<Ingredient> get _adjustedIngredients {
     return widget.recipe.ingredients
-        .map((ing) => ing.adjustForServings(widget.recipe.defaultServings, _currentServings))
+        .map(
+          (ing) => ing.adjustForServings(
+            widget.recipe.defaultServings,
+            _currentServings,
+          ),
+        )
         .toList();
   }
-  
-  bool get _allIngredientsChecked => 
+
+  bool get _allIngredientsChecked =>
       _checkedIngredients.length == _adjustedIngredients.length;
-      
+
   String _tr(String key) => AppTranslations.get(key, _languageCode);
-  String _trParams(String key, Map<String, String> params) => AppTranslations.get(key, _languageCode, params: params);
+  String _trParams(String key, Map<String, String> params) =>
+      AppTranslations.get(key, _languageCode, params: params);
 
   // Colors based on theme — "Cookbook Evening" warm palette
-  Color get _bgColor => _isDark ? AppColors.recipeDarkBg : AppColors.recipeLightBg;
-  Color get _cardColor => _isDark ? AppColors.recipeDarkSurface : AppColors.recipeLightSurface;
-  Color get _textPrimary => _isDark ? AppColors.recipeDarkTextPrimary : AppColors.lightTextPrimary;
-  Color get _textSecondary => _isDark ? AppColors.recipeDarkTextSecondary : AppColors.lightTextSecondary;
-  Color get _borderColor => _isDark ? AppColors.recipeDarkBorder : AppColors.recipeLightBorder;
-  Color get _accentColor => _isDark ? AppColors.recipeAccentDark : AppColors.recipeAccent;
-  Color get _greenColor => _isDark ? AppColors.recipeGreenDark : AppColors.recipeGreen;
-  
-  List<BoxShadow> get _cardShadow => _isDark ? [] : [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.05),
-      blurRadius: 10,
-      offset: const Offset(0, 2),
-    ),
-  ];
+  Color get _bgColor =>
+      _isDark ? AppColors.recipeDarkBg : AppColors.recipeLightBg;
+  Color get _cardColor =>
+      _isDark ? AppColors.recipeDarkSurface : AppColors.recipeLightSurface;
+  Color get _textPrimary =>
+      _isDark ? AppColors.recipeDarkTextPrimary : AppColors.lightTextPrimary;
+  Color get _textSecondary => _isDark
+      ? AppColors.recipeDarkTextSecondary
+      : AppColors.lightTextSecondary;
+  Color get _borderColor =>
+      _isDark ? AppColors.recipeDarkBorder : AppColors.recipeLightBorder;
+  Color get _accentColor =>
+      _isDark ? AppColors.recipeAccentDark : AppColors.recipeAccent;
+  Color get _greenColor =>
+      _isDark ? AppColors.recipeGreenDark : AppColors.recipeGreen;
+
+  List<BoxShadow> get _cardShadow => _isDark
+      ? []
+      : [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ];
 
   @override
   void initState() {
@@ -122,7 +137,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
       }
     });
   }
-  
+
   void _toggleSelectAll() {
     HapticFeedback.mediumImpact();
     setState(() {
@@ -236,7 +251,11 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
             const SizedBox(width: 12),
             Text(
               _tr('cooking_mode_timer_done'),
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: _textPrimary),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: _textPrimary,
+              ),
             ),
           ],
         ),
@@ -256,9 +275,14 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
               backgroundColor: _accentColor,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: Text(_tr('ok'), style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              _tr('ok'),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -280,7 +304,11 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
         title: Text(
           _tr('cooking_mode_exit_title'),
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: _textPrimary),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: _textPrimary,
+          ),
         ),
         content: Text(
           _tr('cooking_mode_exit_message'),
@@ -303,9 +331,14 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: Text(_tr('cooking_mode_exit_button'), style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              _tr('cooking_mode_exit_button'),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -316,24 +349,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
   Widget build(BuildContext context) {
     _isDark = Theme.of(context).brightness == Brightness.dark;
     _languageCode = Localizations.localeOf(context).languageCode;
-    
-    // Get bottom padding - handle different iOS versions
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    double extraPadding = 0.0;
-    
-    if (Platform.isIOS) {
-      if (bottomPadding > 50) {
-        // iOS 26 liquid glass navbar - needs extra 160px
-        extraPadding = 160.0;
-      } else if (bottomPadding > 0 && bottomPadding <= 50) {
-        // iOS 18 and earlier with home indicator (around 34px)
-        // Buttons are too high, add 20px extra padding
-        extraPadding = 20.0;
-      }
-    }
-    
-    final totalBottomPadding = bottomPadding + extraPadding;
-    
+
     return Scaffold(
       backgroundColor: _bgColor,
       body: SafeArea(
@@ -341,10 +357,9 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
         child: Column(
           children: [
             _buildHeader(),
-            
-            if (_timerSeconds > 0 || _timerRunning)
-              _buildTimerBar(),
-            
+
+            if (_timerSeconds > 0 || _timerRunning) _buildTimerBar(),
+
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
@@ -360,8 +375,8 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                 },
               ),
             ),
-            
-            _buildNavigationBar(totalBottomPadding),
+
+            _buildNavigationBar(),
           ],
         ),
       ),
@@ -393,7 +408,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
             ),
           ),
           const SizedBox(width: 16),
-          
+
           // Title and step
           Expanded(
             child: Column(
@@ -401,7 +416,11 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                 Text(
                   widget.recipe.name,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _textPrimary),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: _textPrimary,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -411,14 +430,14 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                       ? _tr('cooking_mode_ingredients')
                       : _trParams('cooking_mode_step_of', {
                           'current': '$_currentStep',
-                          'total': '${widget.recipe.instructions.length}'
+                          'total': '${widget.recipe.instructions.length}',
                         }),
                   style: TextStyle(fontSize: 13, color: _textSecondary),
                 ),
               ],
             ),
           ),
-          
+
           // Progress ring
           SizedBox(
             width: 44,
@@ -429,7 +448,11 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                 CupertinoActivityIndicator(color: _accentColor),
                 Text(
                   '${_currentStep + 1}/$_totalSteps',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _textPrimary),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: _textPrimary,
+                  ),
                 ),
               ],
             ),
@@ -513,7 +536,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
 
   Widget _buildIngredientsStep() {
     final ingredients = _adjustedIngredients;
-    final servingsText = _currentServings == 1 
+    final servingsText = _currentServings == 1
         ? '1 ${_tr('cooking_mode_portion')}'
         : '$_currentServings ${_tr('cooking_mode_portions')}';
 
@@ -537,12 +560,15 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                   ],
                 ),
                 shape: BoxShape.circle,
-                border: Border.all(color: _greenColor.withOpacity(0.3), width: 2),
+                border: Border.all(
+                  color: _greenColor.withOpacity(0.3),
+                  width: 2,
+                ),
               ),
               child: Icon(Icons.restaurant_menu, color: _greenColor, size: 36),
             ),
             const SizedBox(height: 20),
-            
+
             // Title
             Text(
               _tr('cooking_mode_gather_ingredients'),
@@ -555,7 +581,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
               ),
             ),
             const SizedBox(height: 8),
-            
+
             // Subtitle
             Text(
               _tr('cooking_mode_gather_subtitle'),
@@ -563,12 +589,15 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
               style: TextStyle(fontSize: 15, color: _textSecondary),
             ),
             const SizedBox(height: 12),
-            
+
             // Servings badge - TAPPABLE
             GestureDetector(
               onTap: _showServingsSelector,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: _accentColor.withOpacity(_isDark ? 0.2 : 0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -594,7 +623,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
               ),
             ),
             const SizedBox(height: 24),
-            
+
             // Ingredients card
             Container(
               width: double.infinity,
@@ -614,12 +643,16 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        color: _isDark ? AppColors.recipeDarkInput : AppColors.lightInputFill,
+                        color: _isDark
+                            ? AppColors.recipeDarkInput
+                            : AppColors.lightInputFill,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: _borderColor),
                       ),
                       child: Text(
-                        _allIngredientsChecked ? _tr('deselect_all') : _tr('select_all'),
+                        _allIngredientsChecked
+                            ? _tr('deselect_all')
+                            : _tr('select_all'),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 14,
@@ -630,7 +663,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Ingredients list
                   ...ingredients.asMap().entries.map((entry) {
                     final index = entry.key;
@@ -641,14 +674,17 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                       onTap: () => _toggleIngredient(index),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
-                          color: isChecked 
+                          color: isChecked
                               ? _greenColor.withOpacity(_isDark ? 0.15 : 0.08)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: isChecked 
+                            color: isChecked
                                 ? _greenColor.withOpacity(0.4)
                                 : _borderColor,
                           ),
@@ -660,15 +696,23 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                               width: 22,
                               height: 22,
                               decoration: BoxDecoration(
-                                color: isChecked ? _greenColor : Colors.transparent,
+                                color: isChecked
+                                    ? _greenColor
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: isChecked ? _greenColor : _textSecondary.withOpacity(0.4),
+                                  color: isChecked
+                                      ? _greenColor
+                                      : _textSecondary.withOpacity(0.4),
                                   width: 2,
                                 ),
                               ),
                               child: isChecked
-                                  ? const Icon(Icons.check, color: Colors.white, size: 14)
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: Colors.white,
+                                      size: 14,
+                                    )
                                   : null,
                             ),
                             const SizedBox(width: 12),
@@ -678,8 +722,12 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
-                                  color: isChecked ? _textSecondary : _textPrimary,
-                                  decoration: isChecked ? TextDecoration.lineThrough : null,
+                                  color: isChecked
+                                      ? _textSecondary
+                                      : _textPrimary,
+                                  decoration: isChecked
+                                      ? TextDecoration.lineThrough
+                                      : null,
                                 ),
                               ),
                             ),
@@ -691,8 +739,6 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                 ],
               ),
             ),
-            
-
           ],
         ),
       ),
@@ -718,10 +764,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    _accentColor,
-                    _accentColor.withOpacity(0.7),
-                  ],
+                  colors: [_accentColor, _accentColor.withOpacity(0.7)],
                 ),
                 shape: BoxShape.circle,
                 boxShadow: [
@@ -744,7 +787,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
               ),
             ),
             const SizedBox(height: 32),
-            
+
             // Instruction card
             Container(
               width: double.infinity,
@@ -766,9 +809,9 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Timer button
             if (timerMinutes != null && !hasActiveTimer)
               SizedBox(
@@ -777,7 +820,9 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                   onPressed: () => _startTimer(timerMinutes),
                   icon: Icon(Icons.timer, color: _accentColor),
                   label: Text(
-                    _trParams('cooking_mode_start_timer', {'minutes': '$timerMinutes'}),
+                    _trParams('cooking_mode_start_timer', {
+                      'minutes': '$timerMinutes',
+                    }),
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -786,7 +831,9 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
                   ),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     side: BorderSide(color: _accentColor, width: 2),
                   ),
                 ),
@@ -797,92 +844,123 @@ class _CookingModeScreenState extends State<CookingModeScreen> with TickerProvid
     );
   }
 
-  Widget _buildNavigationBar(double totalBottomPadding) {
+  Widget _buildNavigationBar() {
     final isFirstStep = _currentStep == 0;
     final isLastStep = _currentStep == _totalSteps - 1;
 
-    return Container(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: totalBottomPadding + 16,
-      ),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        border: Border(top: BorderSide(color: _borderColor)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Previous button
-          Expanded(
-            child: SizedBox(
-              height: 52,
-              child: OutlinedButton.icon(
-                onPressed: isFirstStep ? null : _previousStep,
-                icon: Icon(
-                  Icons.arrow_back,
-                  size: 18,
-                  color: isFirstStep ? _textSecondary.withOpacity(0.4) : _textSecondary,
-                ),
-                label: Text(
-                  _tr('back'),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: isFirstStep ? _textSecondary.withOpacity(0.4) : _textSecondary,
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: BoxDecoration(
+          color: _cardColor,
+          border: Border(top: BorderSide(color: _borderColor, width: 0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: _isDark ? 0.18 : 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: isFirstStep ? null : _previousStep,
+                  icon: Icon(
+                    Icons.arrow_back_rounded,
+                    size: 18,
+                    color: isFirstStep
+                        ? _textSecondary.withOpacity(0.35)
+                        : _textSecondary,
                   ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  side: BorderSide(
-                    color: isFirstStep ? _borderColor.withOpacity(0.5) : _borderColor,
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _tr('back'),
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: isFirstStep
+                            ? _textSecondary.withOpacity(0.35)
+                            : _textSecondary,
+                      ),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    side: BorderSide(
+                      color: isFirstStep
+                          ? _borderColor.withOpacity(0.45)
+                          : _borderColor,
+                    ),
+                    minimumSize: const Size(0, 48),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          // Next button
-          Expanded(
-            child: SizedBox(
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: isLastStep ? _closeCookingMode : _nextStep,
-                icon: Icon(
-                  isLastStep ? Icons.check : Icons.arrow_forward,
-                  size: 18,
-                ),
-                label: Text(
-                  isLastStep ? _tr('done') : _tr('continue_text'),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isLastStep ? _greenColor : _accentColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: isLastStep ? _closeCookingMode : _nextStep,
+                  icon: Icon(
+                    isLastStep
+                        ? Icons.check_rounded
+                        : Icons.arrow_forward_rounded,
+                    size: 18,
+                  ),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      isLastStep ? _tr('done') : _tr('continue_text'),
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isLastStep ? _greenColor : _accentColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                    minimumSize: const Size(0, 48),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   int? _extractTimerMinutes(String text) {
     final patterns = [
-      RegExp(r'(\d+)\s*(?:Minuten|minuten|Min\.|min\.?|minutes?)', caseSensitive: false),
-      RegExp(r'(\d+)-(\d+)\s*(?:Minuten|minuten|Min\.|min\.?|minutes?)', caseSensitive: false),
+      RegExp(
+        r'(\d+)\s*(?:Minuten|minuten|Min\.|min\.?|minutes?)',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'(\d+)-(\d+)\s*(?:Minuten|minuten|Min\.|min\.?|minutes?)',
+        caseSensitive: false,
+      ),
     ];
 
     for (final pattern in patterns) {
@@ -936,7 +1014,7 @@ class _ServingsSelectorSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          
+
           // Title
           Text(
             _tr('servings'),
@@ -947,7 +1025,7 @@ class _ServingsSelectorSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          
+
           // Servings grid
           Wrap(
             spacing: 12,
@@ -962,9 +1040,11 @@ class _ServingsSelectorSheet extends StatelessWidget {
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: isSelected 
-                        ? accentColor 
-                        : (isDark ? AppColors.recipeDarkInput : AppColors.lightInputFill),
+                    color: isSelected
+                        ? accentColor
+                        : (isDark
+                              ? AppColors.recipeDarkInput
+                              : AppColors.lightInputFill),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isSelected ? accentColor : borderColor,
@@ -985,7 +1065,7 @@ class _ServingsSelectorSheet extends StatelessWidget {
               );
             }).toList(),
           ),
-          
+
           SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
       ),

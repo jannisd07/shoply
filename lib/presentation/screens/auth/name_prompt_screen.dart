@@ -31,13 +31,13 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
     try {
       final user = SupabaseService.instance.currentUser;
       if (user != null) {
-        await SupabaseService.instance.client
-            .from('users')
-            .update({
-              'display_name': name,
-              'updated_at': DateTime.now().toIso8601String(),
-            })
-            .eq('id', user.id);
+        await SupabaseService.instance.client.from('users').upsert({
+          'id': user.id,
+          'email': user.email,
+          'display_name': name,
+          'auth_provider': user.appMetadata['provider'],
+          'updated_at': DateTime.now().toIso8601String(),
+        });
       }
 
       if (mounted) {
@@ -56,18 +56,18 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
     try {
       final user = SupabaseService.instance.currentUser;
       if (user != null) {
-        await SupabaseService.instance.client
-            .from('users')
-            .update({
-              'display_name': 'User',
-              'updated_at': DateTime.now().toIso8601String(),
-            })
-            .eq('id', user.id);
+        await SupabaseService.instance.client.from('users').upsert({
+          'id': user.id,
+          'email': user.email,
+          'display_name': 'User',
+          'auth_provider': user.appMetadata['provider'],
+          'updated_at': DateTime.now().toIso8601String(),
+        });
       }
     } catch (e) {
       debugPrint('Error saving default name: $e');
     }
-    
+
     if (mounted) {
       context.go('/home');
     }
@@ -85,21 +85,26 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
           child: Column(
             children: [
               const Spacer(flex: 2),
-              
+
               // Avo mascot
               const AvoMascot(
                 size: 120,
                 expression: AvoExpression.waving,
                 animate: true,
               ),
-              
+
               const SizedBox(height: 32),
-              
+
               // Speech bubble style greeting
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F5),
+                  color: isDark
+                      ? const Color(0xFF2C2C2E)
+                      : const Color(0xFFF5F5F5),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -113,9 +118,9 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 40),
-              
+
               // Name input field
               TextField(
                 controller: _nameController,
@@ -132,18 +137,23 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                     color: isDark ? Colors.white38 : Colors.black38,
                   ),
                   filled: true,
-                  fillColor: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF5F5F5),
+                  fillColor: isDark
+                      ? const Color(0xFF2C2C2E)
+                      : const Color(0xFFF5F5F5),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                 ),
                 onSubmitted: (_) => _saveName(),
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               // Continue button
               SizedBox(
                 width: double.infinity,
@@ -159,7 +169,10 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                     elevation: 0,
                   ),
                   child: _isLoading
-                      ? CupertinoActivityIndicator(radius: 10, color: Colors.white)
+                      ? CupertinoActivityIndicator(
+                          radius: 10,
+                          color: Colors.white,
+                        )
                       : const Text(
                           'Weiter',
                           style: TextStyle(
@@ -169,9 +182,9 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                         ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // Skip button
               TextButton(
                 onPressed: _skip,
@@ -183,7 +196,7 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                   ),
                 ),
               ),
-              
+
               const Spacer(flex: 3),
             ],
           ),

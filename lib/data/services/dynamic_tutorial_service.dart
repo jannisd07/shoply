@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 
-enum TutorialStepType {
-  info,
-  click,
-  finish,
-}
+enum TutorialStepType { info, click, finish }
 
 enum TutorialStepId {
   welcome,
@@ -37,9 +33,10 @@ class TutorialStep {
 }
 
 class DynamicTutorialService extends ChangeNotifier {
-  static final DynamicTutorialService _instance = DynamicTutorialService._internal();
+  static final DynamicTutorialService _instance =
+      DynamicTutorialService._internal();
   static DynamicTutorialService get instance => _instance;
-  
+
   DynamicTutorialService._internal();
 
   bool _isActive = false;
@@ -50,7 +47,7 @@ class DynamicTutorialService extends ChangeNotifier {
   bool _hasLists = false;
   bool _hasRecipes = false;
   bool _listHasItems = false;
-  
+
   final GlobalKey firstListCardKey = GlobalKey(debugLabel: 'firstListCard');
   final GlobalKey listItemsAreaKey = GlobalKey(debugLabel: 'listItemsArea');
   final GlobalKey addItemInputKey = GlobalKey(debugLabel: 'addItemInput');
@@ -58,7 +55,7 @@ class DynamicTutorialService extends ChangeNotifier {
   final GlobalKey homeTabKey = GlobalKey(debugLabel: 'homeTab');
   final GlobalKey recipesAreaKey = GlobalKey(debugLabel: 'recipesArea');
   final GlobalKey addRecipeButtonKey = GlobalKey(debugLabel: 'addRecipeButton');
-  
+
   bool get isActive => _isActive;
   bool get isInitialized => _isInitialized;
   TutorialStepId? get currentStepId => _currentStepId;
@@ -66,41 +63,41 @@ class DynamicTutorialService extends ChangeNotifier {
   bool get hasLists => _hasLists;
   bool get hasRecipes => _hasRecipes;
   bool get listHasItems => _listHasItems;
-  
+
   TutorialStep? get currentStep {
     if (_currentStepId == null) return null;
     return _getStepConfig(_currentStepId!);
   }
-  
+
   GlobalKey? get currentTargetKey {
     return currentStep?.targetKey;
   }
-  
+
   Future<void> initialize() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
       _isInitialized = false;
       return;
     }
-    
+
     if (_currentUserId != user.id) {
       _isInitialized = false;
       _currentUserId = user.id;
     }
-    
+
     if (_isInitialized) return;
-    
+
     try {
       final response = await SupabaseService.instance
           .from('users')
           .select('tutorial_completed')
           .eq('id', user.id)
           .maybeSingle();
-      
+
       final completed = response?['tutorial_completed'] as bool? ?? false;
-      
+
       _isInitialized = true;
-      
+
       if (!completed) {
         _isActive = true;
         _currentStepId = TutorialStepId.welcome;
@@ -111,7 +108,7 @@ class DynamicTutorialService extends ChangeNotifier {
       _isInitialized = true;
     }
   }
-  
+
   void resetForNewUser() {
     _isInitialized = false;
     _isActive = false;
@@ -120,27 +117,28 @@ class DynamicTutorialService extends ChangeNotifier {
     _targetListId = null;
     notifyListeners();
   }
-  
+
   void updateListsData({required bool hasLists, String? firstListId}) {
     _hasLists = hasLists;
     _targetListId = firstListId;
   }
-  
+
   void updateListItemsData({required bool hasItems}) {
     _listHasItems = hasItems;
   }
-  
+
   void updateRecipesData({required bool hasRecipes}) {
     _hasRecipes = hasRecipes;
   }
-  
+
   TutorialStep _getStepConfig(TutorialStepId stepId) {
     switch (stepId) {
       case TutorialStepId.welcome:
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.info,
-          message: 'Ich bin Avo, dein Einkaufshelfer! Lass mich dir kurz zeigen, wie Avo funktioniert.',
+          message:
+              'Ich bin Avo, dein Einkaufshelfer! Lass mich dir kurz zeigen, wie Avo funktioniert.',
           nextStep: TutorialStepId.openShoppingList,
           buttonText: "Los geht's",
         );
@@ -150,7 +148,7 @@ class DynamicTutorialService extends ChangeNotifier {
           id: stepId,
           type: TutorialStepType.click,
           message: _hasLists
-              ? 'Hier sind deine Einkaufslisten. Tippe auf eine, um sie zu offnen.'
+              ? 'Hier sind deine Einkaufslisten. Tippe auf eine, um sie zu öffnen.'
               : 'Hier ist deine erste Einkaufsliste. Tippe drauf.',
           targetKey: firstListCardKey,
           nextStep: TutorialStepId.showListItems,
@@ -172,7 +170,8 @@ class DynamicTutorialService extends ChangeNotifier {
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.info,
-          message: 'Hier fugst du neue Artikel hinzu. Sie werden automatisch in Kategorien sortiert.',
+          message:
+              'Hier fügst du neue Artikel hinzu. Sie werden automatisch in Kategorien sortiert.',
           targetKey: addItemInputKey,
           nextStep: TutorialStepId.navigateToRecipes,
           buttonText: 'Weiter',
@@ -182,7 +181,8 @@ class DynamicTutorialService extends ChangeNotifier {
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.click,
-          message: 'Jetzt zeig ich dir die Rezepte. Tippe auf das Symbol unten.',
+          message:
+              'Jetzt zeig ich dir die Rezepte. Tippe auf das Symbol unten.',
           targetKey: recipesTabKey,
           nextStep: TutorialStepId.showRecipes,
         );
@@ -192,7 +192,7 @@ class DynamicTutorialService extends ChangeNotifier {
           id: stepId,
           type: TutorialStepType.info,
           message: _hasRecipes
-              ? 'Hier findest du Rezepte. Die Zutaten kannst du direkt zur Liste hinzufugen.'
+              ? 'Hier findest du Rezepte. Die Zutaten kannst du direkt zur Liste hinzufügen.'
               : 'Hier findest du Rezepte von der Community.',
           targetKey: recipesAreaKey,
           nextStep: TutorialStepId.showCreateRecipe,
@@ -213,16 +213,17 @@ class DynamicTutorialService extends ChangeNotifier {
         return TutorialStep(
           id: stepId,
           type: TutorialStepType.finish,
-          message: 'Du bist startklar. Viel Spass beim Einkaufen!',
+          message:
+              'Du bist startklar. Tipp: In den Einstellungen kannst du deine Ernährungspräferenzen angeben.',
           buttonText: 'Loslegen',
         );
     }
   }
-  
+
   void nextStep() {
     final step = currentStep;
     if (step == null) return;
-    
+
     if (step.nextStep != null) {
       _currentStepId = step.nextStep;
       notifyListeners();
@@ -230,36 +231,37 @@ class DynamicTutorialService extends ChangeNotifier {
       completeTutorial();
     }
   }
-  
+
   void completeCurrentStep() {
     nextStep();
   }
-  
+
   void onRouteChanged(String route) {
     if (!_isActive) return;
-    
-    if (route == '/recipes' && _currentStepId == TutorialStepId.navigateToRecipes) {
+
+    if (route == '/recipes' &&
+        _currentStepId == TutorialStepId.navigateToRecipes) {
       _currentStepId = TutorialStepId.showRecipes;
       notifyListeners();
     }
   }
-  
+
   void onListOpened() {
     if (!_isActive) return;
-    
+
     if (_currentStepId == TutorialStepId.openShoppingList) {
       _currentStepId = TutorialStepId.showListItems;
       notifyListeners();
     }
   }
-  
+
   Rect? getTargetRect(GlobalKey key) {
     final context = key.currentContext;
     if (context == null) return null;
-    
+
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return null;
-    
+
     final position = renderBox.localToGlobal(Offset.zero);
     return Rect.fromLTWH(
       position.dx,
@@ -268,40 +270,38 @@ class DynamicTutorialService extends ChangeNotifier {
       renderBox.size.height,
     );
   }
-  
+
   bool isTapOnTarget(Offset globalPosition) {
     final targetKey = currentTargetKey;
     if (targetKey == null) return false;
-    
+
     final rect = getTargetRect(targetKey);
     if (rect == null) return false;
-    
+
     final expandedRect = rect.inflate(10);
     return expandedRect.contains(globalPosition);
   }
-  
+
   Future<void> skipTutorial() async {
     _isActive = false;
     _currentStepId = null;
-    
-    await _saveTutorialCompleted();
-    
     notifyListeners();
+
+    await _saveTutorialCompleted();
   }
-  
+
   Future<void> completeTutorial() async {
     _isActive = false;
     _currentStepId = null;
-    
-    await _saveTutorialCompleted();
-    
     notifyListeners();
+
+    await _saveTutorialCompleted();
   }
-  
+
   Future<void> _saveTutorialCompleted() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) return;
-    
+
     try {
       await SupabaseService.instance
           .from('users')
@@ -311,11 +311,11 @@ class DynamicTutorialService extends ChangeNotifier {
       debugPrint('Error saving tutorial status: $e');
     }
   }
-  
+
   Future<void> restartTutorial() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) return;
-    
+
     try {
       await SupabaseService.instance
           .from('users')
@@ -324,14 +324,14 @@ class DynamicTutorialService extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error resetting tutorial status: $e');
     }
-    
+
     _isInitialized = false;
     _isActive = true;
     _currentStepId = TutorialStepId.welcome;
-    
+
     notifyListeners();
   }
-  
+
   void startTutorial() {
     _isActive = true;
     _currentStepId = TutorialStepId.welcome;

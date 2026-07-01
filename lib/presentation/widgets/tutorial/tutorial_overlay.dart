@@ -1,15 +1,14 @@
-import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shoply/core/mascot/avo_mascot.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
+import 'package:shoply/data/services/navigation_service.dart';
+import 'package:shoply/data/services/supabase_service.dart';
 
 class TutorialOverlay extends StatefulWidget {
   final Widget child;
 
-  const TutorialOverlay({
-    super.key,
-    required this.child,
-  });
+  const TutorialOverlay({super.key, required this.child});
 
   @override
   State<TutorialOverlay> createState() => _TutorialOverlayState();
@@ -18,6 +17,7 @@ class TutorialOverlay extends StatefulWidget {
 class _TutorialOverlayState extends State<TutorialOverlay>
     with TickerProviderStateMixin {
   Rect? _cachedTargetRect;
+  late final StreamSubscription _authSubscription;
   late AnimationController _fadeController;
   late AnimationController _pulseController;
   late Animation<double> _fadeAnimation;
@@ -46,15 +46,34 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await DynamicTutorialService.instance.initialize();
-      if (DynamicTutorialService.instance.isActive && mounted) {
-        _fadeController.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_initializeTutorial());
+    });
+
+    _authSubscription = SupabaseService.instance.authStateChanges.listen((
+      data,
+    ) {
+      if (data.session == null) {
+        DynamicTutorialService.instance.resetForNewUser();
+        return;
       }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_initializeTutorial());
+        }
+      });
     });
 
     _startTargetRectRefresh();
     DynamicTutorialService.instance.addListener(_onTutorialChange);
+  }
+
+  Future<void> _initializeTutorial() async {
+    await DynamicTutorialService.instance.initialize();
+    if (DynamicTutorialService.instance.isActive && mounted) {
+      _fadeController.forward();
+    }
   }
 
   void _onTutorialChange() {
@@ -68,6 +87,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   @override
   void dispose() {
     DynamicTutorialService.instance.removeListener(_onTutorialChange);
+    _authSubscription.cancel();
     _fadeController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -108,12 +128,15 @@ class _TutorialOverlayState extends State<TutorialOverlay>
 
         final step = tutorial.currentStep!;
         final targetKey = tutorial.currentTargetKey;
-        Rect? targetRect = targetKey != null ? tutorial.getTargetRect(targetKey) : null;
+        Rect? targetRect = targetKey != null
+            ? tutorial.getTargetRect(targetKey)
+            : null;
 
-        final Rect? highlightRect = targetRect != null ? targetRect.inflate(4) : null;
+        final Rect? highlightRect = targetRect?.inflate(4);
 
-        final isFullScreenStep = step.id == TutorialStepId.welcome ||
-                                  step.type == TutorialStepType.finish;
+        final isFullScreenStep =
+            step.id == TutorialStepId.welcome ||
+            step.type == TutorialStepType.finish;
 
         final isTabBarTarget = step.id == TutorialStepId.navigateToRecipes;
 
@@ -137,7 +160,11 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     );
   }
 
-  Widget _buildOverlay(BuildContext context, TutorialStep step, Rect? targetRect) {
+  Widget _buildOverlay(
+    BuildContext context,
+    TutorialStep step,
+    Rect? targetRect,
+  ) {
     final screenSize = MediaQuery.of(context).size;
     final isTabBarTarget = step.id == TutorialStepId.navigateToRecipes;
 
@@ -253,12 +280,16 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     );
   }
 
-  Widget _buildSkipButton(BuildContext context, DynamicTutorialService tutorial) {
+  Widget _buildSkipButton(
+    BuildContext context,
+    DynamicTutorialService tutorial,
+  ) {
     final safeTop = MediaQuery.of(context).padding.top;
 
-    final isRecipeStep = tutorial.currentStepId == TutorialStepId.navigateToRecipes ||
-                         tutorial.currentStepId == TutorialStepId.showRecipes ||
-                         tutorial.currentStepId == TutorialStepId.showCreateRecipe;
+    final isRecipeStep =
+        tutorial.currentStepId == TutorialStepId.navigateToRecipes ||
+        tutorial.currentStepId == TutorialStepId.showRecipes ||
+        tutorial.currentStepId == TutorialStepId.showCreateRecipe;
 
     return Positioned(
       top: safeTop + 12,
@@ -279,7 +310,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               ),
             ),
             child: const Text(
-              'Uberspringen',
+              'Überspringen',
               style: TextStyle(
                 color: Color.fromRGBO(255, 255, 255, 0.7),
                 fontSize: 12,
@@ -294,6 +325,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
 
   Widget _buildFullScreenContent(BuildContext context, TutorialStep step) {
     final isWelcome = step.id == TutorialStepId.welcome;
+    final isFinish = step.type == TutorialStepType.finish;
 
     return Positioned.fill(
       child: FadeTransition(
@@ -307,7 +339,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                 const Spacer(flex: 2),
                 AvoMascot(
                   size: isWelcome ? 140 : 120,
-                  expression: isWelcome ? AvoExpression.waving : AvoExpression.celebrating,
+                  expression: isWelcome
+                      ? AvoExpression.waving
+                      : AvoExpression.celebrating,
                   animate: true,
                 ),
                 const SizedBox(height: 32),
@@ -317,6 +351,12 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                   message: step.message,
                   buttonText: step.buttonText ?? 'Weiter',
                   onTap: () => DynamicTutorialService.instance.nextStep(),
+                  secondaryButtonText: isFinish
+                      ? 'Ernährungspräferenzen angeben'
+                      : null,
+                  onSecondaryTap: isFinish
+                      ? () => _openDietPreferencesFromFinish(context)
+                      : null,
                 ),
                 const Spacer(flex: 3),
               ],
@@ -327,7 +367,16 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     );
   }
 
-  Widget _buildFloatingContent(BuildContext context, TutorialStep step, Rect? targetRect) {
+  Future<void> _openDietPreferencesFromFinish(BuildContext context) async {
+    unawaited(DynamicTutorialService.instance.completeTutorial());
+    NavigationService.instance.navigateToDietPreferences();
+  }
+
+  Widget _buildFloatingContent(
+    BuildContext context,
+    TutorialStep step,
+    Rect? targetRect,
+  ) {
     final screenSize = MediaQuery.of(context).size;
     final safeTop = MediaQuery.of(context).padding.top;
     final safeBottom = MediaQuery.of(context).padding.bottom;
@@ -339,7 +388,8 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     if (targetRect == null) {
       cardTop = screenSize.height * 0.35;
     } else {
-      final spaceBelow = screenSize.height - targetRect.bottom - safeBottom - 120;
+      final spaceBelow =
+          screenSize.height - targetRect.bottom - safeBottom - 120;
       final spaceAbove = targetRect.top - skipButtonBottom - 40;
 
       final showBelow = spaceBelow >= 200 || spaceAbove < 180;
@@ -351,7 +401,10 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       }
     }
 
-    cardTop = cardTop.clamp(skipButtonBottom + 20, screenSize.height - safeBottom - 200);
+    cardTop = cardTop.clamp(
+      skipButtonBottom + 20,
+      screenSize.height - safeBottom - 200,
+    );
 
     final isClickStep = step.type == TutorialStepType.click;
 
@@ -368,7 +421,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               padding: const EdgeInsets.only(top: 8),
               child: AvoMascot(
                 size: 64,
-                expression: isClickStep ? AvoExpression.excited : AvoExpression.happy,
+                expression: isClickStep
+                    ? AvoExpression.excited
+                    : AvoExpression.happy,
                 animate: true,
               ),
             ),
@@ -377,7 +432,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               child: _buildCompactMessageCard(
                 context: context,
                 message: step.message,
-                buttonText: step.type == TutorialStepType.info ? (step.buttonText ?? 'Weiter') : null,
+                buttonText: step.type == TutorialStepType.info
+                    ? (step.buttonText ?? 'Weiter')
+                    : null,
                 isClickStep: isClickStep,
                 onTap: step.type == TutorialStepType.info
                     ? () => DynamicTutorialService.instance.nextStep()
@@ -396,6 +453,8 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     required String message,
     required String buttonText,
     required VoidCallback onTap,
+    String? secondaryButtonText,
+    VoidCallback? onSecondaryTap,
   }) {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -450,6 +509,44 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               ),
             ),
           ),
+          if (secondaryButtonText != null && onSecondaryTap != null) ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onSecondaryTap,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 11),
+                decoration: BoxDecoration(
+                  color: const Color.fromRGBO(255, 255, 255, 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color.fromRGBO(255, 255, 255, 0.08),
+                    width: 0.5,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.restaurant_menu_rounded,
+                      color: Color.fromRGBO(255, 255, 255, 0.72),
+                      size: 17,
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      secondaryButtonText,
+                      style: const TextStyle(
+                        color: Color.fromRGBO(255, 255, 255, 0.78),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -489,7 +586,10 @@ class _TutorialOverlayState extends State<TutorialOverlay>
             GestureDetector(
               onTap: onTap,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(10),
@@ -548,8 +648,8 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                 color: isActive
                     ? Colors.white
                     : isPast
-                        ? const Color.fromRGBO(255, 255, 255, 0.4)
-                        : const Color.fromRGBO(255, 255, 255, 0.12),
+                    ? const Color.fromRGBO(255, 255, 255, 0.4)
+                    : const Color.fromRGBO(255, 255, 255, 0.12),
                 borderRadius: BorderRadius.circular(3),
               ),
             );
@@ -598,10 +698,9 @@ class _OverlayPainter extends CustomPainter {
       if (clampedRect.width > 0 && clampedRect.height > 0) {
         final path = Path()
           ..addRect(fullRect)
-          ..addRRect(RRect.fromRectAndRadius(
-            clampedRect,
-            Radius.circular(borderRadius),
-          ))
+          ..addRRect(
+            RRect.fromRectAndRadius(clampedRect, Radius.circular(borderRadius)),
+          )
           ..fillType = PathFillType.evenOdd;
 
         canvas.drawPath(path, paint);
@@ -616,6 +715,6 @@ class _OverlayPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _OverlayPainter oldDelegate) {
     return oldDelegate.targetRect != targetRect ||
-           oldDelegate.overlayOpacity != overlayOpacity;
+        oldDelegate.overlayOpacity != overlayOpacity;
   }
 }
