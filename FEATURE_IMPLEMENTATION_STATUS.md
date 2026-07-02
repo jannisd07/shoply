@@ -549,7 +549,7 @@ exists, "N calories left — 3 dinner ideas from your list."
   - Risk: Low.
   - Recommendation: yes.
 
-- [yes ] IDEA: Build calorie tracking (Feature 6) as its own dedicated
+- [ yes] IDEA: Build calorie tracking (Feature 6) as its own dedicated
   multi-session effort with build verification available, following the
   phased plan above, rather than attempting it piecemeal.
   - Why it helps: avoids shipping a half-working, unverified nutrition
@@ -564,7 +564,7 @@ exists, "N calories left — 3 dinner ideas from your list."
     barcode scanning should re-enable `mobile_scanner` or use a lighter
     camera+Gemini-vision approach, before a follow-up session starts on it.
 
-- [yes ] IDEA: Rebuild onboarding (Feature 7) immediately after Feature 6's
+- [ yes] IDEA: Rebuild onboarding (Feature 7) immediately after Feature 6's
   schema is settled, replacing the static carousel with the adaptive flow
   and making `onboarding_completed` actually gate the router.
   - Why it helps: currently onboarding collects nothing and doesn't even
