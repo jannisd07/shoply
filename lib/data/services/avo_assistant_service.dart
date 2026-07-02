@@ -9,8 +9,11 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/avo_app_knowledge.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
+import 'package:shoply/data/services/expense_split_service.dart';
+import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
+import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide FunctionResponse;
@@ -65,6 +68,17 @@ When the user asks to:
   exist and they didn't specify, call ask_pick_list instead)
 • change ANY setting (theme, language, name, diet, allergies, etc.)
   → call update_setting
+• find prices, deals, offers, or "which store is cheapest" for a
+  product → call search_offers
+• split / share the cost of a past shopping trip with other people
+  ("split yesterday's Lidl trip with Max and Jonas") → first call
+  get_shopping_history to find the right history_id, then call
+  split_trip_cost
+• remove/delete an item or a whole list → call delete_item /
+  delete_list WITHOUT confirm first. It will NOT delete anything and
+  instead returns a confirmation question — ask the user that question
+  verbatim and wait for their reply. Only call the same tool again with
+  confirm=true if they clearly say yes. Never skip this step.
 • know ANYTHING about Shoply itself (premium, pricing, features,
   how-tos, privacy) → call get_app_info with the topic
 
@@ -232,6 +246,57 @@ After a tool returns, write a short natural-language confirmation
               ),
             }, requiredProperties: ['topic']),
           ),
+          FunctionDeclaration(
+            'search_offers',
+            'Search LIVE current supermarket offers (Angebote) for a product near the '
+                'user, sorted cheapest first, across German grocery chains. Use this for '
+                '"how much does X cost", "find X on offer", or "which store is cheapest '
+                'for X". Only covers active promotional offers, not regular shelf prices — '
+                'say so if nothing is found.',
+            Schema.object(properties: {
+              'query': Schema.string(description: 'Product to search for, e.g. "milk"'),
+            }, requiredProperties: ['query']),
+          ),
+          FunctionDeclaration(
+            'split_trip_cost',
+            'Split a completed shopping trip\'s cost between the current user and named '
+                'participants (equal split). ALWAYS call get_shopping_history first to '
+                'resolve history_id from a hint like "yesterday\'s Lidl trip". If the trip '
+                'has no known total_cost yet, you must ask the user for it and pass it.',
+            Schema.object(properties: {
+              'history_id': Schema.string(description: 'Shopping history entry ID to split'),
+              'participant_names': Schema.array(
+                description: 'Names of the other people to split with (not including the current user)',
+                items: Schema.string(),
+              ),
+              'total_cost': Schema.number(
+                description: 'Total trip cost in EUR, only if not already known',
+              ),
+            }, requiredProperties: ['history_id', 'participant_names']),
+          ),
+          FunctionDeclaration(
+            'delete_item',
+            'Delete an item from a shopping list. SAFETY: call this WITHOUT confirm '
+                'first — it returns a confirmation question instead of deleting. Only '
+                'call again with confirm=true after the user explicitly agrees.',
+            Schema.object(properties: {
+              'list_id': Schema.string(),
+              'item_id': Schema.string(),
+              'item_name': Schema.string(description: 'Item name, for the confirmation question'),
+              'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
+            }, requiredProperties: ['list_id', 'item_id', 'item_name']),
+          ),
+          FunctionDeclaration(
+            'delete_list',
+            'Permanently delete a whole shopping list. SAFETY: call this WITHOUT '
+                'confirm first — it returns a confirmation question instead of deleting. '
+                'Only call again with confirm=true after the user explicitly agrees.',
+            Schema.object(properties: {
+              'list_id': Schema.string(),
+              'list_name': Schema.string(description: 'List name, for the confirmation question'),
+              'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
+            }, requiredProperties: ['list_id', 'list_name']),
+          ),
         ]),
       ];
 
@@ -335,6 +400,14 @@ After a tool returns, write a short natural-language confirmation
           return await _toolUpdateSetting(args, ref, payloads);
         case 'get_app_info':
           return _toolAppInfo(args, payloads);
+        case 'search_offers':
+          return await _toolSearchOffers(args);
+        case 'split_trip_cost':
+          return await _toolSplitTripCost(args);
+        case 'delete_item':
+          return await _toolDeleteItem(args, ref);
+        case 'delete_list':
+          return await _toolDeleteList(args, ref);
         default:
           return {'error': 'Unknown tool ${call.name}'};
       }
@@ -723,6 +796,148 @@ After a tool returns, write a short natural-language confirmation
     }
     payloads.add(AvoWidgetPayload.appInfo(topic: topic, answer: answer));
     return {'topic': topic, 'answer': answer};
+  }
+
+  Future<Map<String, Object?>> _toolSearchOffers(Map<String, Object?> args) async {
+    final query = (args['query'] as String?)?.trim() ?? '';
+    if (query.isEmpty) return {'error': 'query is required'};
+
+    final zip = await UserLocationService.instance.getZipCode();
+    if (zip == null || zip.isEmpty) {
+      return {
+        'found': 0,
+        'note': 'No location available — ask the user to set their zip code '
+            'in Profile settings to enable offer search.',
+      };
+    }
+
+    final offers = await OfferPriceService.instance.searchOffers(query, zipCode: zip);
+    if (offers.isEmpty) {
+      return {'found': 0, 'note': 'No current offers found for "$query" near $zip.'};
+    }
+
+    final top = offers.take(5).toList();
+    return {
+      'found': top.length,
+      'cheapest_store': top.first.retailerName,
+      'cheapest_price': top.first.price,
+      'offers': top
+          .map((o) => {
+                'product': o.productName,
+                'price': o.price,
+                'old_price': o.oldPrice,
+                'unit': o.unitShortName,
+                'store': o.retailerName,
+              })
+          .toList(),
+    };
+  }
+
+  Future<Map<String, Object?>> _toolSplitTripCost(Map<String, Object?> args) async {
+    final historyId = args['history_id'] as String?;
+    if (historyId == null || historyId.isEmpty) {
+      return {'error': 'history_id is required — call get_shopping_history first'};
+    }
+    final names = _stringList(args['participant_names']);
+    if (names.isEmpty) {
+      return {'error': 'participant_names must include at least one other person'};
+    }
+
+    final history = await ShoppingHistoryService().getRecentHistory(limit: 30);
+    ShoppingHistory? trip;
+    for (final h in history) {
+      if (h.id == historyId) {
+        trip = h;
+        break;
+      }
+    }
+    if (trip == null) return {'error': 'Shopping history entry not found'};
+
+    final total = (args['total_cost'] as num?)?.toDouble() ?? trip.totalCost;
+    if (total == null || total <= 0) {
+      return {
+        'error':
+            'This trip has no known total cost yet — ask the user for the total in EUR '
+                'and call split_trip_cost again with total_cost set.',
+      };
+    }
+
+    final userId = _supabase.auth.currentUser?.id;
+    String currentUserName = 'You';
+    if (userId != null) {
+      try {
+        final profile = await _supabase
+            .from('users')
+            .select('display_name')
+            .eq('id', userId)
+            .maybeSingle();
+        currentUserName = (profile?['display_name'] as String?) ?? currentUserName;
+      } catch (_) {}
+    }
+
+    final participantCount = names.length + 1;
+    final share = double.parse((total / participantCount).toStringAsFixed(2));
+
+    final shares = [
+      SplitShare(userId: userId, participantName: currentUserName, amount: share),
+      ...names.map((n) => SplitShare(participantName: n, amount: share)),
+    ];
+
+    await ExpenseSplitService.instance.createSplits(
+      historyId: historyId,
+      totalCost: total,
+      shares: shares,
+      paidByUserId: userId,
+      paidByName: currentUserName,
+    );
+
+    return {
+      'success': true,
+      'trip': trip.listName,
+      'total_cost': total,
+      'each_share': share,
+      'participants': [currentUserName, ...names],
+    };
+  }
+
+  Future<Map<String, Object?>> _toolDeleteItem(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final listId = args['list_id'] as String?;
+    final itemId = args['item_id'] as String?;
+    final itemName = (args['item_name'] as String?) ?? 'this item';
+    final confirm = args['confirm'] as bool? ?? false;
+    if (listId == null || itemId == null) {
+      return {'error': 'list_id and item_id are required'};
+    }
+    if (!confirm) {
+      return {
+        'requires_confirmation': true,
+        'question': 'Remove "$itemName" from the list? This can\'t be undone.',
+      };
+    }
+    await ref.read(itemsNotifierProvider(listId).notifier).deleteItem(itemId);
+    return {'success': true, 'deleted': itemName};
+  }
+
+  Future<Map<String, Object?>> _toolDeleteList(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final listId = args['list_id'] as String?;
+    final listName = (args['list_name'] as String?) ?? 'this list';
+    final confirm = args['confirm'] as bool? ?? false;
+    if (listId == null) return {'error': 'list_id is required'};
+    if (!confirm) {
+      return {
+        'requires_confirmation': true,
+        'question':
+            'Delete the whole list "$listName" and everything on it? This can\'t be undone.',
+      };
+    }
+    await ref.read(listsNotifierProvider.notifier).deleteList(listId);
+    return {'success': true, 'deleted': listName};
   }
 
   // ── Data access helpers ──────────────────────────────────────────

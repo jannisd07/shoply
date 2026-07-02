@@ -51,16 +51,30 @@ class ShoppingHistoryService {
 
       final historyId = historyResponse['id'] as String;
 
-      // Add items to history
+      // Add items to history (carrying known offer prices along, if any)
       final historyItems = items.map((item) => {
         'history_id': historyId,
         'name': item.name,
         'quantity': item.quantity,
         'unit': item.unit,
         'category': item.category,
+        'price': item.price,
+        'price_retailer': item.priceRetailer,
       }).toList();
 
       await _supabase.from('shopping_history_items').insert(historyItems);
+
+      // Seed the trip's total from known item prices so the cost-split
+      // sheet has a starting figure (the user can still edit it).
+      final pricedTotal = items
+          .where((i) => i.price != null)
+          .fold<double>(0, (sum, i) => sum + i.price! * i.quantity);
+      if (pricedTotal > 0) {
+        await _supabase
+            .from('shopping_history')
+            .update({'total_cost': pricedTotal})
+            .eq('id', historyId);
+      }
 
       // Track purchases for recommendations
       try {

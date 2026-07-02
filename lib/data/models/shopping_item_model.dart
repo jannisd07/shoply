@@ -19,6 +19,11 @@ class ShoppingItemModel extends Equatable {
   final DateTime createdAt;
   final DateTime? checkedAt;
   final DateTime updatedAt;
+  final double? price;
+  final String? priceCurrency;
+  final String? priceRetailer;
+  final String? priceUnit;
+  final DateTime? priceUpdatedAt;
 
   const ShoppingItemModel({
     required this.id,
@@ -39,7 +44,15 @@ class ShoppingItemModel extends Equatable {
     required this.createdAt,
     this.checkedAt,
     required this.updatedAt,
+    this.price,
+    this.priceCurrency,
+    this.priceRetailer,
+    this.priceUnit,
+    this.priceUpdatedAt,
   });
+
+  /// Whether this item has a known price (from a picked offer or manual entry).
+  bool get hasPrice => price != null;
 
   factory ShoppingItemModel.fromJson(Map<String, dynamic> json) {
     return ShoppingItemModel(
@@ -63,6 +76,13 @@ class ShoppingItemModel extends Equatable {
           ? DateTime.parse(json['checked_at'] as String)
           : null,
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      price: (json['price'] as num?)?.toDouble(),
+      priceCurrency: json['price_currency'] as String?,
+      priceRetailer: json['price_retailer'] as String?,
+      priceUnit: json['price_unit'] as String?,
+      priceUpdatedAt: json['price_updated_at'] != null
+          ? DateTime.parse(json['price_updated_at'] as String)
+          : null,
     );
   }
 
@@ -86,6 +106,11 @@ class ShoppingItemModel extends Equatable {
       'created_at': createdAt.toIso8601String(),
       'checked_at': checkedAt?.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'price': price,
+      'price_currency': priceCurrency,
+      'price_retailer': priceRetailer,
+      'price_unit': priceUnit,
+      'price_updated_at': priceUpdatedAt?.toIso8601String(),
     };
   }
 
@@ -108,6 +133,11 @@ class ShoppingItemModel extends Equatable {
     DateTime? createdAt,
     DateTime? checkedAt,
     DateTime? updatedAt,
+    double? price,
+    String? priceCurrency,
+    String? priceRetailer,
+    String? priceUnit,
+    DateTime? priceUpdatedAt,
   }) {
     return ShoppingItemModel(
       id: id ?? this.id,
@@ -128,6 +158,11 @@ class ShoppingItemModel extends Equatable {
       createdAt: createdAt ?? this.createdAt,
       checkedAt: checkedAt ?? this.checkedAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      price: price ?? this.price,
+      priceCurrency: priceCurrency ?? this.priceCurrency,
+      priceRetailer: priceRetailer ?? this.priceRetailer,
+      priceUnit: priceUnit ?? this.priceUnit,
+      priceUpdatedAt: priceUpdatedAt ?? this.priceUpdatedAt,
     );
   }
 
@@ -150,6 +185,11 @@ class ShoppingItemModel extends Equatable {
         orderIndex,
         createdAt,
         checkedAt,
+        price,
+        priceCurrency,
+        priceRetailer,
+        priceUnit,
+        priceUpdatedAt,
         updatedAt,
       ];
 }

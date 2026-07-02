@@ -68,6 +68,10 @@ class ItemRepository {
     String? notes,
     bool isDietWarning = false,
     String? barcode,
+    double? price,
+    String? priceCurrency,
+    String? priceRetailer,
+    String? priceUnit,
   }) async {
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     print('🔵 [ITEM_REPO] addItem() METHOD ENTRY');
@@ -127,10 +131,22 @@ class ItemRepository {
         final newQuantity = existingItem.quantity + parsedQuantity;
         
         print('🔄 [ITEM_REPO] Found existing item "${existingItem.name}" - merging quantities: ${existingItem.quantity} + $quantity = $newQuantity');
-        
+
+        final mergeUpdate = <String, dynamic>{
+          'quantity': newQuantity,
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+        if (price != null) {
+          mergeUpdate['price'] = price;
+          mergeUpdate['price_currency'] = priceCurrency ?? 'EUR';
+          mergeUpdate['price_retailer'] = priceRetailer;
+          mergeUpdate['price_unit'] = priceUnit;
+          mergeUpdate['price_updated_at'] = DateTime.now().toIso8601String();
+        }
+
         final updatedResponse = await _supabase
             .from('shopping_items')
-            .update({'quantity': newQuantity, 'updated_at': DateTime.now().toIso8601String()})
+            .update(mergeUpdate)
             .eq('id', existingItem.id)
             .select()
             .single();
@@ -179,7 +195,7 @@ class ItemRepository {
         print('🔵 [ITEM_REPO] Inserting item "$parsedName" (qty: $parsedQuantity, unit: $parsedUnit) into database...');
       }
       
-      final response = await _supabase.from('shopping_items').insert({
+      final insertData = <String, dynamic>{
         'list_id': listId,
         'name': parsedName,
         'quantity': parsedQuantity,
@@ -191,7 +207,20 @@ class ItemRepository {
         'is_diet_warning': isDietWarning,
         'barcode': barcode,
         'added_by': userId,
-      }).select().single();
+      };
+      if (price != null) {
+        insertData['price'] = price;
+        insertData['price_currency'] = priceCurrency ?? 'EUR';
+        insertData['price_retailer'] = priceRetailer;
+        insertData['price_unit'] = priceUnit;
+        insertData['price_updated_at'] = DateTime.now().toIso8601String();
+      }
+
+      final response = await _supabase
+          .from('shopping_items')
+          .insert(insertData)
+          .select()
+          .single();
 
       if (kDebugMode) {
         print('✅ [ITEM_REPO] Successfully added item "$name" with ID: ${response['id']}');

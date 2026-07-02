@@ -6,7 +6,10 @@ import 'package:intl/intl.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/data/models/expense_split.dart';
 import 'package:shoply/data/models/shopping_history.dart';
+import 'package:shoply/presentation/screens/history/widgets/split_cost_sheet.dart';
+import 'package:shoply/presentation/state/expense_split_provider.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
 
 /// Paper-style activities screen: "Dein Juli." with stats, weekday
@@ -266,7 +269,7 @@ class _Stat extends StatelessWidget {
   }
 }
 
-class _HistoryRow extends StatelessWidget {
+class _HistoryRow extends ConsumerWidget {
   final ShoppingHistory entry;
   final bool expanded;
   final String locale;
@@ -293,7 +296,7 @@ class _HistoryRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
 
@@ -377,8 +380,165 @@ class _HistoryRow extends StatelessWidget {
                   ),
                 ),
             ],
+            if (expanded) _SplitSection(entry: entry),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SplitSection extends ConsumerWidget {
+  final ShoppingHistory entry;
+
+  const _SplitSection({required this.entry});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final textSecondary = AppColors.textSecondary(context);
+    final accent = AppColors.accentColor(context);
+
+    if (entry.totalCost == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            showSplitCostSheet(context, ref, entry: entry);
+          },
+          child: Row(
+            children: [
+              Icon(Icons.call_split_rounded, size: 15, color: accent),
+              const SizedBox(width: 6),
+              Text(
+                context.tr('split_trip_cost'),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final splitsAsync = ref.watch(tripSplitsProvider(entry.id));
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${context.tr('total_cost')}: ${entry.totalCost!.toStringAsFixed(2)} €',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary(context),
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  showSplitCostSheet(context, ref, entry: entry);
+                },
+                child: Text(
+                  context.tr('edit_split'),
+                  style: TextStyle(fontSize: 12, color: accent),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          splitsAsync.when(
+            loading: () => const SizedBox(
+              height: 20,
+              child: Center(
+                child: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                ),
+              ),
+            ),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (splits) => Column(
+              children: [
+                for (final split in splits)
+                  _SplitParticipantRow(split: split, entryId: entry.id),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SplitParticipantRow extends ConsumerWidget {
+  final ExpenseSplit split;
+  final String entryId;
+
+  const _SplitParticipantRow({required this.split, required this.entryId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              split.participantName,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary(context),
+              ),
+            ),
+          ),
+          Text(
+            '${split.amount.toStringAsFixed(2)} €',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: AppColors.textSecondary(context),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await ref
+                  .read(expenseSplitServiceProvider)
+                  .setPaid(split.id, !split.isPaid);
+              ref.invalidate(tripSplitsProvider(entryId));
+              ref.invalidate(tripsAwaitingPaymentToMeProvider);
+              ref.invalidate(tripsIOweProvider);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: split.isPaid
+                    ? AppColors.accentColor(context).withValues(alpha: 0.12)
+                    : AppColors.border(context).withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                split.isPaid ? context.tr('paid') : context.tr('unpaid'),
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: split.isPaid
+                      ? AppColors.accentColor(context)
+                      : AppColors.textTertiary(context),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git push fallback (remote/scheduled sessions)
+
+In remote Claude Code sessions, `git push` through the default proxy remote can
+fail with 403 ("Resource not accessible by integration") — the GitHub App
+integration has read-only repo access. If that happens AND the
+`GITHUB_FINEGRAINED_PAT` environment variable is set (a fine-grained PAT with
+Contents: Read and write on this repo, configured in the Claude Code
+environment settings), push directly instead:
+
+```bash
+git push https://x-access-token:${GITHUB_FINEGRAINED_PAT}@github.com/jannisd07/shoply.git <branch>
+```
+
+The credentialed URL bypasses the proxy's `insteadOf` rewrite (literal prefix
+match doesn't cover URLs with userinfo), and github.com's git endpoint is
+reachable through the egress policy. Never print the token or commit it.
+If the variable is unset and the normal push 403s, commit locally, tell the
+user pushes are blocked, and do not retry.
+
 ## Project Overview
 
 **Shoply** is a Flutter shopping list app (iOS-primary) with shared lists, AI-powered ingredient categorization, recipe system, and premium subscriptions. Backend is Supabase (Auth, PostgreSQL, Edge Functions, Storage). State management is Riverpod. The app is bilingual (German/English).
@@ -140,7 +159,7 @@ URL scheme: `shoply://` + Universal Links. Routes handled by `DeepLinkService`. 
 
 ### iOS Native Components
 
-- **ShoplyWidget**: iOS home screen widget (3 sizes) in `ios/ShoplyWidget/`. Requires App Group `group.com.shoply.app` shared with main app.
+- **ShoppingListWidget**: iOS home screen widget (Small/Medium/Large) in `ios/ShoppingListWidget/` (Xcode target `ShoppingListWidgetExtension`). Requires App Group `group.com.shoply.app` shared with main app — code-signed via `ios/ShoppingListWidgetExtension.entitlements` (the file `ios/ShoppingListWidget/ShoppingListWidget.entitlements` is unused/orphaned, not referenced by the Xcode project).
 - **VoiceAssistantPlugin**: Siri integration (`ios/Runner/VoiceAssistantPlugin.swift`). iOS-only, initialized via `SiriService`.
 - **LiquidGlassViewFactory**: Native iOS 26 Liquid Glass rendering (`ios/Runner/LiquidGlassViewFactory.swift`).
 

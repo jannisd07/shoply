@@ -146,11 +146,15 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     String? notes,
     bool isDietWarning = false,
     String? barcode,
+    double? price,
+    String? priceCurrency,
+    String? priceRetailer,
+    String? priceUnit,
   }) async {
     try {
       debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       debugPrint('🛒 [ITEMS_PROVIDER] addItem called: "$name"');
-      
+
       await _repository.addItem(
         listId: listId,
         name: name,
@@ -160,6 +164,10 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
         notes: notes,
         isDietWarning: isDietWarning,
         barcode: barcode,
+        price: price,
+        priceCurrency: priceCurrency,
+        priceRetailer: priceRetailer,
+        priceUnit: priceUnit,
       );
       debugPrint('✅ [ITEMS_PROVIDER] Item added to database');
       
