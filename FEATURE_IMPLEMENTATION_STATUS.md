@@ -497,7 +497,7 @@ exists, "N calories left — 3 dinner ideas from your list."
 
 ## Ideas / Needs My Approval
 
-- [ ] IDEA: Delete the dead OCR/flyer-deal pipeline (`ExtractedDeal`,
+- [ yes] IDEA: Delete the dead OCR/flyer-deal pipeline (`ExtractedDeal`,
   `DealExtractorService`, `DealsDatabaseService`, `ProductMatchingService`,
   `DealBadge`, `ShoppingItemGridCard`, `OffersScreen`,
   `SupermarktFinderPage`'s hardcoded demo data, `StoreFlyerService`'s
@@ -513,7 +513,7 @@ exists, "N calories left — 3 dinner ideas from your list."
     a chunk of code I didn't write without asking first.
   - Recommendation: yes.
 
-- [ ] IDEA: Consolidate the two dead mascot/gamification systems
+- [ yes] IDEA: Consolidate the two dead mascot/gamification systems
   (`core/gamification/` and `MascotNotificationService`'s streak logic) into
   one, and make `users.notification_enabled` the single enforced
   notification gate.
@@ -528,7 +528,7 @@ exists, "N calories left — 3 dinner ideas from your list."
     tested with real device pushes).
   - Recommendation: yes, as the first step of Feature 5.
 
-- [ ] IDEA: Let the split-cost sheet pick a different "who paid" person
+- [ yes] IDEA: Let the split-cost sheet pick a different "who paid" person
   instead of always defaulting to whoever opens the sheet.
   - Why it helps: "I paid for everything" is common but so is "someone else
     fronted the money and I'm splitting it after the fact."
@@ -540,7 +540,7 @@ exists, "N calories left — 3 dinner ideas from your list."
   - Risk: Low.
   - Recommendation: yes, small follow-up.
 
-- [ ] IDEA: Push notification when a split is marked paid/unpaid.
+- [ yes] IDEA: Push notification when a split is marked paid/unpaid.
   - Why it helps: closes the loop without requiring someone to reopen the app.
   - Expected user value: medium.
   - Expected business/premium value: low-medium (retention nudge).
@@ -549,7 +549,7 @@ exists, "N calories left — 3 dinner ideas from your list."
   - Risk: Low.
   - Recommendation: yes.
 
-- [ ] IDEA: Build calorie tracking (Feature 6) as its own dedicated
+- [yes ] IDEA: Build calorie tracking (Feature 6) as its own dedicated
   multi-session effort with build verification available, following the
   phased plan above, rather than attempting it piecemeal.
   - Why it helps: avoids shipping a half-working, unverified nutrition
@@ -564,7 +564,7 @@ exists, "N calories left — 3 dinner ideas from your list."
     barcode scanning should re-enable `mobile_scanner` or use a lighter
     camera+Gemini-vision approach, before a follow-up session starts on it.
 
-- [ ] IDEA: Rebuild onboarding (Feature 7) immediately after Feature 6's
+- [yes ] IDEA: Rebuild onboarding (Feature 7) immediately after Feature 6's
   schema is settled, replacing the static carousel with the adaptive flow
   and making `onboarding_completed` actually gate the router.
   - Why it helps: currently onboarding collects nothing and doesn't even
