@@ -11,6 +11,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/list_activity.dart';
 import 'package:shoply/data/services/list_activity_service.dart';
 import 'package:shoply/presentation/widgets/common/liquid_glass_button.dart';
+import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 
 /// Per-list custom category management and category ordering.
 
@@ -597,31 +598,22 @@ class _CategoryOrderScreenState extends State<CategoryOrderScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = AppColors.background(context);
-    final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    
+
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context, _hasChanges),
-        ),
-        title: Text(
-          context.tr('category_order'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+      appBar: PaperSettingsAppBar(
+        title: context.tr('category_order'),
+        onBack: () => Navigator.pop(context, _hasChanges),
         actions: [
-          IconButton(
-            icon: Icon(Icons.add_rounded, color: textPrimary, size: 24),
-            onPressed: _showAddCategoryDialog,
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: PaperCircleIconButton(
+                icon: Icons.add_rounded,
+                onTap: _showAddCategoryDialog,
+              ),
+            ),
           ),
         ],
       ),
@@ -630,12 +622,16 @@ class _CategoryOrderScreenState extends State<CategoryOrderScreen> {
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 4, 28, 16),
-                  child: Text(
-                    context.tr('drag_to_reorder'),
-                    style: TextStyle(
-                      color: textSecondary,
-                      fontSize: 13,
+                  padding: const EdgeInsets.fromLTRB(26, 4, 26, 16),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      context.tr('drag_to_reorder'),
+                      style: TextStyle(
+                        color: textSecondary,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -710,7 +706,7 @@ class _CategoryOrderScreenState extends State<CategoryOrderScreen> {
                       : Categories.getById(category.id).getName(Localizations.localeOf(context).languageCode),
                   style: TextStyle(
                     fontWeight: FontWeight.w400,
-                    fontSize: 17,
+                    fontSize: 15,
                     color: textPrimary,
                   ),
                 ),

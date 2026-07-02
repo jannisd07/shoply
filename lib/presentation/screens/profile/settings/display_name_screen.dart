@@ -3,7 +3,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/data/services/profile_picture_service.dart';
+import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 
@@ -81,11 +83,7 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
               children: [
                 Text(
                   context.tr('change_profile_picture'),
-                  style: TextStyle(
-                    color: textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: PaperTextStyles.serif(18, color: textPrimary),
                 ),
                 const SizedBox(height: 20),
                 _buildOptionRow(
@@ -165,14 +163,14 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
                 label,
                 style: TextStyle(
                   color: textColor ?? textPrimary,
-                  fontSize: 17,
+                  fontSize: 15,
                   fontWeight: FontWeight.w400,
                 ),
               ),
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: textColor ?? textSecondary.withOpacity(0.4),
+              color: textColor ?? textSecondary.withValues(alpha: 0.4),
               size: 20,
             ),
           ],
@@ -235,39 +233,17 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
     final backgroundColor = AppColors.background(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final inputFill = AppColors.inputFill(context);
-    final borderColor = AppColors.border(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          context.tr('profile'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: PaperSettingsAppBar(
+        title: context.tr('profile'),
         actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _saveName,
-            child: _isLoading
-                ? CupertinoActivityIndicator(radius: 10, color: textPrimary)
-                : Text(
-                    context.tr('save'),
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+          PaperSaveButton(
+            label: context.tr('save'),
+            loading: _isLoading,
+            onPressed: _saveName,
           ),
         ],
       ),
@@ -289,7 +265,9 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
                   children: [
                     CircleAvatar(
                       radius: 50,
-                      backgroundColor: inputFill,
+                      backgroundColor: isDark
+                          ? const Color(0xFF2C2C2E)
+                          : PaperColors.cream,
                       backgroundImage: user?.avatarUrl != null
                           ? NetworkImage(user!.avatarUrl!)
                           : null,
@@ -298,10 +276,11 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
                           : user?.avatarUrl == null
                               ? Text(
                                   displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
-                                  style: TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.w600,
-                                    color: textPrimary,
+                                  style: PaperTextStyles.serif(
+                                    34,
+                                    color: isDark
+                                        ? textPrimary
+                                        : PaperColors.creamInk,
                                   ),
                                 )
                               : null,
@@ -323,7 +302,7 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
             const SizedBox(height: 32),
 
             // Name section
-            _buildSectionHeader(context.tr('how_to_be_called'), textSecondary),
+            PaperSectionHeader(context.tr('how_to_be_called')),
             Padding(
               padding: const EdgeInsets.only(bottom: 16, left: 4),
               child: Text(
@@ -333,11 +312,7 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
             ),
 
             Container(
-              decoration: BoxDecoration(
-                color: inputFill,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: borderColor),
-              ),
+              decoration: paperFieldDecoration(context),
               child: TextFormField(
                 controller: _nameController,
                 style: TextStyle(color: textPrimary),
@@ -365,18 +340,4 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
 }

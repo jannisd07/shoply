@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,9 +60,9 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
   Widget build(BuildContext context) {
     final listsAsync = ref.watch(userListsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF2C2C2E) : Colors.white;
+    final cardColor = isDark ? const Color(0xFF2C2C2E) : PaperColors.surface;
     final separatorColor =
-        isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE5E5EA);
+        isDark ? Colors.white.withValues(alpha: 0.08) : PaperColors.hairline;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
@@ -148,7 +149,7 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.3,
-                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                color: isDark ? Colors.white : PaperColors.ink,
               ),
             ),
           ),
@@ -575,7 +576,7 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
               action: SnackBarAction(
                 label: 'View',
                 textColor: Colors.white,
-                onPressed: () => context.go('/lists/$listId'),
+                onPressed: () => context.push('/lists/$listId'),
               ),
             ),
           );

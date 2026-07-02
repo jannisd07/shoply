@@ -35,7 +35,7 @@ class NavigationService {
       path: '/lists/$listId/activities',
       queryParameters: {'name': name},
     );
-    _router!.go(uri.toString());
+    _router!.push(uri.toString());
     debugPrint('✅ [NAVIGATION] Navigated to list activities: $listId');
   }
 
@@ -48,7 +48,7 @@ class NavigationService {
 
     final name = listName ?? 'Shopping List';
     final uri = Uri(path: '/lists/$listId', queryParameters: {'name': name});
-    _router!.go(uri.toString());
+    _router!.push(uri.toString());
     debugPrint('✅ [NAVIGATION] Navigated to list: $listId');
   }
 

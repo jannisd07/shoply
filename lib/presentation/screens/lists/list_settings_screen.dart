@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 
@@ -205,27 +207,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          context.tr('list_settings'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_rounded,
-            color: textPrimary,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: PaperSettingsAppBar(title: context.tr('list_settings')),
       body: _isLoading
           ? const Center(child: CupertinoActivityIndicator())
           : ListView(
@@ -238,17 +220,17 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
               children: [
                 // List name
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8, left: 4),
+                  padding: const EdgeInsets.only(bottom: 8, left: 2),
                   child: Text(
                     widget.listName,
-                    style: TextStyle(fontSize: 15, color: textSecondary),
+                    style: PaperTextStyles.serif(15, color: textSecondary),
                   ),
                 ),
 
                 const SizedBox(height: 24),
 
                 // Members section
-                _buildSectionHeader(context.tr('members'), textSecondary),
+                PaperSectionHeader(context.tr('members')),
                 ...List.generate(_members.length, (index) {
                   final member = _members[index];
                   final isOwner = member['is_owner'] == true;
@@ -306,7 +288,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                                               ? ' (${context.tr('you')})'
                                               : ''),
                                       style: TextStyle(
-                                        fontSize: 17,
+                                        fontSize: 15,
                                         fontWeight: FontWeight.w400,
                                         color: textPrimary,
                                       ),
@@ -315,7 +297,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                                       Text(
                                         context.tr('creator'),
                                         style: TextStyle(
-                                          fontSize: 14,
+                                          fontSize: 13,
                                           color: textSecondary,
                                         ),
                                       ),
@@ -328,17 +310,17 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                                     member['user_id'] as String,
                                     displayName,
                                   ),
-                                  child: Icon(
+                                  child: const Icon(
                                     CupertinoIcons.minus_circle_fill,
-                                    color: CupertinoColors.systemRed,
+                                    color: PaperColors.danger,
                                     size: 20,
                                   ),
                                 )
                               else
                                 Icon(
                                   Icons.chevron_right_rounded,
-                                  color: textSecondary.withOpacity(0.4),
-                                  size: 20,
+                                  color: textSecondary.withValues(alpha: 0.4),
+                                  size: 18,
                                 ),
                             ],
                           ),
@@ -353,7 +335,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                 const SizedBox(height: 32),
 
                 // Actions section
-                _buildSectionHeader(context.tr('actions'), textSecondary),
+                PaperSectionHeader(context.tr('actions')),
                 if (!_isCreator)
                   _buildActionRow(
                     label: context.tr('leave_list'),
@@ -382,35 +364,20 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
   Widget _buildAvatarFallback(
     String name,
     Color textPrimary,
     Color textSecondary,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: textSecondary.withOpacity(0.1),
+      color: isDark ? const Color(0xFF2C2C2E) : PaperColors.cream,
       child: Center(
         child: Text(
           name.isNotEmpty ? name[0].toUpperCase() : '?',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: textSecondary,
+          style: PaperTextStyles.serif(
+            15,
+            color: isDark ? textSecondary : PaperColors.creamInk,
           ),
         ),
       ),
@@ -423,7 +390,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
     required bool isDestructive,
     required VoidCallback onTap,
   }) {
-    final color = isDestructive ? CupertinoColors.systemRed : textPrimary;
+    final color = isDestructive ? PaperColors.danger : textPrimary;
 
     return GestureDetector(
       onTap: () {
@@ -436,7 +403,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 17,
+            fontSize: 15,
             fontWeight: FontWeight.w400,
             color: color,
           ),

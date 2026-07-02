@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
@@ -98,35 +99,23 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 children: [
                   const SizedBox(height: 32),
                   
-                  // ── Hero ──
-                  Center(
-                    child: Text(
-                      'Pro',
-                      style: TextStyle(
-                        fontSize: 56,
-                        fontWeight: FontWeight.w800,
-                        color: fg,
-                        letterSpacing: -2,
-                        height: 1.0,
-                      ),
+                  // ── Hero: paper kicker + serif headline ──
+                  Text(
+                    'SHOPLY PREMIUM',
+                    style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 2,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.accentColor(context),
                     ),
                   ),
-                  
-                  const SizedBox(height: 8),
-                  
-                  Center(
-                    child: Text(
-                      context.tr('unlock_premium_features'),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w400,
-                        color: muted,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
+                  const SizedBox(height: 10),
+                  Text(
+                    context.tr('premium_headline'),
+                    style: PaperTextStyles.serif(28, color: fg, height: 1.25),
                   ),
-                  
-                  const SizedBox(height: 48),
+
+                  const SizedBox(height: 26),
                   
                   // ── Features ──
                   _buildFeatures(context, isDark, fg, muted),
@@ -172,29 +161,28 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   // ── Features list ──
   Widget _buildFeatures(BuildContext context, bool isDark, Color fg, Color muted) {
     final features = [
-      (Icons.auto_awesome_rounded, context.tr('premium_feature_ai')),
-      (Icons.restaurant_menu_rounded, context.tr('premium_feature_cooking_mode')),
-      (Icons.calendar_month_rounded, context.tr('premium_feature_meal_planning')),
-      (Icons.block_rounded, context.tr('premium_feature_no_ads')),
+      context.tr('premium_feat_lists'),
+      context.tr('premium_feat_avo'),
+      context.tr('premium_feat_deals'),
+      context.tr('premium_feat_stats'),
     ];
 
     return Column(
       children: features.map((f) {
         return Padding(
-          padding: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.only(bottom: 14),
           child: Row(
             children: [
-              Icon(f.$1, color: muted, size: 22),
-              const SizedBox(width: 16),
+              Icon(
+                Icons.check,
+                color: AppColors.accentColor(context),
+                size: 17,
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  f.$2,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: fg,
-                    letterSpacing: -0.2,
-                  ),
+                  f,
+                  style: TextStyle(fontSize: 14, color: fg),
                 ),
               ),
             ],
@@ -204,152 +192,60 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     );
   }
 
-  // ── Plan cards ──
+  // ── Plan cards: paper side-by-side per mockup ──
   Widget _buildPlans(
     BuildContext context, bool isDark, Color fg, Color muted, Color dim,
     List<ProductDetails> products,
   ) {
-    final sorted = List<ProductDetails>.from(products)
-      ..sort((a, b) => a.id == SubscriptionProducts.yearlyId ? -1 : 1);
+    final yearly = products
+        .where((p) => p.id == SubscriptionProducts.yearlyId)
+        .firstOrNull;
+    final monthly = products
+        .where((p) => p.id == SubscriptionProducts.monthlyId)
+        .firstOrNull;
 
-    return Column(
-      children: sorted.map((product) {
-        final isSelected = _selectedProductId == product.id;
-        final isYearly = product.id == SubscriptionProducts.yearlyId;
-        
-        String savingText = context.tr('save_percent', params: {'percent': '50'});
-        if (isYearly) {
-          try {
-            final monthlyProduct = products.firstWhere((p) => p.id == SubscriptionProducts.monthlyId);
-            final savings = (monthlyProduct.rawPrice * 12) - product.rawPrice;
-            if (savings > 0) {
-              final symbol = product.price.replaceAll(RegExp(r'[0-9.,\s]'), '');
-              final formattedSavings = savings.truncateToDouble() == savings 
-                  ? savings.toInt().toString() 
-                  : savings.toStringAsFixed(2);
-                  
-              final isGerman = Localizations.localeOf(context).languageCode == 'de';
-              savingText = isGerman ? '$formattedSavings$symbol sparen' : 'Save $symbol$formattedSavings';
-            }
-          } catch (_) {}
-        }
-        
-        return GestureDetector(
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() => _selectedProductId = product.id);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? (isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.04))
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isSelected
-                    ? (isDark
-                        ? Colors.white.withValues(alpha: 0.25)
-                        : Colors.black.withValues(alpha: 0.15))
-                    : (isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.06)),
-                width: isSelected ? 1.5 : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                // Selection dot
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected ? fg : Colors.transparent,
-                    border: Border.all(
-                      color: isSelected ? fg : dim,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: isSelected
-                      ? Icon(Icons.check_rounded, size: 12,
-                          color: isDark ? Colors.black : Colors.white)
-                      : null,
-                ),
-                const SizedBox(width: 16),
-                
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            isYearly ? context.tr('yearly') : context.tr('monthly'),
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                              color: fg,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                          if (isYearly) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.12)
-                                    : Colors.black.withValues(alpha: 0.06),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                savingText,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: fg,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        isYearly
-                            ? context.tr('billed_yearly')
-                            : context.tr('billed_monthly'),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                Text(
-                  product.price,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: fg,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ],
+    String? perMonth;
+    if (yearly != null) {
+      final symbol = yearly.price.replaceAll(RegExp(r'[0-9.,\s]'), '');
+      final val = yearly.rawPrice / 12;
+      perMonth =
+          '${val.toStringAsFixed(2).replaceAll('.', ',')} $symbol ${context.tr('per_month_suffix')}';
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (yearly != null)
+          Expanded(
+            child: _PlanCard(
+              label: context.tr('yearly_label'),
+              price: yearly.price,
+              subline: perMonth ?? '',
+              sublineAccent: true,
+              badge: context.tr('best_choice').toUpperCase(),
+              selected: _selectedProductId == yearly.id,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedProductId = yearly.id);
+              },
             ),
           ),
-        );
-      }).toList(),
+        if (yearly != null && monthly != null) const SizedBox(width: 12),
+        if (monthly != null)
+          Expanded(
+            child: _PlanCard(
+              label: context.tr('monthly_label'),
+              price: monthly.price,
+              subline: context.tr('cancel_anytime'),
+              sublineAccent: false,
+              selected: _selectedProductId == monthly.id,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedProductId = monthly.id);
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -394,30 +290,53 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     final fg = isDark ? Colors.black : Colors.white;
     final bg = isDark ? Colors.white : Colors.black;
 
-    return GestureDetector(
-      onTap: canTap ? () => _subscribe(selectedProduct) : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: double.infinity,
-        height: 56,
-        decoration: BoxDecoration(
-          color: canTap ? bg : bg.withValues(alpha: 0.4),
-          borderRadius: BorderRadius.circular(14),
+    final yearlyPrice = products
+            .where((p) => p.id == SubscriptionProducts.yearlyId)
+            .firstOrNull
+            ?.price ??
+        '';
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: canTap ? () => _subscribe(selectedProduct) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: double.infinity,
+            height: 54,
+            decoration: BoxDecoration(
+              color: canTap
+                  ? PaperColors.ink
+                  : PaperColors.ink.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Center(
+              child: _isLoading
+                  ? const CupertinoActivityIndicator(
+                      radius: 10,
+                      color: PaperColors.paper,
+                    )
+                  : Text(
+                      context.tr('trial_cta'),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: PaperColors.paper,
+                      ),
+                    ),
+            ),
+          ),
         ),
-        child: Center(
-          child: _isLoading
-              ? CupertinoActivityIndicator(radius: 10, color: fg)
-              : Text(
-                  context.tr('subscribe_now'),
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: fg,
-                    letterSpacing: -0.3,
-                  ),
-                ),
+        const SizedBox(height: 10),
+        Text(
+          context.tr('trial_footnote', params: {'price': yearlyPrice}),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textTertiary(context),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -464,6 +383,110 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         );
       }
     }
+  }
+}
+
+/// Paper price card with optional "best choice" badge.
+class _PlanCard extends StatelessWidget {
+  final String label;
+  final String price;
+  final String subline;
+  final bool sublineAccent;
+  final String? badge;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PlanCard({
+    required this.label,
+    required this.price,
+    required this.subline,
+    required this.sublineAccent,
+    this.badge,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.accentColor(context);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.surface(context)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: selected ? accent : AppColors.border(context),
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary(context),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  price,
+                  style: PaperTextStyles.serif(
+                    21,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subline,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: sublineAccent
+                        ? accent
+                        : AppColors.textSecondary(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (badge != null)
+            Positioned(
+              top: -9,
+              left: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  badge!,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

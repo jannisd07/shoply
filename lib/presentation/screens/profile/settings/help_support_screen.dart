@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
@@ -16,23 +18,7 @@ class HelpSupportScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          context.tr('help_support'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: PaperSettingsAppBar(title: context.tr('help_support')),
       body: ListView(
         padding: EdgeInsets.only(
           left: 24,
@@ -42,7 +28,7 @@ class HelpSupportScreen extends StatelessWidget {
         ),
         children: [
           // FAQ Section
-          _buildSectionHeader(context.tr('faq'), textSecondary),
+          PaperSectionHeader(context.tr('faq')),
           _buildFAQItem(
             context: context,
             question: context.tr('faq_create_list'),
@@ -78,7 +64,7 @@ class HelpSupportScreen extends StatelessWidget {
           const SizedBox(height: 32),
 
           // Contact Section
-          _buildSectionHeader(context.tr('contact'), textSecondary),
+          PaperSectionHeader(context.tr('contact')),
           _buildTapItem(
             title: context.tr('email_support'),
             subtitle: 'support@shoplyai.app',
@@ -106,7 +92,7 @@ class HelpSupportScreen extends StatelessWidget {
           const SizedBox(height: 32),
 
           // Resources Section
-          _buildSectionHeader(context.tr('resources'), textSecondary),
+          PaperSectionHeader(context.tr('resources')),
           _buildTapItem(
             title: context.tr('user_guide'),
             textPrimary: textPrimary,
@@ -134,28 +120,10 @@ class HelpSupportScreen extends StatelessWidget {
           Center(
             child: Text(
               'Avo  v1.0.0',
-              style: TextStyle(
-                fontSize: 13,
-                color: textSecondary,
-              ),
+              style: PaperTextStyles.serif(13, color: textSecondary),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
       ),
     );
   }
@@ -200,7 +168,7 @@ class HelpSupportScreen extends StatelessWidget {
                     title,
                     style: TextStyle(
                       color: textPrimary,
-                      fontSize: 17,
+                      fontSize: 15,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
@@ -210,7 +178,7 @@ class HelpSupportScreen extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         color: textSecondary,
-                        fontSize: 14,
+                        fontSize: 13,
                       ),
                     ),
                   ],
@@ -300,11 +268,7 @@ class HelpSupportScreen extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
-                    color: textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: PaperTextStyles.serif(18, color: textPrimary),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -404,7 +368,7 @@ class _FAQExpandableItemState extends State<_FAQExpandableItem> {
                     widget.question,
                     style: TextStyle(
                       color: widget.textPrimary,
-                      fontSize: 17,
+                      fontSize: 15,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
@@ -428,8 +392,8 @@ class _FAQExpandableItemState extends State<_FAQExpandableItem> {
                   widget.answer,
                   style: TextStyle(
                     color: widget.textSecondary,
-                    fontSize: 15,
-                    height: 1.4,
+                    fontSize: 13.5,
+                    height: 1.5,
                   ),
                 ),
               ),

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -68,28 +69,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final backgroundColor = AppColors.background(context);
     final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
     final separatorColor = AppColors.divider(context);
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          context.tr('notifications'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: PaperSettingsAppBar(title: context.tr('notifications')),
       body: _isLoading
           ? const Center(child: CupertinoActivityIndicator())
           : ListView(
@@ -101,7 +85,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
               children: [
                 // SECTION: Listen (Lists)
-                _buildSectionHeader(context.tr('lists_section'), textSecondary),
+                PaperSectionHeader(context.tr('lists_section')),
                 _buildToggleItem(
                   title: context.tr('when_items_added'),
                   value: _itemsAdded,
@@ -126,7 +110,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 const SizedBox(height: 32),
 
                 // SECTION: Rezepte (Recipes)
-                _buildSectionHeader(context.tr('recipes_section'), textSecondary),
+                PaperSectionHeader(context.tr('recipes_section')),
                 _buildToggleItem(
                   title: context.tr('likes_on_recipes'),
                   value: _recipeLikes,
@@ -151,7 +135,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 const SizedBox(height: 32),
 
                 // SECTION: Allgemein (General)
-                _buildSectionHeader(context.tr('general_section'), textSecondary),
+                PaperSectionHeader(context.tr('general_section')),
                 _buildToggleItem(
                   title: context.tr('weekly_summary'),
                   value: _weeklySummary,
@@ -160,21 +144,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ),
               ],
             ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-      ),
     );
   }
 
@@ -193,7 +162,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               title,
               style: TextStyle(
                 color: textPrimary,
-                fontSize: 17,
+                fontSize: 15,
                 fontWeight: FontWeight.w400,
               ),
             ),
@@ -202,7 +171,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           CupertinoSwitch(
             value: value,
             onChanged: (_) => onTap(),
-            activeTrackColor: AppColors.textPrimary(context),
+            activeTrackColor: AppColors.accentColor(context),
           ),
         ],
       ),

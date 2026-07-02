@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui';
 import 'dart:io';
+import 'package:shoply/core/constants/paper_colors.dart';
+import 'package:shoply/presentation/providers/ml_recommendations_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,7 +35,6 @@ import 'package:shoply/presentation/widgets/common/loading_indicator.dart';
 import 'package:shoply/presentation/widgets/recommendations/ml_recommendations_section.dart';
 import 'package:shoply/presentation/screens/lists/widgets/background_selection_sheet.dart';
 import 'package:shoply/presentation/screens/lists/category_order_screen.dart';
-import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shoply/data/services/unread_service.dart'; // Neu
 import 'package:flutter_app_badger/flutter_app_badger.dart'; // Neu
@@ -321,17 +322,35 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        centerTitle: true,
+        centerTitle: false,
+        titleSpacing: 0,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         backgroundColor: Colors.transparent,
-        title: Text(
-          _listName,
-          style: AppTextStyles.h2.copyWith(
-            fontWeight: FontWeight.w800,
-            fontSize: 26,
-          ),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _listName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PaperTextStyles.serif(
+                24,
+                color: AppColors.textPrimary(context),
+              ),
+            ),
+            if (itemsAsync.valueOrNull != null &&
+                itemsAsync.valueOrNull!.isNotEmpty)
+              Text(
+                '${itemsAsync.valueOrNull!.where((i) => !i.isChecked).length} ${context.tr('items_open_suffix')} · ${itemsAsync.valueOrNull!.length} ${context.tr('items')}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary(context),
+                ),
+              ),
+          ],
         ),
         leading: PlatformInfo.isIOS26OrHigher()
             ? Padding(
@@ -530,112 +549,42 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Search/Add Bar - Modern pill-shaped design
-          Container(
-            key: DynamicTutorialService.instance.addItemInputKey,
-            margin: const EdgeInsets.fromLTRB(
-              AppDimensions.screenHorizontalPadding,
-              AppDimensions.paddingMedium,
-              AppDimensions.screenHorizontalPadding,
-              12,
-            ),
-            height: 56,
-            decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.light
-                  ? AppColors.lightCardBackground
-                  : AppColors.darkCardBackground,
-              borderRadius: BorderRadius.circular(
-                AppDimensions.cardBorderRadius,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.lightShadow.withOpacity(0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
+          Column(
+            children: [
+              // Paper progress hairline under the header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppDimensions.screenHorizontalPadding,
+                  4,
+                  AppDimensions.screenHorizontalPadding,
+                  6,
                 ),
-              ],
-            ),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _focusNode,
-              autofocus: false,
-              textInputAction: TextInputAction.done,
-              textCapitalization: TextCapitalization.sentences,
-              style: TextStyle(
-                fontSize: 16,
-                color: Theme.of(context).brightness == Brightness.light
-                    ? AppColors.lightTextPrimary
-                    : AppColors.darkTextPrimary,
-              ),
-              decoration: InputDecoration(
-                hintText: AppLocalizations.of(context).addItem,
-                hintStyle: TextStyle(
-                  color: Theme.of(context).brightness == Brightness.light
-                      ? AppColors.lightTextSecondary
-                      : AppColors.darkTextSecondary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                ),
-                prefixIcon: Padding(
-                  padding: const EdgeInsets.only(left: 20, right: 12),
-                  child: Icon(
-                    Icons.search_rounded,
-                    size: 24,
-                    color: Theme.of(context).brightness == Brightness.light
-                        ? AppColors.lightTextSecondary
-                        : AppColors.darkTextSecondary,
-                  ),
-                ),
-                suffixIcon: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      final prefill = _searchController.text.trim();
-                      _searchController.clear();
-                      _focusNode.unfocus();
-                      _showAddItemDialog(context, prefill: prefill);
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: AppColors.accentColor(context),
-                        shape: BoxShape.circle,
+                child: Builder(
+                  builder: (context) {
+                    final items = itemsAsync.valueOrNull ?? [];
+                    final total = items.length;
+                    final done = items.where((i) => i.isChecked).length;
+                    final progress = total > 0 ? done / total : 0.0;
+                    return Container(
+                      height: 3,
+                      color: AppColors.divider(context),
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: progress.clamp(0.0, 1.0),
+                        heightFactor: 1,
+                        child: ColoredBox(
+                          color: AppColors.accentColor(context),
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.add_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 0,
-                  vertical: 16,
+                    );
+                  },
                 ),
               ),
-              onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
-                  final itemName = value.trim();
-                  _searchController
-                      .clear(); // Clear FIRST to prevent re-triggering
-                  _quickAddItem(itemName);
-                  // Keep focus in text field after adding
-                  _focusNode.requestFocus();
-                }
-              },
-            ),
-          ),
 
-          // Items List
-          Expanded(
+              // Items List
+              Expanded(
             key: DynamicTutorialService.instance.listItemsAreaKey,
             child: itemsAsync.when(
               data: (items) {
@@ -672,9 +621,8 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                     padding: EdgeInsets.only(
                       left: AppDimensions.screenHorizontalPadding,
                       right: AppDimensions.screenHorizontalPadding,
-                      bottom: MainScaffold.getNavbarClearance(
-                        context,
-                      ), // Dynamic navbar clearance
+                      // Safe area + floating add bar height
+                      bottom: MediaQuery.of(context).padding.bottom + 96,
                     ),
                     itemCount:
                         groupedItems.length +
@@ -694,29 +642,42 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         );
                       }
 
-                      // Complete Shopping Button am Ende
+                      // Complete Shopping Button am Ende — Paper ink pill
                       if (index == groupedItems.length + 1) {
+                        final isDark =
+                            Theme.of(context).brightness == Brightness.dark;
                         return Padding(
                           padding: const EdgeInsets.only(top: 24, bottom: 24),
-                          child: ElevatedButton(
-                            onPressed: () =>
-                                _completeShoppingTrip(context, ref, items),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentColor(context),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 18),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppDimensions.buttonBorderRadius,
-                                ),
+                          child: SizedBox(
+                            height: 54,
+                            child: ElevatedButton(
+                              onPressed: () =>
+                                  _completeShoppingTrip(context, ref, items),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isDark
+                                    ? PaperColors.paper
+                                    : PaperColors.ink,
+                                foregroundColor: isDark
+                                    ? PaperColors.ink
+                                    : PaperColors.paper,
+                                elevation: 0,
+                                shape: const StadiumBorder(),
                               ),
-                            ),
-                            child: Text(
-                              AppLocalizations.of(context).completeShopping,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.check_rounded, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    AppLocalizations.of(
+                                      context,
+                                    ).completeShopping,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -746,14 +707,123 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   ),
                 );
               },
-              loading: () =>
-                  LoadingIndicator(message: context.tr('loading_items')),
-              error: (error, stack) => Center(child: Text('Error: $error')),
-            ),
+                  loading: () =>
+                      LoadingIndicator(message: context.tr('loading_items')),
+                  error: (error, stack) =>
+                      Center(child: Text('Error: $error')),
+                ),
+              ),
+            ],
+          ),
+
+          // Floating paper add bar hugging the bottom edge (no navbar).
+          Positioned(
+            left: 10,
+            right: 10,
+            bottom: MediaQuery.of(context).viewInsets.bottom > 0
+                ? 8
+                : (MediaQuery.of(context).padding.bottom > 20
+                      ? MediaQuery.of(context).padding.bottom - 8
+                      : 12),
+            child: _buildPaperAddBar(context),
           ),
         ],
       ),
-      // FloatingActionButton removed - add items via search bar
+    );
+  }
+
+  /// Paper-style floating add bar: plus, text field, AI-sort hint, action.
+  Widget _buildPaperAddBar(BuildContext context) {
+    return Container(
+      key: DynamicTutorialService.instance.addItemInputKey,
+      height: 54,
+      padding: const EdgeInsets.only(left: 18, right: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(27),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.add, size: 18, color: AppColors.textSecondary(context)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              focusNode: _focusNode,
+              autofocus: false,
+              textInputAction: TextInputAction.done,
+              textCapitalization: TextCapitalization.sentences,
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary(context),
+              ),
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context).addItem,
+                hintStyle: TextStyle(
+                  color: AppColors.textTertiary(context),
+                  fontSize: 14,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  final itemName = value.trim();
+                  _searchController
+                      .clear(); // Clear FIRST to prevent re-triggering
+                  _quickAddItem(itemName);
+                  // Keep focus in text field after adding
+                  _focusNode.requestFocus();
+                }
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 12,
+                  color: AppColors.accentColor(context),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  context.tr('ai_sorts_label'),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.accentColor(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              final prefill = _searchController.text.trim();
+              _searchController.clear();
+              _focusNode.unfocus();
+              _showAddItemDialog(context, prefill: prefill);
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              child: Icon(
+                Icons.mic_none,
+                size: 18,
+                color: AppColors.textSecondary(context),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
     );
   }
 
@@ -807,56 +877,21 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Category Header
+              // Category Header - paper kicker style
               if (category.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(
                     top: AppDimensions.spacingLarge,
                     bottom: AppDimensions.spacingSmall,
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: categoryColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          categoryIcon,
-                          size: 20,
-                          color: categoryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          category,
-                          style: AppTextStyles.h3.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentColor(
-                            context,
-                          ).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${categoryItems.length}',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.accentColor(context),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    category.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 2,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                 ),
               // Items List or empty state for custom categories
@@ -865,12 +900,12 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+                    color: isDark ? Colors.grey.shade900 : PaperColors.surface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isDark
                           ? Colors.grey.shade800
-                          : Colors.grey.shade300,
+                          : PaperColors.hairline,
                       style: BorderStyle.solid,
                     ),
                   ),
@@ -882,7 +917,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         size: 18,
                         color: isDark
                             ? Colors.grey.shade600
-                            : Colors.grey.shade500,
+                            : PaperColors.faint,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -890,7 +925,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                         style: TextStyle(
                           color: isDark
                               ? Colors.grey.shade500
-                              : Colors.grey.shade600,
+                              : PaperColors.muted,
                           fontSize: 14,
                         ),
                       ),
@@ -1164,10 +1199,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     String? selectedUnit;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+    final bgColor = isDark ? const Color(0xFF1C1C1E) : PaperColors.surface;
     final fillColor = isDark
         ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.04);
+        : PaperColors.paper;
     final fg = AppColors.textPrimary(context);
     final muted = AppColors.textSecondary(context);
 
@@ -1201,12 +1236,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                             children: [
                               Text(
                                 AppLocalizations.of(context).addItem,
-                                style: TextStyle(
-                                  color: fg,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.5,
-                                ),
+                                style: PaperTextStyles.serif(22, color: fg),
                               ),
                               GestureDetector(
                                 onTap: () => Navigator.pop(context),
@@ -1490,10 +1520,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     String selectedUnit = item.unit ?? 'pcs';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+    final bgColor = isDark ? const Color(0xFF1C1C1E) : PaperColors.surface;
     final fillColor = isDark
         ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.04);
+        : PaperColors.paper;
     final fg = AppColors.textPrimary(context);
     final muted = AppColors.textSecondary(context);
 
@@ -1527,12 +1557,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                             children: [
                               Text(
                                 AppLocalizations.of(context).editItem,
-                                style: TextStyle(
-                                  color: fg,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.5,
-                                ),
+                                style: PaperTextStyles.serif(22, color: fg),
                               ),
                               GestureDetector(
                                 onTap: () => Navigator.pop(context),
@@ -1939,7 +1964,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+          backgroundColor: isDark ? const Color(0xFF1C1C1E) : PaperColors.surface,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
             child: Column(
@@ -2799,24 +2824,13 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   /// The actual content of an item tile with 2/3 check zone and 1/3 edit zone
   Widget _buildItemTileContent(ShoppingItemModel item, bool isDark) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.itemCard(context),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.3)
-                : Colors.black.withValues(alpha: 0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-            spreadRadius: isDark ? 0 : 1,
-          ),
-        ],
+        border: Border(
+          bottom: BorderSide(color: AppColors.divider(context), width: 1),
+        ),
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
         child: Row(
           children: [
             // LEFT 2/3 ZONE: Tap to check/uncheck
@@ -2831,14 +2845,14 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                 },
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                  padding: const EdgeInsets.fromLTRB(2, 13, 8, 13),
                   child: Row(
                     children: [
-                      // Checkbox
+                      // Checkbox - paper circle
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        width: 26,
-                        height: 26,
+                        width: 22,
+                        height: 22,
                         decoration: BoxDecoration(
                           color: item.isChecked
                               ? AppColors.accentColor(context)
@@ -2847,17 +2861,15 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                           border: Border.all(
                             color: item.isChecked
                                 ? AppColors.accentColor(context)
-                                : (isDark
-                                      ? Colors.grey.shade600
-                                      : Colors.grey.shade400),
-                            width: 2,
+                                : AppColors.textTertiary(context),
+                            width: 1.5,
                           ),
                         ),
                         child: item.isChecked
                             ? const Icon(
                                 Icons.check_rounded,
                                 color: Colors.white,
-                                size: 16,
+                                size: 14,
                               )
                             : null,
                       ),
@@ -2870,15 +2882,16 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                             Text(
                               item.name,
                               style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w400,
                                 decoration: item.isChecked
                                     ? TextDecoration.lineThrough
                                     : null,
+                                decorationColor: AppColors.textTertiary(
+                                  context,
+                                ),
                                 color: item.isChecked
-                                    ? (isDark
-                                          ? Colors.grey.shade500
-                                          : Colors.grey.shade500)
+                                    ? AppColors.textTertiary(context)
                                     : AppColors.textPrimary(context),
                               ),
                             ),
@@ -2893,7 +2906,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                   fontSize: 12,
                                   color: isDark
                                       ? Colors.grey.shade500
-                                      : Colors.grey.shade600,
+                                      : PaperColors.muted,
                                 ),
                               ),
                             ],
@@ -2920,26 +2933,18 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                     Text(
                       '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity}${item.unit != null && item.unit!.isNotEmpty ? ' ${item.unit}' : ''}',
                       style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
                         color: item.isChecked
-                            ? (isDark
-                                  ? Colors.grey.shade600
-                                  : Colors.grey.shade400)
-                            : (isDark
-                                  ? Colors.white60
-                                  : const Color(0xFF8E8E93)),
+                            ? AppColors.textTertiary(context)
+                            : AppColors.textSecondary(context),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Icon(
-                      Icons.edit_rounded,
+                      Icons.drag_indicator,
                       size: 16,
-                      color: item.isChecked
-                          ? (isDark
-                                ? Colors.grey.shade700
-                                : Colors.grey.shade400)
-                          : (isDark ? Colors.white38 : const Color(0xFFC7C7CC)),
+                      color: AppColors.textTertiary(context),
                     ),
                   ],
                 ),

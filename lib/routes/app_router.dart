@@ -133,7 +133,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               children: children,
             ),
         branches: [
-          // Branch 0: Home + list detail (sibling routes share the home branch)
+          // Branch 0: Home
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -143,34 +143,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                   key: state.pageKey,
                   child: const HomeScreen(),
                 ),
-              ),
-              GoRoute(
-                path: '/lists/:listId',
-                name: 'list-detail',
-                pageBuilder: (context, state) {
-                  final listId = state.pathParameters['listId']!;
-                  final listName =
-                      state.uri.queryParameters['name'] ?? 'Shopping List';
-                  return CupertinoPage(
-                    key: state.pageKey,
-                    child: ListDetailScreen(listId: listId, listName: listName),
-                  );
-                },
-                routes: [
-                  GoRoute(
-                    path: 'activities',
-                    name: 'list-activities',
-                    builder: (context, state) {
-                      final listId = state.pathParameters['listId']!;
-                      final listName =
-                          state.uri.queryParameters['name'] ?? 'Shopping List';
-                      return ListActivitiesScreen(
-                        listId: listId,
-                        listName: listName,
-                      );
-                    },
-                  ),
-                ],
               ),
             ],
           ),
@@ -251,21 +223,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
 
-          // Branch 2: Avo AI Chat
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/avo',
-                name: 'avo-chat',
-                pageBuilder: (context, state) => NoTransitionPage(
-                  key: state.pageKey,
-                  child: const AvoChatScreen(),
-                ),
-              ),
-            ],
-          ),
-
-          // Branch 3: Profile
+          // Branch 2: Profile
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -281,6 +239,42 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       // Separate routes outside ShellRoute (no bottom nav)
+      GoRoute(
+        path: '/avo',
+        name: 'avo-chat',
+        pageBuilder: (context, state) => CupertinoPage(
+          key: state.pageKey,
+          child: const AvoChatScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/lists/:listId',
+        name: 'list-detail',
+        pageBuilder: (context, state) {
+          final listId = state.pathParameters['listId']!;
+          final listName =
+              state.uri.queryParameters['name'] ?? 'Shopping List';
+          return CupertinoPage(
+            key: state.pageKey,
+            child: ListDetailScreen(listId: listId, listName: listName),
+          );
+        },
+        routes: [
+          GoRoute(
+            path: 'activities',
+            name: 'list-activities',
+            builder: (context, state) {
+              final listId = state.pathParameters['listId']!;
+              final listName =
+                  state.uri.queryParameters['name'] ?? 'Shopping List';
+              return ListActivitiesScreen(
+                listId: listId,
+                listName: listName,
+              );
+            },
+          ),
+        ],
+      ),
       GoRoute(
         path: '/author/:authorId',
         name: 'author-profile',

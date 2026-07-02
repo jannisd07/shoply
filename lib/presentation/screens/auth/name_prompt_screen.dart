@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
@@ -78,7 +79,7 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : PaperColors.paper,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -113,7 +114,7 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+                    color: isDark ? Colors.white : PaperColors.ink,
                     height: 1.4,
                   ),
                 ),
@@ -129,7 +130,7 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white : const Color(0xFF1C1C1E),
+                  color: isDark ? Colors.white : PaperColors.ink,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Dein Name',

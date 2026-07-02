@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
@@ -86,7 +87,7 @@ class AIDashboardScreen extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: BorderSide(
-                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                  color: isDark ? Colors.grey.shade800 : PaperColors.hairline,
                   width: 1,
                 ),
               ),
@@ -98,7 +99,7 @@ class AIDashboardScreen extends StatelessWidget {
                 subtitle: Text(
                   'Show smart suggestions in shopping lists',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    color: isDark ? Colors.grey.shade400 : PaperColors.muted,
                   ),
                 ),
                 value: true,
@@ -125,7 +126,7 @@ class AIDashboardScreen extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+          color: isDark ? Colors.grey.shade800 : PaperColors.hairline,
           width: 1,
         ),
       ),
@@ -169,7 +170,7 @@ class AIDashboardScreen extends StatelessWidget {
                       Text(
                         _getScoreLabel(score),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          color: isDark ? Colors.grey.shade400 : PaperColors.muted,
                         ),
                       ),
                     ],
@@ -181,7 +182,7 @@ class AIDashboardScreen extends StatelessWidget {
             Text(
               'Based on your recent shopping and meal choices',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                color: isDark ? Colors.grey.shade400 : PaperColors.muted,
               ),
               textAlign: TextAlign.center,
             ),
@@ -206,7 +207,7 @@ class AIDashboardScreen extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+          color: isDark ? Colors.grey.shade800 : PaperColors.hairline,
           width: 1,
         ),
       ),
@@ -259,7 +260,7 @@ class AIDashboardScreen extends StatelessWidget {
         Text(
           description,
           style: theme.textTheme.bodySmall?.copyWith(
-            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+            color: isDark ? Colors.grey.shade400 : PaperColors.muted,
             fontSize: 12,
           ),
           maxLines: 2,
@@ -306,7 +307,7 @@ class AIDashboardScreen extends StatelessWidget {
               Text(
                 description,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  color: isDark ? Colors.grey.shade400 : PaperColors.muted,
                 ),
               ),
             ],
@@ -317,7 +318,7 @@ class AIDashboardScreen extends StatelessWidget {
           Icon(
             Icons.arrow_forward_ios_rounded,
             size: 16,
-            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+            color: isDark ? Colors.grey.shade400 : PaperColors.muted,
           ),
         ],
       ],

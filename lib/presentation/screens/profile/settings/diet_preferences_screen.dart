@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/supabase_service.dart';
+import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 
 class DietPreferencesScreen extends ConsumerStatefulWidget {
@@ -99,34 +100,13 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          context.tr('diet_preferences'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: PaperSettingsAppBar(
+        title: context.tr('diet_preferences'),
         actions: [
-          TextButton(
-            onPressed: _isLoading ? null : _savePreferences,
-            child: _isLoading
-                ? CupertinoActivityIndicator(radius: 10, color: textPrimary)
-                : Text(
-                    context.tr('save'),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: textPrimary,
-                    ),
-                  ),
+          PaperSaveButton(
+            label: context.tr('save'),
+            loading: _isLoading,
+            onPressed: _savePreferences,
           ),
         ],
       ),
@@ -151,7 +131,7 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
             ),
 
           // Preferences section
-          _buildSectionHeader(context.tr('diet_preferences'), textSecondary),
+          PaperSectionHeader(context.tr('diet_preferences')),
           ...List.generate(_preferences.length, (index) {
             final pref = _preferences[index];
             return Column(
@@ -170,24 +150,9 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
           const SizedBox(height: 32),
 
           // No restrictions
-          _buildSectionHeader(context.tr('other'), textSecondary),
+          PaperSectionHeader(context.tr('other')),
           _buildNoRestrictionsRow(textPrimary, textSecondary),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
       ),
     );
   }
@@ -223,7 +188,7 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
                     pref.label,
                     style: TextStyle(
                       color: textPrimary,
-                      fontSize: 17,
+                      fontSize: 15,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
@@ -232,7 +197,7 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
                     pref.description,
                     style: TextStyle(
                       color: textSecondary,
-                      fontSize: 14,
+                      fontSize: 13,
                     ),
                   ),
                 ],
@@ -241,8 +206,10 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
             const SizedBox(width: 12),
             Icon(
               isSelected ? Icons.check_circle_rounded : Icons.circle_outlined,
-              color: isSelected ? textPrimary : textSecondary.withOpacity(0.4),
-              size: 22,
+              color: isSelected
+                  ? AppColors.accentColor(context)
+                  : textSecondary.withValues(alpha: 0.4),
+              size: 21,
             ),
           ],
         ),
@@ -273,7 +240,7 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
                     context.tr('no_restrictions'),
                     style: TextStyle(
                       color: textPrimary,
-                      fontSize: 17,
+                      fontSize: 15,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
@@ -282,7 +249,7 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
                     context.tr('i_eat_everything'),
                     style: TextStyle(
                       color: textSecondary,
-                      fontSize: 14,
+                      fontSize: 13,
                     ),
                   ),
                 ],
@@ -291,8 +258,10 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
             const SizedBox(width: 12),
             Icon(
               isSelected ? Icons.check_circle_rounded : Icons.circle_outlined,
-              color: isSelected ? textPrimary : textSecondary.withOpacity(0.4),
-              size: 22,
+              color: isSelected
+                  ? AppColors.accentColor(context)
+                  : textSecondary.withValues(alpha: 0.4),
+              size: 21,
             ),
           ],
         ),

@@ -41,57 +41,59 @@ class AppColors {
   // LIGHT MODE COLORS
   // ============================================
   
-  /// Main screen background - pure white for clean look
-  static const Color lightBackground = Color(0xFFFFFFFF);
-  
-  /// Elevated background
-  static const Color lightBackgroundElevated = Color(0xFFFFFFFF);
-  
-  /// Surface/Card background - subtle warm gray
-  static const Color lightSurface = Color(0xFFF8F8F8);
-  
-  /// Input field fill color
-  static const Color lightInputFill = Color(0xFFF5F5F5);
-  
-  /// Border color for inputs and cards
-  static const Color lightBorder = Color(0xFFEAEAEA);
-  
-  /// Divider/separator color
-  static const Color lightDivider = Color(0xFFE8E8E8);
-  
-  /// Primary text - soft black
-  static const Color lightTextPrimary = Color(0xFF1C1C1E);
-  
-  /// Secondary text - iOS system gray
-  static const Color lightTextSecondary = Color(0xFF6E6E73);
-  
-  /// Tertiary/hint text
-  static const Color lightTextTertiary = Color(0xFF8E8E93);
-  
-  /// Button background (secondary)
-  static const Color lightButtonSecondary = Color(0xFFEFEFEF);
+  // "Paper" design language: warm editorial palette (see paper_colors.dart)
+
+  /// Main screen background - warm paper
+  static const Color lightBackground = Color(0xFFF7F3EC);
+
+  /// Elevated background - brighter paper surface
+  static const Color lightBackgroundElevated = Color(0xFFFFFDF8);
+
+  /// Surface/Card background - brighter paper surface
+  static const Color lightSurface = Color(0xFFFFFDF8);
+
+  /// Input field fill color - soft cream
+  static const Color lightInputFill = Color(0xFFEFE8DA);
+
+  /// Border color for inputs and cards - paper hairline
+  static const Color lightBorder = Color(0xFFE2D9C8);
+
+  /// Divider/separator color - soft paper hairline
+  static const Color lightDivider = Color(0xFFEAE3D6);
+
+  /// Primary text - warm ink
+  static const Color lightTextPrimary = Color(0xFF201D18);
+
+  /// Secondary text - warm muted
+  static const Color lightTextSecondary = Color(0xFF8A8274);
+
+  /// Tertiary/hint text - warm faint
+  static const Color lightTextTertiary = Color(0xFFB5AB97);
+
+  /// Button background (secondary) - cream
+  static const Color lightButtonSecondary = Color(0xFFE9DFCB);
 
   // ============================================
-  // ACCENT COLORS - Modern Blue Palette
+  // ACCENT COLORS - Paper Terracotta Palette
   // ============================================
-  
-  /// Primary accent - Modern vibrant blue (light mode)
-  static const Color accent = Color(0xFF2563EB);
-  
-  /// Primary accent for dark mode - Brighter blue for contrast
-  static const Color accentDark = Color(0xFF3B82F6);
-  
-  /// Success - iOS Green
-  static const Color success = Color(0xFF34C759);
-  
-  /// Warning - iOS Orange  
-  static const Color warning = Color(0xFFFF9500);
-  
-  /// Error/Destructive - iOS Red
-  static const Color error = Color(0xFFFF3B30);
-  
+
+  /// Primary accent - terracotta (light mode)
+  static const Color accent = Color(0xFFC0502A);
+
+  /// Primary accent for dark mode - brighter terracotta for contrast
+  static const Color accentDark = Color(0xFFD4693F);
+
+  /// Success - muted sage green
+  static const Color success = Color(0xFF5F7D52);
+
+  /// Warning - warm amber ink
+  static const Color warning = Color(0xFFBA7517);
+
+  /// Error/Destructive - paper danger red
+  static const Color error = Color(0xFFA33B2A);
+
   /// Info - Same as accent
-  static const Color info = Color(0xFF2563EB);
+  static const Color info = Color(0xFFC0502A);
   
   /// Yellow accent
   static const Color accentYellow = Color(0xFFFFCC00);
@@ -102,8 +104,8 @@ class AppColors {
   /// Teal accent
   static const Color accentTeal = Color(0xFF5AC8FA);
   
-  /// Light accent variant for backgrounds
-  static const Color accentLight = Color(0xFFDBEAFE);
+  /// Light accent variant for backgrounds - pale terracotta tint
+  static const Color accentLight = Color(0xFFF3DCCF);
   
   /// Accent color getter based on theme
   static Color accentColor(BuildContext context) {
@@ -147,9 +149,9 @@ class AppColors {
   /// Berry purple - for desserts
   static const Color berryPurple = Color(0xFF7E57C2);
   
-  /// Recipe/Food accent - primary color for recipe features
-  static const Color recipeAccent = Color(0xFF4CAF50); // Fresh green
-  static const Color recipeAccentDark = Color(0xFF66BB6A); // Brighter for dark mode
+  /// Recipe/Food accent - paper terracotta
+  static const Color recipeAccent = Color(0xFFC0502A);
+  static const Color recipeAccentDark = Color(0xFFD4693F);
   
   /// Get recipe accent based on theme
   static Color recipeAccentColor(BuildContext context) {
@@ -164,26 +166,26 @@ class AppColors {
   static const Color recipeDarkInput = Color(0xFF2A362A);
   static const Color recipeDarkBorder = Color(0xFF3A4A3A);
 
-  /// Recipe-specific theme colors (light mode)
-  static const Color recipeLightBg = Color(0xFFF5F9F5);
-  static const Color recipeLightSurface = Color(0xFFF0F5F0);
-  static const Color recipeLightBorder = Color(0xFFD8E8D8);
+  /// Recipe-specific theme colors (light mode) - paper palette
+  static const Color recipeLightBg = Color(0xFFF7F3EC);
+  static const Color recipeLightSurface = Color(0xFFFFFDF8);
+  static const Color recipeLightBorder = Color(0xFFE2D9C8);
 
-  /// Recipe step number accent - warm orange
-  static const Color recipeStep = Color(0xFFFF7043);
+  /// Recipe step number accent - terracotta
+  static const Color recipeStep = Color(0xFFC0502A);
 
-  /// Recipe star rating gold
-  static const Color recipeStarGold = Color(0xFFFFB300);
+  /// Recipe star rating gold - warm amber ink
+  static const Color recipeStarGold = Color(0xFFBA7517);
 
   /// Recipe text colors
   static const Color recipeDarkTextPrimary = Color(0xFFE8F0E8);
   static const Color recipeDarkTextSecondary = Color(0xFFA0B0A0);
-  static const Color recipeLightTextPrimary = Color(0xFF1A2E1A);
-  static const Color recipeLightTextSecondary = Color(0xFF5A6E5A);
+  static const Color recipeLightTextPrimary = Color(0xFF201D18);
+  static const Color recipeLightTextSecondary = Color(0xFF8A8274);
 
-  /// Recipe green accent (for buttons, highlights)
-  static const Color recipeGreen = Color(0xFF4CAF50);
-  static const Color recipeGreenDark = Color(0xFF66BB6A);
+  /// Recipe green accent (for buttons, highlights) - muted sage
+  static const Color recipeGreen = Color(0xFF5F7D52);
+  static const Color recipeGreenDark = Color(0xFF7A986C);
   static const Color recipeStepDark = Color(0xFFFF8A65);
 
   /// Get recipe text primary color based on theme
@@ -334,11 +336,11 @@ class AppColors {
   static const Color lightCardBackground = lightSurface;
   static const Color lightShadow = Color(0x0F000000);
   
-  /// List background color - slightly off-white for item contrast
-  static const Color lightListBackground = Color(0xFFF5F6F8);
-  
-  /// Item card background - soft white for subtle contrast
-  static const Color lightItemCard = Color(0xFFFEFEFE);
+  /// List background color - warm paper
+  static const Color lightListBackground = Color(0xFFF7F3EC);
+
+  /// Item card background - brighter paper surface
+  static const Color lightItemCard = Color(0xFFFFFDF8);
   
   static const Color darkPrimaryBackground = darkBackground;
   static const Color darkSecondaryBackground = darkSurface;
@@ -370,15 +372,15 @@ class AppColors {
         : lightItemCard;
   }
 
-  // Gradients
+  // Gradients - terracotta tones
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
+    colors: [Color(0xFFC0502A), Color(0xFFD4693F)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient darkGradient = LinearGradient(
-    colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
+    colors: [Color(0xFFD4693F), Color(0xFFE07E52)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

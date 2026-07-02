@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/constants/recipe_categories.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/dietary_preference.dart';
@@ -309,8 +311,8 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
     final savedState = ref.watch(savedRecipesProvider);
 
     // Watch refresh trigger to reload data when ratings change
@@ -321,7 +323,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     });
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF262626) : const Color(0xFFFFFFFF),
+      backgroundColor: AppColors.background(context),
       body: _isLoading
           ? _buildLoadingState(context)
           : Column(
@@ -352,12 +354,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
               children: [
                 Text(
                   context.tr('recipes'),
-                  style: TextStyle(
-                    color: textPrimary,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.5,
-                  ),
+                  style: PaperTextStyles.serif(27, color: textPrimary),
                 ),
                 const Spacer(),
                 IconButton(
@@ -372,10 +369,11 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
             const SizedBox(height: 8),
             // Search Bar - ALWAYS the same TextField widget
             Container(
-              height: 40,
+              height: 42,
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(12),
+                color: AppColors.surface(context),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.border(context)),
               ),
               child: TextField(
                 controller: _searchController,
@@ -434,15 +432,9 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
               margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                color: AppColors.surface(context),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppColors.border(context)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -704,8 +696,8 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
 
   Widget _buildSearchResultsList(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
     final queryLower = _searchQuery.toLowerCase();
     
     // Dismiss keyboard on scroll
@@ -866,7 +858,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                   ...matchingAuthors.take(3).map((author) => ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
-                      backgroundColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                      backgroundColor: isDark ? Colors.white.withValues(alpha: 0.08) : PaperColors.cream,
                       child: Text(
                         (author['author_name'] as String? ?? 'U')[0].toUpperCase(),
                         style: TextStyle(color: textPrimary),
@@ -959,34 +951,31 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     VoidCallback? onSeeAll,
     Color? iconColor,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
-    
+    // Paper kicker style section header
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+        padding: const EdgeInsets.fromLTRB(16, 26, 16, 12),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: iconColor ?? (Theme.of(context).brightness == Brightness.dark ? Colors.white70 : const Color(0xFF6B7280))),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                color: textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+            Expanded(
+              child: Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary(context),
+                ),
               ),
             ),
-            const Spacer(),
             if (onSeeAll != null)
               GestureDetector(
                 onTap: onSeeAll,
                 child: Text(
                   context.tr('see_all'),
                   style: TextStyle(
-                    color: textSecondary,
-                    fontSize: 14,
+                    color: AppColors.accentColor(context),
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1015,33 +1004,21 @@ class _StatItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: iconColor ?? (isDark ? Colors.white70 : const Color(0xFF6B7280))),
-            const SizedBox(width: 4),
-            Text(
-              value,
-              style: TextStyle(
-                color: textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+        Text(
+          value,
+          style: PaperTextStyles.serif(
+            19,
+            color: AppColors.textPrimary(context),
+          ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
           style: TextStyle(
-            color: textSecondary,
+            color: AppColors.textSecondary(context),
             fontSize: 11,
           ),
         ),
@@ -1064,171 +1041,137 @@ class _FeaturedRecipeCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSaved = ref.watch(isRecipeSavedProvider(recipe.id));
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
+    final accent = AppColors.accentColor(context);
 
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          height: 200,
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Background Image
-              CachedNetworkImage(
-                imageUrl: recipe.imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                placeholder: (_, __) => Container(
-                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                  child: const Center(child: CupertinoActivityIndicator()),
-                ),
-                errorWidget: (_, __, ___) => Container(
-                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                  child: const Icon(Icons.restaurant_rounded, size: 48),
-                ),
-              ),
-              // Gradient Overlay
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.8),
-                    ],
+        borderRadius: BorderRadius.circular(6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Image block with kicker + bookmark
+            SizedBox(
+              height: 150,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: recipe.imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      color: const Color(0xFFB7C4A9),
+                      child: const Center(child: CupertinoActivityIndicator()),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      color: const Color(0xFFB7C4A9),
+                      child: const Icon(
+                        Icons.restaurant_rounded,
+                        size: 40,
+                        color: Color(0xFF42513A),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              // Content
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    // Featured Badge
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.auto_awesome, size: 14, color: Colors.white),
-                              SizedBox(width: 4),
-                              Text(
-                                'Featured',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                  Positioned(
+                    left: 12,
+                    bottom: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: PaperColors.paper.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        context.tr('recipe_of_the_week').toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w600,
+                          color: PaperColors.creamInk,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    // Title
-                    Text(
-                      recipe.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    // Info Row
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'by ${recipe.authorName}',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
-                              fontSize: 14,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const Spacer(),
-                        const Icon(Icons.schedule_rounded, size: 14, color: Colors.white70),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${recipe.totalTimeMinutes} min',
-                          style: const TextStyle(color: Colors.white70, fontSize: 13),
-                        ),
-                        if (recipe.averageRating > 0) ...[
-                          const SizedBox(width: 12),
-                          Icon(Icons.star_rounded, size: 14, color: const Color(0xFFFFB300)),
-                          const SizedBox(width: 2),
-                          Text(
-                            recipe.averageRating.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Bookmark Button
-              Positioned(
-                top: 12,
-                right: 12,
-                child: GestureDetector(
-                  onTap: () {
-                    ref.read(savedRecipesProvider.notifier).toggleSave(recipe.id);
-                  },
-                  child: ClipOval(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                  ),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: GestureDetector(
+                      onTap: () {
+                        ref
+                            .read(savedRecipesProvider.notifier)
+                            .toggleSave(recipe.id);
+                      },
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(7),
                         decoration: BoxDecoration(
-                          color: isSaved ? Colors.white : Colors.black.withValues(alpha: 0.15),
+                          color: PaperColors.paper.withValues(alpha: 0.92),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
                         ),
                         child: Icon(
-                          isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                          size: 22,
-                          color: isSaved ? Colors.black : Colors.white,
+                          isSaved
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          size: 18,
+                          color: isSaved ? accent : PaperColors.creamInk,
                         ),
                       ),
                     ),
                   ),
+                ],
+              ),
+            ),
+            // Paper content panel below the image
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: AppColors.surface(context),
+                border: Border(
+                  left: BorderSide(color: AppColors.border(context)),
+                  right: BorderSide(color: AppColors.border(context)),
+                  bottom: BorderSide(color: AppColors.border(context)),
                 ),
               ),
-            ],
-          ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    recipe.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PaperTextStyles.serif(19, color: textPrimary),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${recipe.totalTimeMinutes} min · ${recipe.authorName}'
+                    '${recipe.averageRating > 0 ? ' · ★ ${recipe.averageRating.toStringAsFixed(1)}' : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.shopping_cart_outlined,
+                        size: 13,
+                        color: accent,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        context.tr('add_to_list'),
+                        style: TextStyle(fontSize: 12, color: accent),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1253,53 +1196,44 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.border(context)),
         ),
         child: Column(
           children: [
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, size: 22, color: isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                Icon(
+                  icon,
+                  size: 20,
+                  color: AppColors.textSecondary(context),
                 ),
                 if (badge != null)
                   Positioned(
-                    top: -4,
-                    right: -8,
+                    top: -6,
+                    right: -14,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.white70 : const Color(0xFF6B7280),
-                        borderRadius: BorderRadius.circular(10),
+                        color: AppColors.accentColor(context),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         badge!,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
@@ -1310,9 +1244,9 @@ class _ActionCard extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: textPrimary,
+                color: AppColors.textPrimary(context),
                 fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
               maxLines: 1,
@@ -1340,23 +1274,17 @@ class _CategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
-    final surface = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
+    final surface = AppColors.surface(context);
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: surface,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: isDark ? null : [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.border(context)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1412,9 +1340,9 @@ class _CreatorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
+    final cardColor = AppColors.surface(context);
     final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
 
     return GestureDetector(
@@ -1509,9 +1437,9 @@ class _HorizontalRecipeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
+    final cardColor = AppColors.surface(context);
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
     final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
     final isSaved = ref.watch(isRecipeSavedProvider(recipe.id));
 
@@ -1666,21 +1594,23 @@ class _RecipeCard extends ConsumerWidget {
       );
     }
     
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
-    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
-    final inputFill = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05);
+    final cardColor = AppColors.surface(context);
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
+    final borderColor = AppColors.border(context);
+    final inputFill = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : PaperColors.cream;
     final isSaved = ref.watch(isRecipeSavedProvider(recipe.id));
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
           decoration: BoxDecoration(
             color: cardColor,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(color: borderColor, width: 1),
           ),
           child: InkWell(
@@ -1785,11 +1715,7 @@ class _RecipeCard extends ConsumerWidget {
                     children: [
                       Text(
                         recipe.name,
-                        style: TextStyle(
-                          color: textPrimary,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: PaperTextStyles.serif(18, color: textPrimary),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),

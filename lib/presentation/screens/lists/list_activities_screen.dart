@@ -7,7 +7,7 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/list_activity.dart';
 import 'package:shoply/data/services/list_activity_service.dart';
-import 'package:shoply/presentation/widgets/common/liquid_glass_button.dart';
+import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 
 /// Screen displaying all activities/changes for a shopping list.
 /// 
@@ -54,35 +54,18 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
     final languageCode = Localizations.localeOf(context).languageCode;
 
     return Scaffold(
-      backgroundColor: isDark ? Colors.black : Colors.grey[100],
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 8),
-          child: Center(
-            child: LiquidGlassButton(
-              icon: Icons.close,
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-        ),
-        title: Text(
-          context.tr('list_activities'),
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black,
-          ),
-        ),
-        centerTitle: true,
+      backgroundColor: AppColors.background(context),
+      appBar: PaperSettingsAppBar(
+        title: context.tr('list_activities'),
         actions: [
           if (_activities.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: LiquidGlassButton(
-                icon: Icons.delete_outline,
-                onPressed: _showClearConfirmation,
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(
+                child: PaperCircleIconButton(
+                  icon: Icons.delete_outline,
+                  onTap: _showClearConfirmation,
+                ),
               ),
             ),
         ],
@@ -333,7 +316,7 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+        backgroundColor: AppColors.background(context),
         title: Text(context.tr('clear_activities')),
         content: Text(context.tr('clear_activities_confirm')),
         actions: [

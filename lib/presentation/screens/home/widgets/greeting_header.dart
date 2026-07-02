@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
-import 'package:shoply/core/constants/app_text_styles.dart';
-import 'package:shoply/core/mascot/avo_mascot.dart';
-import 'package:shoply/core/gamification/gamification_service.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
 
-/// Collapsible sliver header with mascot, greeting message, and streak
-/// Animates opacity, scale, and position on scroll
+/// Collapsible sliver header in paper style: date kicker line and a
+/// serif time-based greeting, avatar on the right.
 class GreetingHeader extends SliverPersistentHeaderDelegate {
   final String displayName;
   final String? avatarUrl;
@@ -23,7 +22,7 @@ class GreetingHeader extends SliverPersistentHeaderDelegate {
   double get minExtent => 60;
 
   @override
-  double get maxExtent => 160;
+  double get maxExtent => 130;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
@@ -43,7 +42,7 @@ class GreetingHeader extends SliverPersistentHeaderDelegate {
             alignment: Alignment.topLeft,
             child: Padding(
               padding: const EdgeInsets.only(
-                top: AppDimensions.spacingXLarge,
+                top: AppDimensions.spacingLarge,
                 left: AppDimensions.screenHorizontalPadding,
                 right: AppDimensions.screenHorizontalPadding,
                 bottom: AppDimensions.spacingSmall,
@@ -62,11 +61,12 @@ class GreetingHeader extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant GreetingHeader oldDelegate) {
-    return oldDelegate.displayName != displayName || oldDelegate.avatarUrl != avatarUrl;
+    return oldDelegate.displayName != displayName ||
+        oldDelegate.avatarUrl != avatarUrl;
   }
 }
 
-class _GreetingContent extends StatefulWidget {
+class _GreetingContent extends StatelessWidget {
   final String displayName;
   final String? avatarUrl;
   final VoidCallback onAvatarTap;
@@ -77,171 +77,67 @@ class _GreetingContent extends StatefulWidget {
     required this.onAvatarTap,
   });
 
-  @override
-  State<_GreetingContent> createState() => _GreetingContentState();
-}
-
-class _GreetingContentState extends State<_GreetingContent> {
-  final GamificationService _gamification = GamificationService();
-  
-  int _streak = 0;
-  String _greeting = '';
-  AvoExpression _mood = AvoExpression.happy;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final streak = await _gamification.updateStreak();
-    final (greeting, mood) = _gamification.getTimeBasedGreeting(widget.displayName);
-    
-    if (mounted) {
-      setState(() {
-        _streak = streak;
-        _greeting = greeting;
-        _mood = mood;
-        _initialized = true;
-      });
-    }
-  }
-
-  void _onMascotTap() {
-    HapticFeedback.lightImpact();
-    // Just haptic feedback, don't change the greeting
+  String _greetingKey() {
+    final hour = DateTime.now().hour;
+    if (hour < 11) return 'greeting_morning';
+    if (hour < 18) return 'greeting_day';
+    return 'greeting_evening';
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_initialized) {
-      return Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Hey ${widget.displayName}! 👋',
-                  style: AppTextStyles.h1.copyWith(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 28,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          _buildAvatar(),
-        ],
-      );
-    }
+    final locale = Localizations.localeOf(context).toString();
+    final dateLine = DateFormat('EEEE, d. MMMM', locale).format(DateTime.now());
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Mascot
-        GestureDetector(
-          onTap: _onMascotTap,
-          child: AvoMascot(
-            size: 55,
-            expression: _mood,
-            animate: true,
-          ),
-        ),
-        
-        const SizedBox(width: 14),
-        
-        // Greeting and streak
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Greeting message
               Text(
-                _greeting,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary(context),
-                  height: 1.35,
+                dateLine,
+                style: TextStyle(fontSize: 13, color: textSecondary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${context.tr(_greetingKey())},\n$displayName.',
+                style: PaperTextStyles.serif(
+                  27,
+                  color: textPrimary,
+                  height: 1.2,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              
-              // Streak badge
-              if (_streak > 1) ...[
-                const SizedBox(height: 8),
-                _buildStreakBadge(),
-              ],
             ],
           ),
         ),
-        
         const SizedBox(width: 12),
-        
-        // Avatar
-        _buildAvatar(),
-      ],
-    );
-  }
-
-  Widget _buildStreakBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFFFF9500).withOpacity(0.15),
-            const Color(0xFFFF6B00).withOpacity(0.15),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('🔥', style: TextStyle(fontSize: 12)),
-          const SizedBox(width: 4),
-          Text(
-            '$_streak day streak',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFFFF9500),
-            ),
+        GestureDetector(
+          onTap: onAvatarTap,
+          child: CircleAvatar(
+            radius: 18,
+            backgroundColor: PaperColors.cream,
+            backgroundImage:
+                avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+            child: avatarUrl == null
+                ? Text(
+                    (displayName.isNotEmpty ? displayName[0] : 'U')
+                        .toUpperCase(),
+                    style: PaperTextStyles.serif(
+                      15,
+                      color: PaperColors.creamInk,
+                    ),
+                  )
+                : null,
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAvatar() {
-    return GestureDetector(
-      onTap: widget.onAvatarTap,
-      child: CircleAvatar(
-        radius: 22,
-        backgroundColor: AppColors.accent,
-        backgroundImage: widget.avatarUrl != null
-            ? NetworkImage(widget.avatarUrl!)
-            : null,
-        child: widget.avatarUrl == null
-            ? Text(
-                (widget.displayName.isNotEmpty ? widget.displayName[0] : 'U').toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                ),
-              )
-            : null,
-      ),
+        ),
+      ],
     );
   }
 }

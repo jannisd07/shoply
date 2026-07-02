@@ -6,6 +6,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/core/localization/app_translations.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 
 /// Full-screen cooking mode that guides users step-by-step through a recipe
 class CookingModeScreen extends StatefulWidget {
@@ -74,15 +75,7 @@ class _CookingModeScreenState extends State<CookingModeScreen>
   Color get _greenColor =>
       _isDark ? AppColors.recipeGreenDark : AppColors.recipeGreen;
 
-  List<BoxShadow> get _cardShadow => _isDark
-      ? []
-      : [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ];
+  List<BoxShadow> get _cardShadow => const [];
 
   @override
   void initState() {
@@ -573,12 +566,7 @@ class _CookingModeScreenState extends State<CookingModeScreen>
             Text(
               _tr('cooking_mode_gather_ingredients'),
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: _textPrimary,
-                letterSpacing: -0.5,
-              ),
+              style: PaperTextStyles.serif(24, color: _textPrimary),
             ),
             const SizedBox(height: 8),
 

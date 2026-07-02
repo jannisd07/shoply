@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -257,7 +258,7 @@ class PremiumLockedOverlay extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      color: isDark ? const Color(0xFF0A0A0A) : Colors.white,
+      color: isDark ? const Color(0xFF0A0A0A) : PaperColors.paper,
       child: SafeArea(
         child: Center(
           child: Padding(

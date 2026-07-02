@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
@@ -12,7 +13,7 @@ import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
-import 'package:shoply/presentation/screens/main_scaffold.dart';
+import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -81,7 +82,7 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
 
   void _shuffleChips() {
     final s = List<String>.from(_suggestions)..shuffle(Random());
-    _chips = s.take(3).toList();
+    _chips = s.take(2).toList();
   }
 
   Future<void> _initAvo() async {
@@ -269,10 +270,10 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
     final view = View.of(context);
     final rawKbd = view.viewInsets.bottom / view.devicePixelRatio;
     final kbdOpen = rawKbd > 0;
-    // Closed: sit just above the pill navbar (8px breathing room).
-    // Open: minimal gap above the keyboard (Scaffold already resized body).
+    // Full-screen route (no navbar). Closed: hug the bottom edge so the
+    // composer corners run concentric with the iPhone display corners.
     final inputPad =
-        kbdOpen ? 6.0 : MainScaffold.getNavbarTopOffset(context) + 8.0;
+        kbdOpen ? 6.0 : max(MediaQuery.of(context).padding.bottom - 8.0, 12.0);
 
     return Scaffold(
       backgroundColor: AppColors.background(context),
@@ -288,40 +289,99 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
               padding: const EdgeInsets.fromLTRB(20, 10, 16, 8),
               child: Row(
                 children: [
-                  const AvoMascot(size: 30, expression: AvoExpression.happy),
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go('/home');
+                      }
+                    },
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF2C2C2E)
+                            : PaperColors.cream,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 16,
+                        color: AppColors.textSecondary(context),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(
+                      color: PaperColors.sage,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: AvoMascot(
+                        size: 26,
+                        expression: AvoExpression.happy,
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Avo', style: TextStyle(
-                          fontSize: 17, fontWeight: FontWeight.w700,
+                        Text('Avo', style: PaperTextStyles.serif(
+                          19,
                           color: AppColors.textPrimary(context),
-                          letterSpacing: -0.2,
+                          height: 1.1,
                         )),
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 200),
-                          child: _isTyping
-                              ? Text(
-                                  'thinking…',
-                                  key: const ValueKey('thinking'),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textTertiary(context),
-                                  ),
-                                )
-                              : const SizedBox.shrink(key: ValueKey('idle')),
+                          child: Text(
+                            _isTyping
+                                ? context.tr('thinking_label')
+                                : context.tr('your_shopping_assistant'),
+                            key: ValueKey(_isTyping),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary(context),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
+                  if (ref.watch(isSubscribedProvider)) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: PaperColors.hairline),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        'Premium',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: PaperColors.creamInk,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   if (kbdOpen) ...[
                     GestureDetector(
                       onTap: () => FocusScope.of(context).unfocus(),
                       child: Container(
                         width: 34, height: 34,
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0F0F3),
+                          color: isDark ? const Color(0xFF2C2C2E) : PaperColors.cream,
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -342,7 +402,7 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
                     child: Container(
                       width: 34, height: 34,
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF0F0F3),
+                        color: isDark ? const Color(0xFF2C2C2E) : PaperColors.cream,
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.add_rounded, size: 19, color: AppColors.textSecondary(context)),
@@ -379,70 +439,69 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
                     ),
             ),
 
-            // ── Input ──
+            // ── Input — tall "Brief" composer: text on top, toolbar below ──
             Container(
-              padding: EdgeInsets.only(left: 16, right: 16, top: 6, bottom: inputPad),
+              padding: EdgeInsets.only(left: 10, right: 10, top: 6, bottom: inputPad),
               child: Container(
-                constraints: const BoxConstraints(maxHeight: 140),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-                  borderRadius: BorderRadius.circular(26),
+                  color: isDark ? const Color(0xFF1C1C1E) : PaperColors.surface,
+                  borderRadius: BorderRadius.circular(30),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE2E2E2),
+                    color: isDark ? const Color(0xFF2C2C2E) : PaperColors.hairline,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.07),
-                      blurRadius: 16,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                padding: const EdgeInsets.fromLTRB(18, 8, 14, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        maxLines: 5, minLines: 1,
-                        textInputAction: TextInputAction.newline,
-                        onChanged: (_) => setState(() {}),
-                        onSubmitted: (_) => _send(),
-                        style: TextStyle(fontSize: 15, color: AppColors.textPrimary(context), height: 1.45),
-                        decoration: InputDecoration(
-                          hintText: context.tr('ask_avo_anything'),
-                          hintStyle: TextStyle(
-                            color: isDark ? const Color(0xFF5A5A5E) : const Color(0xFFAEAEB2),
-                            fontSize: 15,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.fromLTRB(20, 13, 14, 13),
+                    TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      maxLines: 4, minLines: 2,
+                      textInputAction: TextInputAction.newline,
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: (_) => _send(),
+                      style: TextStyle(fontSize: 15, color: AppColors.textPrimary(context), height: 1.45),
+                      decoration: InputDecoration(
+                        hintText: context.tr('ask_avo_anything'),
+                        hintStyle: PaperTextStyles.serif(
+                          15,
+                          color: isDark ? const Color(0xFF5A5A5E) : PaperColors.faint,
                         ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.fromLTRB(2, 8, 2, 4),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6, bottom: 6),
-                      child: GestureDetector(
-                        onTap: _send,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeInOut,
-                          width: 36, height: 36,
-                          decoration: BoxDecoration(
-                            color: _controller.text.trim().isNotEmpty
-                                ? AppColors.accentColor(context)
-                                : Colors.transparent,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.arrow_upward_rounded, size: 19,
-                            color: _controller.text.trim().isNotEmpty
-                                ? Colors.white
-                                : isDark ? const Color(0xFF48484A) : const Color(0xFFC7C7CC),
+                    Row(
+                      children: [
+                        Icon(Icons.add_rounded, size: 21, color: AppColors.textSecondary(context)),
+                        const SizedBox(width: 14),
+                        Icon(Icons.photo_camera_outlined, size: 19, color: AppColors.textSecondary(context)),
+                        const SizedBox(width: 14),
+                        Icon(Icons.mic_none_rounded, size: 20, color: AppColors.textSecondary(context)),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: _send,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeInOut,
+                            width: 34, height: 34,
+                            decoration: BoxDecoration(
+                              color: _controller.text.trim().isNotEmpty
+                                  ? PaperColors.terracotta
+                                  : (isDark ? const Color(0xFF2C2C2E) : PaperColors.cream),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.arrow_upward_rounded, size: 19,
+                              color: _controller.text.trim().isNotEmpty
+                                  ? PaperColors.paper
+                                  : isDark ? const Color(0xFF48484A) : PaperColors.faint,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -477,26 +536,33 @@ class _EmptyState extends StatelessWidget {
             const AvoMascot(size: 64, expression: AvoExpression.waving),
             const SizedBox(height: 14),
             Text(
-              'How can I help?',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
+              context.tr('how_can_i_help'),
+              style: PaperTextStyles.serif(
+                24,
                 color: AppColors.textPrimary(context),
-                letterSpacing: -0.3,
               ),
             ),
             const SizedBox(height: 28),
-            // 2-column suggestion card grid
-            Row(
+            // Quick actions + shuffled suggestions as pills
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Expanded(child: _SuggestionCard(text: chips[0], onTap: onTap, isDark: isDark)),
-                const SizedBox(width: 10),
-                Expanded(child: _SuggestionCard(text: chips[1], onTap: onTap, isDark: isDark)),
+                _SuggestionPill(
+                  text: context.tr('chip_analyze_list'),
+                  onTap: onTap,
+                  isDark: isDark,
+                ),
+                _SuggestionPill(
+                  text: context.tr('chip_find_recipe'),
+                  onTap: onTap,
+                  isDark: isDark,
+                ),
+                for (final chip in chips)
+                  _SuggestionPill(text: chip, onTap: onTap, isDark: isDark),
               ],
             ),
-            const SizedBox(height: 10),
-            if (chips.length > 2)
-              _SuggestionCard(text: chips[2], onTap: onTap, isDark: isDark, wide: true),
           ],
         ),
       ),
@@ -504,16 +570,14 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _SuggestionCard extends StatelessWidget {
+class _SuggestionPill extends StatelessWidget {
   final String text;
   final void Function(String) onTap;
   final bool isDark;
-  final bool wide;
-  const _SuggestionCard({
+  const _SuggestionPill({
     required this.text,
     required this.onTap,
     required this.isDark,
-    this.wide = false,
   });
 
   @override
@@ -521,25 +585,21 @@ class _SuggestionCard extends StatelessWidget {
     return GestureDetector(
       onTap: () => onTap(text),
       child: Container(
-        width: wide ? double.infinity : null,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF5F5F7),
-          borderRadius: BorderRadius.circular(16),
+          color: isDark ? const Color(0xFF1C1C1E) : PaperColors.surface,
+          borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFE8E8ED),
+            color: isDark ? const Color(0xFF2C2C2E) : PaperColors.hairline,
           ),
         ),
         child: Text(
           text,
           style: TextStyle(
-            fontSize: 13.5,
+            fontSize: 13,
             fontWeight: FontWeight.w500,
             color: AppColors.textPrimary(context),
-            height: 1.35,
           ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
         ),
       ),
     );
@@ -563,13 +623,22 @@ class _UserBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
-          color: AppColors.accentColor(context),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? AppColors.accentColor(context)
+              : PaperColors.ink,
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20), topRight: Radius.circular(20),
-            bottomLeft: Radius.circular(20), bottomRight: Radius.circular(4),
+            topLeft: Radius.circular(16), topRight: Radius.circular(16),
+            bottomLeft: Radius.circular(16), bottomRight: Radius.circular(4),
           ),
         ),
-        child: Text(text, style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.4)),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 14,
+            color: PaperColors.paper,
+            height: 1.4,
+          ),
+        ),
       ),
     );
   }
@@ -608,8 +677,8 @@ class _AvoMessage extends StatelessWidget {
               padding: const EdgeInsets.only(right: 32),
               child: SelectableText(
                 msg.text,
-                style: TextStyle(
-                  fontSize: 15,
+                style: PaperTextStyles.serif(
+                  15,
                   color: AppColors.textPrimary(context),
                   height: 1.55,
                 ),
@@ -680,9 +749,9 @@ class _RecipeCards extends StatelessWidget {
             child: Container(
               width: 200,
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF8F8F8),
+                color: isDark ? Colors.white.withValues(alpha: 0.06) : PaperColors.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE)),
+                border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : PaperColors.hairline),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -749,9 +818,9 @@ class _ListItemsView extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFFAFAFA),
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : PaperColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE)),
+        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : PaperColors.hairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -841,9 +910,9 @@ class _ListOverview extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFFAFAFA),
+            color: isDark ? Colors.white.withValues(alpha: 0.04) : PaperColors.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE)),
+            border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : PaperColors.hairline),
           ),
           child: Row(children: [
             Icon(Icons.list_rounded, size: 18, color: AppColors.accentColor(context)),
@@ -892,7 +961,7 @@ class _HistoryView extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFFAFAFA),
+            color: isDark ? Colors.white.withValues(alpha: 0.04) : PaperColors.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE),
@@ -1063,7 +1132,7 @@ class _NutritionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFFAFAFA),
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : PaperColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE),
@@ -1228,7 +1297,7 @@ class _AppInfoCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFFAFAFA),
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : PaperColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFEEEEEE),

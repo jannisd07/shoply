@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/constants/app_text_styles.dart';
 
@@ -29,7 +30,7 @@ class EmptyState extends StatelessWidget {
             Icon(
               icon,
               size: 80,
-              color: Colors.grey.shade400,
+              color: AppColors.textTertiary(context),
             ),
             const SizedBox(height: AppDimensions.spacingLarge),
             Text(
@@ -42,7 +43,7 @@ class EmptyState extends StatelessWidget {
               Text(
                 subtitle!,
                 style: AppTextStyles.bodyMedium.copyWith(
-                  color: Colors.grey.shade600,
+                  color: AppColors.textSecondary(context),
                 ),
                 textAlign: TextAlign.center,
               ),

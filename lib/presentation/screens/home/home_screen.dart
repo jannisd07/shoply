@@ -22,7 +22,7 @@ import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/core/services/siri_service.dart';
 import 'package:shoply/core/utils/category_detector.dart';
-import 'package:shoply/presentation/screens/home/widgets/list_card_with_animation.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
@@ -389,11 +389,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               floating: false,
             ),
 
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppDimensions.spacingMedium),
+            // Avo hint strip (paper cream box)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppDimensions.screenHorizontalPadding,
+                  8,
+                  AppDimensions.screenHorizontalPadding,
+                  0,
+                ),
+                child: GestureDetector(
+                  onTap: () => context.push('/avo'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFE8DA),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.eco_outlined,
+                          size: 16,
+                          color: PaperColors.sageInk,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            context.tr('avo_hint_home'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF5A5346),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          context.tr('show_label'),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: PaperColors.terracotta,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
 
-            // Listen-Header
+            const SliverToBoxAdapter(
+              child: SizedBox(height: AppDimensions.spacingLarge),
+            ),
+
+            // Listen-Header: kicker + terracotta text action
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -401,43 +454,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
-                      context.tr('your_lists'),
-                      style: AppTextStyles.h2.copyWith(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 26,
+                      context.tr('your_lists').toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 2,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary(context),
                       ),
                     ),
-                    SizedBox(
-                      width: 92,
-                      child: AdaptivePopupMenuButton.text<String>(
-                        label: '+ ${context.tr('new')}',
-                        buttonStyle: PopupButtonStyle.glass,
-                        shrinkWrap: true,
-                        items: [
-                          AdaptivePopupMenuItem(
-                            label: context.tr('create_new_list'),
-                            icon: PlatformInfo.isIOS26OrHigher()
-                                ? 'plus.circle.fill'
-                                : Icons.add_circle,
-                            value: 'new',
-                          ),
-                          AdaptivePopupMenuItem(
-                            label: context.tr('join_list'),
-                            icon: PlatformInfo.isIOS26OrHigher()
-                                ? 'person.2.fill'
-                                : Icons.group_add,
-                            value: 'join',
-                          ),
-                        ],
-                        onSelected: (index, item) {
-                          if (item.value == 'new') {
-                            _showCreateListDialog(context, ref);
-                          } else if (item.value == 'join') {
-                            _showJoinListDialog(context, ref);
-                          }
-                        },
+                    // Tap: create list. Long-press: join a shared list.
+                    GestureDetector(
+                      onTap: () => _showCreateListDialog(context, ref),
+                      onLongPress: () => _showJoinListDialog(context, ref),
+                      behavior: HitTestBehavior.opaque,
+                      child: Text(
+                        context.tr('new_list_plus'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.accentColor(context),
+                        ),
                       ),
                     ),
                   ],
@@ -497,54 +536,72 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   final sortedLists = [...lists]
                     ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
-                  return SizedBox(
-                    height: 140 * 1.75,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppDimensions.screenHorizontalPadding,
-                      ),
-                      itemCount: sortedLists.length,
-                      itemBuilder: (context, index) {
-                        final list = sortedLists[index];
-                        final tutorial = DynamicTutorialService.instance;
-                        final isFirstList = index == 0;
+                  // Paper editorial index: numbered vertical rows with
+                  // hairline progress instead of horizontal cards.
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimensions.screenHorizontalPadding,
+                    ),
+                    child: Column(
+                      children: [
+                        for (
+                          int index = 0;
+                          index < sortedLists.length;
+                          index++
+                        )
+                          Builder(
+                            builder: (context) {
+                              final list = sortedLists[index];
+                              final isFirstList = index == 0;
 
-                        // Update tutorial with user data
-                        if (isFirstList) {
-                          tutorial.updateListsData(
-                            hasLists: true,
-                            firstListId: list.id,
-                          );
-                        }
+                              // Update tutorial with user data
+                              if (isFirstList) {
+                                tutorial.updateListsData(
+                                  hasLists: true,
+                                  firstListId: list.id,
+                                );
+                              }
 
-                        return _buildListCard(
-                          context,
-                          ref,
-                          list.id,
-                          list.name,
-                          list.itemCount ?? 0,
-                          list.getBackgroundType(),
-                          list.getBackgroundValue(),
-                          list.backgroundImageUrl,
-                          list.updatedAt,
-                          () {
-                            context.push(
-                              '/lists/${list.id}?name=${Uri.encodeComponent(list.name)}',
-                            );
-                            // Complete tutorial step if this is the first list
-                            if (isFirstList &&
-                                tutorial.isActive &&
-                                tutorial.currentStepId ==
-                                    TutorialStepId.openShoppingList) {
-                              tutorial.completeCurrentStep();
-                            }
-                          },
-                          tutorialKey: isFirstList
-                              ? tutorial.firstListCardKey
-                              : null,
-                        );
-                      },
+                              return _PaperListRow(
+                                key: ValueKey(list.id),
+                                index: index,
+                                name: list.name,
+                                itemCount: list.itemCount ?? 0,
+                                uncheckedCount: list.uncheckedCount,
+                                isShared: list.isShared,
+                                tutorialKey: isFirstList
+                                    ? tutorial.firstListCardKey
+                                    : null,
+                                onTap: () {
+                                  context.push(
+                                    '/lists/${list.id}?name=${Uri.encodeComponent(list.name)}',
+                                  );
+                                  // Complete tutorial step if this is the first list
+                                  if (isFirstList &&
+                                      tutorial.isActive &&
+                                      tutorial.currentStepId ==
+                                          TutorialStepId.openShoppingList) {
+                                    tutorial.completeCurrentStep();
+                                  }
+                                },
+                                onLongPress: () async {
+                                  HapticFeedback.mediumImpact();
+                                  final shouldDelete =
+                                      await _showDeleteConfirmation(
+                                    context,
+                                    list.name,
+                                    ref,
+                                  );
+                                  if (shouldDelete == true) {
+                                    ref
+                                        .read(listsNotifierProvider.notifier)
+                                        .deleteList(list.id);
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                      ],
                     ),
                   );
                 },
@@ -574,8 +631,107 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: SizedBox(height: AppDimensions.spacingLarge),
             ),
 
-            // Einkaufshistorie - Matching full page design
-            SliverToBoxAdapter(child: const _ShoppingHistorySection()),
+            // Angebote strip (paper cream block)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimensions.screenHorizontalPadding,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: PaperColors.cream,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.tr('deals_kicker').toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.w600,
+                                color: PaperColors.creamInk,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              context.tr('deals_teaser'),
+                              style: PaperTextStyles.serif(
+                                14,
+                                color: const Color(0xFF4A4232),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward,
+                        size: 16,
+                        color: PaperColors.creamInk,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(
+              child: SizedBox(height: AppDimensions.spacingLarge),
+            ),
+
+            // Aktivitätszeile -> Einkaufsverlauf
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimensions.screenHorizontalPadding,
+                ),
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ShoppingHistoryScreen(),
+                      ),
+                    );
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: const EdgeInsets.only(top: 12),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(color: AppColors.divider(context)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.notifications_none,
+                          size: 15,
+                          color: AppColors.textSecondary(context),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _LatestActivityLine(),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: AppColors.textTertiary(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
             const SliverToBoxAdapter(
               child: SizedBox(height: AppDimensions.spacingXLarge),
@@ -782,40 +938,133 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return completer.future;
   }
 
-  Widget _buildListCard(
-    BuildContext context,
-    WidgetRef ref,
-    String listId,
-    String name,
-    int itemCount,
-    String backgroundType,
-    String? backgroundValue,
-    String? backgroundImageUrl,
-    DateTime? updatedAt,
-    VoidCallback onTap, {
-    GlobalKey? tutorialKey,
-  }) {
-    return ListCardWithAnimation(
-      tutorialKey: tutorialKey,
-      listId: listId,
-      name: name,
-      itemCount: itemCount,
-      backgroundType: backgroundType,
-      backgroundValue: backgroundValue,
-      backgroundImageUrl: backgroundImageUrl,
-      updatedAt: updatedAt,
-      onTap: onTap,
-      onLongPress: () async {
-        // 🎯 Haptisches Feedback
-        HapticFeedback.mediumImpact();
+}
 
-        // Zeige AdaptiveAlertDialog
-        final shouldDelete = await _showDeleteConfirmation(context, name, ref);
+/// Latest shopping activity as a single paper line.
+class _LatestActivityLine extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(recentHistoryProvider);
+    final textSecondary = AppColors.textSecondary(context);
+    final style = TextStyle(fontSize: 12, color: textSecondary);
 
-        if (shouldDelete == true) {
-          ref.read(listsNotifierProvider.notifier).deleteList(listId);
+    return historyAsync.when(
+      data: (entries) {
+        if (entries.isEmpty) {
+          return Text(context.tr('shopping_history'), style: style);
         }
+        final latest = entries.first;
+        final locale = Localizations.localeOf(context).toString();
+        final date = DateFormat('d. MMM', locale).format(latest.completedAt);
+        return Text(
+          '${context.tr('last_shopped_prefix')} ${latest.listName} · $date',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: style,
+        );
       },
+      loading: () => Text(context.tr('shopping_history'), style: style),
+      error: (_, __) => Text(context.tr('shopping_history'), style: style),
+    );
+  }
+}
+
+/// Paper-style editorial list row: serif number, name, hairline progress.
+class _PaperListRow extends StatelessWidget {
+  final int index;
+  final String name;
+  final int itemCount;
+  final int? uncheckedCount;
+  final bool isShared;
+  final GlobalKey? tutorialKey;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _PaperListRow({
+    super.key,
+    required this.index,
+    required this.name,
+    required this.itemCount,
+    required this.uncheckedCount,
+    this.isShared = false,
+    required this.onTap,
+    required this.onLongPress,
+    this.tutorialKey,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppColors.accentColor(context);
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
+    final baseline = AppColors.divider(context);
+
+    final unchecked = (uncheckedCount ?? itemCount).clamp(0, itemCount);
+    final done = itemCount - unchecked;
+    final progress = itemCount > 0 ? done / itemCount : 0.0;
+
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        key: tutorialKey,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  (index + 1).toString().padLeft(2, '0'),
+                  style: PaperTextStyles.serif(14, color: accent),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: PaperTextStyles.serif(18, color: textPrimary),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        (itemCount == 0
+                                ? context.tr('list_empty_label')
+                                : unchecked == 0
+                                    ? context.tr('all_done_label')
+                                    : context.tr(
+                                        'items_left',
+                                        params: {'n': '$unchecked'},
+                                      )) +
+                            (isShared
+                                ? ' · ${context.tr('shared_label')}'
+                                : ''),
+                        style: TextStyle(fontSize: 12, color: textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isShared)
+                  Icon(Icons.people_outline, size: 17, color: textSecondary),
+              ],
+            ),
+          ),
+          Container(
+            height: 2.5,
+            color: baseline,
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: progress.clamp(0.0, 1.0),
+              heightFactor: 1,
+              child: ColoredBox(color: accent),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -912,12 +1161,12 @@ class _ShoppingHistorySectionState
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  context.tr('shopping_history'),
+                  context.tr('shopping_history').toUpperCase(),
                   style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                    color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                    fontSize: 11,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary(context),
                   ),
                 ),
                 GestureDetector(
@@ -932,11 +1181,9 @@ class _ShoppingHistorySectionState
                   child: Text(
                     context.tr('see_all'),
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? const Color(0xFF6B6B6B)
-                          : const Color(0xFF9CA3AF),
+                      color: AppColors.accentColor(context),
                     ),
                   ),
                 ),

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -17,6 +18,10 @@ import 'package:shoply/presentation/screens/profile/settings/notifications_scree
 import 'package:shoply/presentation/screens/profile/settings/language_screen.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
+import 'package:shoply/presentation/state/language_provider.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/state/saved_recipes_provider.dart';
+import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/presentation/screens/subscription/subscription_screen.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 
@@ -59,12 +64,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               padding: const EdgeInsets.only(bottom: 28),
               child: Text(
                 context.tr('settings'),
-                style: TextStyle(
-                  color: textPrimary,
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                ),
+                style: PaperTextStyles.serif(30, color: textPrimary),
               ),
             ),
 
@@ -128,6 +128,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 _SettingsItemData(
                   icon: Icons.language_rounded,
                   title: context.tr('language'),
+                  trailing: ref.watch(languageProvider) == 'de'
+                      ? 'Deutsch'
+                      : 'English',
                   onTap: () => Navigator.push(
                     context,
                     CupertinoPageRoute(builder: (context) => const LanguageScreen()),
@@ -172,11 +175,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 _SettingsItemData(
                   icon: Icons.shield_outlined,
                   title: context.tr('privacy'),
+                  external: true,
                   onTap: () => _openExternal('https://joinavo.app/privacy'),
                 ),
                 _SettingsItemData(
                   icon: Icons.description_outlined,
                   title: context.tr('imprint'),
+                  external: true,
                   onTap: () => _openExternal('https://joinavo.app/impressum'),
                 ),
                 _SettingsItemData(
@@ -205,16 +210,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: Colors.red.withValues(alpha: 0.25),
-                    width: 1,
+                    color: PaperColors.danger.withValues(
+                      alpha: isDark ? 0.45 : 0.28,
+                    ),
                   ),
                 ),
                 child: Center(
                   child: Text(
                     context.tr('sign_out'),
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 16,
+                    style: TextStyle(
+                      color: isDark
+                          ? const Color(0xFFE0887A)
+                          : PaperColors.danger,
+                      fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -245,16 +253,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.05),
-            width: 1,
-          ),
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border(context)),
         ),
         child: userAsync.when(
           data: (user) {
@@ -265,17 +266,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ? displayName[0].toUpperCase()
                 : '?';
 
-            return Row(
+            final headerRow = Row(
               children: [
                 // Avatar
                 Container(
                   width: 56,
                   height: 56,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.06),
+                    color: PaperColors.cream,
                   ),
                   child: avatarUrl != null && avatarUrl.isNotEmpty
                       ? ClipOval(
@@ -325,25 +324,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     children: [
                       Text(
                         displayName,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: textPrimary,
-                          letterSpacing: -0.3,
-                        ),
+                        style: PaperTextStyles.serif(19, color: textPrimary),
                       ),
-                      if (email.isNotEmpty) ...[
-                        const SizedBox(height: 3),
+                      const SizedBox(height: 3),
+                      if (ref.watch(isSubscribedProvider))
+                        Text(
+                          'Premium',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.accentColor(context),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      else if (email.isNotEmpty)
                         Text(
                           email,
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             color: textSecondary,
-                            letterSpacing: -0.1,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ],
                     ],
                   ),
                 ),
@@ -351,6 +352,51 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   Icons.chevron_right_rounded,
                   color: textSecondary,
                   size: 22,
+                ),
+              ],
+            );
+
+            final listsCount =
+                ref.watch(listsNotifierProvider).valueOrNull?.length ?? 0;
+            final tripsCount =
+                ref.watch(shoppingHistoryProvider).valueOrNull?.length ?? 0;
+            final savedCount =
+                ref.watch(savedRecipesProvider).savedIds.length;
+
+            return Column(
+              children: [
+                headerRow,
+                const SizedBox(height: 14),
+                Container(height: 1, color: AppColors.divider(context)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildStat(
+                      context,
+                      '$tripsCount',
+                      context.tr('purchases_label'),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 30,
+                      color: AppColors.divider(context),
+                    ),
+                    _buildStat(
+                      context,
+                      '$listsCount',
+                      context.tr('lists_label'),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 30,
+                      color: AppColors.divider(context),
+                    ),
+                    _buildStat(
+                      context,
+                      '$savedCount',
+                      context.tr('saved_label'),
+                    ),
+                  ],
                 ),
               ],
             );
@@ -436,6 +482,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  Widget _buildStat(BuildContext context, String value, String label) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: PaperTextStyles.serif(
+              19,
+              color: AppColors.textPrimary(context),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 9.5,
+              letterSpacing: 1,
+              color: AppColors.textSecondary(context),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSectionHeader(String title, Color textSecondary) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10, left: 4),
@@ -443,9 +516,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         title.toUpperCase(),
         style: TextStyle(
           color: textSecondary,
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: FontWeight.w600,
-          letterSpacing: 0.8,
+          letterSpacing: 2,
         ),
       ),
     );
@@ -460,18 +533,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final textSecondary = AppColors.textSecondary(context);
 
     return Container(
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : Colors.black.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.05),
-          width: 1,
-        ),
-      ),
+      decoration: const BoxDecoration(),
       child: Column(
         children: List.generate(items.length, (index) {
           final item = items[index];
@@ -486,31 +548,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 },
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 13),
                   child: Row(
                     children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.black.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          item.icon,
-                          color: textPrimary,
-                          size: 18,
-                        ),
+                      Icon(
+                        item.icon,
+                        color: textSecondary,
+                        size: 17,
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           item.title,
                           style: TextStyle(
                             color: textPrimary,
-                            fontSize: 16,
+                            fontSize: 14,
                             fontWeight: FontWeight.w400,
                           ),
                         ),
@@ -520,15 +572,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           item.trailing!,
                           style: TextStyle(
                             color: textSecondary,
-                            fontSize: 15,
+                            fontSize: 13,
                           ),
                         ),
-                      if (item.showChevron) ...[
+                      if (item.external) ...[
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.open_in_new_rounded,
+                          color: textSecondary,
+                          size: 15,
+                        ),
+                      ] else if (item.showChevron) ...[
                         const SizedBox(width: 6),
                         Icon(
                           Icons.chevron_right_rounded,
                           color: textSecondary,
-                          size: 20,
+                          size: 18,
                         ),
                       ],
                     ],
@@ -537,12 +596,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               if (!isLast)
                 Padding(
-                  padding: const EdgeInsets.only(left: 62),
+                  padding: EdgeInsets.zero,
                   child: Container(
-                    height: 0.5,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.black.withValues(alpha: 0.06),
+                    height: 1,
+                    color: AppColors.divider(context),
                   ),
                 ),
             ],
@@ -555,59 +612,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget _buildProBanner(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSubscribed = ref.watch(isSubscribedProvider);
-    final fg = AppColors.textPrimary(context);
-    final muted = AppColors.textSecondary(context);
+
+    final card = BoxDecoration(
+      color: isDark ? const Color(0xFF1C1C1E) : PaperColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(
+        color: isDark ? const Color(0xFF2C2C2E) : PaperColors.hairline,
+      ),
+    );
 
     if (isSubscribed) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 28),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.10)
-                  : Colors.black.withValues(alpha: 0.06),
-              width: 1,
-            ),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: card,
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white : Colors.black,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'PRO',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? Colors.black : Colors.white,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  context.tr('subscription_success'),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: muted,
-                    letterSpacing: -0.2,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Avo Premium',
+                      style: PaperTextStyles.serif(
+                        15,
+                        color: AppColors.textPrimary(context),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      context.tr('subscription_success'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary(context),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Icon(
-                Icons.check_circle_rounded,
-                color: fg,
-                size: 20,
+              Container(
+                width: 28,
+                height: 28,
+                decoration: const BoxDecoration(
+                  color: PaperColors.sage,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  size: 16,
+                  color: PaperColors.sageInk,
+                ),
               ),
             ],
           ),
@@ -620,48 +675,49 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       child: GestureDetector(
         onTap: () => showSubscriptionSheet(context),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.white : Colors.black,
-            borderRadius: BorderRadius.circular(16),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: card,
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.black.withValues(alpha: 0.3)
-                      : Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'PRO',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? Colors.white : Colors.white,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  context.tr('unlock_premium_features'),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark
-                        ? Colors.black.withValues(alpha: 0.6)
-                        : Colors.white.withValues(alpha: 0.7),
-                    letterSpacing: -0.2,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Avo Premium',
+                      style: PaperTextStyles.serif(
+                        15,
+                        color: AppColors.textPrimary(context),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      context.tr('premium_trial_line'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary(context),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Icon(
-                Icons.arrow_forward_rounded,
-                color: isDark ? Colors.black : Colors.white,
-                size: 20,
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: PaperColors.terracotta,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  context.tr('try_free'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: PaperColors.paper,
+                  ),
+                ),
               ),
             ],
           ),
@@ -676,6 +732,7 @@ class _SettingsItemData {
   final String title;
   final String? trailing;
   final bool showChevron;
+  final bool external;
   final VoidCallback? onTap;
 
   const _SettingsItemData({
@@ -683,6 +740,7 @@ class _SettingsItemData {
     required this.title,
     this.trailing,
     this.showChevron = true,
+    this.external = false,
     this.onTap,
   });
 }

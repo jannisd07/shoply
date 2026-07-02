@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/supabase_service.dart';
+import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 
 class PersonalInfoScreen extends ConsumerStatefulWidget {
@@ -110,41 +111,18 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     final backgroundColor = AppColors.background(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final inputFill = AppColors.inputFill(context);
-    final borderColor = AppColors.border(context);
     final separatorColor = AppColors.divider(context);
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          context.tr('personal_information'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+      appBar: PaperSettingsAppBar(
+        title: context.tr('personal_information'),
         actions: [
           if (_hasChanges)
-            TextButton(
-              onPressed: _isLoading ? null : _saveChanges,
-              child: _isLoading
-                  ? CupertinoActivityIndicator(radius: 10, color: textPrimary)
-                  : Text(
-                      context.tr('save'),
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+            PaperSaveButton(
+              label: context.tr('save'),
+              loading: _isLoading,
+              onPressed: _saveChanges,
             ),
         ],
       ),
@@ -158,13 +136,9 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
         ),
         children: [
           // Age section
-          _buildSectionHeader(context.tr('age'), textSecondary),
+          PaperSectionHeader(context.tr('age')),
           Container(
-            decoration: BoxDecoration(
-              color: inputFill,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: borderColor),
-            ),
+            decoration: paperFieldDecoration(context),
             child: TextField(
               controller: _ageController,
               keyboardType: TextInputType.number,
@@ -188,7 +162,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
           const SizedBox(height: 32),
 
           // Height section
-          _buildSectionHeader(context.tr('height'), textSecondary),
+          PaperSectionHeader(context.tr('height')),
 
           // Unit toggle
           Row(
@@ -201,11 +175,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
           const SizedBox(height: 12),
 
           Container(
-            decoration: BoxDecoration(
-              color: inputFill,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: borderColor),
-            ),
+            decoration: paperFieldDecoration(context),
             child: TextField(
               controller: _heightController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -228,7 +198,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
           const SizedBox(height: 32),
 
           // Gender section
-          _buildSectionHeader(context.tr('gender'), textSecondary),
+          PaperSectionHeader(context.tr('gender')),
           _buildGenderRow(context, 'male', context.tr('male'), textPrimary, textSecondary),
           Container(height: 0.5, color: separatorColor),
           _buildGenderRow(context, 'female', context.tr('female'), textPrimary, textSecondary),
@@ -255,21 +225,6 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, Color textSecondary) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
   Widget _buildUnitOption(BuildContext context, String unit, Color textPrimary, Color textSecondary, Color separatorColor) {
     final isSelected = _selectedHeightUnit == unit;
 
@@ -287,14 +242,16 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
         children: [
           Icon(
             isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-            color: isSelected ? textPrimary : textSecondary.withOpacity(0.4),
+            color: isSelected
+                ? AppColors.accentColor(context)
+                : textSecondary.withValues(alpha: 0.4),
             size: 20,
           ),
           const SizedBox(width: 8),
           Text(
             unit.toUpperCase(),
             style: TextStyle(
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
               color: isSelected ? textPrimary : textSecondary,
             ),
@@ -324,7 +281,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 17,
+                  fontSize: 15,
                   fontWeight: FontWeight.w400,
                   color: textPrimary,
                 ),
@@ -333,8 +290,8 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
             if (isSelected)
               Icon(
                 Icons.check_rounded,
-                color: textPrimary,
-                size: 22,
+                color: AppColors.accentColor(context),
+                size: 20,
               ),
           ],
         ),

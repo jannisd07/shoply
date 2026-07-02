@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_dimensions.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/validators.dart';
+import 'package:shoply/core/widgets/paper/paper_widgets.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/fcm_service.dart';
 
@@ -326,48 +327,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = AppColors.background(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final inputFillColor = AppColors.inputFill(context);
-    final inputBorderColor = AppColors.border(context);
-
     return ScaffoldMessenger(
       key: _scaffoldMessengerKey,
       child: Scaffold(
-        backgroundColor: backgroundColor,
-        appBar: AppBar(
-          backgroundColor: backgroundColor,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          leading: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: CircleAvatar(
-              backgroundColor: inputFillColor,
-              child: IconButton(
-                icon: Icon(
-                  Icons.arrow_back_ios_rounded,
-                  color: textPrimary,
-                  size: 18,
-                ),
-                onPressed: () => context.go('/welcome'),
-              ),
-            ),
-          ),
-        ),
+        backgroundColor: PaperColors.paper,
         body: SafeArea(
-          child: Center(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollStartNotification) {
+                FocusScope.of(context).unfocus();
+              }
+              return false;
+            },
             child: SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimensions.screenHorizontalPadding,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 26),
               child: _showOtpVerification
-                  ? _buildOtpVerificationView(
-                      context,
-                      inputFillColor,
-                      inputBorderColor,
-                    )
-                  : _buildSignUpForm(context, inputFillColor, inputBorderColor),
+                  ? _buildOtpVerificationView()
+                  : _buildSignUpForm(),
             ),
           ),
         ),
@@ -375,418 +352,216 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  Widget _buildSignUpForm(
-    BuildContext context,
-    Color inputFillColor,
-    Color inputBorderColor,
-  ) {
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-
+  Widget _buildSignUpForm() {
     return Form(
       key: _formKey,
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.person_add_outlined, size: 64, color: textPrimary),
-
-          const SizedBox(height: 32),
-
-          Text(
-            'Create your account',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w500,
-              color: textPrimary,
+          const SizedBox(height: 8),
+          IconButton(
+            padding: EdgeInsets.zero,
+            alignment: Alignment.centerLeft,
+            icon: const Icon(
+              Icons.arrow_back,
+              size: 22,
+              color: PaperColors.ink,
             ),
-            textAlign: TextAlign.center,
+            onPressed: () => context.go('/welcome'),
           ),
-
-          const SizedBox(height: 40),
-
-          // Email Field
-          TextFormField(
+          const SizedBox(height: 20),
+          PaperKicker(context.tr('signup_kicker')),
+          const SizedBox(height: 10),
+          Text(
+            context.tr('signup_headline'),
+            style: PaperTextStyles.serif(27),
+          ),
+          const SizedBox(height: 34),
+          PaperUnderlineField(
             controller: _emailController,
+            label: context.tr('email'),
+            hint: 'name@example.com',
             keyboardType: TextInputType.emailAddress,
             autofillHints: const [AutofillHints.email],
             textInputAction: TextInputAction.next,
-            style: TextStyle(color: textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Email',
-              labelStyle: TextStyle(color: textSecondary),
-              hintText: 'name@example.com',
-              hintStyle: TextStyle(color: textSecondary.withOpacity(0.6)),
-              filled: true,
-              fillColor: inputFillColor,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 18,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: inputBorderColor),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: inputBorderColor),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: AppColors.accent),
-              ),
-            ),
             validator: Validators.validateEmail,
           ),
-
-          const SizedBox(height: 16),
-
-          // Password Field
-          TextFormField(
+          const SizedBox(height: 22),
+          PaperUnderlineField(
             controller: _passwordController,
+            label: context.tr('password'),
             obscureText: _obscurePassword,
             autofillHints: const [AutofillHints.newPassword],
             textInputAction: TextInputAction.next,
-            style: TextStyle(color: textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Password',
-              labelStyle: TextStyle(color: textSecondary),
-              filled: true,
-              fillColor: inputFillColor,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 18,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: inputBorderColor),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: inputBorderColor),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: AppColors.accent),
-              ),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                  color: textSecondary,
-                ),
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
+            validator: Validators.validatePassword,
+            suffix: GestureDetector(
+              onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+              child: Icon(
+                _obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                size: 19,
+                color: PaperColors.muted,
               ),
             ),
-            validator: Validators.validatePassword,
           ),
-
-          const SizedBox(height: 16),
-
-          // Confirm Password Field
-          TextFormField(
+          const SizedBox(height: 22),
+          PaperUnderlineField(
             controller: _confirmPasswordController,
+            label: context.tr('confirm_password_label'),
             obscureText: _obscureConfirmPassword,
             autofillHints: const [AutofillHints.newPassword],
             textInputAction: TextInputAction.done,
-            style: TextStyle(color: textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Confirm Password',
-              labelStyle: TextStyle(color: textSecondary),
-              filled: true,
-              fillColor: inputFillColor,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 18,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: inputBorderColor),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: inputBorderColor),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: AppColors.accent),
-              ),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureConfirmPassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                  color: textSecondary,
-                ),
-                onPressed: () => setState(
-                  () => _obscureConfirmPassword = !_obscureConfirmPassword,
-                ),
-              ),
-            ),
+            onFieldSubmitted: (_) => _signUp(),
             validator: (value) {
-              if (value == null || value.isEmpty)
-                return 'Please confirm password';
-              if (value != _passwordController.text)
+              if (value == null || value.isEmpty) {
+                return context.tr('required');
+              }
+              if (value != _passwordController.text) {
                 return 'Passwords do not match';
+              }
               return null;
             },
-          ),
-
-          const SizedBox(height: 32),
-
-          // Sign Up Button
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _signUp,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                elevation: 0,
+            suffix: GestureDetector(
+              onTap: () => setState(
+                () => _obscureConfirmPassword = !_obscureConfirmPassword,
               ),
-              child: _isLoading
-                  ? CupertinoActivityIndicator(radius: 10, color: Colors.white)
-                  : const Text(
-                      'Create Account',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Divider with "or"
-          Row(
-            children: [
-              Expanded(child: Divider(color: inputBorderColor)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text('or', style: TextStyle(color: textSecondary)),
-              ),
-              Expanded(child: Divider(color: inputBorderColor)),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Google Sign-In Button
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: OutlinedButton.icon(
-              onPressed: _isGoogleLoading ? null : _signInWithGoogle,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: textPrimary,
-                side: BorderSide(color: inputBorderColor),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                ),
-              ),
-              icon: _isGoogleLoading
-                  ? CupertinoActivityIndicator(radius: 10, color: textPrimary)
-                  : Image.network(
-                      'https://www.google.com/favicon.ico',
-                      height: 20,
-                      width: 20,
-                      errorBuilder: (_, __, ___) => Icon(
-                        Icons.g_mobiledata,
-                        size: 24,
-                        color: textPrimary,
-                      ),
-                    ),
-              label: Text(
-                _isGoogleLoading ? 'Signing in...' : 'Continue with Google',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: textPrimary,
-                ),
+              child: Icon(
+                _obscureConfirmPassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                size: 19,
+                color: PaperColors.muted,
               ),
             ),
           ),
-
-          const SizedBox(height: 24),
-
-          // Login Link
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                "Already have an account? ",
-                style: TextStyle(color: textSecondary),
+          const SizedBox(height: 30),
+          PaperPrimaryButton(
+            label: context.tr('create_account'),
+            loading: _isLoading,
+            onPressed: _signUp,
+          ),
+          const SizedBox(height: 22),
+          PaperOrDivider(context.tr('or')),
+          const SizedBox(height: 22),
+          PaperOutlineButton(
+            label: context.tr('continue_with_google'),
+            loading: _isGoogleLoading,
+            leading: Image.network(
+              'https://www.google.com/favicon.ico',
+              height: 18,
+              width: 18,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.g_mobiledata,
+                size: 22,
+                color: PaperColors.creamInk,
               ),
-              GestureDetector(
-                onTap: () => context.go('/welcome'),
-                child: Text(
-                  "Log In",
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontWeight: FontWeight.bold,
+            ),
+            onPressed: _signInWithGoogle,
+          ),
+          const SizedBox(height: 24),
+          Center(
+            child: GestureDetector(
+              onTap: () => context.go('/login'),
+              child: Text.rich(
+                TextSpan(
+                  text: '${context.tr('already_have_account')} ',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: PaperColors.muted,
                   ),
+                  children: [
+                    TextSpan(
+                      text: context.tr('log_in_paper'),
+                      style: const TextStyle(
+                        color: PaperColors.terracotta,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  Widget _buildOtpVerificationView(
-    BuildContext context,
-    Color inputFillColor,
-    Color inputBorderColor,
-  ) {
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-
+  Widget _buildOtpVerificationView() {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.mark_email_read_outlined, size: 64, color: textPrimary),
-
-        const SizedBox(height: 32),
-
-        Text(
-          'Verify your email',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w500,
-            color: textPrimary,
-          ),
-          textAlign: TextAlign.center,
-        ),
-
-        const SizedBox(height: 12),
-
-        Text(
-          'We sent a 6-digit code to\n$_pendingEmail',
-          style: TextStyle(fontSize: 15, color: textSecondary, height: 1.5),
-          textAlign: TextAlign.center,
-        ),
-
         const SizedBox(height: 8),
-
-        Text(
-          'Please also check your spam folder.',
-          style: TextStyle(fontSize: 13, color: textSecondary.withOpacity(0.7)),
-          textAlign: TextAlign.center,
-        ),
-
-        const SizedBox(height: 40),
-
-        // OTP Input Field
-        TextFormField(
-          controller: _otpController,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.center,
-          maxLength: 6,
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 24,
-            letterSpacing: 8,
-            fontWeight: FontWeight.w600,
-          ),
-          decoration: InputDecoration(
-            hintText: '000000',
-            hintStyle: TextStyle(
-              color: textSecondary.withOpacity(0.5),
-              fontSize: 24,
-              letterSpacing: 8,
-            ),
-            counterText: '',
-            filled: true,
-            fillColor: inputFillColor,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 18,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: inputBorderColor),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: inputBorderColor),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: AppColors.accent),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 32),
-
-        // Verify Button
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _verifyOtp,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              elevation: 0,
-            ),
-            child: _isLoading
-                ? CupertinoActivityIndicator(radius: 10, color: Colors.white)
-                : const Text(
-                    'Verify',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        // Resend Code Link
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              "Didn't receive the code? ",
-              style: TextStyle(color: textSecondary),
-            ),
-            GestureDetector(
-              onTap: _isLoading ? null : _resendOtp,
-              child: Text(
-                "Resend",
-                style: TextStyle(
-                  color: AppColors.accent,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        // Back to signup
-        TextButton(
+        IconButton(
+          padding: EdgeInsets.zero,
+          alignment: Alignment.centerLeft,
+          icon: const Icon(Icons.arrow_back, size: 22, color: PaperColors.ink),
           onPressed: () {
             setState(() {
               _showOtpVerification = false;
               _otpController.clear();
             });
           },
-          child: Text(
-            'Back to Sign Up',
-            style: TextStyle(color: textSecondary),
+        ),
+        const SizedBox(height: 20),
+        const PaperKicker('Verify email'),
+        const SizedBox(height: 10),
+        Text('Check your\ninbox.', style: PaperTextStyles.serif(27)),
+        const SizedBox(height: 14),
+        Text(
+          'We sent a 6-digit code to\n$_pendingEmail',
+          style: PaperTextStyles.body(color: PaperColors.muted),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Please also check your spam folder.',
+          style: PaperTextStyles.body(size: 12, color: PaperColors.faint),
+        ),
+        const SizedBox(height: 34),
+        PaperUnderlineField(
+          controller: _otpController,
+          label: 'Code',
+          hint: '000000',
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: PaperColors.ink,
+            fontSize: 24,
+            letterSpacing: 8,
+            fontWeight: FontWeight.w500,
           ),
         ),
+        const SizedBox(height: 30),
+        PaperPrimaryButton(
+          label: 'Verify code',
+          loading: _isLoading,
+          onPressed: _verifyOtp,
+        ),
+        const SizedBox(height: 20),
+        Center(
+          child: GestureDetector(
+            onTap: _isLoading ? null : _resendOtp,
+            child: Text.rich(
+              TextSpan(
+                text: "Didn't receive the code? ",
+                style: const TextStyle(fontSize: 13, color: PaperColors.muted),
+                children: const [
+                  TextSpan(
+                    text: 'Resend',
+                    style: TextStyle(
+                      color: PaperColors.terracotta,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
       ],
     );
   }
