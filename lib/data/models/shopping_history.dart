@@ -8,6 +8,9 @@ class ShoppingHistory extends Equatable {
   final int totalItems;
   final DateTime completedAt;
   final String? completedByName;
+  final double? totalCost;
+  final String? paidByUserId;
+  final String? paidByName;
   final List<ShoppingHistoryItem> items;
 
   const ShoppingHistory({
@@ -18,6 +21,9 @@ class ShoppingHistory extends Equatable {
     required this.totalItems,
     required this.completedAt,
     this.completedByName,
+    this.totalCost,
+    this.paidByUserId,
+    this.paidByName,
     this.items = const [],
   });
 
@@ -30,6 +36,9 @@ class ShoppingHistory extends Equatable {
       totalItems: json['total_items'] as int,
       completedAt: DateTime.parse(json['completed_at'] as String),
       completedByName: json['completed_by_name'] as String?,
+      totalCost: (json['total_cost'] as num?)?.toDouble(),
+      paidByUserId: json['paid_by_user_id'] as String?,
+      paidByName: json['paid_by_name'] as String?,
       items: json['items'] != null
           ? (json['items'] as List)
               .map((i) => ShoppingHistoryItem.fromJson(i as Map<String, dynamic>))
@@ -47,11 +56,47 @@ class ShoppingHistory extends Equatable {
       'total_items': totalItems,
       'completed_at': completedAt.toIso8601String(),
       'completed_by_name': completedByName,
+      'total_cost': totalCost,
+      'paid_by_user_id': paidByUserId,
+      'paid_by_name': paidByName,
     };
   }
 
+  ShoppingHistory copyWith({
+    double? totalCost,
+    String? paidByUserId,
+    String? paidByName,
+    List<ShoppingHistoryItem>? items,
+  }) {
+    return ShoppingHistory(
+      id: id,
+      userId: userId,
+      listId: listId,
+      listName: listName,
+      totalItems: totalItems,
+      completedAt: completedAt,
+      completedByName: completedByName,
+      totalCost: totalCost ?? this.totalCost,
+      paidByUserId: paidByUserId ?? this.paidByUserId,
+      paidByName: paidByName ?? this.paidByName,
+      items: items ?? this.items,
+    );
+  }
+
   @override
-  List<Object?> get props => [id, userId, listId, listName, totalItems, completedAt, completedByName, items];
+  List<Object?> get props => [
+        id,
+        userId,
+        listId,
+        listName,
+        totalItems,
+        completedAt,
+        completedByName,
+        totalCost,
+        paidByUserId,
+        paidByName,
+        items,
+      ];
 }
 
 class ShoppingHistoryItem extends Equatable {
@@ -61,6 +106,8 @@ class ShoppingHistoryItem extends Equatable {
   final double quantity;
   final String? unit;
   final String? category;
+  final double? price;
+  final String? priceRetailer;
 
   const ShoppingHistoryItem({
     required this.id,
@@ -69,6 +116,8 @@ class ShoppingHistoryItem extends Equatable {
     this.quantity = 1.0,
     this.unit,
     this.category,
+    this.price,
+    this.priceRetailer,
   });
 
   factory ShoppingHistoryItem.fromJson(Map<String, dynamic> json) {
@@ -79,6 +128,8 @@ class ShoppingHistoryItem extends Equatable {
       quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,
       unit: json['unit'] as String?,
       category: json['category'] as String?,
+      price: (json['price'] as num?)?.toDouble(),
+      priceRetailer: json['price_retailer'] as String?,
     );
   }
 
@@ -90,9 +141,12 @@ class ShoppingHistoryItem extends Equatable {
       'quantity': quantity,
       'unit': unit,
       'category': category,
+      'price': price,
+      'price_retailer': priceRetailer,
     };
   }
 
   @override
-  List<Object?> get props => [id, historyId, name, quantity, unit, category];
+  List<Object?> get props =>
+      [id, historyId, name, quantity, unit, category, price, priceRetailer];
 }

@@ -41,6 +41,9 @@ import 'package:flutter_app_badger/flutter_app_badger.dart'; // Neu
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/presentation/screens/lists/list_settings_screen.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
+import 'package:shoply/data/models/store_offer.dart';
+import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_price_summary_bar.dart';
 
 class ListDetailScreen extends ConsumerStatefulWidget {
   final String listId;
@@ -725,7 +728,36 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                 : (MediaQuery.of(context).padding.bottom > 20
                       ? MediaQuery.of(context).padding.bottom - 8
                       : 12),
-            child: _buildPaperAddBar(context),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (MediaQuery.of(context).viewInsets.bottom == 0)
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final items = ref
+                              .watch(itemsNotifierProvider(widget.listId))
+                              .valueOrNull ??
+                          const <ShoppingItemModel>[];
+                      return ListPriceSummaryBar(
+                        listId: widget.listId,
+                        items: items,
+                      );
+                    },
+                  ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchController,
+                  builder: (context, value, _) {
+                    final query = value.text.trim();
+                    if (query.length < 2) return const SizedBox.shrink();
+                    return OfferSuggestionsBar(
+                      query: query,
+                      onSelect: _addItemFromOffer,
+                    );
+                  },
+                ),
+                _buildPaperAddBar(context),
+              ],
+            ),
           ),
         ],
       ),
@@ -1187,6 +1219,42 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
     // Note: No need to invalidate listsNotifierProvider - the itemsNotifierProvider
     // already handles state updates and the list count will update automatically
+  }
+
+  /// Adds a real product from a live retailer offer (see [OfferSuggestionsBar])
+  /// to the list, carrying its price/retailer/unit along with it.
+  void _addItemFromOffer(StoreOffer offer) async {
+    HapticFeedback.mediumImpact();
+    _searchController.clear();
+    _focusNode.unfocus();
+
+    try {
+      final user = ref.read(currentUserProvider).value;
+      final isDietWarning = user != null
+          ? DietChecker.checkDietWarning(offer.productName, user.dietPreferences)
+          : false;
+
+      await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
+            name: offer.productName,
+            category: null,
+            isDietWarning: isDietWarning,
+            price: offer.price,
+            priceCurrency: 'EUR',
+            priceRetailer: offer.retailerName,
+            priceUnit: offer.unitShortName,
+          );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.tr('error_adding', params: {'error': e.toString()}),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showAddItemDialog(BuildContext context, {String prefill = ''}) {
@@ -2907,6 +2975,21 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                   color: isDark
                                       ? Colors.grey.shade500
                                       : PaperColors.muted,
+                                ),
+                              ),
+                            ],
+                            if (item.hasPrice) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                item.priceRetailer != null
+                                    ? '${item.price!.toStringAsFixed(2)} € · ${item.priceRetailer}'
+                                    : '${item.price!.toStringAsFixed(2)} €',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.accentColor(context),
                                 ),
                               ),
                             ],
