@@ -2,6 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Branch policy for scheduled routines (standing permission from the owner)
+
+Scheduled/routine Claude Code sessions must NOT each work on their own
+one-off session branch (that forces the owner to merge a PR every few
+hours). Instead — the repo owner has explicitly granted standing permission
+for this — every scheduled routine run should:
+
+1. `git fetch origin claude/daily` — if the branch exists, base all work on
+   it: `git checkout -B claude/daily origin/claude/daily`. If it doesn't
+   exist yet, create it from the latest `origin/main`.
+2. Develop and commit on `claude/daily` (this overrides the session's
+   auto-generated designated branch for scheduled routine runs).
+3. Push to `origin claude/daily` (use the `GITHUB_FINEGRAINED_PAT` fallback
+   below if the normal push 403s).
+
+NEVER push to `main` directly: every push to `main` triggers the TestFlight
+deploy workflow (`.github/workflows/ios-testflight.yml`, no path filter),
+and routine sessions cannot compile-verify code (no Flutter SDK in the
+remote environment). The owner merges `claude/daily` into `main` manually
+whenever they choose.
+
+Interactive (non-routine) sessions where the user gives explicit different
+instructions are unaffected by this policy.
+
 ## Git push fallback (remote/scheduled sessions)
 
 In remote Claude Code sessions, `git push` through the default proxy remote can
