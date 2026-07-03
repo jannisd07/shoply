@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ui';
 import 'dart:io';
 import 'package:shoply/core/constants/paper_colors.dart';
-import 'package:shoply/presentation/providers/ml_recommendations_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -757,34 +756,48 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                 : (MediaQuery.of(context).padding.bottom > 20
                       ? MediaQuery.of(context).padding.bottom - 8
                       : 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (MediaQuery.of(context).viewInsets.bottom == 0)
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final items = ref
-                              .watch(itemsNotifierProvider(widget.listId))
-                              .valueOrNull ??
-                          const <ShoppingItemModel>[];
-                      return ListPriceSummaryBar(
-                        listId: widget.listId,
-                        items: items,
-                      );
-                    },
-                  ),
-                ValueListenableBuilder<String>(
-                  valueListenable: _offerQuery,
-                  builder: (context, query, _) {
-                    if (query.length < 2) return const SizedBox.shrink();
-                    return OfferSuggestionsBar(
-                      query: query,
-                      onSelect: _addItemFromOffer,
-                    );
-                  },
-                ),
-                _buildPaperAddBar(context),
-              ],
+            child: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _searchController,
+              builder: (context, value, _) {
+                final liveQuery = value.text.trim();
+                final isSearching = liveQuery.length >= 2;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // While searching, show live offer suggestions (debounced
+                    // query so fast typing doesn't fire an API call per
+                    // keystroke); otherwise the basket price-comparison
+                    // summary. Never both stacked.
+                    if (isSearching)
+                      ValueListenableBuilder<String>(
+                        valueListenable: _offerQuery,
+                        builder: (context, query, _) {
+                          if (query.length < 2) {
+                            return const SizedBox.shrink();
+                          }
+                          return OfferSuggestionsBar(
+                            query: query,
+                            onSelect: _addItemFromOffer,
+                          );
+                        },
+                      )
+                    else if (MediaQuery.of(context).viewInsets.bottom == 0)
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final items = ref
+                                  .watch(itemsNotifierProvider(widget.listId))
+                                  .valueOrNull ??
+                              const <ShoppingItemModel>[];
+                          return ListPriceSummaryBar(
+                            listId: widget.listId,
+                            items: items,
+                          );
+                        },
+                      ),
+                    _buildPaperAddBar(context),
+                  ],
+                );
+              },
             ),
           ),
         ],

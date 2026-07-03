@@ -265,20 +265,51 @@ class _OfferRow extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  '${offer.price.toStringAsFixed(2)} €',
-                  style: PaperTextStyles.serif(
-                    15,
-                    color: AppColors.textPrimary(context),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (offer.discountPercent != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentColor(context)
+                              .withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '-${offer.discountPercent}%',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.accentColor(context),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                    ],
+                    Text(
+                      '${offer.price.toStringAsFixed(2)} €',
+                      style: PaperTextStyles.serif(
+                        15,
+                        color: AppColors.textPrimary(context),
+                      ),
+                    ),
+                  ],
                 ),
-                if (offer.oldPrice != null && offer.oldPrice! > offer.price)
+                if (offer.regularPrice != null)
                   Text(
-                    '${offer.oldPrice!.toStringAsFixed(2)} €',
+                    context.tr(
+                      'instead_of_price',
+                      params: {
+                        'price': offer.regularPrice!.toStringAsFixed(2),
+                      },
+                    ),
                     style: TextStyle(
                       fontSize: 10,
                       color: AppColors.textTertiary(context),
-                      decoration: TextDecoration.lineThrough,
                     ),
                   ),
               ],

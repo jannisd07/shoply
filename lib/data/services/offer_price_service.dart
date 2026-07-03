@@ -69,13 +69,41 @@ class OfferPriceService {
       return cached.offers;
     }
 
+    var results = await _rawSearch(normalized, zipCode: zipCode, limit: limit);
+
+    // Branded/compound/specific terms often miss (e.g. "golden toast" → 0, or
+    // "Toastbrötchen" → only one store). Retry with a broader generic stem and
+    // merge in the comparable products so all stores show up. The stem-matched
+    // fallback is relevance-guarded (product name must contain the stem) so a
+    // short prefix can't pull in unrelated items.
+    final generic = _genericTerm(normalized);
+    final retailerCount = results.map((o) => o.retailerUniqueName).toSet().length;
+    if (generic != null && generic != normalized && retailerCount < 2) {
+      final fallback = await _rawSearch(generic, zipCode: zipCode, limit: limit);
+      final seen = results.map((o) => o.id).toSet();
+      results = [
+        ...results,
+        ...fallback.where((o) =>
+            seen.add(o.id) && o.productName.toLowerCase().contains(generic)),
+      ]..sort((a, b) => a.price.compareTo(b.price));
+    }
+
+    _searchCache[cacheKey] = _CachedOffers(DateTime.now(), results);
+    return results;
+  }
+
+  Future<List<StoreOffer>> _rawSearch(
+    String q, {
+    required String zipCode,
+    required int limit,
+  }) async {
     await _ensureKeys();
     await _throttle();
 
     final uri = Uri.parse('$_baseUrl/offers/search').replace(
       queryParameters: {
         'as': 'web',
-        'q': normalized,
+        'q': q,
         'limit': '$limit',
         'offset': '0',
         'zipCode': zipCode,
@@ -90,7 +118,7 @@ class OfferPriceService {
         response = await _get(uri);
       }
       if (response.statusCode != 200) {
-        print('❌ [OFFERS] Search failed (${response.statusCode}) for "$query"');
+        print('❌ [OFFERS] Search failed (${response.statusCode}) for "$q"');
         return const [];
       }
 
@@ -100,18 +128,50 @@ class OfferPriceService {
           .map(StoreOffer.fromJson)
           .whereType<StoreOffer>()
           .where((o) => _isGrocery(o.retailerUniqueName))
+          .where((o) => o.isFood)
           .where((o) => o.isValidNow)
           .toList()
         ..sort((a, b) => a.price.compareTo(b.price));
 
-      _searchCache[cacheKey] = _CachedOffers(DateTime.now(), results);
-      print('✅ [OFFERS] "$query" @$zipCode → ${results.length} offers');
+      print('✅ [OFFERS] "$q" @$zipCode → ${results.length} offers');
       return results;
     } catch (e) {
-      print('❌ [OFFERS] Search error for "$query": $e');
+      print('❌ [OFFERS] Search error for "$q": $e');
       return const [];
     }
   }
+
+  /// Reduce a branded/compound/specific query to a broader stem so the API
+  /// returns comparable products across stores.
+  ///
+  /// Multi-word: German compounds put the head noun last ("Golden Toast" →
+  /// "toast", "Bio Vollmilch 3,5%" → "vollmilch"). Single long word: use a
+  /// short prefix stem ("Toastbrötchen" → "toast", "Schweinerippe" →
+  /// "schwe") — callers relevance-filter fallback hits by this stem, so an
+  /// over-broad prefix can't introduce noise. Returns null when nothing
+  /// sensible remains.
+  String? _genericTerm(String query) {
+    final cleaned = query
+        .toLowerCase()
+        // strip quantities/units/percentages
+        .replaceAll(
+            RegExp(r'\b\d+([.,]\d+)?\s*(g|kg|ml|l|%|x|stk|stück|pck|er)?\b'), ' ')
+        .replaceAll(RegExp(r'[^a-zäöüß\s-]'), ' ');
+    final words = cleaned
+        .split(RegExp(r'[\s-]+'))
+        .where((w) => w.length >= 3 && !_stopWords.contains(w))
+        .toList();
+    if (words.isEmpty) return null;
+    if (words.length >= 2) return words.last;
+    // Single word: broaden long words to a 5-char stem, else keep as-is.
+    final word = words.first;
+    return word.length >= 7 ? word.substring(0, 5) : word;
+  }
+
+  static const Set<String> _stopWords = {
+    'bio', 'frische', 'frisch', 'die', 'der', 'das', 'mit', 'ohne', 'und',
+    'aus', 'von', 'fein', 'gut', 'natur', 'classic', 'original',
+  };
 
   /// The cheapest offer per retailer for [query] (used for basket totals).
   Future<Map<String, StoreOffer>> cheapestPerRetailer(

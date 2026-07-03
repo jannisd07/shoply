@@ -7,14 +7,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Priority: manual override → fresh GPS fix (reverse geocoded) → cached
 /// value. The zip is cached for a day; a manual PLZ set by the user wins
 /// until cleared.
+/// Zip code plus whether it's the user's real location (manual/GPS) or a
+/// generic fallback used only so the offers feature is never empty.
+class ZipInfo {
+  final String zipCode;
+  final bool isReal;
+  const ZipInfo(this.zipCode, this.isReal);
+}
+
 class UserLocationService {
   UserLocationService._();
   static final UserLocationService instance = UserLocationService._();
 
-  static const _zipKey = 'offers_zip_code';
-  static const _zipTimeKey = 'offers_zip_fetched_at';
+  // v2: previous versions cached any reverse-geocoded zip, including foreign
+  // ones (e.g. the simulator's US location). Bumping the key drops those.
+  static const _zipKey = 'offers_zip_code_v2';
+  static const _zipTimeKey = 'offers_zip_fetched_at_v2';
   static const _manualZipKey = 'offers_zip_manual';
   static const _cacheMaxAge = Duration(hours: 24);
+
+  /// Central German zip used only when we have no real location, so search
+  /// suggestions still return offers from the big nationwide chains.
+  static const String defaultZip = '10115';
+
+  /// Always returns a usable zip. [isReal] is false when it's [defaultZip],
+  /// which the UI surfaces as a "set your PLZ" hint.
+  Future<ZipInfo> getZipInfo({bool forceRefresh = false}) async {
+    final zip = await getZipCode(forceRefresh: forceRefresh);
+    if (zip != null && zip.isNotEmpty) return ZipInfo(zip, true);
+    return const ZipInfo(defaultZip, false);
+  }
 
   Future<String?> getZipCode({bool forceRefresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
@@ -87,14 +109,24 @@ class UserLocationService {
         position.latitude,
         position.longitude,
       );
-      final zip = placemarks
-          .map((p) => p.postalCode)
-          .firstWhere((z) => z != null && z.isNotEmpty, orElse: () => null);
 
-      if (zip != null) {
-        print('✅ [LOCATION] Resolved zip code: $zip');
+      // Offers are Germany-only, so only accept a German placemark. A
+      // non-DE location (e.g. the simulator's default US coordinates) must
+      // fall through to the nationwide default zip instead of querying with
+      // a foreign postal code that returns zero offers.
+      for (final p in placemarks) {
+        final isGerman = (p.isoCountryCode?.toUpperCase() == 'DE') ||
+            (p.country == 'Deutschland') ||
+            (p.country == 'Germany');
+        final zip = p.postalCode;
+        if (isGerman && zip != null && zip.isNotEmpty) {
+          print('✅ [LOCATION] Resolved German zip code: $zip');
+          return zip;
+        }
       }
-      return zip;
+
+      print('⚠️ [LOCATION] No German placemark found; using fallback zip');
+      return null;
     } catch (e) {
       print('❌ [LOCATION] Failed to resolve zip: $e');
       return null;
