@@ -9,15 +9,21 @@ final userZipCodeProvider = FutureProvider<String?>((ref) async {
   return UserLocationService.instance.getZipCode();
 });
 
-/// Top offers for a live search query (used by the add-bar suggestions).
-final offerSuggestionsProvider = FutureProvider.autoDispose
+/// All current offers for a live search query, cheapest first, unfiltered by
+/// retailer (used both for the top-3 suggestions and for savings stats).
+final offerSearchAllProvider = FutureProvider.autoDispose
     .family<List<StoreOffer>, String>((ref, query) async {
   if (query.trim().length < 2) return const [];
   final zip = await ref.watch(userZipCodeProvider.future);
   if (zip == null || zip.isEmpty) return const [];
 
-  final offers =
-      await OfferPriceService.instance.searchOffers(query, zipCode: zip);
+  return OfferPriceService.instance.searchOffers(query, zipCode: zip);
+});
+
+/// Top offers for a live search query (used by the add-bar suggestions).
+final offerSuggestionsProvider = FutureProvider.autoDispose
+    .family<List<StoreOffer>, String>((ref, query) async {
+  final offers = await ref.watch(offerSearchAllProvider(query).future);
 
   // Top 3, preferring distinct retailers so the user sees real alternatives.
   final result = <StoreOffer>[];

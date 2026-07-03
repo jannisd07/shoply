@@ -6,9 +6,12 @@ import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/screens/lists/widgets/zip_code_sheet.dart';
 
 /// Top-3 live offers for the text currently typed in the add bar.
 /// Paper card floating above the add bar; tap adds the product to the list.
+/// Also nudges the user to set a zip code when location isn't available yet,
+/// since offer lookups have no way to pick a region without one.
 class OfferSuggestionsBar extends ConsumerWidget {
   final String query;
   final void Function(StoreOffer offer) onSelect;
@@ -21,9 +24,29 @@ class OfferSuggestionsBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final zipAsync = ref.watch(userZipCodeProvider);
+    if (!zipAsync.hasValue) return const SizedBox.shrink();
+    if (zipAsync.value == null) {
+      return _ZipCodeNudge(
+        onTap: () async {
+          HapticFeedback.selectionClick();
+          await showZipCodeSheet(context);
+        },
+      );
+    }
+
     final offersAsync = ref.watch(offerSuggestionsProvider(query));
     final offers = offersAsync.valueOrNull ?? const <StoreOffer>[];
     if (offers.isEmpty) return const SizedBox.shrink();
+
+    final allOffers =
+        ref.watch(offerSearchAllProvider(query)).valueOrNull ?? offers;
+    final maxPrice = allOffers.isEmpty
+        ? null
+        : allOffers.map((o) => o.price).reduce((a, b) => a > b ? a : b);
+    final savings =
+        maxPrice != null ? maxPrice - offers.first.price : 0.0;
+    final showSavings = allOffers.length > 1 && savings >= 0.20;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -54,15 +77,29 @@ class OfferSuggestionsBar extends ConsumerWidget {
                   color: AppColors.accentColor(context),
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  context.tr('offers_nearby').toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    letterSpacing: 1.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary(context),
+                Expanded(
+                  child: Text(
+                    context.tr('offers_nearby').toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      letterSpacing: 1.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                 ),
+                if (showSavings)
+                  Text(
+                    context.tr(
+                      'cheapest_saves_up_to',
+                      params: {'amount': savings.toStringAsFixed(2)},
+                    ),
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.accentColor(context),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -87,11 +124,68 @@ class OfferSuggestionsBar extends ConsumerWidget {
   }
 }
 
+class _ZipCodeNudge extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ZipCodeNudge({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border(context)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.location_on_outlined,
+              size: 16,
+              color: AppColors.accentColor(context),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                context.tr('set_zip_code_prompt'),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textPrimary(context),
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.textSecondary(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _OfferRow extends StatelessWidget {
   final StoreOffer offer;
   final VoidCallback onTap;
 
   const _OfferRow({required this.offer, required this.onTap});
+
+  /// "Ends today" / "ends in Xd" when the offer's validity window closes
+  /// soon — a lightweight freshness/confidence signal for the user.
+  String? _expiryLabel(BuildContext context) {
+    final validTo = offer.validTo;
+    if (validTo == null) return null;
+    final daysLeft = validTo.toUtc().difference(DateTime.now().toUtc()).inHours / 24;
+    if (daysLeft < 0 || daysLeft > 3) return null;
+    if (daysLeft < 1) return context.tr('offer_ends_today');
+    return context.tr('offer_ends_in_days', params: {'days': '${daysLeft.ceil()}'});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +246,18 @@ class _OfferRow extends StatelessWidget {
                       color: AppColors.textSecondary(context),
                     ),
                   ),
+                  if (_expiryLabel(context) != null) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      _expiryLabel(context)!,
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

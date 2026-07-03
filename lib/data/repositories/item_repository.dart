@@ -72,6 +72,7 @@ class ItemRepository {
     String? priceCurrency,
     String? priceRetailer,
     String? priceUnit,
+    bool autoParse = true,
   }) async {
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     print('🔵 [ITEM_REPO] addItem() METHOD ENTRY');
@@ -91,7 +92,7 @@ class ItemRepository {
     double parsedQuantity = quantity;
     String? parsedUnit = unit;
     
-    if (quantity == 1.0 && unit == null && name.trim().isNotEmpty) {
+    if (autoParse && quantity == 1.0 && unit == null && name.trim().isNotEmpty) {
       try {
         if (kDebugMode) {
           print('🧠 [ITEM_REPO] Auto-parsing ingredient: "$name"');

@@ -65,6 +65,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   final _scrollController = ScrollController();
   late String _listName;
 
+  // Debounced copy of the add-bar text used for live offer search, so a
+  // fast typer doesn't fire a network request per keystroke.
+  final ValueNotifier<String> _offerQuery = ValueNotifier<String>('');
+  Timer? _offerQueryDebounce;
+
   // Drag and drop state
   ShoppingItemModel? _draggedItem;
   String? _draggedFromCategory;
@@ -220,6 +225,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   void initState() {
     super.initState();
     _listName = widget.listName;
+    _searchController.addListener(_onSearchChangedForOffers);
     // Reload items when entering the list
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(itemsNotifierProvider(widget.listId).notifier).loadItems();
@@ -238,6 +244,26 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       // Load list owner info
       _loadListOwner();
     });
+  }
+
+  /// Debounces the add-bar text into [_offerQuery] (300ms) so live offer
+  /// search only fires once the user pauses typing. Clearing the field
+  /// updates instantly so the suggestion card disappears without delay.
+  void _onSearchChangedForOffers() {
+    final text = _searchController.text.trim();
+    if (text.isEmpty) {
+      _setOfferQuery('');
+      return;
+    }
+    _offerQueryDebounce?.cancel();
+    _offerQueryDebounce = Timer(const Duration(milliseconds: 300), () {
+      _setOfferQuery(text);
+    });
+  }
+
+  void _setOfferQuery(String value) {
+    _offerQueryDebounce?.cancel();
+    if (_offerQuery.value != value) _offerQuery.value = value;
   }
 
   Future<void> _loadListOwner() async {
@@ -284,7 +310,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   @override
   void dispose() {
     _autoScrollTimer?.cancel();
+    _offerQueryDebounce?.cancel();
+    _searchController.removeListener(_onSearchChangedForOffers);
     _searchController.dispose();
+    _offerQuery.dispose();
     _focusNode.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -744,10 +773,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                       );
                     },
                   ),
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _searchController,
-                  builder: (context, value, _) {
-                    final query = value.text.trim();
+                ValueListenableBuilder<String>(
+                  valueListenable: _offerQuery,
+                  builder: (context, query, _) {
                     if (query.length < 2) return const SizedBox.shrink();
                     return OfferSuggestionsBar(
                       query: query,
@@ -1242,6 +1270,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             priceCurrency: 'EUR',
             priceRetailer: offer.retailerName,
             priceUnit: offer.unitShortName,
+            // The offer already carries the real product name/unit — skip
+            // the Gemini ingredient-parse pass so it isn't rewritten.
+            autoParse: false,
           );
     } catch (e) {
       if (mounted) {

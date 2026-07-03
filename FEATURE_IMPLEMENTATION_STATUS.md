@@ -1,33 +1,25 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-02 (autonomous session)_
+_Last updated: 2026-07-03 (autonomous session — Feature 1 focus)_
 
-## Critical environment note (read first)
+## Environment note (read first)
 
-This session ran in a **Linux cloud container with no Flutter/Dart SDK and no
-network access to install one** (outbound access is allow-listed to a small
-set of domains — `flutter.dev`/GitHub SDK downloads are not reachable, and no
-system package for Flutter exists). This was verified, not assumed:
-`flutter`/`dart` are absent from `PATH`, no cached SDK exists anywhere on the
-filesystem, and `git clone` of `flutter/flutter` was blocked by the network
-policy (403).
-
-**Consequence: `dart analyze`, `flutter test`, and `flutter build` could NOT
-be run this session.** Every code change below was written by close reading
-of the existing code (matching exact provider names, method signatures, and
-column names verified live against the Supabase database) and a manual
-brace/paren/bracket balance check across all touched files, but **none of it
-has been compiler-verified**. Before merging, please run at minimum:
-
-```bash
-flutter pub get
-dart analyze
-flutter build ios --simulator --debug
-```
-
-and fix anything that surfaces. I've tried to keep changes additive and
-pattern-matched to minimize risk, but this is not a substitute for the real
-toolchain.
+Unlike the prior two sessions, **this session had a working Flutter/Dart
+toolchain**: outbound network access allowed `git clone` of `flutter/flutter`
+(stable channel), so the SDK was fetched locally into `/tmp/flutter-sdk` and
+used to run real verification — `flutter pub get` and `dart analyze` both ran
+successfully against the full `lib/` tree. `flutter build ios` still cannot
+run here (no macOS/Xcode in this Linux container — that's a hard platform
+limitation, not a policy/network one), and `flutter test` fails on an
+unrelated pre-existing issue (see Checks section of Feature 1 below), but
+`dart analyze` gave real, full-project compiler feedback for every change in
+this session, which the previous two sessions could not get. Baseline
+(before this session's changes, confirmed by re-running analyze against the
+prior commit): 2 errors (both from the gitignored `firebase_options.dart`,
+expected in this environment) and 67 warnings, all pre-existing. After this
+session's changes: still 2 errors (same expected cause), and 61 warnings —
+net *fewer* than baseline (dead-code deletion removed some), **zero new
+errors or warnings introduced**.
 
 ## Session context you should know
 
@@ -49,14 +41,14 @@ was **never wired into any screen** — this session wired it up.
 
 | # | Feature | Completion | Status | Blockers |
 |---|---|---|---|---|
-| 1 | Pricing, offers, cheapest store | ~65% | In progress | Regular (non-offer) shelf prices have no public API — offers-only by design |
-| 2 | Split shopping trip costs | ~85% | Implemented (needs QA) | None functional; needs compiler verification |
+| 1 | Pricing, offers, cheapest store | ~78% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
+| 2 | Split shopping trip costs | ~85% | Implemented (needs QA) | None functional; needs a real device run |
 | 3 | Widgets & quick actions | ~55% | In progress | Root cause fixed; needs a real Xcode/device build to confirm |
-| 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs compiler verification |
-| 5 | Avo mascot & smart notifications | ~20% | Not started (this session) | Large scope; see plan below |
+| 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
+| 5 | Avo mascot & smart notifications | ~20% | Not started | Large scope; see plan below |
 | 6 | Calorie tracking | 0% | Not started | Large greenfield feature; see plan below |
-| 7 | Personalized onboarding & navbar | ~15% | Not started (this session) | Depends on Feature 6 decisions |
-| 8 | Cross-feature UX / growth / premium | ~10% | Not started (this session) | Depends on 1–7 |
+| 7 | Personalized onboarding & navbar | ~15% | Not started | Depends on Feature 6 decisions |
+| 8 | Cross-feature UX / growth / premium | ~10% | Not started | Depends on 1–7 |
 
 ---
 
@@ -102,41 +94,134 @@ existed:
   straight into Feature 2's cost splitting.
 - Added an Avo AI tool, `search_offers` (Feature 4).
 
-**Explicitly NOT done (documented, not faked):**
+**This session (2026-07-03) picked up from that baseline and did a QA +
+gap-closing pass**, since the prior session's own audit already flagged the
+fast-typer debounce risk and several unimplemented autonomy items. What
+changed:
+
+- **Debounced live offer search.** The add-bar search was previously fed
+  straight from `_searchController` into `OfferSuggestionsBar` on every
+  keystroke — since each distinct string is a separate
+  `FutureProvider.autoDispose.family` instance, a fast typer really was
+  firing one marktguru API call per character. Added a 300ms debounce
+  (`_offerQuery` `ValueNotifier` + `Timer` in `list_detail_screen.dart`);
+  clearing the field still updates instantly (no lag on dismiss).
+- **Fixed a real correctness bug in `_addItemFromOffer`:** adding a picked
+  offer called `ItemRepository.addItem()` with `quantity: 1.0, unit: null`,
+  which is exactly the condition that triggers the *Gemini ingredient-parse*
+  pass (meant for free-text entries like "2 cups flour") — so a real,
+  branded product name/price from a live offer could get silently rewritten
+  by the AI parser, and burned an extra Gemini call for data that was
+  already exact. Added an `autoParse` flag (default `true`, preserving all
+  existing call sites) threaded through `ItemRepository.addItem()` →
+  `ItemsNotifier.addItem()`, and the offer-add path now passes
+  `autoParse: false` to keep the product name/price exactly as returned by
+  the offer.
+- **Manual zip-code fallback** — `UserLocationService` already supported a
+  manual PLZ override, but there was **no UI anywhere** to set one. Any user
+  who denies location permission (or is on a platform without GPS) got
+  pricing silently and permanently disabled with zero explanation. Added:
+  - `zip_code_sheet.dart` (new) — a bottom sheet to set the zip code,
+    reusable from anywhere.
+  - A nudge card in `OfferSuggestionsBar` ("Add your zip code to see nearby
+    offers") that appears exactly where the dead-end was — while
+    searching, once we know the zip resolved to nothing (not just "still
+    loading").
+  - A permanent "Zip code (for local offers)" field on the Personal Info
+    settings screen, so it can be set or changed anytime, not just from the
+    nudge.
+- **Savings signal ("smart substitutions").** A real product-substitute
+  graph doesn't exist (marktguru returns offers per literal search query,
+  not a mapped "cheaper alternative" relation), so building one honestly
+  would mean guessing at product equivalence — risky for a diet/allergy-aware
+  app. Instead, implemented the safe version of the same idea: the search
+  results for one query already span multiple brands/retailers at different
+  prices; when the spread between the cheapest and priciest match for that
+  query is ≥ €0.20, the suggestion card now shows "Save up to €X" next to
+  the top (cheapest) result — using data already fetched, no extra network
+  cost (`offerSearchAllProvider`, new, feeds both the top-3 list and this
+  stat from one shared request).
+- **Freshness/confidence tag.** Each offer row now shows "Offer ends today" /
+  "Offer ends in Xd" when its `validTo` is within 3 days — a lightweight,
+  honest confidence signal from data that already exists (no fake
+  confidence score invented).
+- **Removed the genuinely dead OCR/flyer pipeline — with a correction to the
+  prior session's audit.** Verified reachability of every symbol before
+  deleting anything (grepped for constructors, providers, and routes, not
+  just class names). Deleted (zero live references, confirmed):
+  `DealExtractorService`, `StoreFlyerService`, `TesseractSetup` (OCR helper
+  for a package that's commented out in `pubspec.yaml` — never had a real
+  backend), `StoreFlyerModel`, `ShoppingItemWithDeal`, `flyers_provider.dart`
+  (all 3 of its providers had 0 external watchers), `OffersScreen`,
+  `SupermarktFinderPage`, `FlyerViewerScreen` (none reachable from
+  `app_router.dart` or any navigation call site), `FlyerCard`, `DealBadge`,
+  `ShoppingItemGridCard`. **Correction:** the prior session's write-up
+  described `ProductMatchingService`/`DealsDatabaseService`/`ExtractedDeal`
+  as part of the dead pipeline with "a `dealBonus` scoring hook... on a
+  currently-unused code path." That's not accurate — `RecommendationService`
+  (which calls `ProductMatchingService.findBestDealForProduct`) **is** live,
+  reachable from `list_detail_screen.dart` via `RecommendationsSection`. So
+  those three files were **kept**, not deleted. In practice the `dealBonus`
+  they compute is always zero today, because the only writer to
+  `DealsDatabaseService`'s local deals table was the extractor that's now
+  removed (it was already permanently empty before this session — deleting
+  it doesn't change behavior, just removes an always-inert write path).
+  Whether to also strip that now-fully-inert `dealBonus` hook from
+  `RecommendationService` is flagged as a new idea below rather than done
+  here, since it touches the (separate, Feature 8-ish) recommendations
+  engine, not pricing/offers directly.
+
+**Still explicitly NOT done (documented, not faked):**
 - Regular (non-promotional) shelf prices — no public API exists for German
-  supermarkets; this is a hard external constraint, not a shortcut. The
-  offer coverage is honestly partial (only currently-running Angebote), and
-  the UI/AI copy says so ("offer prices only").
-- Smart substitutions ("this alternative saves you X") — not implemented.
-- Price confidence labels — not implemented (the underlying data source
-  doesn't provide staleness/confidence signals beyond `validFrom`/`validTo`,
-  which is already used to filter to `isValidNow`).
-- "Closest reasonable option" using real distance — `UserLocationService`
-  only resolves a zip code (for the offers API's regional filter), not
-  actual store distances/addresses. A real "near me" store list would need a
-  store-locator API, which isn't wired up.
-- The dead OCR/flyer pipeline was left alone rather than revived or deleted
-  — deleting ~1,500 lines of working-but-unused code felt outside this
-  session's risk budget without being asked; flagged as an idea below.
+  supermarkets; hard external constraint, not a shortcut. UI/AI copy says so.
+- Real distance-based "closest reasonable store" — `UserLocationService`
+  only resolves a zip code, not store addresses/distances; would need a
+  store-locator API that isn't wired up.
+- Item-level "cheaper at another store — switch and save €X" hint on
+  existing priced list items. `basketComparisonProvider` already fetches the
+  per-item, per-retailer prices needed for this (it's what powers the
+  store-comparison sheet), so the data exists — this would be a UI-only
+  addition inside the (very large, 3000+ line) `list_detail_screen.dart` item
+  row. Scoped out this session to keep the diff reviewable and low-risk;
+  flagged as the natural next increment for Feature 1.
 
-**Files changed:** `lib/data/models/shopping_item_model.dart`,
-`lib/data/repositories/item_repository.dart`,
-`lib/presentation/state/items_provider.dart`,
-`lib/presentation/screens/lists/list_detail_screen.dart`,
-`lib/presentation/screens/lists/widgets/list_price_summary_bar.dart` (new),
-`lib/data/services/shopping_history_service.dart`,
-`lib/core/localization/app_translations.dart`,
-`supabase/migrations/20260702055031_pricing_and_cost_splitting.sql` (new —
-documents already-applied live schema).
+**Files changed:** `lib/presentation/providers/price_comparison_provider.dart`
+(added `offerSearchAllProvider`), `lib/presentation/screens/lists/widgets/offer_suggestions_bar.dart`
+(zip nudge, savings badge, expiry tag), `lib/presentation/screens/lists/widgets/zip_code_sheet.dart`
+(new), `lib/presentation/screens/lists/list_detail_screen.dart` (debounce,
+`autoParse: false` on offer-add), `lib/data/repositories/item_repository.dart`
++ `lib/presentation/state/items_provider.dart` (`autoParse` param),
+`lib/presentation/screens/profile/settings/personal_info_screen.dart` (zip
+field), `lib/core/localization/app_translations.dart` (new EN/DE keys).
+**Deleted** (dead code, see above): `lib/data/services/deal_extractor_service.dart`,
+`lib/data/services/store_flyer_service.dart`, `lib/data/services/tesseract_setup.dart`,
+`lib/data/models/store_flyer_model.dart`, `lib/data/models/shopping_item_with_deal.dart`,
+`lib/presentation/state/flyers_provider.dart`,
+`lib/presentation/screens/flyers/flyer_viewer_screen.dart`,
+`lib/presentation/screens/markets/supermarkt_finder_page.dart`,
+`lib/presentation/screens/offers/offers_screen.dart`,
+`lib/presentation/widgets/flyer_card.dart`,
+`lib/presentation/widgets/deals/deal_badge.dart`,
+`lib/presentation/widgets/list/shopping_item_grid_card.dart`.
 
-**Checks performed:** Manual trace of every call site against the live
-Supabase schema (columns verified via MCP `list_tables`); brace/paren
-balance check. **Not run:** `dart analyze`, build, or a real device/simulator
-test of the add-item-from-offer flow. Please verify search debouncing feels
-right in practice — there's no explicit debounce on the `ValueListenableBuilder`
-beyond Riverpod's `FutureProvider.autoDispose.family` caching per exact
-query string, which may fire a network call per keystroke on a fast typer.
-Consider adding a 300ms debounce if that turns out to be an issue.
+**Checks performed:** Real Flutter SDK available this session (see
+environment note above) — ran `flutter pub get` and `dart analyze` against
+the full project before and after every meaningful change. Result: 2
+pre-existing errors (gitignored `firebase_options.dart`, expected), 61
+warnings (down from the 67-warning baseline — the dead-code deletion removed
+some, zero new warnings introduced by any change this session), 643 total
+issues (down from 655). Verified every deleted symbol's reachability by
+grepping for constructor calls, provider watchers, and router entries before
+removing it — not just class-name mentions. `flutter test` (the repo's
+compile-smoke test) fails on both this branch and its unmodified parent
+commit with the same error, in an unrelated package (`lucide_icons` vs. this
+Flutter SDK's `IconData` being a `final class`) — confirmed pre-existing via
+`git stash` + re-run, not a regression from this session. `pubspec.lock`
+churn from running `pub get` with a freshly-downloaded SDK was reverted
+before committing, to avoid unrelated dependency-version noise in the diff.
+**Not run (no macOS/Xcode available in this container):** `flutter build ios
+--simulator --debug`, or a real on-device test of the add-item-from-offer
+flow, the zip-code sheet, or the savings/expiry badges rendering correctly.
 
 ---
 
@@ -497,21 +582,47 @@ exists, "N calories left — 3 dinner ideas from your list."
 
 ## Ideas / Needs My Approval
 
-- [ yes] IDEA: Delete the dead OCR/flyer-deal pipeline (`ExtractedDeal`,
-  `DealExtractorService`, `DealsDatabaseService`, `ProductMatchingService`,
-  `DealBadge`, `ShoppingItemGridCard`, `OffersScreen`,
-  `SupermarktFinderPage`'s hardcoded demo data, `StoreFlyerService`'s
-  fake-scrape-then-demo-data fallback) now that the marktguru pipeline is
-  the real, wired-up offer source.
-  - Why it helps: removes ~1,500 lines of code that can never do anything
-    (nothing feeds it data) and that could confuse future contributors into
-    building on the wrong foundation.
-  - Expected user value: none directly (it's invisible today).
-  - Expected business/premium value: none directly; reduces maintenance risk.
-  - Complexity: Low (deletion + removing the now-empty `deals/` widget dir).
-  - Risk: Low — confirmed zero live call sites — but I didn't want to delete
-    a chunk of code I didn't write without asking first.
-  - Recommendation: yes.
+- [x] IDEA (approved, DONE this session — with a correction): Delete the dead
+  OCR/flyer-deal pipeline now that the marktguru pipeline is the real,
+  wired-up offer source.
+  - **Outcome:** Deleted `DealExtractorService`, `StoreFlyerService`,
+    `TesseractSetup`, `StoreFlyerModel`, `ShoppingItemWithDeal`,
+    `flyers_provider.dart`, `OffersScreen`, `SupermarktFinderPage`,
+    `FlyerViewerScreen`, `FlyerCard`, `DealBadge`, `ShoppingItemGridCard` —
+    all confirmed zero live call sites (grepped for constructors/providers/
+    routes, not just class-name mentions).
+  - **Correction to the original idea:** `ExtractedDeal`,
+    `DealsDatabaseService`, and `ProductMatchingService` were **not**
+    deleted, because they turned out to be live — `RecommendationService`
+    calls `ProductMatchingService.findBestDealForProduct()`, and
+    `RecommendationService` is reachable from `list_detail_screen.dart` via
+    `RecommendationsSection`. Deleting them would have broken a working (if
+    functionally inert — see below) code path. See Feature 1's session notes
+    above for the full explanation.
+  - See the new idea directly below for the follow-up this uncovered.
+
+- [ ] IDEA: Strip the now-fully-inert `dealBonus` hook from
+  `RecommendationService` (and decide whether `ProductMatchingService`/
+  `DealsDatabaseService`/`ExtractedDeal` should go too).
+  - Why it helps: `RecommendationService.dealBonus` scoring can never
+    contribute anything now — its only real data source (the OCR extractor)
+    was just deleted as dead code, and it was already permanently empty
+    before that (nothing ever populated `DealsDatabaseService`'s local
+    table). Right now it's a live call that always no-ops, which is subtler
+    and easier to miss than obviously-dead code.
+  - Expected user value: none directly (already invisible).
+  - Expected business/premium value: none directly; reduces confusion for
+    whoever next touches the recommendations engine.
+  - Complexity: Low-medium — touches `RecommendationService` (used by
+    `RecommendationsSection`, which is live in `list_detail_screen.dart`),
+    so it's a recommendations-engine change, not a pure pricing one. Slightly
+    out of Feature 1's scope, closer to Feature 8 (cross-feature
+    recommendations) — flagging rather than doing it opportunistically.
+  - Risk: Low if done carefully (just remove the dead scoring term), but
+    touches a live, user-facing ranking path, so it deserves its own
+    focused pass rather than a drive-by edit.
+  - Recommendation: yes, as a small follow-up — either standalone or folded
+    into a future Feature 8 pass on the recommendation engines.
 
 - [ yes] IDEA: Consolidate the two dead mascot/gamification systems
   (`core/gamification/` and `MascotNotificationService`'s streak logic) into

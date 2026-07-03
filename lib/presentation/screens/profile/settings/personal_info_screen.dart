@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/supabase_service.dart';
+import 'package:shoply/data/services/user_location_service.dart';
+import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 
@@ -18,8 +20,10 @@ class PersonalInfoScreen extends ConsumerStatefulWidget {
 class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
   final _ageController = TextEditingController();
   final _heightController = TextEditingController();
+  final _zipController = TextEditingController();
   String _selectedHeightUnit = 'cm';
   String? _selectedGender;
+  String _initialZip = '';
   bool _isLoading = false;
   bool _hasChanges = false;
 
@@ -27,6 +31,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadZipCode();
   }
 
   Future<void> _loadUserData() async {
@@ -61,6 +66,16 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
     }
   }
 
+  Future<void> _loadZipCode() async {
+    final zip = await UserLocationService.instance.getManualZipCode() ?? '';
+    if (mounted) {
+      setState(() {
+        _zipController.text = zip;
+        _initialZip = zip;
+      });
+    }
+  }
+
   Future<void> _saveChanges() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) return;
@@ -78,6 +93,13 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
         'gender': _selectedGender,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', user.id);
+
+      final zip = _zipController.text.trim();
+      if (zip != _initialZip) {
+        await UserLocationService.instance.setManualZipCode(zip);
+        _initialZip = zip;
+        ref.invalidate(userZipCodeProvider);
+      }
 
       if (mounted) {
         setState(() => _hasChanges = false);
@@ -103,6 +125,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
   void dispose() {
     _ageController.dispose();
     _heightController.dispose();
+    _zipController.dispose();
     super.dispose();
   }
 
@@ -206,6 +229,38 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
           _buildGenderRow(context, 'other', context.tr('other'), textPrimary, textSecondary),
           Container(height: 0.5, color: separatorColor),
           _buildGenderRow(context, 'prefer_not_to_say', context.tr('prefer_not_to_say'), textPrimary, textSecondary),
+
+          const SizedBox(height: 32),
+
+          // Zip code section (used for local offer/price lookups)
+          PaperSectionHeader(context.tr('location_for_offers')),
+          Container(
+            decoration: paperFieldDecoration(context),
+            child: TextField(
+              controller: _zipController,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: textPrimary),
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(5),
+              ],
+              decoration: InputDecoration(
+                hintText: context.tr('zip_code_hint'),
+                hintStyle: TextStyle(color: textSecondary),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.all(16),
+              ),
+              onChanged: (_) => setState(() => _hasChanges = true),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              context.tr('zip_code_field_hint'),
+              style: TextStyle(color: textSecondary, fontSize: 12),
+            ),
+          ),
 
           const SizedBox(height: 32),
 
