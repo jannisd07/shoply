@@ -1,6 +1,6 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-03 (autonomous session — Feature 1 focus)_
+_Last updated: 2026-07-03, second session of the day (scheduled routine — Feature 1 focus)_
 
 ## Environment note (read first)
 
@@ -41,7 +41,7 @@ was **never wired into any screen** — this session wired it up.
 
 | # | Feature | Completion | Status | Blockers |
 |---|---|---|---|---|
-| 1 | Pricing, offers, cheapest store | ~78% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
+| 1 | Pricing, offers, cheapest store | ~85% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~85% | Implemented (needs QA) | None functional; needs a real device run |
 | 3 | Widgets & quick actions | ~55% | In progress | Root cause fixed; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
@@ -171,21 +171,78 @@ changed:
   here, since it touches the (separate, Feature 8-ish) recommendations
   engine, not pricing/offers directly.
 
+**Second session, 2026-07-03 (scheduled routine).** Started by reconciling
+two divergent lines of Feature-1 work: your own `ac54af5` on `main`
+(comparable-basket totals, German-placemark zip fix, food filter, relevance
+sort + generic-term search fallback, single-line summary bar) and the
+morning routine session's `d7afe2f` on `claude/daily` (debounce, offer-add
+fidelity/`autoParse`, manual-zip UX, dead-code deletion) had **no common
+descendant** — each was missing the other's fixes. Merged `main` into
+`claude/daily`, resolving three conflicting files so both sides' behavior
+survives:
+- `price_comparison_provider.dart`: kept your `effectiveZipProvider`
+  (nationwide fallback zip) and rebased the shared `offerSearchAllProvider`
+  on it; one `offerSuggestionsProvider` with your relevance sort + the
+  distinct-retailer top-3.
+- `list_detail_screen.dart`: your either/or logic (offer suggestions XOR
+  summary bar, never stacked, keyed off the live text) now feeds the
+  suggestions from the debounced query, so fast typing still doesn't fire an
+  API call per keystroke.
+- `app_translations.dart`: union of both sides' new keys.
+
+Then closed the gaps that were still open, in order of user value:
+- **Per-item smart substitutions (the "cheaper alternative saves you €X"
+  ask).** New `BasketComparison.cheapestOfferFor(itemName)` exposes the
+  per-item cheapest offer the basket comparison already fetches (zero extra
+  API traffic). Every unchecked list row now shows a small accent chip:
+  "Spare €X bei [Store]" when the item's saved price beats a live offer by
+  ≥ €0.10, or "€X · [Store]" when the item has no price yet. Tapping opens a
+  new offer sheet (`item_offer_sheet.dart`) — product image, brand, store,
+  unit, price, regular-price/discount, validity — with one "Preis
+  übernehmen" action that persists price/retailer/unit onto the item via
+  the existing `ItemsNotifier.updateItem`. After applying, the chip
+  disappears on its own (the saved price now matches the offer).
+- **Whole-list estimated total.** The store-comparison sheet now shows
+  "Ganze Liste, geschätzt (Y/Z Artikel) ≈ €X": each open item counts its own
+  saved price if set, else the cheapest current offer, and the coverage
+  fraction is shown so the estimate is honest about what it excludes.
+- **Quantity-pricing bugfix.** `knownTotal` multiplied price × quantity
+  unconditionally, so "500 g Hackfleisch" with a €2.99 offer price would
+  have contributed €1,495 to the total. New
+  `ShoppingItemModel.pricingQuantity` multiplies only piece-like quantities
+  (no unit / Stk / x / pcs, 1–50) and counts measured quantities once; used
+  by both the summary-bar total and the new estimate.
+- **Zip-gating consistency fix.** `OfferSuggestionsBar` blocked all
+  suggestions behind the zip nudge even though your `effectiveZipProvider`
+  fallback makes nationwide search work without one. Now it shows the
+  fallback results with a compact "set your zip for local prices" footer
+  inside the card; the full nudge card only appears when there are no
+  results at all.
+
+**Verification this session:** Flutter 3.44.4/Dart 3.12.2 installed from
+`storage.googleapis.com`; `dart analyze` = **0 errors, 0 new warnings**
+(60 pre-existing warnings byte-identical to the parent commits, diffed
+ignoring line numbers). Live end-to-end check of the marktguru pipeline
+from this container: `offers/search?q=Milch&zipCode=10115` returns 200 with
+real offers using the shipped fallback keys, the JSON shape matches
+`StoreOffer.fromJson` field-for-field, and the CDN image URL pattern
+(`mg2de.b-cdn.net/api/v1/offers/{id}/images/default/0/medium.jpg`) resolves
+200. `flutter test` fails on Flutter 3.44 because `lucide_icons` 0.257.0
+extends the now-`final` `IconData` — dependency/SDK mismatch, pre-existing,
+not app code. No iOS build possible here (Linux).
+
 **Still explicitly NOT done (documented, not faked):**
 - Regular (non-promotional) shelf prices — no public API exists for German
   supermarkets; hard external constraint, not a shortcut. UI/AI copy says so.
 - Real distance-based "closest reasonable store" — `UserLocationService`
   only resolves a zip code, not store addresses/distances; would need a
   store-locator API that isn't wired up.
-- Item-level "cheaper at another store — switch and save €X" hint on
-  existing priced list items. `basketComparisonProvider` already fetches the
-  per-item, per-retailer prices needed for this (it's what powers the
-  store-comparison sheet), so the data exists — this would be a UI-only
-  addition inside the (very large, 3000+ line) `list_detail_screen.dart` item
-  row. Scoped out this session to keep the diff reviewable and low-risk;
-  flagged as the natural next increment for Feature 1.
+- Cross-product substitution ("buy Rama instead of Kerrygold") — the chip
+  suggests the cheapest offer matching the item's own name/stem, not a
+  different product class; real product-equivalence mapping would need to
+  respect diet/allergy constraints and is out of scope.
 
-**Files changed:** `lib/presentation/providers/price_comparison_provider.dart`
+**Files changed (morning session):** `lib/presentation/providers/price_comparison_provider.dart`
 (added `offerSearchAllProvider`), `lib/presentation/screens/lists/widgets/offer_suggestions_bar.dart`
 (zip nudge, savings badge, expiry tag), `lib/presentation/screens/lists/widgets/zip_code_sheet.dart`
 (new), `lib/presentation/screens/lists/list_detail_screen.dart` (debounce,
@@ -193,6 +250,20 @@ changed:
 + `lib/presentation/state/items_provider.dart` (`autoParse` param),
 `lib/presentation/screens/profile/settings/personal_info_screen.dart` (zip
 field), `lib/core/localization/app_translations.dart` (new EN/DE keys).
+
+**Files changed (second session):**
+`lib/presentation/screens/lists/widgets/item_offer_sheet.dart` (new —
+`ItemOfferChip` + offer detail/apply sheet),
+`lib/data/models/store_offer.dart` (`cheapestOfferFor`),
+`lib/data/models/shopping_item_model.dart` (`pricingQuantity`),
+`lib/presentation/screens/lists/widgets/list_price_summary_bar.dart`
+(estimated list total, quantity fix),
+`lib/presentation/screens/lists/widgets/offer_suggestions_bar.dart`
+(nationwide-fallback footer), `lib/presentation/screens/lists/list_detail_screen.dart`
+(chip in item rows, merge resolution),
+`lib/presentation/providers/price_comparison_provider.dart` (merge
+resolution), `lib/core/localization/app_translations.dart` (7 new EN/DE
+keys), plus the merge commit reconciling `main`'s `ac54af5`.
 **Deleted** (dead code, see above): `lib/data/services/deal_extractor_service.dart`,
 `lib/data/services/store_flyer_service.dart`, `lib/data/services/tesseract_setup.dart`,
 `lib/data/models/store_flyer_model.dart`, `lib/data/models/shopping_item_with_deal.dart`,

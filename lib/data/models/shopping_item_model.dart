@@ -54,6 +54,28 @@ class ShoppingItemModel extends Equatable {
   /// Whether this item has a known price (from a picked offer or manual entry).
   bool get hasPrice => price != null;
 
+  /// How many times a per-product price should be counted for this item.
+  /// Piece-like quantities ("3" bottles) multiply; measured quantities
+  /// ("500 g") count the price once, since prices are per product, not per
+  /// measurement unit.
+  double get pricingQuantity {
+    final u = unit?.trim().toLowerCase();
+    final isPieceLike = u == null ||
+        u.isEmpty ||
+        u == 'x' ||
+        u == 'stk' ||
+        u == 'stk.' ||
+        u == 'st' ||
+        u == 'pcs' ||
+        u == 'pc' ||
+        u == 'piece' ||
+        u == 'pieces' ||
+        u == 'stück';
+    if (!isPieceLike) return 1;
+    if (quantity < 1 || quantity > 50) return 1;
+    return quantity;
+  }
+
   factory ShoppingItemModel.fromJson(Map<String, dynamic> json) {
     return ShoppingItemModel(
       id: json['id'] as String,

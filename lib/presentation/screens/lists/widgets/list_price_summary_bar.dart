@@ -8,6 +8,7 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/state/items_provider.dart';
 
 /// Compact "known total + cheapest store" chip for the list detail screen.
 /// Tapping it opens the full per-store basket comparison. Renders nothing
@@ -25,7 +26,8 @@ class ListPriceSummaryBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pricedItems = items.where((i) => !i.isChecked && i.hasPrice).toList();
-    final knownTotal = pricedItems.fold<double>(0, (sum, i) => sum + (i.price ?? 0) * i.quantity);
+    final knownTotal = pricedItems.fold<double>(
+        0, (sum, i) => sum + (i.price ?? 0) * i.pricingQuantity);
     final zipInfo = ref.watch(effectiveZipProvider).valueOrNull;
     final basketAsync = ref.watch(basketComparisonProvider(listId));
     final bestStore = basketAsync.valueOrNull?.bestStore;
@@ -310,12 +312,34 @@ class _StoreComparisonSheet extends ConsumerWidget {
 
   const _StoreComparisonSheet({required this.comparison, required this.listId});
 
+  /// Estimate for the whole open list: an item's own price when set, else
+  /// the cheapest current offer for it, else it stays uncovered. Returns
+  /// (total, coveredCount, openCount); null total when nothing is covered.
+  (double, int, int)? _estimateListTotal(WidgetRef ref) {
+    final items =
+        ref.watch(itemsNotifierProvider(listId)).valueOrNull ?? const [];
+    final open = items.where((i) => !i.isChecked).toList();
+    if (open.isEmpty) return null;
+    var total = 0.0;
+    var covered = 0;
+    for (final item in open) {
+      final price = item.price ??
+          comparison.cheapestOfferFor(item.name.trim())?.price;
+      if (price == null) continue;
+      total += price * item.pricingQuantity;
+      covered++;
+    }
+    if (covered == 0) return null;
+    return (total, covered, open.length);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
     final accent = AppColors.accentColor(context);
     final stores = comparison.ranked;
+    final estimate = _estimateListTotal(ref);
 
     return Container(
       decoration: BoxDecoration(
@@ -452,6 +476,35 @@ class _StoreComparisonSheet extends ConsumerWidget {
                 ],
               ),
             ),
+          if (estimate != null) ...[
+            Container(
+              height: 0.5,
+              margin: const EdgeInsets.only(bottom: 10),
+              color: AppColors.divider(context),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    context.tr('estimated_list_total', params: {
+                      'known': '${estimate.$2}',
+                      'total': '${estimate.$3}',
+                    }),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: textPrimary,
+                    ),
+                  ),
+                ),
+                Text(
+                  '≈ ${estimate.$1.toStringAsFixed(2)} €',
+                  style: PaperTextStyles.serif(16, color: textPrimary),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
           const SizedBox(height: 2),
           Text(
             context.tr('comparable_note',

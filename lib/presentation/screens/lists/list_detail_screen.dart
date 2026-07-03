@@ -41,6 +41,8 @@ import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/presentation/screens/lists/list_settings_screen.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/models/store_offer.dart';
+import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/screens/lists/widgets/item_offer_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_price_summary_bar.dart';
 
@@ -3037,6 +3039,33 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                                 ),
                               ),
                             ],
+                            if (!item.isChecked)
+                              Consumer(
+                                builder: (context, chipRef, _) {
+                                  final comparison = chipRef
+                                      .watch(basketComparisonProvider(
+                                          widget.listId))
+                                      .valueOrNull;
+                                  final offer = comparison
+                                      ?.cheapestOfferFor(item.name.trim());
+                                  if (offer == null ||
+                                      !ItemOfferChip.isWorthShowing(
+                                          item, offer)) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return ItemOfferChip(
+                                    item: item,
+                                    offer: offer,
+                                    onTap: () => showItemOfferSheet(
+                                      context,
+                                      ref: ref,
+                                      listId: widget.listId,
+                                      item: item,
+                                      offer: offer,
+                                    ),
+                                  );
+                                },
+                              ),
                           ],
                         ),
                       ),

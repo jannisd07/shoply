@@ -222,4 +222,21 @@ class BasketComparison {
     }
     return null;
   }
+
+  /// The cheapest current offer for a single list item across all stores,
+  /// or null when no store has it on offer. [itemName] must be the trimmed
+  /// item name the comparison was built from.
+  StoreOffer? cheapestOfferFor(String itemName) {
+    StoreOffer? cheapest;
+    for (final store in stores) {
+      for (final match in store.matches) {
+        final offer = match.offer;
+        if (offer == null || match.itemName != itemName) continue;
+        if (cheapest == null || offer.price < cheapest.price) {
+          cheapest = offer;
+        }
+      }
+    }
+    return cheapest;
+  }
 }

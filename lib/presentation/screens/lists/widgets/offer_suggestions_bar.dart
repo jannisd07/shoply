@@ -26,18 +26,23 @@ class OfferSuggestionsBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final zipAsync = ref.watch(userZipCodeProvider);
     if (!zipAsync.hasValue) return const SizedBox.shrink();
-    if (zipAsync.value == null) {
-      return _ZipCodeNudge(
-        onTap: () async {
-          HapticFeedback.selectionClick();
-          await showZipCodeSheet(context);
-        },
-      );
-    }
+    // No real zip: suggestions still work through the nationwide fallback
+    // zip, but nudge for a real one so prices become local.
+    final needsZip = zipAsync.value == null;
 
     final offersAsync = ref.watch(offerSuggestionsProvider(query));
     final offers = offersAsync.valueOrNull ?? const <StoreOffer>[];
-    if (offers.isEmpty) return const SizedBox.shrink();
+    if (offers.isEmpty) {
+      if (needsZip) {
+        return _ZipCodeNudge(
+          onTap: () async {
+            HapticFeedback.selectionClick();
+            await showZipCodeSheet(context);
+          },
+        );
+      }
+      return const SizedBox.shrink();
+    }
 
     final allOffers =
         ref.watch(offerSearchAllProvider(query)).valueOrNull ?? offers;
@@ -118,6 +123,47 @@ class OfferSuggestionsBar extends ConsumerWidget {
               },
             ),
           ],
+          if (needsZip)
+            GestureDetector(
+              onTap: () async {
+                HapticFeedback.selectionClick();
+                await showZipCodeSheet(context);
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: AppColors.divider(context),
+                      width: 0.5,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 12,
+                      color: AppColors.textSecondary(context),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        context.tr('offers_nationwide_set_zip'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary(context),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
