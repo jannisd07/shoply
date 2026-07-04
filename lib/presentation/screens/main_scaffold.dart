@@ -109,11 +109,12 @@ class _SlidingTabsContainerState extends State<SlidingTabsContainer>
 
 /// Main scaffold with the Paper floating ink navigation ("D1" design).
 ///
-/// Layout: a content-sized, centered ink pill + detached Avo orb on the
-/// right. The active tab sits in a soft 12% paper seat. The tab set is
-/// preference-driven: [ list · book · (flame) · user ], where the Kalorien
-/// tab only appears when the user opted into calorie tracking (onboarding
-/// or profile settings). Create-list lives on the home screen
+/// Layout: an ink pill spanning the screen width (16pt margins, capped at
+/// 480pt for tablets) with tabs spread evenly, plus a detached Avo orb on
+/// the right edge. The active tab sits in a soft 12% paper seat. The tab
+/// set is preference-driven: [ list · book · (flame) · user ], where the
+/// Kalorien tab only appears when the user opted into calorie tracking
+/// (onboarding or profile settings). Create-list lives on the home screen
 /// ("+ Neue Liste"), not in the navbar.
 class MainScaffold extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -206,68 +207,78 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
               right: 0,
               bottom: navBottom,
               child: Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      height: MainScaffold._pillHeight,
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      decoration: BoxDecoration(
-                        color: pillColor,
-                        borderRadius: BorderRadius.circular(
-                          MainScaffold._pillHeight / 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF201D18)
-                                .withValues(alpha: 0.22),
-                            blurRadius: 18,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _NavIcon(
-                            icon: LucideIcons.list,
-                            label: 'Listen',
-                            active: _currentBranch == _kBranchHome,
-                            onTap: () => _goBranch(_kBranchHome),
-                            itemKey: tut.homeTabKey,
-                          ),
-                          _NavIcon(
-                            icon: LucideIcons.book,
-                            label: 'Rezepte',
-                            active: _currentBranch == _kBranchRecipes,
-                            onTap: () => _goBranch(_kBranchRecipes),
-                            itemKey: tut.recipesTabKey,
-                          ),
-                          if (caloriesEnabled)
-                            _NavIcon(
-                              icon: LucideIcons.flame,
-                              label: 'Kalorien',
-                              active: _currentBranch == _kBranchCalories,
-                              onTap: () => _goBranch(_kBranchCalories),
+                // Pill spans the screen width (minus margins); capped so it
+                // doesn't stretch absurdly on tablets/landscape.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: MainScaffold._pillHeight,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: pillColor,
+                              borderRadius: BorderRadius.circular(
+                                MainScaffold._pillHeight / 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF201D18,
+                                  ).withValues(alpha: 0.22),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
                             ),
-                          _NavIcon(
-                            icon: LucideIcons.user,
-                            label: 'Profil',
-                            active: _currentBranch == _kBranchProfile,
-                            onTap: () => _goBranch(_kBranchProfile),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _NavIcon(
+                                  icon: LucideIcons.list,
+                                  label: 'Listen',
+                                  active: _currentBranch == _kBranchHome,
+                                  onTap: () => _goBranch(_kBranchHome),
+                                  itemKey: tut.homeTabKey,
+                                ),
+                                _NavIcon(
+                                  icon: LucideIcons.book,
+                                  label: 'Rezepte',
+                                  active: _currentBranch == _kBranchRecipes,
+                                  onTap: () => _goBranch(_kBranchRecipes),
+                                  itemKey: tut.recipesTabKey,
+                                ),
+                                if (caloriesEnabled)
+                                  _NavIcon(
+                                    icon: LucideIcons.flame,
+                                    label: 'Kalorien',
+                                    active: _currentBranch == _kBranchCalories,
+                                    onTap: () => _goBranch(_kBranchCalories),
+                                  ),
+                                _NavIcon(
+                                  icon: LucideIcons.user,
+                                  label: 'Profil',
+                                  active: _currentBranch == _kBranchProfile,
+                                  onTap: () => _goBranch(_kBranchProfile),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 10),
+                        _AvoOrb(
+                          color: pillColor,
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            context.push('/avo');
+                          },
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 10),
-                    _AvoOrb(
-                      color: pillColor,
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        context.push('/avo');
-                      },
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
