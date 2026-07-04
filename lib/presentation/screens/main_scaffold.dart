@@ -109,13 +109,14 @@ class _SlidingTabsContainerState extends State<SlidingTabsContainer>
 
 /// Main scaffold with the Paper floating ink navigation ("D1" design).
 ///
-/// Layout: an ink pill spanning the screen width (16pt margins, capped at
-/// 480pt for tablets) with tabs spread evenly, plus a detached Avo orb on
-/// the right edge. The active tab sits in a soft 12% paper seat. The tab
-/// set is preference-driven: [ list · book · (flame) · user ], where the
-/// Kalorien tab only appears when the user opted into calorie tracking
-/// (onboarding or profile settings). Create-list lives on the home screen
-/// ("+ Neue Liste"), not in the navbar.
+/// Layout (matches the D1 mockup metrics): an ink pill spanning the screen
+/// width (14pt margins, capped at 480pt for tablets) with 46pt tab seats
+/// distributed spaceAround, plus a detached 58pt Avo orb on the right edge
+/// and a soft background fade behind the whole bar. The active tab sits in
+/// a 12% paper seat. The tab set is preference-driven:
+/// [ list · book · (flame) · user ], where the Kalorien tab only appears
+/// when the user opted into calorie tracking (onboarding or profile
+/// settings). Create-list lives on the home screen ("+ Neue Liste").
 class MainScaffold extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
 
@@ -201,24 +202,52 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
             ),
           ),
 
+          // Soft fade from transparent to the page background behind the
+          // navbar, so scrolled content settles calmly under the bar
+          // instead of colliding with it (clean zone, like the mockup).
+          if (!kbd)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: navBottom + MainScaffold._pillHeight + 34,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        (isDark ? Colors.black : PaperColors.paper).withValues(
+                          alpha: 0.0,
+                        ),
+                        isDark ? Colors.black : PaperColors.paper,
+                      ],
+                      stops: const [0.0, 0.62],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           if (!kbd)
             Positioned(
               left: 0,
               right: 0,
               bottom: navBottom,
               child: Center(
-                // Pill spans the screen width (minus margins); capped so it
-                // doesn't stretch absurdly on tablets/landscape.
+                // Pill spans the screen width (minus margins, like the D1
+                // mockup); capped so it doesn't stretch on tablets.
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 480),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
                     child: Row(
                       children: [
                         Expanded(
                           child: Container(
                             height: MainScaffold._pillHeight,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
                             decoration: BoxDecoration(
                               color: pillColor,
                               borderRadius: BorderRadius.circular(
@@ -235,7 +264,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
                               ],
                             ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
                                 _NavIcon(
                                   icon: LucideIcons.list,
@@ -308,13 +337,14 @@ class _NavIcon extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
+      // Tab = its 46x46 seat, distributed by the pill's spaceAround — exact
+      // D1 mockup metrics. The active seat is a soft 12% paper circle so
+      // state reads by shape, not just opacity.
       child: SizedBox(
         key: itemKey,
-        width: 56,
+        width: 46,
         height: MainScaffold._pillHeight,
         child: Center(
-          // The active tab sits in a soft 12% paper seat so state reads by
-          // shape, not just opacity ("D1").
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
