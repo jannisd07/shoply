@@ -118,6 +118,9 @@ class _MultiStepRecipeScreenState extends State<MultiStepRecipeScreen> {
         _originalIngredientNames = recipe.ingredients.map((i) => i.name).toList();
         _originalInstructions = recipe.instructions.toList();
         
+        for (var ing in _ingredients) {
+          ing.dispose();
+        }
         _ingredients.clear();
         for (final ing in recipe.ingredients) {
           final input = _IngredientInput();
@@ -127,7 +130,10 @@ class _MultiStepRecipeScreenState extends State<MultiStepRecipeScreen> {
           _ingredients.add(input);
         }
         if (_ingredients.isEmpty) _ingredients.add(_IngredientInput());
-        
+
+        for (var controller in _instructionControllers) {
+          controller.dispose();
+        }
         _instructionControllers.clear();
         for (final instruction in recipe.instructions) {
           _instructionControllers.add(TextEditingController(text: instruction));
@@ -148,45 +154,58 @@ class _MultiStepRecipeScreenState extends State<MultiStepRecipeScreen> {
 
   Future<void> _loadDraft(String draftId) async {
     setState(() => _isLoadingData = true);
-    
-    final draft = await _draftService.getDraft(draftId);
-    if (draft != null && mounted) {
-      _currentDraftId = draft.id;
-      _nameController.text = draft.name;
-      
-      if (draft.prepTimeMinutes != null) _prepTimeController.text = draft.prepTimeMinutes.toString();
-      if (draft.cookTimeMinutes != null) _cookTimeController.text = draft.cookTimeMinutes.toString();
-      if (draft.defaultServings != null) _servingsController.text = draft.defaultServings.toString();
-      
-      if (draft.localImagePath != null && File(draft.localImagePath!).existsSync()) {
-        _selectedImage = File(draft.localImagePath!);
-      }
-      
-      _ingredients.clear();
-      if (draft.ingredients.isEmpty) {
-        _ingredients.add(_IngredientInput());
-      } else {
-        for (final ing in draft.ingredients) {
-          final input = _IngredientInput();
-          input.nameController.text = ing.name;
-          input.amountController.text = ing.amount;
-          input.unitController.text = ing.unit;
-          _ingredients.add(input);
+
+    try {
+      final draft = await _draftService.getDraft(draftId);
+      if (draft != null && mounted) {
+        _currentDraftId = draft.id;
+        _nameController.text = draft.name;
+
+        if (draft.prepTimeMinutes != null) _prepTimeController.text = draft.prepTimeMinutes.toString();
+        if (draft.cookTimeMinutes != null) _cookTimeController.text = draft.cookTimeMinutes.toString();
+        if (draft.defaultServings != null) _servingsController.text = draft.defaultServings.toString();
+
+        if (draft.localImagePath != null && File(draft.localImagePath!).existsSync()) {
+          _selectedImage = File(draft.localImagePath!);
+        }
+
+        for (var ing in _ingredients) {
+          ing.dispose();
+        }
+        _ingredients.clear();
+        if (draft.ingredients.isEmpty) {
+          _ingredients.add(_IngredientInput());
+        } else {
+          for (final ing in draft.ingredients) {
+            final input = _IngredientInput();
+            input.nameController.text = ing.name;
+            input.amountController.text = ing.amount;
+            input.unitController.text = ing.unit;
+            _ingredients.add(input);
+          }
+        }
+
+        for (var controller in _instructionControllers) {
+          controller.dispose();
+        }
+        _instructionControllers.clear();
+        if (draft.instructions.isEmpty) {
+          _instructionControllers.add(TextEditingController());
+        } else {
+          for (final instruction in draft.instructions) {
+            _instructionControllers.add(TextEditingController(text: instruction));
+          }
         }
       }
-      
-      _instructionControllers.clear();
-      if (draft.instructions.isEmpty) {
-        _instructionControllers.add(TextEditingController());
-      } else {
-        for (final instruction in draft.instructions) {
-          _instructionControllers.add(TextEditingController(text: instruction));
-        }
+
+      if (mounted) setState(() => _isLoadingData = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingData = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${_tr('error')}: $e')),
+        );
       }
-      
-      setState(() => _isLoadingData = false);
-    } else {
-      setState(() => _isLoadingData = false);
     }
   }
 
