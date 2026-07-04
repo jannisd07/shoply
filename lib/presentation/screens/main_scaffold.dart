@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter/services.dart';
@@ -122,12 +124,25 @@ class MainScaffold extends ConsumerStatefulWidget {
 
   const MainScaffold({super.key, required this.navigationShell});
 
-  static const double _pillHeight = 58.0;
+  /// The D1 mockup was drawn on a 300pt-wide phone frame. Every navbar
+  /// metric scales linearly with screen width from that baseline, so the
+  /// length-to-thickness ratio, seat and icon sizes match the mockup 1:1
+  /// on any device (e.g. ×1.34 on a 402pt iPhone 17 Pro). Capped at 480pt
+  /// of layout width so tablets don't get a comically large bar.
+  static const double _mockupWidth = 300.0;
+
+  static double navScale(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    return math.min(w, 480.0) / _mockupWidth;
+  }
+
+  /// Pill/orb height (58 in the mockup), scaled to this screen.
+  static double pillHeightOf(BuildContext context) => 58.0 * navScale(context);
 
   /// Bottom padding child screens need to clear the floating navbar.
   static double getNavbarClearance(BuildContext context) {
     final safeBottom = MediaQuery.of(context).padding.bottom;
-    return safeBottom + _pillHeight + 16.0;
+    return safeBottom + pillHeightOf(context) + 16.0;
   }
 
   /// Y offset (from the bottom of the screen) of the top edge of the pill
@@ -135,7 +150,7 @@ class MainScaffold extends ConsumerStatefulWidget {
   static double getNavbarTopOffset(BuildContext context) {
     final safeBot = MediaQuery.of(context).padding.bottom;
     final navBottom = safeBot > 20 ? safeBot - 4 : 12.0;
-    return navBottom + _pillHeight;
+    return navBottom + pillHeightOf(context);
   }
 
   @override
@@ -186,6 +201,10 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
 
     final pillColor = isDark ? const Color(0xFF16181D) : PaperColors.ink;
 
+    // All D1 mockup metrics (baseline: 300pt frame), scaled to this screen.
+    final k = MainScaffold.navScale(context);
+    final pillH = 58.0 * k;
+
     return Scaffold(
       backgroundColor: isDark ? Colors.black : PaperColors.paper,
       body: Stack(
@@ -210,7 +229,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
               left: 0,
               right: 0,
               bottom: 0,
-              height: navBottom + MainScaffold._pillHeight + 34,
+              height: navBottom + pillH + 24 * k,
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -236,23 +255,21 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
               right: 0,
               bottom: navBottom,
               child: Center(
-                // Pill spans the screen width (minus margins, like the D1
-                // mockup); capped so it doesn't stretch on tablets.
+                // D1 mockup structure at exact scaled metrics: 14k margins,
+                // pill flex + 10k gap + 58k orb; capped for tablets.
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 480),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: EdgeInsets.symmetric(horizontal: 14 * k),
                     child: Row(
                       children: [
                         Expanded(
                           child: Container(
-                            height: MainScaffold._pillHeight,
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            height: pillH,
+                            padding: EdgeInsets.symmetric(horizontal: 6 * k),
                             decoration: BoxDecoration(
                               color: pillColor,
-                              borderRadius: BorderRadius.circular(
-                                MainScaffold._pillHeight / 2,
-                              ),
+                              borderRadius: BorderRadius.circular(pillH / 2),
                               boxShadow: [
                                 BoxShadow(
                                   color: const Color(
@@ -269,6 +286,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
                                 _NavIcon(
                                   icon: LucideIcons.list,
                                   label: 'Listen',
+                                  scale: k,
                                   active: _currentBranch == _kBranchHome,
                                   onTap: () => _goBranch(_kBranchHome),
                                   itemKey: tut.homeTabKey,
@@ -276,6 +294,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
                                 _NavIcon(
                                   icon: LucideIcons.book,
                                   label: 'Rezepte',
+                                  scale: k,
                                   active: _currentBranch == _kBranchRecipes,
                                   onTap: () => _goBranch(_kBranchRecipes),
                                   itemKey: tut.recipesTabKey,
@@ -284,12 +303,14 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
                                   _NavIcon(
                                     icon: LucideIcons.flame,
                                     label: 'Kalorien',
+                                    scale: k,
                                     active: _currentBranch == _kBranchCalories,
                                     onTap: () => _goBranch(_kBranchCalories),
                                   ),
                                 _NavIcon(
                                   icon: LucideIcons.user,
                                   label: 'Profil',
+                                  scale: k,
                                   active: _currentBranch == _kBranchProfile,
                                   onTap: () => _goBranch(_kBranchProfile),
                                 ),
@@ -297,9 +318,10 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        SizedBox(width: 10 * k),
                         _AvoOrb(
                           color: pillColor,
+                          scale: k,
                           onTap: () {
                             HapticFeedback.lightImpact();
                             context.push('/avo');
@@ -320,6 +342,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
 class _NavIcon extends StatelessWidget {
   final IconData icon;
   final String label;
+  final double scale;
   final bool active;
   final VoidCallback onTap;
   final Key? itemKey;
@@ -327,6 +350,7 @@ class _NavIcon extends StatelessWidget {
   const _NavIcon({
     required this.icon,
     required this.label,
+    required this.scale,
     required this.active,
     required this.onTap,
     this.itemKey,
@@ -334,22 +358,23 @@ class _NavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tab = its seat (46 in the mockup), distributed by the pill's
+    // spaceAround. The active seat is a soft 12% paper circle so state
+    // reads by shape, not just opacity.
+    final seat = 46 * scale;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      // Tab = its 46x46 seat, distributed by the pill's spaceAround — exact
-      // D1 mockup metrics. The active seat is a soft 12% paper circle so
-      // state reads by shape, not just opacity.
       child: SizedBox(
         key: itemKey,
-        width: 46,
-        height: MainScaffold._pillHeight,
+        width: seat,
+        height: 58 * scale,
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
-            width: 46,
-            height: 46,
+            width: seat,
+            height: seat,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
@@ -362,7 +387,7 @@ class _NavIcon extends StatelessWidget {
                 opacity: active ? 1.0 : 0.42,
                 child: Icon(
                   icon,
-                  size: 21,
+                  size: 21 * scale,
                   color: PaperColors.paper,
                   semanticLabel: label,
                 ),
@@ -379,9 +404,14 @@ class _NavIcon extends StatelessWidget {
 /// same surface and shadow as the pill, so the two read as one system.
 class _AvoOrb extends StatelessWidget {
   final Color color;
+  final double scale;
   final VoidCallback onTap;
 
-  const _AvoOrb({required this.color, required this.onTap});
+  const _AvoOrb({
+    required this.color,
+    required this.scale,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -389,8 +419,8 @@ class _AvoOrb extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        width: MainScaffold._pillHeight,
-        height: MainScaffold._pillHeight,
+        width: 58 * scale,
+        height: 58 * scale,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
@@ -402,10 +432,10 @@ class _AvoOrb extends StatelessWidget {
             ),
           ],
         ),
-        child: const Center(
+        child: Center(
           child: Icon(
             LucideIcons.messageCircle,
-            size: 22,
+            size: 22 * scale,
             color: PaperColors.paper,
             semanticLabel: 'Avo',
           ),
