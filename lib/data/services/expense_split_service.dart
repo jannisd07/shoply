@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:shoply/data/models/expense_split.dart';
+import 'package:shoply/data/services/push_notification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// One participant's share in a trip-cost split, as entered in the UI
@@ -26,7 +30,11 @@ class ExpenseSplitService {
   final _supabase = Supabase.instance.client;
 
   /// Splits [historyId]'s cost among [shares]. [paidByUserId]/[paidByName]
-  /// record who actually paid at checkout (defaults to the current user).
+  /// record who actually paid at checkout — a name-only payer (someone
+  /// without an app account) has [paidByName] set and [paidByUserId] null;
+  /// when neither is given the current user is assumed to have paid.
+  /// The payer's own share (if they have one) is created already marked as
+  /// paid, since they settled it at the register.
   /// Replaces any existing splits for this trip (re-splitting overwrites).
   Future<List<ExpenseSplit>> createSplits({
     required String historyId,
@@ -38,8 +46,17 @@ class ExpenseSplitService {
     final currentUserId = _supabase.auth.currentUser?.id;
     if (currentUserId == null) throw Exception('User not authenticated');
 
+    final effectivePaidByUserId = (paidByUserId == null && paidByName == null)
+        ? currentUserId
+        : paidByUserId;
+
     await _supabase.from('expense_splits').delete().eq('history_id', historyId);
 
+    bool isPayersOwnShare(SplitShare s) => s.userId != null
+        ? s.userId == effectivePaidByUserId
+        : effectivePaidByUserId == null && s.participantName == paidByName;
+
+    final now = DateTime.now();
     final rows = shares
         .map((s) => ExpenseSplit(
               id: '',
@@ -47,8 +64,9 @@ class ExpenseSplitService {
               userId: s.userId,
               participantName: s.participantName,
               amount: s.amount,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
+              isPaid: isPayersOwnShare(s),
+              createdAt: now,
+              updatedAt: now,
             ).toInsertJson())
         .toList();
 
@@ -58,7 +76,7 @@ class ExpenseSplitService {
 
     await _supabase.from('shopping_history').update({
       'total_cost': totalCost,
-      'paid_by_user_id': paidByUserId ?? currentUserId,
+      'paid_by_user_id': effectivePaidByUserId,
       'paid_by_name': paidByName,
     }).eq('id', historyId);
 
@@ -98,7 +116,70 @@ class ExpenseSplitService {
         .eq('id', splitId)
         .select()
         .single();
-    return ExpenseSplit.fromJson(response);
+    final split = ExpenseSplit.fromJson(response);
+    // Fire-and-forget: a failed push must never fail the paid toggle.
+    unawaited(_notifySplitStatusChanged(split, isPaid));
+    return split;
+  }
+
+  /// Notifies "the other side" of a share's paid status changing: the payer
+  /// when a participant settles their own share, or the participant when the
+  /// payer marks it settled/reopened. Skips name-only people (no account)
+  /// and never notifies the person who tapped the toggle.
+  Future<void> _notifySplitStatusChanged(ExpenseSplit split, bool isPaid) async {
+    try {
+      final actorId = _supabase.auth.currentUser?.id;
+      if (actorId == null) return;
+
+      final trip = await _supabase
+          .from('shopping_history')
+          .select('list_name, paid_by_user_id')
+          .eq('id', split.historyId)
+          .maybeSingle();
+      if (trip == null) return;
+
+      final payerId = trip['paid_by_user_id'] as String?;
+      final listName = trip['list_name'] as String? ?? '';
+      final recipients = {split.userId, payerId}
+          .whereType<String>()
+          .where((id) => id != actorId)
+          .toList();
+      if (recipients.isEmpty) return;
+
+      String actorName = 'Someone';
+      try {
+        final profile = await _supabase
+            .from('users')
+            .select('display_name')
+            .eq('id', actorId)
+            .maybeSingle();
+        actorName = (profile?['display_name'] as String?) ?? actorName;
+      } catch (_) {}
+
+      final amount = split.amount.toStringAsFixed(2);
+      final title = isPaid ? '💶 Share settled' : '💶 Share reopened';
+      final body = actorId == payerId
+          ? (isPaid
+              ? '$actorName marked your $amount € share for "$listName" as paid'
+              : '$actorName marked your $amount € share for "$listName" as unpaid')
+          : (isPaid
+              ? '$actorName paid their $amount € share for "$listName"'
+              : '$actorName reopened their $amount € share for "$listName"');
+
+      await PushNotificationService.instance.sendToUsers(
+        userIds: recipients,
+        title: title,
+        body: body,
+        data: {
+          'type': 'expense_split',
+          'history_id': split.historyId,
+          'is_paid': isPaid,
+        },
+      );
+      debugPrint('✅ [SPLIT] Notified ${recipients.length} user(s) of paid change');
+    } catch (e) {
+      debugPrint('⚠️ [SPLIT] Could not send paid-status notification: $e');
+    }
   }
 
   /// Trips the current user paid for that still have unpaid participants —

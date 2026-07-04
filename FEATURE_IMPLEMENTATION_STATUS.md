@@ -1,6 +1,6 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-04 (scheduled routine — Feature 1 focus, third session)_
+_Last updated: 2026-07-04 (scheduled routine — Feature 2 focus: QA pass + approved ideas)_
 
 ## Environment note (read first)
 
@@ -42,7 +42,7 @@ was **never wired into any screen** — this session wired it up.
 | # | Feature | Completion | Status | Blockers |
 |---|---|---|---|---|
 | 1 | Pricing, offers, cheapest store | ~90% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
-| 2 | Split shopping trip costs | ~85% | Implemented (needs QA) | None functional; needs a real device run |
+| 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~55% | In progress | Root cause fixed; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
 | 5 | Avo mascot & smart notifications | ~20% | Not started | Large scope; see plan below |
@@ -467,6 +467,102 @@ existing `shopping_history_items` embed pattern already used in the
 codebase. Brace/paren balance check on all files. **Not run:** `dart
 analyze`, build, or a real end-to-end split/pay flow on device.
 
+**Fourth session, 2026-07-04 (scheduled routine — this feature's dedicated
+session).** Feature 1's remaining gaps are all genuinely blocked externally,
+so per the feature order this session selected Feature 2: a QA audit of the
+existing ~85% state plus the two owner-approved ideas. Real Flutter 3.44.4
+toolchain available (downloaded to `/tmp/flutter`); every change verified
+with full-project `flutter analyze` against a baseline diff.
+
+*Bugs found by auditing (all fixed):*
+1. **The payer's own share was created unpaid**, so the payer appeared in
+   their own home-screen "owes you" banner ("Dominik owes you €12.50" shown
+   to Dominik). `createSplits` now marks the payer's share `is_paid: true`
+   (+ `paid_at`) at insert — they settled it at the register. The home
+   banner additionally filters out payer-own rows defensively, so trips
+   split before this fix stop showing the phantom row too.
+2. **List members merged into the split sheet got €0.00 shares** — 
+   `_mergeMembers` never recalculated the equal split, so amounts were stale
+   until the user happened to touch the total or a checkbox. Recalc now runs
+   (post-frame, since the merge happens during build) whenever members load.
+3. **Equal split lost cents** (€10 / 3 → 3× €3.33 = €9.99). The sheet now
+   distributes whole cents (3.34/3.33/3.33 — verified with a small
+   edge-case script: remainders, 1 participant, €0.01 totals). The Avo
+   `split_trip_cost` tool had the same bug; there the payer's share absorbs
+   the remainder so shares always sum to the trip total.
+4. **The "assigned vs. total" reconciliation line didn't update live** while
+   typing custom amounts, and per-participant amount `TextEditingController`s
+   were recreated inline on every rebuild (a rebuild mid-typing would
+   clobber the field, and none were ever disposed). Participants now own
+   persistent controllers (disposed with the sheet), the sum line updates on
+   every keystroke, and it turns terracotta + semibold when custom amounts
+   don't add up to the total (soft warning, doesn't block saving).
+5. **`createSplits` silently coerced a name-only payer into the current
+   user** (`paidByUserId ?? currentUserId`). The fallback now applies only
+   when no payer is given at all, which the approved payer picker requires.
+
+*Approved ideas implemented (moved here from the ideas section):*
+- **"Who paid" picker** in the split sheet — a chip row of all participants
+  under "Paid by", defaulting to the current user. Works with name-only
+  payers (e.g. a roommate without the app fronted the money): the trip then
+  stores `paid_by_name` with a null `paid_by_user_id`, and the current
+  user's own unpaid share correctly shows up in their "you owe" banner.
+- **Push notification on paid/unpaid** — `setPaid()` now notifies "the
+  other side" (the payer when a participant settles their own share; the
+  participant when the payer marks/reopens it), via the existing
+  `PushNotificationService` → `send-push-notification` edge function.
+  Fire-and-forget with `unawaited(...)`: a failed push can never fail the
+  toggle. Never notifies the actor themselves; skips name-only people.
+- **Copyable payment reminder** (was "explicitly NOT done" above) — unpaid,
+  non-payer rows in the history split view now have a copy icon that puts a
+  friendly localized message on the clipboard ("Hi Max! Kleine Erinnerung:
+  du schuldest mir noch 12,50 € für unseren Einkauf \"Wocheneinkauf\".
+  Danke! 🛒"), using the `copy_reminder`/`reminder_copied` keys that already
+  existed plus a new `payment_reminder_message` key (EN/DE).
+
+*Other UX improvements:*
+- The home banner's "you owe €X to Y" rows now have an "I paid it back"
+  quick action (the payer gets the push above). Verified against live RLS
+  that participants may update their own split row (`auth.uid() = user_id`
+  is in the UPDATE policy).
+- The history split view now shows "Paid by: X" under the total, so a trip's
+  payer is visible without opening the edit sheet.
+- Marking paid from any surface now invalidates both banner providers, so
+  the two home-banner directions can't go stale against each other.
+
+*Files changed (fourth session):*
+`lib/data/services/expense_split_service.dart` (payer-share settlement,
+name-only payer fix, paid-status push), `lib/data/models/expense_split.dart`
+(`toInsertJson` carries `paid_at`),
+`lib/presentation/screens/history/widgets/split_cost_sheet.dart` (payer
+picker, persistent controllers, cent-accurate split, live sum line),
+`lib/presentation/screens/history/shopping_history_screen.dart` (copy
+reminder, paid-by line), 
+`lib/presentation/screens/home/widgets/pending_splits_banner.dart`
+(payer-row filter, "I paid it back" action),
+`lib/data/services/avo_assistant_service.dart` (cent-remainder fix only),
+`lib/core/localization/app_translations.dart` (3 new EN/DE keys).
+
+*Checks performed (fourth session):* `flutter analyze` before/after —
+baseline 642 issues (0 errors, 61 warnings), after 641 (0 errors, 60
+warnings — one pre-existing unused-variable warning was cleared because the
+new paid-by line uses it; zero new issues of any severity). Cent-split math
+verified with a throwaway `dart run` edge-case script (remainder
+distribution, single participant, €0.01 totals, Avo payer-remainder — all
+pass, not committed). Live RLS re-verified via Supabase MCP for the new
+participant-updates-own-row path and the shopping_history SELECT scope the
+notification lookup relies on (a participant later removed from the list
+degrades gracefully — trip embed returns null and the row is skipped).
+`flutter test` still fails on the pre-existing `lucide_icons`/`IconData`
+SDK mismatch (unrelated, unchanged). **Not run (no macOS/Xcode here):** iOS
+build; real push delivery end-to-end (needs two devices with FCM tokens);
+visual check of the payer chips/copy icon on a device.
+
+*Still open (small):* real push delivery QA on device; consider a
+Supabase trigger instead of client-side push if you ever want reminders
+when the *app is closed* on the payer's side (current approach sends from
+the actor's client, which is fine for this flow).
+
 ---
 
 ## Feature 3 — Widgets and quick actions
@@ -804,26 +900,17 @@ exists, "N calories left — 3 dinner ideas from your list."
     tested with real device pushes).
   - Recommendation: yes, as the first step of Feature 5.
 
-- [ yes] IDEA: Let the split-cost sheet pick a different "who paid" person
-  instead of always defaulting to whoever opens the sheet.
-  - Why it helps: "I paid for everything" is common but so is "someone else
-    fronted the money and I'm splitting it after the fact."
-  - Expected user value: medium — avoids a workaround of re-opening the
-    sheet as the payer's account.
-  - Expected business/premium value: none.
-  - Complexity: Low (add a picker to `SplitCostSheet`, service already
-    supports arbitrary `paidByUserId`/`paidByName`).
-  - Risk: Low.
-  - Recommendation: yes, small follow-up.
+- [x] IDEA (approved, DONE 2026-07-04): Let the split-cost sheet pick a
+  different "who paid" person instead of always defaulting to whoever opens
+  the sheet.
+  - **Outcome:** Implemented as a "Paid by" chip row in the split sheet,
+    including name-only payers. Details in Feature 2's fourth-session notes.
 
-- [ yes] IDEA: Push notification when a split is marked paid/unpaid.
-  - Why it helps: closes the loop without requiring someone to reopen the app.
-  - Expected user value: medium.
-  - Expected business/premium value: low-medium (retention nudge).
-  - Complexity: Low (call the existing `PushNotificationService` from
-    `ExpenseSplitService.setPaid()`).
-  - Risk: Low.
-  - Recommendation: yes.
+- [x] IDEA (approved, DONE 2026-07-04): Push notification when a split is
+  marked paid/unpaid.
+  - **Outcome:** Implemented client-side in `ExpenseSplitService.setPaid()`
+    via the existing `PushNotificationService`; notifies the other party
+    only, fire-and-forget. Details in Feature 2's fourth-session notes.
 
 - [ yes] IDEA: Build calorie tracking (Feature 6) as its own dedicated
   multi-session effort with build verification available, following the

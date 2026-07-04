@@ -32,6 +32,7 @@ class _Participant {
   String name;
   bool included;
   double amount;
+  final TextEditingController amountController = TextEditingController();
 
   _Participant({
     this.userId,
@@ -39,6 +40,11 @@ class _Participant {
     this.included = true,
     this.amount = 0,
   });
+
+  void setAmount(double value) {
+    amount = value;
+    amountController.text = value > 0 ? value.toStringAsFixed(2) : '';
+  }
 }
 
 class _SplitCostSheet extends ConsumerStatefulWidget {
@@ -54,6 +60,7 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
   final _totalController = TextEditingController();
   final List<_Participant> _participants = [];
   final _newNameController = TextEditingController();
+  _Participant? _payer;
   bool _customAmounts = false;
   bool _saving = false;
   bool _initialized = false;
@@ -62,6 +69,9 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
   void dispose() {
     _totalController.dispose();
     _newNameController.dispose();
+    for (final p in _participants) {
+      p.amountController.dispose();
+    }
     super.dispose();
   }
 
@@ -71,11 +81,14 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
     _totalController.text = widget.entry.totalCost != null
         ? widget.entry.totalCost!.toStringAsFixed(2)
         : '';
-    _participants.add(_Participant(userId: currentUserId, name: currentUserName));
+    final me = _Participant(userId: currentUserId, name: currentUserName);
+    _participants.add(me);
+    _payer = me;
     _recalcEqualSplit();
   }
 
   void _mergeMembers(List<Map<String, dynamic>> members, String? currentUserId) {
+    var added = false;
     for (final m in members) {
       final user = m['user'] as Map<String, dynamic>?;
       final id = user?['id'] as String?;
@@ -83,6 +96,14 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
       if (_participants.any((p) => p.userId == id)) continue;
       final name = (user?['display_name'] as String?) ?? context.tr('member');
       _participants.add(_Participant(userId: id, name: name));
+      added = true;
+    }
+    // Runs during build (from whenData): defer the recalc, since it writes
+    // to amount controllers whose TextFields already have listeners.
+    if (added) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(_recalcEqualSplit);
+      });
     }
   }
 
@@ -91,13 +112,22 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
   List<_Participant> get _includedParticipants =>
       _participants.where((p) => p.included).toList();
 
+  double get _assignedSum =>
+      _includedParticipants.fold<double>(0, (s, p) => s + p.amount);
+
+  bool get _sumMatchesTotal => (_assignedSum - _total).abs() < 0.01;
+
+  /// Splits the total in whole cents so the shares always sum to the total
+  /// exactly (e.g. 10.00 / 3 → 3.34, 3.33, 3.33 instead of 3× 3.33).
   void _recalcEqualSplit() {
     if (_customAmounts) return;
     final included = _includedParticipants;
     if (included.isEmpty) return;
-    final share = _total / included.length;
-    for (final p in included) {
-      p.amount = share;
+    final totalCents = (_total * 100).round();
+    final baseCents = totalCents ~/ included.length;
+    final remainder = totalCents % included.length;
+    for (var i = 0; i < included.length; i++) {
+      included[i].setAmount((baseCents + (i < remainder ? 1 : 0)) / 100);
     }
   }
 
@@ -111,7 +141,7 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
 
     setState(() => _saving = true);
     try {
-      final currentUser = await ref.read(currentUserProvider.future);
+      final payer = _payer ?? _participants.first;
       await ref.read(expenseSplitServiceProvider).createSplits(
             historyId: widget.entry.id,
             totalCost: _total,
@@ -122,8 +152,8 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
                       amount: double.parse(p.amount.toStringAsFixed(2)),
                     ))
                 .toList(),
-            paidByUserId: currentUser?.id,
-            paidByName: currentUser?.displayName,
+            paidByUserId: payer.userId,
+            paidByName: payer.name,
           );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -272,20 +302,16 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
                                 textAlign: TextAlign.end,
                                 keyboardType:
                                     const TextInputType.numberWithOptions(decimal: true),
-                                controller: TextEditingController(
-                                  text: p.amount > 0 ? p.amount.toStringAsFixed(2) : '',
-                                )..selection = TextSelection.collapsed(
-                                    offset: p.amount > 0
-                                        ? p.amount.toStringAsFixed(2).length
-                                        : 0,
-                                  ),
+                                controller: p.amountController,
                                 decoration: const InputDecoration(
                                   suffixText: ' €',
                                   isDense: true,
                                   border: UnderlineInputBorder(),
                                 ),
-                                onChanged: (v) => p.amount =
-                                    double.tryParse(v.replaceAll(',', '.')) ?? 0,
+                                onChanged: (v) => setSheetState(() {
+                                  p.amount =
+                                      double.tryParse(v.replaceAll(',', '.')) ?? 0;
+                                }),
                               ),
                             ),
                           ],
@@ -319,7 +345,56 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
                       ],
                     ),
 
+                    const SizedBox(height: 14),
+                    Text(
+                      context.tr('paid_by').toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.w600,
+                        color: textSecondary,
+                      ),
+                    ),
                     const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final p in _participants)
+                          GestureDetector(
+                            onTap: () => setSheetState(() => _payer = p),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: identical(_payer, p)
+                                    ? accent.withValues(alpha: 0.14)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: identical(_payer, p)
+                                      ? accent
+                                      : AppColors.border(context),
+                                ),
+                              ),
+                              child: Text(
+                                p.name,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: identical(_payer, p)
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: identical(_payer, p)
+                                      ? accent
+                                      : textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -328,8 +403,15 @@ class _SplitCostSheetState extends ConsumerState<_SplitCostSheet> {
                           style: TextStyle(fontSize: 12, color: textSecondary),
                         ),
                         Text(
-                          '${_includedParticipants.fold<double>(0, (s, p) => s + p.amount).toStringAsFixed(2)} € / ${_total.toStringAsFixed(2)} €',
-                          style: TextStyle(fontSize: 12, color: textSecondary),
+                          '${_assignedSum.toStringAsFixed(2)} € / ${_total.toStringAsFixed(2)} €',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                _sumMatchesTotal ? FontWeight.w400 : FontWeight.w600,
+                            color: _sumMatchesTotal
+                                ? textSecondary
+                                : PaperColors.terracotta,
+                          ),
                         ),
                       ],
                     ),

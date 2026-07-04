@@ -42,7 +42,10 @@ class PendingSplitsBanner extends ConsumerWidget {
         child: Column(
           children: [
             for (final trip in owedToMe)
-              for (final split in trip.splits.where((s) => !s.isPaid))
+              // Skip the payer's own share (settled at the register; older
+              // splits may still carry it as an unpaid row).
+              for (final split in trip.splits.where(
+                  (s) => !s.isPaid && s.userId != trip.paidByUserId))
                 _SplitRow(
                   icon: Icons.arrow_downward_rounded,
                   iconColor: accent,
@@ -63,6 +66,7 @@ class PendingSplitsBanner extends ConsumerWidget {
                         .read(expenseSplitServiceProvider)
                         .setPaid(split.id, true);
                     ref.invalidate(tripsAwaitingPaymentToMeProvider);
+                    ref.invalidate(tripsIOweProvider);
                   },
                   quickActionLabel: context.tr('mark_as_paid'),
                 ),
@@ -81,6 +85,15 @@ class PendingSplitsBanner extends ConsumerWidget {
                   textPrimary: textPrimary,
                   textSecondary: textSecondary,
                   onTap: () => _openHistory(context),
+                  onQuickAction: () async {
+                    HapticFeedback.lightImpact();
+                    await ref
+                        .read(expenseSplitServiceProvider)
+                        .setPaid(split.id, true);
+                    ref.invalidate(tripsIOweProvider);
+                    ref.invalidate(tripsAwaitingPaymentToMeProvider);
+                  },
+                  quickActionLabel: context.tr('i_paid_back'),
                 ),
           ],
         ),

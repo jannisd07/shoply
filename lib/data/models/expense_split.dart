@@ -66,6 +66,7 @@ class ExpenseSplit extends Equatable {
       'participant_name': participantName,
       'amount': amount,
       'is_paid': isPaid,
+      if (isPaid) 'paid_at': (paidAt ?? createdAt).toIso8601String(),
     };
   }
 

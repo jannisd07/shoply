@@ -453,6 +453,14 @@ class _SplitSection extends ConsumerWidget {
               ),
             ],
           ),
+          if (entry.paidByName != null && entry.paidByName!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '${context.tr('paid_by')}: ${entry.paidByName}',
+                style: TextStyle(fontSize: 11.5, color: textSecondary),
+              ),
+            ),
           const SizedBox(height: 6),
           splitsAsync.when(
             loading: () => const SizedBox(
@@ -469,7 +477,7 @@ class _SplitSection extends ConsumerWidget {
             data: (splits) => Column(
               children: [
                 for (final split in splits)
-                  _SplitParticipantRow(split: split, entryId: entry.id),
+                  _SplitParticipantRow(split: split, entry: entry),
               ],
             ),
           ),
@@ -481,12 +489,37 @@ class _SplitSection extends ConsumerWidget {
 
 class _SplitParticipantRow extends ConsumerWidget {
   final ExpenseSplit split;
-  final String entryId;
+  final ShoppingHistory entry;
 
-  const _SplitParticipantRow({required this.split, required this.entryId});
+  const _SplitParticipantRow({required this.split, required this.entry});
+
+  /// Copies a friendly, localized payment-reminder message for this share
+  /// to the clipboard, ready to paste into any messenger.
+  Future<void> _copyReminder(BuildContext context) async {
+    HapticFeedback.selectionClick();
+    final message = context.tr(
+      'payment_reminder_message',
+      params: {
+        'name': split.participantName,
+        'amount': split.amount.toStringAsFixed(2),
+        'list': entry.listName,
+      },
+    );
+    await Clipboard.setData(ClipboardData(text: message));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('reminder_copied'))),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Copying a reminder only makes sense for shares someone still owes the
+    // payer — not for the payer's own (auto-settled) share.
+    final showReminder = !split.isPaid &&
+        (split.userId == null || split.userId != entry.paidByUserId);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
@@ -500,6 +533,21 @@ class _SplitParticipantRow extends ConsumerWidget {
               ),
             ),
           ),
+          if (showReminder)
+            GestureDetector(
+              onTap: () => _copyReminder(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Tooltip(
+                  message: context.tr('copy_reminder'),
+                  child: Icon(
+                    Icons.copy_rounded,
+                    size: 13,
+                    color: AppColors.textTertiary(context),
+                  ),
+                ),
+              ),
+            ),
           Text(
             '${split.amount.toStringAsFixed(2)} €',
             style: TextStyle(
@@ -514,7 +562,7 @@ class _SplitParticipantRow extends ConsumerWidget {
               await ref
                   .read(expenseSplitServiceProvider)
                   .setPaid(split.id, !split.isPaid);
-              ref.invalidate(tripSplitsProvider(entryId));
+              ref.invalidate(tripSplitsProvider(entry.id));
               ref.invalidate(tripsAwaitingPaymentToMeProvider);
               ref.invalidate(tripsIOweProvider);
             },

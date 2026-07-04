@@ -877,9 +877,13 @@ After a tool returns, write a short natural-language confirmation
 
     final participantCount = names.length + 1;
     final share = double.parse((total / participantCount).toStringAsFixed(2));
+    // The payer's share absorbs the cent remainder so shares sum to the total.
+    final payerShare =
+        double.parse((total - share * names.length).toStringAsFixed(2));
 
     final shares = [
-      SplitShare(userId: userId, participantName: currentUserName, amount: share),
+      SplitShare(
+          userId: userId, participantName: currentUserName, amount: payerShare),
       ...names.map((n) => SplitShare(participantName: n, amount: share)),
     ];
 

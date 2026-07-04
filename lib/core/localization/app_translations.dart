@@ -258,6 +258,10 @@ class AppTranslations {
     'reminder_copied': 'Reminder copied to clipboard',
     'owed_to_me_line': '{name} owes you {amount} € · {list}',
     'i_owe_line': 'You owe {amount} € to {name}',
+    'paid_by': 'Paid by',
+    'i_paid_back': 'I paid it back',
+    'payment_reminder_message':
+        'Hi {name}! Quick reminder: you still owe me {amount} € for our shopping trip "{list}". Thanks! 🛒',
     'offers_nearby': 'Offers nearby',
     'price_data_from_offers': 'Compare prices across nearby stores',
     'compare_prices': 'Compare prices',
@@ -945,6 +949,10 @@ class AppTranslations {
     'reminder_copied': 'Erinnerung in Zwischenablage kopiert',
     'owed_to_me_line': '{name} schuldet dir {amount} € · {list}',
     'i_owe_line': 'Du schuldest {name} {amount} €',
+    'paid_by': 'Bezahlt von',
+    'i_paid_back': 'Zurückgezahlt',
+    'payment_reminder_message':
+        'Hi {name}! Kleine Erinnerung: du schuldest mir noch {amount} € für unseren Einkauf "{list}". Danke! 🛒',
     'offers_nearby': 'Angebote in der Nähe',
     'price_data_from_offers': 'Preise der Märkte in der Nähe vergleichen',
     'compare_prices': 'Preise vergleichen',
