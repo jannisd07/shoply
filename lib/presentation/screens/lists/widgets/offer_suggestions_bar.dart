@@ -282,8 +282,8 @@ class _OfferRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 1),
                   Text(
-                    offer.unitShortName != null
-                        ? '${offer.retailerName} · ${offer.unitShortName}'
+                    offer.unitSizeLabel != null
+                        ? '${offer.retailerName} · ${offer.unitSizeLabel}'
                         : offer.retailerName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -355,6 +355,14 @@ class _OfferRow extends StatelessWidget {
                     ),
                     style: TextStyle(
                       fontSize: 10,
+                      color: AppColors.textTertiary(context),
+                    ),
+                  ),
+                if (offer.unitPriceLabel != null)
+                  Text(
+                    offer.unitPriceLabel!,
+                    style: TextStyle(
+                      fontSize: 9.5,
                       color: AppColors.textTertiary(context),
                     ),
                   ),

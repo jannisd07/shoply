@@ -1284,7 +1284,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             price: offer.price,
             priceCurrency: 'EUR',
             priceRetailer: offer.retailerName,
-            priceUnit: offer.unitShortName,
+            priceUnit: offer.unitSizeLabel ?? offer.unitShortName,
             // The offer already carries the real product name/unit — skip
             // the Gemini ingredient-parse pass so it isn't rewritten.
             autoParse: false,
@@ -3027,9 +3027,12 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                             if (item.hasPrice) ...[
                               const SizedBox(height: 3),
                               Text(
-                                item.priceRetailer != null
-                                    ? '${item.price!.toStringAsFixed(2)} € · ${item.priceRetailer}'
-                                    : '${item.price!.toStringAsFixed(2)} €',
+                                [
+                                  '${item.price!.toStringAsFixed(2)} €',
+                                  if (item.priceUnit != null) item.priceUnit!,
+                                  if (item.priceRetailer != null)
+                                    item.priceRetailer!,
+                                ].join(' · '),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

@@ -51,6 +51,11 @@ class OfferPriceService {
   final Map<String, _CachedOffers> _searchCache = {};
   static const _searchCacheTtl = Duration(minutes: 30);
   DateTime _lastRequest = DateTime.fromMillisecondsSinceEpoch(0);
+  // Serializes throttle turns so concurrent callers (e.g. a basket comparison
+  // fetching many items at once via Future.wait) still space out request
+  // *starts* by minGap, instead of all reading the stale _lastRequest at once
+  // and firing simultaneously.
+  Future<void> _throttleQueue = Future.value();
 
   /// Search current offers for [query] around [zipCode].
   /// Returns offers sorted by price (cheapest first), grocery chains only.
@@ -201,13 +206,24 @@ class OfferPriceService {
     }).timeout(const Duration(seconds: 12));
   }
 
-  Future<void> _throttle() async {
-    const minGap = Duration(milliseconds: 250);
-    final elapsed = DateTime.now().difference(_lastRequest);
-    if (elapsed < minGap) {
-      await Future.delayed(minGap - elapsed);
-    }
-    _lastRequest = DateTime.now();
+  Future<void> _throttle() {
+    // Chain onto the queue so each caller's wait+timestamp-update runs to
+    // completion before the next one reads _lastRequest — without this, N
+    // concurrent callers (Future.wait) would all see the same stale
+    // _lastRequest and pass the gap check together.
+    final turn = _throttleQueue.then((_) async {
+      const minGap = Duration(milliseconds: 250);
+      final elapsed = DateTime.now().difference(_lastRequest);
+      if (elapsed < minGap) {
+        await Future.delayed(minGap - elapsed);
+      }
+      _lastRequest = DateTime.now();
+    });
+    // Keep the queue alive even if this turn's caller later fails downstream;
+    // failures happen after _throttle() resolves, so this future itself
+    // never rejects.
+    _throttleQueue = turn;
+    return turn;
   }
 
   Future<void> _ensureKeys() async {

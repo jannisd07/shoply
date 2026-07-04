@@ -78,12 +78,18 @@ final basketComparisonProvider = FutureProvider.autoDispose
         zipCode: zip, comparableItemCount: 0, stores: const []);
   }
 
-  // item name → cheapest offer per retailer
-  final perItem = <String, Map<String, StoreOffer>>{};
-  for (final name in names) {
-    perItem[name] =
+  // item name → cheapest offer per retailer. Fetched concurrently (the
+  // service's internal throttle still spaces out actual request starts) —
+  // sequential awaits here would mean ~1s per item, i.e. 20+ seconds for a
+  // full basket before showing any comparison at all.
+  final fetched = await Future.wait(names.map((name) async {
+    final result =
         await OfferPriceService.instance.cheapestPerRetailer(name, zipCode: zip);
-  }
+    return MapEntry(name, result);
+  }));
+  final perItem = <String, Map<String, StoreOffer>>{
+    for (final entry in fetched) entry.key: entry.value,
+  };
 
   // Items that at least one store offers form the comparable basket; for each
   // such item remember the cheapest price anywhere (the "fill" price used when

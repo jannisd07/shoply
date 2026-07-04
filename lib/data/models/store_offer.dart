@@ -16,6 +16,15 @@ class StoreOffer {
   final DateTime? validFrom;
   final DateTime? validTo;
 
+  /// Pack size in [unitShortName] (e.g. `0.5` for a 500g pack, in kg).
+  final double? volume;
+  /// Number of packs the offer price covers (e.g. `12` for a 12-pack case).
+  /// `null`/`1` for a single pack.
+  final double? packQuantity;
+  /// Price per [unitShortName] ("Grundpreis"), e.g. €/kg or €/l — already
+  /// computed by the API as `price / (volume * packQuantity)`.
+  final double? referencePrice;
+
   const StoreOffer({
     required this.id,
     required this.productName,
@@ -29,6 +38,9 @@ class StoreOffer {
     required this.categoryName,
     required this.validFrom,
     required this.validTo,
+    this.volume,
+    this.packQuantity,
+    this.referencePrice,
   });
 
   /// Non-food categories to hide (marktguru mixes appliances, drugstore,
@@ -106,6 +118,37 @@ class StoreOffer {
     return true;
   }
 
+  static String _formatNum(double n) {
+    if (n == n.roundToDouble()) return n.toStringAsFixed(0);
+    // Trim to at most 2 decimals, no trailing zero (e.g. 1.5, not 1.50).
+    var s = n.toStringAsFixed(2);
+    if (s.endsWith('0')) s = s.substring(0, s.length - 1);
+    return s;
+  }
+
+  /// Human-readable pack size, e.g. "500 g", "1.5 l", or "12 x 1 l" for a
+  /// multi-pack. Null when the API didn't provide pack-size data.
+  String? get unitSizeLabel {
+    if (volume == null || unitShortName == null || volume! <= 0) return null;
+    final size = '${_formatNum(volume!)} $unitShortName';
+    if (packQuantity != null && packQuantity! > 1) {
+      return '${_formatNum(packQuantity!)} x $size';
+    }
+    return size;
+  }
+
+  /// "Grundpreis" — price per [unitShortName], e.g. "1.58 €/kg". Null when
+  /// unavailable, or when it wouldn't add information beyond the sale price
+  /// (a plain single unit, e.g. exactly 1 l for 1 pack).
+  String? get unitPriceLabel {
+    if (referencePrice == null || unitShortName == null) return null;
+    final isPlainSingleUnit = (packQuantity == null || packQuantity == 1) &&
+        volume != null &&
+        volume == 1;
+    if (isPlainSingleUnit) return null;
+    return '${referencePrice!.toStringAsFixed(2)} €/$unitShortName';
+  }
+
   static StoreOffer? fromJson(Map<String, dynamic> json) {
     final price = (json['price'] as num?)?.toDouble();
     final product = json['product'] as Map<String, dynamic>?;
@@ -141,6 +184,9 @@ class StoreOffer {
       categoryName: categoryName,
       validFrom: from,
       validTo: to,
+      volume: (json['volume'] as num?)?.toDouble(),
+      packQuantity: (json['quantity'] as num?)?.toDouble(),
+      referencePrice: (json['referencePrice'] as num?)?.toDouble(),
     );
   }
 }

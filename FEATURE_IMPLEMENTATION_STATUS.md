@@ -1,6 +1,6 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-03, second session of the day (scheduled routine — Feature 1 focus)_
+_Last updated: 2026-07-04 (scheduled routine — Feature 1 focus, third session)_
 
 ## Environment note (read first)
 
@@ -41,7 +41,7 @@ was **never wired into any screen** — this session wired it up.
 
 | # | Feature | Completion | Status | Blockers |
 |---|---|---|---|---|
-| 1 | Pricing, offers, cheapest store | ~85% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
+| 1 | Pricing, offers, cheapest store | ~90% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~85% | Implemented (needs QA) | None functional; needs a real device run |
 | 3 | Widgets & quick actions | ~55% | In progress | Root cause fixed; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
@@ -241,6 +241,100 @@ not app code. No iOS build possible here (Linux).
   suggests the cheapest offer matching the item's own name/stem, not a
   different product class; real product-equivalence mapping would need to
   respect diet/allergy constraints and is out of scope.
+
+**Third session, 2026-07-04 (scheduled routine).** This session had a real
+Flutter/Dart toolchain (downloaded Flutter 3.44.4 stable from
+`storage.googleapis.com` into `/tmp/flutter`, same version the earlier
+session used) so every change below is verified with a real `flutter
+analyze` and a live curl-based check of the marktguru API's actual JSON
+shape — not just brace-balance/grep verification. Audited the existing 85%
+state instead of re-reading the write-up at face value, and found two real,
+previously-undiscovered gaps:
+
+1. **Performance bug in the "cheapest store" comparison — now fixed.**
+   `basketComparisonProvider` fetched each list item's offers with a
+   sequential `for (name in names) { await ... }` loop. Timed the real
+   marktguru endpoint from this container: ~850–1050ms per request. For a
+   25-item list (the code's own cap) that's a **20+ second wait** just to
+   open the store-comparison sheet — effectively broken for any
+   realistically-sized list, not a minor slowness. Fixed by:
+   - Rewriting the loop as `Future.wait(names.map(...))` so all items fetch
+     concurrently (`lib/presentation/providers/price_comparison_provider.dart`).
+   - Fixing a real concurrency bug this exposed in
+     `OfferPriceService._throttle()`: it read/wrote a shared `_lastRequest`
+     timestamp with a bare check-then-act (no synchronization), so N
+     concurrent callers would all read the same stale timestamp and pass the
+     rate-limit gate together — the throttle silently did nothing under
+     concurrency. Replaced it with a proper serialized queue (each call
+     chains onto `_throttleQueue`, so request *starts* are still spaced by
+     the 250ms minimum gap even when many callers fire at once) —
+     `lib/data/services/offer_price_service.dart`. Net effect: a 25-item
+     basket comparison now takes roughly (25 × 250ms spacing) + one request's
+     latency ≈ 7s instead of 20–25s, while still not hammering the
+     (unofficial, keyless-auth) API with a simultaneous burst.
+2. **"Unit size and unit price" — a required capability from the brief that
+   was never implemented, despite the API already providing the data for
+   free.** Verified live against the real marktguru API
+   (`offers/search?q=...&zipCode=10115`) that every offer response includes
+   `volume` (pack size), `quantity` (pack count, e.g. 12 for a 12-pack case),
+   and `referencePrice` (the Grundpreis — price per `unit.shortName`,
+   already computed server-side as `price / (volume × quantity)`) — none of
+   which `StoreOffer.fromJson` parsed, so this data was being silently
+   discarded on every single request the app already makes. Implemented:
+   - Added `volume`/`packQuantity`/`referencePrice` fields to `StoreOffer`
+     plus two getters: `unitSizeLabel` (e.g. `"12 x 1 l"`, `"0.5 kg"`) and
+     `unitPriceLabel` (Grundpreis, e.g. `"1.58 €/kg"`; suppressed for plain
+     single-pack-single-unit items where it would just repeat the sale
+     price) — `lib/data/models/store_offer.dart`.
+   - Wired both into the offer suggestion rows and the item-offer detail
+     sheet (replacing the previously-shown bare unit letter, e.g. "l", with
+     the actual pack size) —
+     `lib/presentation/screens/lists/widgets/offer_suggestions_bar.dart`,
+     `lib/presentation/screens/lists/widgets/item_offer_sheet.dart`.
+   - The persisted `price_unit` on an item (set when adding from an offer or
+     applying an offer to an existing item) now stores the human pack-size
+     label instead of the bare unit letter, and the list-item row now
+     actually displays it (`priceUnit` was being saved but never rendered
+     anywhere) — `lib/presentation/screens/lists/list_detail_screen.dart`,
+     `lib/presentation/screens/lists/widgets/item_offer_sheet.dart`.
+   - Verified the new model logic (parsing + both label getters, including
+     the multipack and suppressed-redundant-label cases) against JSON
+     shaped exactly like real API responses, via a throwaway `dart run`
+     script (not committed) — all cases passed.
+
+Re-audited the previously-listed "explicitly NOT done" items and confirmed
+they're still genuinely blocked, not shortcuts: `UserLocationService` only
+ever resolves a zip code (no lat/lng, no store addresses), so real
+distance-based "closest store" has no data to work from without adding a
+store-locator API; regular (non-promotional) shelf prices still have no
+public API for German supermarkets. Both are unchanged, honest blockers.
+
+**Files changed (third session):**
+`lib/data/models/store_offer.dart` (unit size/price fields + getters),
+`lib/data/services/offer_price_service.dart` (serialized throttle queue),
+`lib/presentation/providers/price_comparison_provider.dart` (parallel
+per-item fetch),
+`lib/presentation/screens/lists/widgets/offer_suggestions_bar.dart`,
+`lib/presentation/screens/lists/widgets/item_offer_sheet.dart`,
+`lib/presentation/screens/lists/list_detail_screen.dart`.
+
+**Checks performed (third session):** Downloaded Flutter 3.44.4 stable
+directly (no `CI=true`/root issues once `git config --global --add
+safe.directory /tmp/flutter` was set); `flutter pub get` + `flutter analyze`
+run before and after, diffed ignoring line-number shifts — **byte-identical
+issue set** (0 errors — after copying `env.example.dart` → `env.dart` and
+adding a throwaway stub `firebase_options.dart`, both gitignored/untracked,
+to get a real baseline instead of the 17 expected-but-noisy "file doesn't
+exist" errors; 60 pre-existing warnings, 581 pre-existing info, 641 total
+before and after). Verified live against the real marktguru API with `curl`
+that `volume`/`quantity`/`referencePrice` are present and consistent with
+the parsing logic (milk: 1l/1pack/€0.99 grundpreis; yogurt: 0.5kg/1pack/€1.58;
+water: 1l×12pack/€0.50 grundpreis). `flutter test` still fails on the
+pre-existing `lucide_icons`/`IconData` final-class incompatibility
+(confirmed unrelated: same failure on this branch before any of this
+session's changes). No iOS build possible (Linux container, no Xcode) — the
+UI changes (unit-size labels, price-summary display) are logic-verified and
+analyzer-clean but not visually confirmed on a simulator/device.
 
 **Files changed (morning session):** `lib/presentation/providers/price_comparison_provider.dart`
 (added `offerSearchAllProvider`), `lib/presentation/screens/lists/widgets/offer_suggestions_bar.dart`

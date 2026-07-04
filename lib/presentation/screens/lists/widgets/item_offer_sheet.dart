@@ -139,7 +139,7 @@ class _ItemOfferSheetState extends State<_ItemOfferSheet> {
         'price': widget.offer.price,
         'price_currency': 'EUR',
         'price_retailer': widget.offer.retailerName,
-        'price_unit': widget.offer.unitShortName,
+        'price_unit': widget.offer.unitSizeLabel ?? widget.offer.unitShortName,
         'price_updated_at': DateTime.now().toUtc().toIso8601String(),
       });
       if (mounted) Navigator.pop(context);
@@ -248,7 +248,7 @@ class _ItemOfferSheetState extends State<_ItemOfferSheet> {
                             offer.brandName!.isNotEmpty)
                           offer.brandName!,
                         offer.retailerName,
-                        if (offer.unitShortName != null) offer.unitShortName!,
+                        if (offer.unitSizeLabel != null) offer.unitSizeLabel!,
                       ].join(' · '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -304,6 +304,13 @@ class _ItemOfferSheetState extends State<_ItemOfferSheet> {
                 ),
             ],
           ),
+          if (offer.unitPriceLabel != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              offer.unitPriceLabel!,
+              style: TextStyle(fontSize: 11.5, color: textSecondary),
+            ),
+          ],
           if (savings != null && savings >= 0.10) ...[
             const SizedBox(height: 10),
             Container(
