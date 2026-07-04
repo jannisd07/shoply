@@ -47,7 +47,7 @@ was **never wired into any screen** — this session wired it up.
 | 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
 | 5 | Avo mascot & smart notifications | ~20% | Not started | Large scope; see plan below |
 | 6 | Calorie tracking | 0% | Not started | Large greenfield feature; see plan below |
-| 7 | Personalized onboarding & navbar | ~15% | Not started | Depends on Feature 6 decisions |
+| 7 | Personalized onboarding & navbar | ~30% | In progress | Goal questionnaire depends on Feature 6 |
 | 8 | Cross-feature UX / growth / premium | ~10% | Not started | Depends on 1–7 |
 
 ---
@@ -791,6 +791,19 @@ tab yet (no screen exists until Feature 6; the pill is where it will slot
 in) and no nudge dot on the orb (no nudge signal exists until Feature 5).
 Verified with `flutter analyze` (0 errors, no new warnings); not yet seen
 on a device/simulator.
+
+**Navbar fix + calorie-tab visibility (2026-07-04, second round):** The
+first D1 cut stretched the pill edge-to-edge (looked broken on device —
+owner screenshot). Now the pill + orb group is content-sized and centered,
+so it lays out correctly with either tab set. The Kalorien tab is now real
+and preference-driven: `calorieTrackingEnabledProvider` (SharedPreferences,
+default off), settable from a new opt-in page at the end of onboarding and
+a switch in Profile → Preferences; a `/calories` shell branch (branch 2,
+profile moved to 3) hosts an honest v0 screen that says tracking isn't
+built yet (no fake data) and offers "hide this tab". Disabling the pref
+while on the tab falls back to Home. Feature 7 moves to ~30%: the navbar
+side of "calorie tracking must be optional" is done; the full adaptive
+onboarding questionnaire and goal math remain with Feature 6.
 
 **Not implemented this session.** Audited: the current "onboarding" is a
 3-page static marketing carousel gated by a **device-local** SharedPreferences

@@ -6,12 +6,16 @@ import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
+import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 
-// Branch indices: 0=home, 1=recipes, 2=profile.
+// Branch indices — must match the StatefulShellRoute branch order in
+// app_router.dart. The calories branch always exists (stable indices);
+// its tab is only shown when the user opted into calorie tracking.
 // Avo chat lives outside the shell (full-screen push, no navbar).
 const int _kBranchHome = 0;
 const int _kBranchRecipes = 1;
-const int _kBranchProfile = 2;
+const int _kBranchCalories = 2;
+const int _kBranchProfile = 3;
 
 /// Container rendered by [StatefulShellRoute.navigatorContainerBuilder] that
 /// keeps every branch's navigator alive in the widget tree and slides
@@ -105,11 +109,12 @@ class _SlidingTabsContainerState extends State<SlidingTabsContainer>
 
 /// Main scaffold with the Paper floating ink navigation ("D1" design).
 ///
-/// Layout: [ list · book · user ] pill + detached Avo orb on the right.
-/// The pill spans the available width; the active tab sits in a soft
-/// 12% paper seat. Create-list lives on the home screen ("+ Neue Liste"),
-/// not in the navbar. A Kalorien tab joins the pill once calorie tracking
-/// exists (Feature 6/7 — the tab set is meant to become preference-driven).
+/// Layout: a content-sized, centered ink pill + detached Avo orb on the
+/// right. The active tab sits in a soft 12% paper seat. The tab set is
+/// preference-driven: [ list · book · (flame) · user ], where the Kalorien
+/// tab only appears when the user opted into calorie tracking (onboarding
+/// or profile settings). Create-list lives on the home screen
+/// ("+ Neue Liste"), not in the navbar.
 class MainScaffold extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
 
@@ -165,6 +170,17 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
     final navBottom = safeBot > 20 ? safeBot - 4 : 12.0;
     final tut = DynamicTutorialService.instance;
     final isOffline = ref.watch(isOfflineProvider);
+    final caloriesEnabled = ref.watch(calorieTrackingEnabledProvider);
+
+    // If the tab was hidden while its branch was active (settings toggle or
+    // "hide tab" on the calories screen), fall back to home.
+    if (!caloriesEnabled && _currentBranch == _kBranchCalories) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !ref.read(calorieTrackingEnabledProvider)) {
+          widget.navigationShell.goBranch(_kBranchHome);
+        }
+      });
+    }
 
     final pillColor = isDark ? const Color(0xFF16181D) : PaperColors.ink;
 
@@ -189,53 +205,58 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
               left: 0,
               right: 0,
               bottom: navBottom,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Center(
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Container(
-                        height: MainScaffold._pillHeight,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        decoration: BoxDecoration(
-                          color: pillColor,
-                          borderRadius: BorderRadius.circular(
-                            MainScaffold._pillHeight / 2,
+                    Container(
+                      height: MainScaffold._pillHeight,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: pillColor,
+                        borderRadius: BorderRadius.circular(
+                          MainScaffold._pillHeight / 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF201D18)
+                                .withValues(alpha: 0.22),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF201D18)
-                                  .withValues(alpha: 0.22),
-                              blurRadius: 18,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _NavIcon(
+                            icon: LucideIcons.list,
+                            label: 'Listen',
+                            active: _currentBranch == _kBranchHome,
+                            onTap: () => _goBranch(_kBranchHome),
+                            itemKey: tut.homeTabKey,
+                          ),
+                          _NavIcon(
+                            icon: LucideIcons.book,
+                            label: 'Rezepte',
+                            active: _currentBranch == _kBranchRecipes,
+                            onTap: () => _goBranch(_kBranchRecipes),
+                            itemKey: tut.recipesTabKey,
+                          ),
+                          if (caloriesEnabled)
                             _NavIcon(
-                              icon: LucideIcons.list,
-                              label: 'Listen',
-                              active: _currentBranch == _kBranchHome,
-                              onTap: () => _goBranch(_kBranchHome),
-                              itemKey: tut.homeTabKey,
+                              icon: LucideIcons.flame,
+                              label: 'Kalorien',
+                              active: _currentBranch == _kBranchCalories,
+                              onTap: () => _goBranch(_kBranchCalories),
                             ),
-                            _NavIcon(
-                              icon: LucideIcons.book,
-                              label: 'Rezepte',
-                              active: _currentBranch == _kBranchRecipes,
-                              onTap: () => _goBranch(_kBranchRecipes),
-                              itemKey: tut.recipesTabKey,
-                            ),
-                            _NavIcon(
-                              icon: LucideIcons.user,
-                              label: 'Profil',
-                              active: _currentBranch == _kBranchProfile,
-                              onTap: () => _goBranch(_kBranchProfile),
-                            ),
-                          ],
-                        ),
+                          _NavIcon(
+                            icon: LucideIcons.user,
+                            label: 'Profil',
+                            active: _currentBranch == _kBranchProfile,
+                            onTap: () => _goBranch(_kBranchProfile),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 10),

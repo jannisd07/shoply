@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/presentation/screens/auth/welcome_screen.dart';
+import 'package:shoply/presentation/screens/calories/calories_screen.dart';
 import 'package:shoply/presentation/screens/home/home_screen.dart';
 import 'package:shoply/presentation/screens/ai/avo_chat_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_screen.dart';
@@ -223,7 +224,22 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
 
-          // Branch 2: Profile
+          // Branch 2: Calories (tab only shown when the user opted in;
+          // the branch always exists so the index mapping stays stable)
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/calories',
+                name: 'calories',
+                pageBuilder: (context, state) => NoTransitionPage(
+                  key: state.pageKey,
+                  child: const CaloriesScreen(),
+                ),
+              ),
+            ],
+          ),
+
+          // Branch 3: Profile
           StatefulShellBranch(
             routes: [
               GoRoute(

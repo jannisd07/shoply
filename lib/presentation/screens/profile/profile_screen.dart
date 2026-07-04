@@ -18,6 +18,7 @@ import 'package:shoply/presentation/screens/profile/settings/notifications_scree
 import 'package:shoply/presentation/screens/profile/settings/language_screen.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
+import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/saved_recipes_provider.dart';
@@ -135,6 +136,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     context,
                     CupertinoPageRoute(builder: (context) => const LanguageScreen()),
                   ),
+                ),
+                _SettingsItemData(
+                  icon: Icons.local_fire_department_outlined,
+                  title: context.tr('calorie_tracking'),
+                  showChevron: false,
+                  trailingWidget: Switch.adaptive(
+                    value: ref.watch(calorieTrackingEnabledProvider),
+                    activeColor: AppColors.accentColor(context),
+                    onChanged: (v) => ref
+                        .read(calorieTrackingEnabledProvider.notifier)
+                        .setEnabled(v),
+                  ),
+                  onTap: () => ref
+                      .read(calorieTrackingEnabledProvider.notifier)
+                      .setEnabled(!ref.read(calorieTrackingEnabledProvider)),
                 ),
               ],
             ),
@@ -575,6 +591,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             fontSize: 13,
                           ),
                         ),
+                      if (item.trailingWidget != null) item.trailingWidget!,
                       if (item.external) ...[
                         const SizedBox(width: 6),
                         Icon(
@@ -731,6 +748,7 @@ class _SettingsItemData {
   final IconData icon;
   final String title;
   final String? trailing;
+  final Widget? trailingWidget;
   final bool showChevron;
   final bool external;
   final VoidCallback? onTap;
@@ -739,6 +757,7 @@ class _SettingsItemData {
     required this.icon,
     required this.title,
     this.trailing,
+    this.trailingWidget,
     this.showChevron = true,
     this.external = false,
     this.onTap,

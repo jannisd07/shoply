@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/widgets/paper/paper_widgets.dart';
+import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 
 /// Key used to track onboarding completion in SharedPreferences
 const String kOnboardingCompleteKey = 'onboarding_complete_v1';
@@ -22,16 +24,19 @@ Future<void> markOnboardingComplete() async {
 }
 
 /// Paper-style onboarding: three calm feature pages, then /welcome.
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  static const int _pageCount = 4;
+
   final _pageController = PageController();
   int _currentPage = 0;
+  bool _caloriesOptIn = false;
 
   @override
   void dispose() {
@@ -40,13 +45,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _finishOnboarding() async {
+    // Persist the calorie-tracking choice (skipping keeps the default: off —
+    // the toggle stays available in profile settings either way).
+    await ref
+        .read(calorieTrackingEnabledProvider.notifier)
+        .setEnabled(_caloriesOptIn);
     await markOnboardingComplete();
     if (!mounted) return;
     context.go('/welcome');
   }
 
   void _nextPage() {
-    if (_currentPage < 2) {
+    if (_currentPage < _pageCount - 1) {
       _pageController.animateToPage(
         _currentPage + 1,
         duration: const Duration(milliseconds: 400),
@@ -59,7 +69,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLast = _currentPage == 2;
+    final isLast = _currentPage == _pageCount - 1;
 
     return Scaffold(
       backgroundColor: PaperColors.paper,
@@ -105,6 +115,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     subtitle: context.tr('onb_recipes_sub'),
                     illustration: const _RecipesIllustration(),
                   ),
+                  _CalorieOptInPage(
+                    optedIn: _caloriesOptIn,
+                    onChanged: (v) => setState(() => _caloriesOptIn = v),
+                  ),
                 ],
               ),
             ),
@@ -114,7 +128,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    children: List.generate(3, (i) {
+                    children: List.generate(_pageCount, (i) {
                       final active = i == _currentPage;
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
@@ -180,6 +194,116 @@ class _PaperFeaturePage extends StatelessWidget {
             style: PaperTextStyles.body(color: PaperColors.muted),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Final onboarding page: opt into calorie tracking (Feature 7 — the
+/// choice only controls whether the Kalorien tab appears in the navbar
+/// and can be changed anytime in profile settings).
+class _CalorieOptInPage extends StatelessWidget {
+  final bool optedIn;
+  final ValueChanged<bool> onChanged;
+
+  const _CalorieOptInPage({required this.optedIn, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            height: 250,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: PaperColors.cream,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.local_fire_department_outlined,
+                size: 64,
+                color: PaperColors.creamInk,
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          PaperKicker(context.tr('onb_cal_kicker'),
+              color: PaperColors.terracotta),
+          const SizedBox(height: 10),
+          Text(context.tr('onb_cal_title'), style: PaperTextStyles.serif(28)),
+          const SizedBox(height: 12),
+          Text(
+            context.tr('onb_cal_sub'),
+            style: PaperTextStyles.body(color: PaperColors.muted),
+          ),
+          const SizedBox(height: 20),
+          _CalorieChoiceCard(
+            label: context.tr('onb_cal_no'),
+            selected: !optedIn,
+            onTap: () => onChanged(false),
+          ),
+          const SizedBox(height: 10),
+          _CalorieChoiceCard(
+            label: context.tr('onb_cal_yes'),
+            selected: optedIn,
+            onTap: () => onChanged(true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CalorieChoiceCard extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CalorieChoiceCard({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        decoration: BoxDecoration(
+          color: PaperColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? PaperColors.ink : PaperColors.hairline,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: PaperColors.ink,
+                ),
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check_rounded,
+                  size: 18, color: PaperColors.ink),
+          ],
+        ),
       ),
     );
   }

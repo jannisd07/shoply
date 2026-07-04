@@ -197,6 +197,18 @@ class AppTranslations {
     'onb_recipes_title': 'Recipes adapt\nto you.',
     'onb_recipes_sub':
         'Vegetarian, vegan, gluten-free — Avo swaps ingredients and fills your list.',
+    'onb_cal_kicker': 'Optional',
+    'onb_cal_title': 'Track calories\ntoo?',
+    'onb_cal_sub':
+        'Adds a calories tab next to your lists. Just shopping is fine too — you can change this anytime in settings.',
+    'onb_cal_no': 'Just shopping and recipes',
+    'onb_cal_yes': 'With calorie tracking',
+    'calorie_tracking': 'Calorie tracking',
+    'calories_v0_title': 'Your day,\nin calories.',
+    'calories_v0_card_title': 'Tracking starts here soon',
+    'calories_v0_card_sub':
+        'Meal logging, goals and progress are in the works. This tab is where they will live — it is not counting anything yet.',
+    'hide_calories_tab': 'Hide this tab',
     'signup_kicker': 'Create account',
     'signup_headline': 'Nice to\nmeet you.',
     'confirm_password_label': 'Confirm password',
@@ -888,6 +900,18 @@ class AppTranslations {
     'onb_recipes_title': 'Rezepte passen\nsich dir an.',
     'onb_recipes_sub':
         'Vegetarisch, vegan, glutenfrei — Avo tauscht Zutaten und füllt deine Liste.',
+    'onb_cal_kicker': 'Optional',
+    'onb_cal_title': 'Auch Kalorien\ntracken?',
+    'onb_cal_sub':
+        'Fügt einen Kalorien-Tab neben deinen Listen hinzu. Nur Einkaufen ist auch völlig okay — du kannst das jederzeit in den Einstellungen ändern.',
+    'onb_cal_no': 'Nur Einkaufen & Rezepte',
+    'onb_cal_yes': 'Mit Kalorien-Tracking',
+    'calorie_tracking': 'Kalorien-Tracking',
+    'calories_v0_title': 'Dein Tag,\nin Kalorien.',
+    'calories_v0_card_title': 'Tracking startet hier bald',
+    'calories_v0_card_sub':
+        'Mahlzeiten-Log, Ziele und Fortschritt sind in Arbeit. Dieser Tab ist ihr Zuhause — gezählt wird hier noch nichts.',
+    'hide_calories_tab': 'Tab ausblenden',
     'signup_kicker': 'Konto erstellen',
     'signup_headline': 'Schön, dass\ndu da bist.',
     'confirm_password_label': 'Passwort bestätigen',
