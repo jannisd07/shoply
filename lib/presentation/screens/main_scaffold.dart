@@ -3,12 +3,9 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
-import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
-import 'package:shoply/presentation/state/lists_provider.dart';
 
 // Branch indices: 0=home, 1=recipes, 2=profile.
 // Avo chat lives outside the shell (full-screen push, no navbar).
@@ -106,17 +103,19 @@ class _SlidingTabsContainerState extends State<SlidingTabsContainer>
   }
 }
 
-/// Main scaffold with the Paper floating ink pill navigation.
+/// Main scaffold with the Paper floating ink navigation ("D1" design).
 ///
-/// Layout: [ list · book · (+) · chat · user ] — one dark pill, the
-/// terracotta plus in the center creates a new list.
+/// Layout: [ list · book · user ] pill + detached Avo orb on the right.
+/// The pill spans the available width; the active tab sits in a soft
+/// 12% paper seat. Create-list lives on the home screen ("+ Neue Liste"),
+/// not in the navbar. A Kalorien tab joins the pill once calorie tracking
+/// exists (Feature 6/7 — the tab set is meant to become preference-driven).
 class MainScaffold extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
 
   const MainScaffold({super.key, required this.navigationShell});
 
-  static const double _pillHeight = 62.0;
-  static const double _plusSize = 38.0;
+  static const double _pillHeight = 58.0;
 
   /// Bottom padding child screens need to clear the floating navbar.
   static double getNavbarClearance(BuildContext context) {
@@ -157,52 +156,6 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
     }
   }
 
-  Future<void> _onCreateList() async {
-    HapticFeedback.mediumImpact();
-    final result = await AdaptiveAlertDialog.inputShow(
-      context: context,
-      title: context.tr('create_new_list'),
-      message: context.tr('enter_list_name_prompt'),
-      icon: PlatformInfo.isIOS26OrHigher()
-          ? 'list.bullet.circle.fill'
-          : Icons.list_alt,
-      input: AdaptiveAlertDialogInput(
-        placeholder: context.tr('enter_list_name'),
-        initialValue: '',
-        keyboardType: TextInputType.text,
-      ),
-      actions: [
-        AlertAction(
-          title: context.tr('cancel'),
-          style: AlertActionStyle.cancel,
-          onPressed: () {},
-        ),
-        AlertAction(
-          title: context.tr('create'),
-          style: AlertActionStyle.primary,
-          onPressed: () {},
-        ),
-      ],
-    );
-
-    if (result != null && result.trim().isNotEmpty) {
-      try {
-        await ref
-            .read(listsNotifierProvider.notifier)
-            .createList(result.trim());
-        if (mounted) {
-          _goBranch(_kBranchHome);
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${context.tr('error')}: $e')),
-          );
-        }
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final kbd = MediaQuery.of(context).viewInsets.bottom > 0;
@@ -236,77 +189,64 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
               left: 0,
               right: 0,
               bottom: navBottom,
-              child: Center(
-                child: Container(
-                  height: MainScaffold._pillHeight,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: pillColor,
-                    borderRadius: BorderRadius.circular(
-                      MainScaffold._pillHeight / 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _NavIcon(
-                        icon: LucideIcons.list,
-                        label: 'Listen',
-                        active: _currentBranch == _kBranchHome,
-                        onTap: () => _goBranch(_kBranchHome),
-                        itemKey: tut.homeTabKey,
-                      ),
-                      _NavIcon(
-                        icon: LucideIcons.book,
-                        label: 'Rezepte',
-                        active: _currentBranch == _kBranchRecipes,
-                        onTap: () => _goBranch(_kBranchRecipes),
-                        itemKey: tut.recipesTabKey,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: GestureDetector(
-                          onTap: _onCreateList,
-                          behavior: HitTestBehavior.opaque,
-                          child: Container(
-                            width: MainScaffold._plusSize,
-                            height: MainScaffold._plusSize,
-                            decoration: const BoxDecoration(
-                              color: PaperColors.terracotta,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.add,
-                              color: PaperColors.paper,
-                              size: 21,
-                            ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: MainScaffold._pillHeight,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        decoration: BoxDecoration(
+                          color: pillColor,
+                          borderRadius: BorderRadius.circular(
+                            MainScaffold._pillHeight / 2,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF201D18)
+                                  .withValues(alpha: 0.22),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _NavIcon(
+                              icon: LucideIcons.list,
+                              label: 'Listen',
+                              active: _currentBranch == _kBranchHome,
+                              onTap: () => _goBranch(_kBranchHome),
+                              itemKey: tut.homeTabKey,
+                            ),
+                            _NavIcon(
+                              icon: LucideIcons.book,
+                              label: 'Rezepte',
+                              active: _currentBranch == _kBranchRecipes,
+                              onTap: () => _goBranch(_kBranchRecipes),
+                              itemKey: tut.recipesTabKey,
+                            ),
+                            _NavIcon(
+                              icon: LucideIcons.user,
+                              label: 'Profil',
+                              active: _currentBranch == _kBranchProfile,
+                              onTap: () => _goBranch(_kBranchProfile),
+                            ),
+                          ],
                         ),
                       ),
-                      _NavIcon(
-                        icon: LucideIcons.messageCircle,
-                        label: 'Avo',
-                        active: false,
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          context.push('/avo');
-                        },
-                      ),
-                      _NavIcon(
-                        icon: LucideIcons.user,
-                        label: 'Profil',
-                        active: _currentBranch == _kBranchProfile,
-                        onTap: () => _goBranch(_kBranchProfile),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 10),
+                    _AvoOrb(
+                      color: pillColor,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        context.push('/avo');
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -341,15 +281,71 @@ class _NavIcon extends StatelessWidget {
         width: 56,
         height: MainScaffold._pillHeight,
         child: Center(
-          child: AnimatedOpacity(
+          // The active tab sits in a soft 12% paper seat so state reads by
+          // shape, not just opacity ("D1").
+          child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            opacity: active ? 1.0 : 0.42,
-            child: Icon(
-              icon,
-              size: 21,
-              color: PaperColors.paper,
-              semanticLabel: label,
+            curve: Curves.easeOut,
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active
+                  ? PaperColors.paper.withValues(alpha: 0.12)
+                  : Colors.transparent,
             ),
+            child: Center(
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: active ? 1.0 : 0.42,
+                child: Icon(
+                  icon,
+                  size: 21,
+                  color: PaperColors.paper,
+                  semanticLabel: label,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Detached circular Avo button sitting to the right of the tab pill —
+/// same surface and shadow as the pill, so the two read as one system.
+class _AvoOrb extends StatelessWidget {
+  final Color color;
+  final VoidCallback onTap;
+
+  const _AvoOrb({required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: MainScaffold._pillHeight,
+        height: MainScaffold._pillHeight,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF201D18).withValues(alpha: 0.22),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Icon(
+            LucideIcons.messageCircle,
+            size: 22,
+            color: PaperColors.paper,
+            semanticLabel: 'Avo',
           ),
         ),
       ),

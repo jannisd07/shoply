@@ -779,6 +779,19 @@ a pile of unverified files.
 
 ## Feature 7 — Personalized onboarding and navbar
 
+**Navbar update (2026-07-04, owner-directed):** After an interactive design
+round (three concepts → Option B variations → light/dark treatments), the
+owner picked the "D1" design and it is now implemented in `MainScaffold`:
+a full-width ink pill with three tabs (Listen · Rezepte · Profil) whose
+active tab sits in a 12% paper circular seat, plus a detached circular Avo
+orb on the right that pushes `/avo`. The navbar "+" was removed — create-list
+already exists on the home screen ("+ Neue Liste") and lists screen. Two
+deliberate deviations from the mockup, to avoid faking state: no Kalorien
+tab yet (no screen exists until Feature 6; the pill is where it will slot
+in) and no nudge dot on the orb (no nudge signal exists until Feature 5).
+Verified with `flutter analyze` (0 errors, no new warnings); not yet seen
+on a device/simulator.
+
 **Not implemented this session.** Audited: the current "onboarding" is a
 3-page static marketing carousel gated by a **device-local** SharedPreferences
 flag (not account-scoped — reinstalling re-triggers it even for existing
