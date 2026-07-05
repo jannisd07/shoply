@@ -1,6 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shoply/data/services/supabase_service.dart';
+import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/navigation_service.dart';
 import 'dart:io';
@@ -144,6 +145,13 @@ class FCMService {
         return;
       }
 
+      // Respect the master notification switch: don't resurrect the token
+      // (e.g. on token refresh or re-login) while notifications are off.
+      if (!await NotificationPreferencesService.instance.isMasterEnabled()) {
+        debugPrint('🔕 [FCM] Notifications disabled — not saving token');
+        return;
+      }
+
       debugPrint('🔥🔥🔥 [FCM] SAVING TOKEN TO DATABASE');
       debugPrint('🔥 User ID: $userId');
       debugPrint('🔥 Token (first 50 chars): ${token.substring(0, 50)}...');
@@ -173,13 +181,40 @@ class FCMService {
     debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     if (message.notification != null) {
-      // Show local notification when app is in foreground
+      // Show local notification when app is in foreground.
+      // showNotification enforces the user's notification preferences.
       NotificationService.instance.showNotification(
         id: message.messageId.hashCode,
         title: message.notification!.title ?? 'Avo',
         body: message.notification!.body ?? '',
         payload: message.data.toString(),
+        category: _categoryForType(message.data['type'] as String?),
       );
+    }
+  }
+
+  /// Map a push payload `type` to the user's settings toggle it belongs to.
+  /// Unknown types fall back to the master switch only.
+  NotificationCategory? _categoryForType(String? type) {
+    switch (type) {
+      case 'list_activity':
+      case 'category_change':
+      case 'list_update':
+        return NotificationCategory.listActivity;
+      case 'list_invitation':
+        return NotificationCategory.listInvitations;
+      case 'shopping_complete':
+        return NotificationCategory.shoppingCompleted;
+      case 'recipe_rating':
+      case 'recipe_like':
+        return NotificationCategory.recipeLikes;
+      case 'recipe_comment':
+        return NotificationCategory.recipeComments;
+      case 'new_recipe':
+      case 'recipe_of_the_day':
+        return NotificationCategory.newRecipes;
+      default:
+        return null;
     }
   }
 
@@ -259,6 +294,24 @@ class FCMService {
       await _saveTokenToDatabase(_fcmToken!);
     } else {
       debugPrint('⚠️ [FCM] Still no FCM token available');
+    }
+  }
+
+  /// Remove the stored FCM token for the current user so remote pushes stop
+  /// being delivered (used when the master notification switch is turned off).
+  Future<void> removeTokenForCurrentUser() async {
+    try {
+      final userId = SupabaseService.instance.currentUser?.id;
+      if (userId == null) return;
+
+      await SupabaseService.instance.client.from('users').update({
+        'fcm_token': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', userId);
+
+      debugPrint('🔕 [FCM] Token removed from database for user $userId');
+    } catch (e) {
+      debugPrint('❌ [FCM] Failed to remove token: $e');
     }
   }
 }

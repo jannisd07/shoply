@@ -24,6 +24,7 @@ import 'package:shoply/core/services/siri_service.dart';
 import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
+import 'package:shoply/presentation/screens/home/widgets/avo_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/pending_splits_banner.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
@@ -444,6 +445,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
 
             const SliverToBoxAdapter(child: PendingSplitsBanner()),
+
+            // Avo restock nudges ("you buy milk about every 5 days")
+            const SliverToBoxAdapter(child: AvoNudgeCard()),
 
             const SliverToBoxAdapter(
               child: SizedBox(height: AppDimensions.spacingLarge),

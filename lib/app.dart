@@ -17,6 +17,7 @@ import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/widgets/tutorial/tutorial_overlay.dart';
 import 'package:shoply/routes/app_router.dart';
 import 'package:shoply/data/services/deep_link_service.dart';
+import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/navigation_service.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
@@ -29,16 +30,21 @@ class AvoApp extends ConsumerStatefulWidget {
   ConsumerState<AvoApp> createState() => _AvoAppState();
 }
 
-class _AvoAppState extends ConsumerState<AvoApp> {
+class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
   late final StreamSubscription<AuthState> _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     // Initialize deep link service after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeDeepLinks();
+      // Push Avo's scheduled restock reminder a day ahead: while the app is
+      // being used, the in-app card is the surface — the notification should
+      // only fire when the app has NOT been opened since yesterday.
+      unawaited(MascotNotificationService.instance.rearmRestockReminder());
     });
 
     _authSubscription = SupabaseService.instance.authStateChanges.listen((
@@ -149,8 +155,18 @@ class _AvoAppState extends ConsumerState<AvoApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSubscription.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // Re-arm on every return to the app (throttled inside the service).
+      unawaited(MascotNotificationService.instance.rearmRestockReminder());
+    }
   }
 
   @override

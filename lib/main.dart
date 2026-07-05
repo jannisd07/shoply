@@ -15,6 +15,7 @@ import 'package:shoply/data/services/analytics_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/fcm_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
+import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/app_review_service.dart';
 import 'package:shoply/data/services/subscription_service.dart';
@@ -127,10 +128,20 @@ Future<void> _initializeServicesInBackground() async {
       debugPrint('🔐 [AUTH] State changed: $event');
 
       if (event == AuthChangeEvent.signedIn && (Platform.isIOS || Platform.isAndroid)) {
+        // Sync the master notification switch first: saveTokenForCurrentUser
+        // respects it, so a user who disabled notifications on another
+        // device doesn't get their FCM token resurrected here.
+        await NotificationPreferencesService.instance.syncFromRemote();
         await FCMService.instance.saveTokenForCurrentUser();
-        await MascotNotificationService.instance.updateLastActive();
-        await MascotNotificationService.instance.checkAndSendNotification();
+        await MascotNotificationService.instance
+            .rearmRestockReminder(force: true);
         _runRecipeLabelMigration();
+      }
+
+      if (event == AuthChangeEvent.signedOut && (Platform.isIOS || Platform.isAndroid)) {
+        // Clears the scheduled restock reminder (no user = nothing due).
+        await MascotNotificationService.instance
+            .rearmRestockReminder(force: true);
       }
     });
   } catch (e) {

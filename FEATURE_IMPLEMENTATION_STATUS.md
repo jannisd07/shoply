@@ -1,8 +1,17 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-05 (scheduled routine — Feature 3 focus: Siri/Shortcuts were silently never built into the app; fixed and wired end-to-end)_
+_Last updated: 2026-07-05, second run (scheduled routine — Feature 5 focus: Avo mascot consolidation, the single enforced notification gate, and real behavior-based restock nudges)_
 
 ## Environment note (read first)
+
+Recent scheduled sessions (including the latest, 2026-07-05) download a real
+Flutter SDK into the container and verify every change with a full-project
+`flutter analyze`; the 2026-07-05 Feature-5 session additionally found that
+`flutter test` **passes** on Flutter 3.35.6 (the long-reported
+`lucide_icons`/`IconData` failure only occurs on newer 3.44.x SDKs where
+`IconData` became `final`). `flutter build ios` remains impossible here (no
+macOS/Xcode in the Linux container). The note below is from the 2026-07-02
+session, kept for history:
 
 Unlike the prior two sessions, **this session had a working Flutter/Dart
 toolchain**: outbound network access allowed `git clone` of `flutter/flutter`
@@ -45,7 +54,7 @@ was **never wired into any screen** — this session wired it up.
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~75% | In progress (this session) | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
-| 5 | Avo mascot & smart notifications | ~20% | Not started | Large scope; see plan below |
+| 5 | Avo mascot & smart notifications | ~60% | In progress (this session) | Recipe/price-drop nudges still open; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | 0% | Not started | Large greenfield feature; see plan below |
 | 7 | Personalized onboarding & navbar | ~30% | In progress | Goal questionnaire depends on Feature 6 |
 | 8 | Cross-feature UX / growth / premium | ~10% | Not started | Depends on 1–7 |
@@ -903,15 +912,107 @@ I'd rather flag it precisely than rush a shallow pass:
   but achievement-unlock and recipe-of-the-day pushes are stubbed/never
   triggered.
 
-**Recommended approach for a follow-up session** (not started): (1) delete
-or consolidate the dead `core/gamification/` module into
-`MascotNotificationService` rather than running two systems; (2) make
-`users.notification_enabled` (already chatbot-settable) the single real gate
-and wire it into `NotificationService`/`MascotNotificationService`; (3) add
-one new behavioral trigger using the *already-computed*
-`item_purchase_stats.average_days_between` — "you usually buy milk every 5
-days, it's not on your list" — since the hard part (the data pipeline)
-already exists and is populated.
+**Sixth session, 2026-07-05 (scheduled routine — this feature's dedicated
+session).** Executed exactly the three-step plan the previous audit
+recommended (and the owner approved via the `[ yes]` consolidation idea),
+plus the surfaces that make it user-visible. Real Flutter 3.35.6 toolchain
+(`/tmp/flutter`); every change verified with full-project `flutter analyze`
+(0 errors, 59 warnings before and after — zero new issues of any severity;
+info count *dropped* 557 → 549 from dead-code deletion). Notably, `flutter
+test` **passes** on this SDK ("All tests passed", including the app-construct
+smoke test) — the `lucide_icons`/`IconData` failure reported by earlier
+sessions is specific to newer SDKs (3.44.x) where `IconData` became `final`.
+
+*1. Consolidation (approved idea — done):*
+- **Deleted `lib/core/gamification/` entirely** (`GamificationService`,
+  `HomeGreetingWidget`, `ShoplySprout` mascot, barrel file) — re-verified
+  zero external imports before deleting. One mascot voice remains.
+- **Deleted the seven never-called `notify*` helpers** in
+  `NotificationService` (`notifyListUpdate`, `notifyRecipeRating`,
+  `notifyRecipeComment`, `notifyListInvitation`, `notifyShoppingComplete`,
+  `notifyItemDeleted`, `notifyItemToggled`) — grep-confirmed zero callers;
+  `showNotification` is (and was) the single real display path, used by the
+  FCM foreground handler and the mascot service.
+- **Rewrote `MascotNotificationService`**, removing the random
+  time-of-day fluff ("Avo says hi!", "miss you", weekend messages — exactly
+  the spam the brief says to avoid), the per-call streak counter that was
+  both never-invoked and mathematically wrong (3 trips in one day = "3-day
+  streak"), and the dead `AvoContext`/expression-message catalogs (zero
+  external callers). What remains is one focused, data-driven job (below).
+
+*2. The single enforced notification gate (approved idea — done):*
+- New `NotificationPreferencesService`
+  (`lib/data/services/notification_preferences_service.dart`):
+  - **Master switch = `users.notification_enabled`** (account-scoped,
+    verified live: column exists, RLS lets users update their own row),
+    mirrored into SharedPreferences for synchronous/offline checks and
+    synced from the DB on sign-in and when opening the settings screen.
+  - **The 7 existing per-category SharedPreferences toggles** (same keys the
+    settings screen always wrote, so saved values carry over) plus a new
+    `notif_avo_nudges` category — all now actually enforced.
+  - `NotificationService.showNotification`/`scheduleNotification` check the
+    gate (master + optional category) before showing anything; the FCM
+    foreground handler maps push `type` → category so remote pushes respect
+    the user's toggles while the app is open.
+  - **Disabling the master switch also nulls `users.fcm_token`** (and
+    re-enabling re-saves it, incl. on token refresh/re-login, which now
+    check the gate) — verified that all push senders
+    (`PushNotificationService`, `ListActivityService`) read exactly that
+    column, so background pushes genuinely stop. This is real enforcement,
+    not a decorative toggle.
+  - Settings screen: new master switch at the top (with description);
+    category toggles fade + become inert while it's off; new "Avo" section
+    with the restock-reminders toggle. Avo chat's `update_setting`
+    notifications path (`AvoSettingsBridge`) now routes through the same
+    cache/FCM/reminder sync, so "Avo, turn off notifications" really turns
+    everything off.
+
+*3. Real behavioral nudge — restock suggestions (done):*
+- New `AvoNudgeService` (`lib/data/services/avo_nudge_service.dart`)
+  computes "probably running low" items from the already-populated
+  `item_purchase_stats.average_days_between` (verified live: 730 stat rows,
+  126 currently nudge-eligible in the real DB). Rules: ≥3 tracked
+  purchases, rhythm between 2–60 days, overdue by ≥1× its own average but
+  ≤4× (beyond that the habit has probably changed), not already unchecked
+  on any visible list (one RLS-scoped query), not snoozed. Dismissing
+  snoozes for one of the item's own purchase cycles — not forever — so the
+  nudge honestly comes back when it's plausibly due again.
+- **Home-screen card** (`AvoNudgeCard`, placed with the pending-splits
+  banner): small Avo mascot + up to 3 items with "Etwa alle 5 Tage ·
+  zuletzt vor 8 Tagen", one-tap **Hinzufügen** (adds to the most recently
+  touched list with the item's preferred quantity/category, `autoParse:
+  false` so no Gemini call is burned on a known item name; snackbar
+  confirms which list) and an ✕ to snooze. Renders nothing when nothing is
+  due. EN/DE localized.
+- **Scheduled morning reminder, designed not to spam:** on every app
+  open/resume (and sign-in), `MascotNotificationService.rearmRestockReminder`
+  cancels and re-schedules ONE one-shot local notification for tomorrow
+  09:00 ("Milch ist wahrscheinlich fast aufgebraucht – du kaufst es etwa
+  alle 5 Tage."). While the user keeps using the app it therefore never
+  fires (the in-app card is the surface); it only fires if the app hasn't
+  been opened since yesterday AND something was actually due. No repeat
+  schedule, gated by master + Avo category, cleared on sign-out/disable.
+  Uses `zonedSchedule` (added explicit `timezone` dep — already in the
+  lockfile transitively via flutter_local_notifications, so resolution is
+  unchanged).
+- **Avo assistant connection:** new `get_restock_suggestions` Gemini tool
+  ("was sollte ich nachkaufen?") returning item + rhythm + days-since, with
+  a system-prompt rule to offer adding the items via the existing
+  `add_item_to_list` tool.
+
+**Explicitly NOT done (honest gaps):**
+- Recipe suggestions from past meals/offers/budget, price-drop/Angebote
+  notifications, "you usually buy this on Sundays" (weekday patterns), and
+  milestone celebrations — all still open; the notification gate +
+  `AvoNudgeService` now give them a clean place to land.
+- Scheduled-notification delivery needs a real device QA pass (fires when
+  app is closed? iOS pending-notification limits?). Logic is
+  analyzer-verified and edge-case-tested (filter math, month/year rollover,
+  snooze pruning — throwaway `dart run` script, all passed), but no
+  simulator/device run is possible in this container.
+- The nudge computation runs on app open/resume; there is no server-side
+  push for it (a Supabase cron + push edge function would deliver even if
+  the app is never opened — flagged as an idea below).
 
 ---
 
@@ -1133,20 +1234,33 @@ exists, "N calories left — 3 dinner ideas from your list."
   - Recommendation: yes, as a small follow-up — either standalone or folded
     into a future Feature 8 pass on the recommendation engines.
 
-- [ yes] IDEA: Consolidate the two dead mascot/gamification systems
-  (`core/gamification/` and `MascotNotificationService`'s streak logic) into
-  one, and make `users.notification_enabled` the single enforced
-  notification gate.
-  - Why it helps: right now there are 2 mascot personality systems and 3
-    notification-preference flags, none of which fully work together.
-  - Expected user value: a Settings toggle that actually does something,
-    and one consistent Avo voice instead of two unused parallel ones.
-  - Expected business/premium value: retention — this is the foundation
-    Feature 5 needs to build real nudges on.
-  - Complexity: Medium.
-  - Risk: Low-medium (touches notification-sending code paths — should be
-    tested with real device pushes).
-  - Recommendation: yes, as the first step of Feature 5.
+- [x] IDEA (approved, DONE 2026-07-05): Consolidate the two dead
+  mascot/gamification systems into one, and make
+  `users.notification_enabled` the single enforced notification gate.
+  - **Outcome:** `core/gamification/` deleted; `MascotNotificationService`
+    rewritten as the one data-driven Avo voice; new
+    `NotificationPreferencesService` enforces master + category toggles at
+    the `showNotification` choke point and syncs the FCM token so the
+    master switch stops background pushes too. Details in Feature 5's
+    sixth-session notes.
+
+- [ ] IDEA: Server-side restock reminders (Supabase cron + the existing
+  send-push-notification edge function) instead of the client-scheduled
+  local notification.
+  - Why it helps: the current reminder is scheduled on-device when the app
+    is used, so a user who stops opening the app entirely gets at most one
+    reminder (the last one armed). A daily cron could compute due items in
+    SQL (the same `item_purchase_stats` rules) and push, honestly gated by
+    `users.notification_enabled` + a per-user nudge opt-out column.
+  - Expected user value: medium-high — this is the actual "bring users
+    back" channel.
+  - Expected business/premium value: high (retention loop).
+  - Complexity: Medium (SQL port of the eligibility rules; snooze state
+    would need to move server-side to be respected).
+  - Risk: Medium — real push spam potential if the caps aren't right; needs
+    careful frequency capping (e.g. max 2/week).
+  - Recommendation: needs decision — only after the on-device version has
+    proven the copy/frequency feels right to you.
 
 - [x] IDEA (approved, DONE 2026-07-04): Let the split-cost sheet pick a
   different "who paid" person instead of always defaulting to whoever opens

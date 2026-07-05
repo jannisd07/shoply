@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'
     show WidgetRef;
 import 'package:shoply/data/models/user_model.dart';
+import 'package:shoply/data/services/mascot_notification_service.dart';
+import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
@@ -279,13 +281,22 @@ class AvoSettingsBridge {
         error: 'Notifications must be true or false',
       );
     }
-    return await _updateUserField(
+    final result = await _updateUserField(
       key: 'notifications',
       displayName: 'Notifications',
       newValue: enabled ? 'on' : 'off',
       apply: (u, v) => u.copyWith(notificationEnabled: v == 'on'),
       readCurrent: (u) => u.notificationEnabled ? 'on' : 'off',
     );
+    if (result.success) {
+      // The DB row is already updated; mirror the enforced local gate
+      // (SharedPreferences cache + FCM token) and Avo's scheduled reminder.
+      await NotificationPreferencesService.instance
+          .applyMasterChangedRemotely(enabled);
+      await MascotNotificationService.instance
+          .rearmRestockReminder(force: true);
+    }
+    return result;
   }
 
   Future<SettingChangeResult> _updateUserField({

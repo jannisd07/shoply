@@ -216,6 +216,22 @@ class AppTranslations {
     'greeting_day': 'Good afternoon',
     'greeting_evening': 'Good evening',
     'avo_hint_home': 'Avo: missing something? Ask me about recipes.',
+    'restock_title': 'Probably running low',
+    'restock_line': 'About every {avg} days · last bought {days} days ago',
+    'restock_add_action': 'Add',
+    'restock_added_to': '{item} added to "{list}"',
+    'restock_notification_title': '🥑 Time to restock?',
+    'restock_notification_body_one':
+        '{item} is probably running low – you buy it about every {days} days.',
+    'restock_notification_body_many':
+        '{item} and {count} more are probably running low. Avo has the details.',
+    'all_notifications': 'Allow notifications',
+    'all_notifications_desc':
+        'Master switch for all Shoply notifications, including push messages from shared lists.',
+    'avo_section': 'Avo',
+    'avo_restock_reminders': 'Restock reminders',
+    'avo_restock_reminders_desc':
+        'A morning reminder when items you buy regularly are probably running low.',
     'show_label': 'Show',
     'new_list_plus': '+ New list',
     'items_open_suffix': 'open',
@@ -919,6 +935,22 @@ class AppTranslations {
     'greeting_day': 'Guten Tag',
     'greeting_evening': 'Guten Abend',
     'avo_hint_home': 'Avo: Fehlt was? Frag mich nach Rezepten.',
+    'restock_title': 'Wahrscheinlich fast leer',
+    'restock_line': 'Etwa alle {avg} Tage · zuletzt vor {days} Tagen',
+    'restock_add_action': 'Hinzufügen',
+    'restock_added_to': '{item} zu "{list}" hinzugefügt',
+    'restock_notification_title': '🥑 Zeit nachzukaufen?',
+    'restock_notification_body_one':
+        '{item} ist wahrscheinlich fast aufgebraucht – du kaufst es etwa alle {days} Tage.',
+    'restock_notification_body_many':
+        '{item} und {count} weitere sind wahrscheinlich fast aufgebraucht. Avo hat die Details.',
+    'all_notifications': 'Mitteilungen erlauben',
+    'all_notifications_desc':
+        'Hauptschalter für alle Shoply-Mitteilungen, inklusive Push-Nachrichten aus geteilten Listen.',
+    'avo_section': 'Avo',
+    'avo_restock_reminders': 'Nachkauf-Erinnerungen',
+    'avo_restock_reminders_desc':
+        'Eine morgendliche Erinnerung, wenn regelmäßig gekaufte Artikel wahrscheinlich zur Neige gehen.',
     'show_label': 'Zeigen',
     'new_list_plus': '+ Neue Liste',
     'items_open_suffix': 'offen',

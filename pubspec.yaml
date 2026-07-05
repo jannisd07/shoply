@@ -53,6 +53,7 @@ dependencies:
   
   # Notifications
   flutter_local_notifications: ^19.0.0
+  timezone: ^0.10.1  # TZDateTime for zonedSchedule (Avo restock reminder)
   firebase_messaging: ^16.0.3  # Re-enabled for push notifications
   
   # Analytics

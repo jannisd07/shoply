@@ -8,6 +8,7 @@ import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/avo_app_knowledge.dart';
+import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
@@ -70,6 +71,9 @@ When the user asks to:
   → call update_setting
 • find prices, deals, offers, or "which store is cheapest" for a
   product → call search_offers
+• know what they might need to buy / what's running low / restock
+  ideas → call get_restock_suggestions (based on their real purchase
+  rhythm), then offer to add the items via add_item_to_list
 • split / share the cost of a past shopping trip with other people
   ("split yesterday's Lidl trip with Max and Jonas") → first call
   get_shopping_history to find the right history_id, then call
@@ -275,6 +279,17 @@ After a tool returns, write a short natural-language confirmation
             }, requiredProperties: ['history_id', 'participant_names']),
           ),
           FunctionDeclaration(
+            'get_restock_suggestions',
+            'Items the user is probably running low on, based on their own '
+                'purchase rhythm (how often they historically re-buy each item). '
+                'Excludes items already on an open list. Use when the user asks '
+                'what they might need, what to buy, or restock ideas.',
+            Schema.object(properties: {
+              'limit': Schema.integer(
+                  description: 'Max suggestions to return (default 5)'),
+            }),
+          ),
+          FunctionDeclaration(
             'delete_item',
             'Delete an item from a shopping list. SAFETY: call this WITHOUT confirm '
                 'first — it returns a confirmation question instead of deleting. Only '
@@ -402,6 +417,8 @@ After a tool returns, write a short natural-language confirmation
           return _toolAppInfo(args, payloads);
         case 'search_offers':
           return await _toolSearchOffers(args);
+        case 'get_restock_suggestions':
+          return await _toolRestockSuggestions(args);
         case 'split_trip_cost':
           return await _toolSplitTripCost(args);
         case 'delete_item':
@@ -828,6 +845,31 @@ After a tool returns, write a short natural-language confirmation
                 'old_price': o.oldPrice,
                 'unit': o.unitShortName,
                 'store': o.retailerName,
+              })
+          .toList(),
+    };
+  }
+
+  Future<Map<String, Object?>> _toolRestockSuggestions(
+      Map<String, Object?> args) async {
+    final limit = (args['limit'] as num?)?.toInt() ?? 5;
+    final suggestions = await AvoNudgeService.instance
+        .getRestockSuggestions(limit: limit.clamp(1, 10));
+    if (suggestions.isEmpty) {
+      return {
+        'found': 0,
+        'note': 'Nothing seems due right now — either everything was bought '
+            'recently, or there is not enough purchase history yet (an item '
+            'needs 3+ tracked purchases).',
+      };
+    }
+    return {
+      'found': suggestions.length,
+      'suggestions': suggestions
+          .map((s) => {
+                'item': s.displayName,
+                'buys_about_every_days': s.averageDays,
+                'last_bought_days_ago': s.daysSince,
               })
           .toList(),
     };

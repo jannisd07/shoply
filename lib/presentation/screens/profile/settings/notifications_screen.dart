@@ -1,9 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/data/services/mascot_notification_service.dart';
+import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -14,22 +15,10 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  // Preference keys
-  static const _keyItemsAdded = 'notif_items_added';
-  static const _keyShoppingCompleted = 'notif_shopping_completed';
-  static const _keyListInvitations = 'notif_list_invitations';
-  static const _keyRecipeLikes = 'notif_recipe_likes';
-  static const _keyComments = 'notif_comments';
-  static const _keyNewRecipes = 'notif_new_recipes';
-  static const _keyWeeklySummary = 'notif_weekly_summary';
+  final _prefs = NotificationPreferencesService.instance;
 
-  bool _itemsAdded = true;
-  bool _shoppingCompleted = true;
-  bool _listInvitations = true;
-  bool _recipeLikes = true;
-  bool _comments = true;
-  bool _newRecipes = false;
-  bool _weeklySummary = true;
+  bool _masterEnabled = true;
+  final Map<NotificationCategory, bool> _categoryValues = {};
 
   bool _isLoading = true;
 
@@ -40,35 +29,53 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _loadPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
+    final master = await _prefs.isMasterEnabled();
+    final values = <NotificationCategory, bool>{};
+    for (final category in NotificationCategory.values) {
+      values[category] = await _prefs.isCategoryEnabled(category);
+    }
+    if (!mounted) return;
     setState(() {
-      _itemsAdded = prefs.getBool(_keyItemsAdded) ?? true;
-      _shoppingCompleted = prefs.getBool(_keyShoppingCompleted) ?? true;
-      _listInvitations = prefs.getBool(_keyListInvitations) ?? true;
-      _recipeLikes = prefs.getBool(_keyRecipeLikes) ?? true;
-      _comments = prefs.getBool(_keyComments) ?? true;
-      _newRecipes = prefs.getBool(_keyNewRecipes) ?? false;
-      _weeklySummary = prefs.getBool(_keyWeeklySummary) ?? true;
+      _masterEnabled = master;
+      _categoryValues.addAll(values);
       _isLoading = false;
+    });
+
+    // The DB is authoritative for the master switch (settable from other
+    // devices / Avo chat) — refresh from remote in the background.
+    await _prefs.syncFromRemote();
+    final synced = await _prefs.isMasterEnabled();
+    if (mounted && synced != master) {
+      setState(() => _masterEnabled = synced);
+    }
+  }
+
+  void _toggleMaster() {
+    HapticFeedback.selectionClick();
+    final newValue = !_masterEnabled;
+    setState(() => _masterEnabled = newValue);
+    _prefs.setMasterEnabled(newValue).then((_) {
+      // Clears or re-arms Avo's scheduled reminder to match the new gate.
+      MascotNotificationService.instance.rearmRestockReminder(force: true);
     });
   }
 
-  Future<void> _savePreference(String key, bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
-  }
-
-  void _toggle(String key, bool currentValue, void Function(bool) setter) {
+  void _toggleCategory(NotificationCategory category) {
     HapticFeedback.selectionClick();
-    final newValue = !currentValue;
-    setter(newValue);
-    _savePreference(key, newValue);
+    final newValue = !(_categoryValues[category] ?? category.defaultValue);
+    setState(() => _categoryValues[category] = newValue);
+    _prefs.setCategoryEnabled(category, newValue).then((_) {
+      if (category == NotificationCategory.avoNudges) {
+        MascotNotificationService.instance.rearmRestockReminder(force: true);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final backgroundColor = AppColors.background(context);
     final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
     final separatorColor = AppColors.divider(context);
 
     return Scaffold(
@@ -84,67 +91,135 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 bottom: 60 + MediaQuery.of(context).padding.bottom,
               ),
               children: [
-                // SECTION: Listen (Lists)
-                PaperSectionHeader(context.tr('lists_section')),
+                // Master switch (enforced account-wide, incl. push delivery)
                 _buildToggleItem(
-                  title: context.tr('when_items_added'),
-                  value: _itemsAdded,
+                  title: context.tr('all_notifications'),
+                  value: _masterEnabled,
                   textPrimary: textPrimary,
-                  onTap: () => _toggle(_keyItemsAdded, _itemsAdded, (v) => setState(() => _itemsAdded = v)),
+                  onTap: _toggleMaster,
                 ),
-                _buildDivider(separatorColor),
-                _buildToggleItem(
-                  title: context.tr('when_shopping_completed'),
-                  value: _shoppingCompleted,
-                  textPrimary: textPrimary,
-                  onTap: () => _toggle(_keyShoppingCompleted, _shoppingCompleted, (v) => setState(() => _shoppingCompleted = v)),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    context.tr('all_notifications_desc'),
+                    style: TextStyle(fontSize: 12, color: textSecondary),
+                  ),
                 ),
-                _buildDivider(separatorColor),
-                _buildToggleItem(
-                  title: context.tr('list_invitations'),
-                  value: _listInvitations,
-                  textPrimary: textPrimary,
-                  onTap: () => _toggle(_keyListInvitations, _listInvitations, (v) => setState(() => _listInvitations = v)),
-                ),
+                const SizedBox(height: 20),
 
-                const SizedBox(height: 32),
+                // Category toggles are inert while the master switch is off.
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOutCubic,
+                  opacity: _masterEnabled ? 1.0 : 0.4,
+                  child: IgnorePointer(
+                    ignoring: !_masterEnabled,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // SECTION: Avo
+                        PaperSectionHeader(context.tr('avo_section')),
+                        _buildToggleItem(
+                          title: context.tr('avo_restock_reminders'),
+                          value: _categoryValue(NotificationCategory.avoNudges),
+                          textPrimary: textPrimary,
+                          onTap: () =>
+                              _toggleCategory(NotificationCategory.avoNudges),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            context.tr('avo_restock_reminders_desc'),
+                            style:
+                                TextStyle(fontSize: 12, color: textSecondary),
+                          ),
+                        ),
 
-                // SECTION: Rezepte (Recipes)
-                PaperSectionHeader(context.tr('recipes_section')),
-                _buildToggleItem(
-                  title: context.tr('likes_on_recipes'),
-                  value: _recipeLikes,
-                  textPrimary: textPrimary,
-                  onTap: () => _toggle(_keyRecipeLikes, _recipeLikes, (v) => setState(() => _recipeLikes = v)),
-                ),
-                _buildDivider(separatorColor),
-                _buildToggleItem(
-                  title: context.tr('comments_notifications'),
-                  value: _comments,
-                  textPrimary: textPrimary,
-                  onTap: () => _toggle(_keyComments, _comments, (v) => setState(() => _comments = v)),
-                ),
-                _buildDivider(separatorColor),
-                _buildToggleItem(
-                  title: context.tr('new_recipes_from_followed'),
-                  value: _newRecipes,
-                  textPrimary: textPrimary,
-                  onTap: () => _toggle(_keyNewRecipes, _newRecipes, (v) => setState(() => _newRecipes = v)),
-                ),
+                        const SizedBox(height: 28),
 
-                const SizedBox(height: 32),
+                        // SECTION: Listen (Lists)
+                        PaperSectionHeader(context.tr('lists_section')),
+                        _buildToggleItem(
+                          title: context.tr('when_items_added'),
+                          value:
+                              _categoryValue(NotificationCategory.listActivity),
+                          textPrimary: textPrimary,
+                          onTap: () => _toggleCategory(
+                              NotificationCategory.listActivity),
+                        ),
+                        _buildDivider(separatorColor),
+                        _buildToggleItem(
+                          title: context.tr('when_shopping_completed'),
+                          value: _categoryValue(
+                              NotificationCategory.shoppingCompleted),
+                          textPrimary: textPrimary,
+                          onTap: () => _toggleCategory(
+                              NotificationCategory.shoppingCompleted),
+                        ),
+                        _buildDivider(separatorColor),
+                        _buildToggleItem(
+                          title: context.tr('list_invitations'),
+                          value: _categoryValue(
+                              NotificationCategory.listInvitations),
+                          textPrimary: textPrimary,
+                          onTap: () => _toggleCategory(
+                              NotificationCategory.listInvitations),
+                        ),
 
-                // SECTION: Allgemein (General)
-                PaperSectionHeader(context.tr('general_section')),
-                _buildToggleItem(
-                  title: context.tr('weekly_summary'),
-                  value: _weeklySummary,
-                  textPrimary: textPrimary,
-                  onTap: () => _toggle(_keyWeeklySummary, _weeklySummary, (v) => setState(() => _weeklySummary = v)),
+                        const SizedBox(height: 28),
+
+                        // SECTION: Rezepte (Recipes)
+                        PaperSectionHeader(context.tr('recipes_section')),
+                        _buildToggleItem(
+                          title: context.tr('likes_on_recipes'),
+                          value:
+                              _categoryValue(NotificationCategory.recipeLikes),
+                          textPrimary: textPrimary,
+                          onTap: () =>
+                              _toggleCategory(NotificationCategory.recipeLikes),
+                        ),
+                        _buildDivider(separatorColor),
+                        _buildToggleItem(
+                          title: context.tr('comments_notifications'),
+                          value: _categoryValue(
+                              NotificationCategory.recipeComments),
+                          textPrimary: textPrimary,
+                          onTap: () => _toggleCategory(
+                              NotificationCategory.recipeComments),
+                        ),
+                        _buildDivider(separatorColor),
+                        _buildToggleItem(
+                          title: context.tr('new_recipes_from_followed'),
+                          value:
+                              _categoryValue(NotificationCategory.newRecipes),
+                          textPrimary: textPrimary,
+                          onTap: () =>
+                              _toggleCategory(NotificationCategory.newRecipes),
+                        ),
+
+                        const SizedBox(height: 28),
+
+                        // SECTION: Allgemein (General)
+                        PaperSectionHeader(context.tr('general_section')),
+                        _buildToggleItem(
+                          title: context.tr('weekly_summary'),
+                          value: _categoryValue(
+                              NotificationCategory.weeklySummary),
+                          textPrimary: textPrimary,
+                          onTap: () => _toggleCategory(
+                              NotificationCategory.weeklySummary),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
     );
+  }
+
+  bool _categoryValue(NotificationCategory category) {
+    return _categoryValues[category] ?? category.defaultValue;
   }
 
   Widget _buildToggleItem({
