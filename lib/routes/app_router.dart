@@ -156,7 +156,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                 name: 'recipes',
                 pageBuilder: (context, state) => NoTransitionPage(
                   key: state.pageKey,
-                  child: const RecipesScreen(),
+                  child: RecipesScreen(
+                    initialQuery: state.uri.queryParameters['q'],
+                  ),
                 ),
                 routes: [
                   GoRoute(

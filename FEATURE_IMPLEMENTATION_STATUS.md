@@ -1,6 +1,6 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-04 (scheduled routine — Feature 2 focus: QA pass + approved ideas)_
+_Last updated: 2026-07-05 (scheduled routine — Feature 3 focus: Siri/Shortcuts were silently never built into the app; fixed and wired end-to-end)_
 
 ## Environment note (read first)
 
@@ -43,7 +43,7 @@ was **never wired into any screen** — this session wired it up.
 |---|---|---|---|---|
 | 1 | Pricing, offers, cheapest store | ~90% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
-| 3 | Widgets & quick actions | ~55% | In progress | Root cause fixed; needs a real Xcode/device build to confirm |
+| 3 | Widgets & quick actions | ~75% | In progress (this session) | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
 | 5 | Avo mascot & smart notifications | ~20% | Not started | Large scope; see plan below |
 | 6 | Calorie tracking | 0% | Not started | Large greenfield feature; see plan below |
@@ -635,6 +635,185 @@ the single most important item to verify manually before considering
 Feature 3 done — the diagnosis is high-confidence but unverified in
 practice.
 
+**Fifth session, 2026-07-05 (scheduled routine — this feature's dedicated
+session).** A real Flutter 3.35.6 toolchain was available this session
+(downloaded to `/tmp/flutter`), so every Dart change is verified with
+`flutter analyze` — 641 issues before and after (0 errors, 59 warnings, 582
+info), byte-identical once line numbers are normalized out: **zero new
+issues of any severity**. Went looking for "quick actions" beyond the
+widget (the feature title is "Widgets *and quick actions*") and found a
+second, much larger root-cause bug of the exact same shape as the widget's:
+a real, substantial feature existed entirely as source code and did
+**nothing at all** on a real device.
+
+**What was broken:** `ios/Runner/AppIntents.swift` (462 lines — a full Siri
+Shortcuts / App Intents implementation: "add item to list", "create list",
+"show lists", "search recipes", "show saved recipes", "show recipes", plus
+an `AppShortcutsProvider` with real Siri phrases in German and English) has
+existed in the repo since the app's early commits. **It was never added to
+the Xcode project.** Confirmed by grepping `Runner.xcodeproj/project.pbxproj`
+for the filename — zero hits, and there's no `PBXFileSystemSynchronizedRootGroup`
+covering `ios/Runner/` (only the widget extension's folder uses that
+Xcode-16 auto-sync mechanism) that could have picked it up implicitly. The
+file compiled into nothing, shipped in no build, and had zero effect —
+Shortcuts app, Siri, and Spotlight never saw any of these six shortcuts,
+ever. A second file, `ios/Runner/VoiceAssistantPlugin.swift` (legacy
+`INIntent`-based donation), is *also* unbuilt and unregistered, and — not
+that it matters, since it's not compiled either — defines its own
+`class CreateListIntent: INIntent`, which would collide with
+`AppIntents.swift`'s `struct CreateListIntent: AppIntent` if both were ever
+added to the same target. Left `VoiceAssistantPlugin.swift` unbuilt
+(legacy/superseded, no Dart caller — see below) rather than risk that
+collision.
+
+Even had `AppIntents.swift` been compiling all along, it still wouldn't
+have worked: `AddItemToListIntent`/`CreateListIntent` wrote "pending"
+item/list data into `UserDefaults(suiteName: "group.com.shoply.app")` under
+keys `pending_items`/`pending_lists`/`user_lists` — but the Dart side
+(`SiriService.dart`) reads a **completely different storage domain**
+(`SharedPreferences.getInstance()`, which is `UserDefaults.standard`, not
+the App Group suite — the *only* domain shared between an App Intents
+extension process and the main app) under **different key names**
+(`siri_pending_items`/`siri_pending_lists`). Two independent bugs stacked on
+top of the "never compiled" bug: wrong storage suite, wrong keys. A third,
+already-wired call site (`home_screen.dart`'s `_checkSiriPendingItems()`,
+called from `initState`) has perfectly reasonable find-or-create-list logic
+sitting on top of that same permanently-empty `siri_pending_items` source —
+so it runs on every app launch and is a harmless no-op, forever, because
+its data source can never be written to from an extension process. Three
+layered, independent implementation attempts, all dead, none catching the
+others' bugs because none of them were ever exercised end-to-end.
+
+**What I implemented:**
+- **Compiled `AppIntents.swift` into the `Runner` target.** Verified there
+  was no safe automatic way to do this (no synchronized group covers
+  `ios/Runner/`), so added it the same way the existing
+  `LiquidGlassViewFactory.swift` is wired: one `PBXFileReference`, one
+  `PBXBuildFile`, one entry in the Runner group's children, one entry in the
+  Runner target's `Sources` build phase — a 4-line diff. To do this safely
+  without Xcode available to validate the result, installed the `pbxproj`
+  Python library (`pip install pbxproj`) in a venv and used it twice: once
+  to dry-run `add_file()` and read back a guaranteed-unique, non-colliding
+  GID pair, then discarded that (its own writer reformats the *entire* file,
+  which would have made the diff unreviewable), and again afterward to
+  parse my hand-written 4-line edit and confirm (a) the file parses as valid
+  as a whole, and (b) `AppIntents.swift` ends up in the `Runner` target's
+  `Sources` phase only — not `RunnerTests`, not `ShoppingListWidgetExtension`.
+  `VoiceAssistantPlugin.swift` was deliberately left out of the project (see
+  above).
+- **Fixed the App-Group-vs-standard-UserDefaults storage bug at the root**,
+  rather than patching either side to match the other's broken convention:
+  `AddItemToListIntent`/`CreateListIntent` now hand off to Flutter via a
+  deep link (`shoply://add-item?name=...&list=...&quantity=...`,
+  `shoply://create-list?name=...`) — the same working pattern the other four
+  intents already used (`UIApplication.shared.open(url)`), instead of the
+  cross-process UserDefaults queue that could never work. Removed the dead
+  `pending_items`/`pending_lists`/`user_lists` bookkeeping entirely rather
+  than leaving it as inert clutter next to the real fix.
+- **`DeepLinkService`** (`lib/data/services/deep_link_service.dart`) gained
+  two callback fields (`onAddItemRequested`, `onCreateListRequested`) set
+  once from `app.dart` — the one place in the widget tree with both a
+  Riverpod `ref` and the deep-link init call already — since the service
+  itself is a plain singleton with no provider access. `_handleDeepLink` now
+  intercepts these two action-type hosts before falling through to the
+  existing path-based navigation.
+- **`app.dart`** implements the actual add-item/create-list logic:
+  resolve-by-name against the user's real lists (`userListsProvider`),
+  exact case-insensitive match reuses the list, no match creates a new one
+  with that name (matching exactly what the Siri dialog told the user would
+  happen), then adds the item via the existing `ItemsNotifier.addItem` (same
+  Gemini-categorization path as manual entry) and navigates to
+  `/list/:id` — the same route the widget's own deep link already uses.
+- **Fixed `ListNameQuery.suggestedEntities()`** (Siri's "which list?" picker)
+  to read the App Group's `widget_available_lists` key — the real, already-
+  live cache `WidgetService.updateAvailableLists` writes on every list load
+  — instead of the never-written `user_lists` plain-string array. Siri will
+  now actually suggest the user's real lists instead of a hardcoded
+  `["Einkaufsliste", "Wocheneinkauf"]` fallback.
+- **Fixed two broken deep-link routes** that `AppIntents.swift`'s working
+  intents already pointed at, discovered while tracing the flow end-to-end:
+  `shoply://recipes` (host `recipes`, no segments) fell through to the
+  default case and opened Home instead of the Recipes tab;
+  `shoply://recipes/search?q=X` fell through to a nonexistent `/search`
+  route. Added explicit `recipes`/`lists` cases to
+  `_parseCustomSchemePath`, and threaded the search query through properly:
+  `RecipesScreen` now takes an `initialQuery` (set post-frame in `initState`
+  — setting `.text` fires the existing search listener synchronously, which
+  calls `setState`, so it can't happen during `initState` itself), and
+  `app_router.dart`'s `/recipes` route passes `state.uri.queryParameters['q']`
+  through. `shoply://recipes/saved` already matched an existing route once
+  `recipes` had a case at all.
+- **Removed the widget's dead "pending toggles" pull-sync path** — a second,
+  smaller instance of the same disease. `WidgetService.getPendingToggles`/
+  `clearPendingToggles` (Dart), `AppDelegate.swift`'s matching native
+  handlers, and `ItemsNotifier._syncWidgetToggles()` (which called them on
+  every single list load) all round-tripped through a `widget_pending_toggles`
+  App Group key that **nothing has ever written** — the widget's real
+  toggle path (`ToggleItemIntent` → `toggleItemInDefaults` →
+  `syncToggleToSupabase`) writes the item state directly and syncs straight
+  to Supabase, bypassing this queue entirely. Confirmed zero writers via
+  grep across the whole repo (Dart and Swift) before deleting.
+- **Corrected `CLAUDE.md`'s iOS Native Components note**, which claimed
+  `VoiceAssistantPlugin.swift` was "iOS-only, initialized via `SiriService`"
+  — it never was; documented the real (now-fixed) architecture and the
+  reason `VoiceAssistantPlugin.swift` stays unbuilt.
+
+**Explicitly NOT done / still open:**
+- **The single most important remaining step is the same as last session:
+  a real Xcode build.** This session's fix makes `AppIntents.swift` compile
+  into the target for the first time ever — that specific claim (it wasn't
+  in the project file, now it is, verified by parsing) is about as
+  confident as source inspection can be, but only Xcode can confirm it
+  actually builds clean, and only a device can confirm Siri/Shortcuts/
+  Spotlight actually surface the six shortcuts and that tapping "Add Milch
+  to Einkaufsliste" really adds the item.
+- **`SiriService.dart`'s method-channel path (`com.shoply.app/siri`) and
+  `home_screen.dart`'s `_checkSiriPendingItems()`** are now confirmed-dead
+  in a second, independent way (no native code anywhere calls that channel)
+  but were left in place rather than deleted this session — they're inert,
+  not harmful, and touching `home_screen.dart`'s init flow felt like a
+  separate, riskier change than the deep-link fix this session focused on.
+  Flagged as a cleanup idea below.
+- Still not built: a distinct "today's list" widget, "recently used items"
+  quick-add widget, or "Avo suggestion" widget (Feature 5 doesn't exist yet
+  to suggest anything from). The existing configurable widget (pick any one
+  list) plus the now-working Siri "add item" shortcut cover a meaningful
+  slice of "low-friction home-screen actions" without inventing a new
+  WidgetKit target this session.
+- The two pre-existing, non-blocking issues flagged last session
+  (`SavedRecipesWidget` plumbing with no matching WidgetKit widget; the
+  widget target's `IPHONEOS_DEPLOYMENT_TARGET = 26.0`) are unchanged —
+  still worth a look, not touched here.
+
+**Files changed (fifth session):**
+`ios/Runner.xcodeproj/project.pbxproj` (compile `AppIntents.swift` into
+`Runner`), `ios/Runner/AppIntents.swift` (deep-link handoff instead of the
+broken UserDefaults queue, real list-cache read, dead bookkeeping removed),
+`ios/Runner/AppDelegate.swift` (removed dead pending-toggles handlers),
+`lib/data/services/deep_link_service.dart` (action-link callbacks,
+`recipes`/`lists` routing), `lib/app.dart` (Siri add-item/create-list
+handlers), `lib/presentation/screens/recipes/recipes_screen.dart`
+(`initialQuery`), `lib/routes/app_router.dart` (`q` query param wiring),
+`lib/data/services/widget_service.dart` +
+`lib/presentation/state/items_provider.dart` (dead pending-toggles code
+removed), `CLAUDE.md` (corrected Siri doc note).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh
+(`storage.googleapis.com`); `flutter analyze` before/after every change,
+diffed with line/column numbers normalized out — **byte-identical issue
+set** (641 issues: 0 errors, 59 warnings, 582 info; zero new issues of any
+severity). Validated the hand-edited `project.pbxproj` by parsing it with
+the Python `pbxproj` library (confirms the OpenStep-plist grammar is intact
+— a real syntax error would fail to parse, not just look different) and
+asserting `AppIntents.swift` lands in exactly one target's `Sources` phase
+(`Runner`, not `RunnerTests`/`ShoppingListWidgetExtension`). Traced every
+new deep-link route against `app_router.dart`'s actual route table to
+confirm each one resolves to a real screen. Confirmed via repo-wide grep
+that `widget_pending_toggles` had zero writers anywhere before deleting the
+code that read it. **Not run (no macOS/Xcode in this container):** an
+actual Xcode build, Siri/Shortcuts appearing on a real device, or the
+add-item/create-list flow end-to-end on a device.
+
 ---
 
 ## Feature 4 — AI assistant app control
@@ -868,6 +1047,49 @@ exists, "N calories left — 3 dinner ideas from your list."
 ---
 
 ## Ideas / Needs My Approval
+
+- [ ] IDEA: Delete the now-doubly-confirmed-dead Siri legacy code:
+  `ios/Runner/VoiceAssistantPlugin.swift` (unbuilt, unregistered, no Dart
+  caller), `SiriService.dart`'s method-channel path
+  (`com.shoply.app/siri`'s `addItemToList`/`createList`/`getLists` handling,
+  the `siri_pending_items`/`siri_pending_lists` SharedPreferences
+  bookkeeping), and `home_screen.dart`'s `_checkSiriPendingItems()` (a
+  permanent no-op called on every app launch, since nothing can ever write
+  to a plain-`SharedPreferences` key from an App Intents extension process
+  — see Feature 3's fifth-session note for why).
+  - Why it helps: three confirmed-dead code paths for the exact same
+    feature (Siri add-item) is confusing for whoever touches this next —
+    the fifth session almost built on top of the wrong one before tracing
+    the App-Group-vs-standard-UserDefaults process boundary all the way
+    through.
+  - Expected user value: none directly (already invisible; the real path is
+    the new `shoply://add-item` deep link).
+  - Expected business/premium value: none directly; prevents a future
+    regression where someone "fixes" the dead path instead of the live one.
+  - Complexity: Low (pure deletion, already confirmed zero live callers this
+    session) to Medium (`home_screen.dart`'s `_checkSiriPendingItems` touches
+    `initState`, worth a careful look rather than a blind delete).
+  - Risk: Low — all three paths are provably unreachable today.
+  - Recommendation: yes, as a small follow-up once the Feature 3 deep-link
+    fix has been confirmed working on a real device (don't want two Siri
+    changes unverified at the same time).
+
+- [ ] IDEA: Build a distinct "Today's list" and/or "recently used items"
+  WidgetKit widget, per the original Feature 3 brief.
+  - Why it helps: the existing widget covers "my one chosen list" well; a
+    second widget kind (e.g. "items you buy most often, tap to add to your
+    active list") adds a genuinely different quick-add surface.
+  - Expected user value: medium — a real convenience, not just parity with
+    what already exists.
+  - Expected business/premium value: low-medium (retention via more
+    home-screen surface area).
+  - Complexity: Medium-high — a new WidgetKit target/kind is exactly the
+    kind of change that can't be verified at all without Xcode, more so than
+    editing an existing one.
+  - Risk: Medium without build verification.
+  - Recommendation: needs decision — do after the current widget +
+    Siri/Shortcuts fixes are confirmed working on a real device, so any new
+    build issue is easy to isolate to the new code.
 
 - [x] IDEA (approved, DONE this session — with a correction): Delete the dead
   OCR/flyer-deal pipeline now that the marktguru pipeline is the real,

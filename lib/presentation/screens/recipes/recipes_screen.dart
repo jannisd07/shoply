@@ -21,7 +21,11 @@ import 'package:shoply/data/services/contextual_prompt_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class RecipesScreen extends ConsumerStatefulWidget {
-  const RecipesScreen({super.key});
+  const RecipesScreen({super.key, this.initialQuery});
+
+  /// Pre-fills and triggers the search, e.g. from a Siri "search recipes"
+  /// deep link (`shoply://recipes/search?q=...`).
+  final String? initialQuery;
 
   @override
   ConsumerState<RecipesScreen> createState() => _RecipesScreenState();
@@ -62,6 +66,15 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     _searchController.addListener(_onSearchTextChanged);
     _loadAllData();
     _maybeShowDietPrompt();
+
+    final initialQuery = widget.initialQuery;
+    if (initialQuery != null && initialQuery.isNotEmpty) {
+      // Deferred: setting .text fires _onSearchTextChanged synchronously,
+      // which calls setState — not allowed during initState itself.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchController.text = initialQuery;
+      });
+    }
   }
   
   /// Show diet preferences prompt once on first visit

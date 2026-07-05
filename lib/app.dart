@@ -18,6 +18,9 @@ import 'package:shoply/presentation/widgets/tutorial/tutorial_overlay.dart';
 import 'package:shoply/routes/app_router.dart';
 import 'package:shoply/data/services/deep_link_service.dart';
 import 'package:shoply/data/services/navigation_service.dart';
+import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/state/items_provider.dart';
 
 class AvoApp extends ConsumerStatefulWidget {
   const AvoApp({super.key});
@@ -77,6 +80,9 @@ class _AvoAppState extends ConsumerState<AvoApp> {
       // Set router in NavigationService for notification handling
       NavigationService.instance.setRouter(router);
 
+      DeepLinkService.instance.onAddItemRequested = _handleSiriAddItem;
+      DeepLinkService.instance.onCreateListRequested = _handleSiriCreateList;
+
       await DeepLinkService.instance.initialize(router);
 
       // Process any pending deep link that opened the app
@@ -84,6 +90,61 @@ class _AvoAppState extends ConsumerState<AvoApp> {
     } catch (e) {
       debugPrint('⚠️ [APP] Failed to initialize deep links: $e');
     }
+  }
+
+  /// "Add {item} to {list}" via Siri/Shortcuts (`AddItemToListIntent` in
+  /// AppIntents.swift). [listName] comes from Siri's own suggestion list or
+  /// free text, so it may not match a real list's casing/name exactly —
+  /// reuse the list on an exact case-insensitive match, otherwise create a
+  /// new one with that name (matches what the Siri dialog told the user
+  /// would happen).
+  Future<void> _handleSiriAddItem(
+    String itemName,
+    String listName,
+    double? quantity,
+  ) async {
+    try {
+      final lists = await ref.read(userListsProvider.future);
+      final target = _findListByName(lists, listName) ??
+          await ref.read(listsNotifierProvider.notifier).createList(listName);
+
+      await ref
+          .read(itemsNotifierProvider(target.id).notifier)
+          .addItem(name: itemName, quantity: quantity ?? 1.0);
+
+      ref.read(routerProvider).go(
+            Uri(path: '/list/${target.id}', queryParameters: {'name': target.name})
+                .toString(),
+          );
+      debugPrint('✅ [SIRI] Added "$itemName" to "${target.name}"');
+    } catch (e) {
+      debugPrint('❌ [SIRI] Failed to add "$itemName" to "$listName": $e');
+    }
+  }
+
+  /// "Create list {name}" via Siri/Shortcuts (`CreateListIntent`). Reuses an
+  /// existing list with the same name instead of creating a duplicate.
+  Future<void> _handleSiriCreateList(String listName) async {
+    try {
+      final lists = await ref.read(userListsProvider.future);
+      final target = _findListByName(lists, listName) ??
+          await ref.read(listsNotifierProvider.notifier).createList(listName);
+
+      ref.read(routerProvider).go(
+            Uri(path: '/list/${target.id}', queryParameters: {'name': target.name})
+                .toString(),
+          );
+      debugPrint('✅ [SIRI] Opened list "${target.name}"');
+    } catch (e) {
+      debugPrint('❌ [SIRI] Failed to create list "$listName": $e');
+    }
+  }
+
+  ShoppingListModel? _findListByName(List<ShoppingListModel> lists, String name) {
+    for (final list in lists) {
+      if (list.name.toLowerCase() == name.toLowerCase()) return list;
+    }
+    return null;
   }
 
   @override

@@ -75,10 +75,6 @@ import WidgetKit
         self.clearWidgetData(result: result)
       case "refreshAllWidgets":
         self.refreshAllWidgets(result: result)
-      case "getPendingToggles":
-        self.getPendingToggles(result: result)
-      case "clearPendingToggles":
-        self.clearPendingToggles(result: result)
       case "updateAvailableLists":
         self.updateAvailableLists(call.arguments as? [String: Any], result: result)
       case "updateSupabaseCredentials":
@@ -166,32 +162,6 @@ import WidgetKit
     if #available(iOS 14.0, *) {
       WidgetCenter.shared.reloadAllTimelines()
       print("✅ [Widget] All widget timelines reloaded")
-    }
-    result(true)
-  }
-
-  private func getPendingToggles(result: FlutterResult) {
-    if let defaults = UserDefaults(suiteName: appGroupId) {
-      let toggles = defaults.array(forKey: "widget_pending_toggles") as? [[String: Any]] ?? []
-      // Convert to Flutter-compatible format
-      let flutterToggles = toggles.map { toggle -> [String: Any] in
-        return [
-          "itemId": toggle["itemId"] as? String ?? "",
-          "timestamp": toggle["timestamp"] as? Double ?? 0,
-        ]
-      }
-      print("✅ [Widget] Returning \(flutterToggles.count) pending toggles")
-      result(flutterToggles)
-    } else {
-      result([])
-    }
-  }
-
-  private func clearPendingToggles(result: FlutterResult) {
-    if let defaults = UserDefaults(suiteName: appGroupId) {
-      defaults.removeObject(forKey: "widget_pending_toggles")
-      defaults.synchronize()
-      print("✅ [Widget] Cleared pending toggles")
     }
     result(true)
   }

@@ -3,6 +3,26 @@ import AppIntents
 import UIKit
 import SwiftUI
 
+// MARK: - Shared App Group Helpers
+//
+// The Flutter app already keeps a live cache of the user's real lists in the
+// App Group (`WidgetService.updateAvailableLists`, written on every list load
+// — see `ShoppingListWidget.swift`'s `loadAvailableLists()` for the sibling
+// reader in the widget extension target). Siri/Shortcuts reads that same
+// cache instead of a separate, never-populated key.
+private let kShoplyAppGroupId = "group.com.shoply.app"
+private let kShoplyAvailableListsKey = "widget_available_lists"
+
+private func loadShoplyListNames() -> [String] {
+    guard let defaults = UserDefaults(suiteName: kShoplyAppGroupId),
+          let jsonString = defaults.string(forKey: kShoplyAvailableListsKey),
+          let jsonData = jsonString.data(using: .utf8),
+          let array = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: String]] else {
+        return []
+    }
+    return array.compactMap { $0["name"] }
+}
+
 // MARK: - Item Name Entity
 @available(iOS 16.0, *)
 struct ItemNameEntity: AppEntity {
@@ -49,18 +69,17 @@ struct ListNameQuery: EntityQuery {
     }
     
     func suggestedEntities() async throws -> [ListNameEntity] {
-        // Get lists from UserDefaults
-        let defaults = UserDefaults(suiteName: "group.com.shoply.app")
-        var lists = defaults?.array(forKey: "user_lists") as? [String] ?? ["Einkaufsliste", "Wocheneinkauf"]
-        
+        var lists = loadShoplyListNames()
+        if lists.isEmpty { lists = ["Einkaufsliste"] }
+
         // Add "New List" option at the end
         lists.append("➕ Neue Liste erstellen")
-        
+
         return lists.map { ListNameEntity(id: $0) }
     }
-    
+
     func defaultResult() async -> ListNameEntity? {
-        return ListNameEntity(id: "Einkaufsliste")
+        return ListNameEntity(id: loadShoplyListNames().first ?? "Einkaufsliste")
     }
 }
 
@@ -102,47 +121,30 @@ struct AddItemToListIntent: AppIntent {
             // If they entered text, use it as the new list name
             let newListName = newListEntity.id
             
-            // Only create if it's not the placeholder
+            // Only proceed if it's not the placeholder; the Flutter side creates
+            // the list on the fly if no existing list has this name (see
+            // DeepLinkService's add-item handler), so no App Group bookkeeping
+            // is needed here beyond passing the chosen name along.
             if newListName != "➕ Neue Liste erstellen" && !newListName.isEmpty {
                 targetList = newListName
-                
-                // Add to user lists
-                let defaults = UserDefaults(suiteName: "group.com.shoply.app")
-                var lists = defaults?.array(forKey: "user_lists") as? [String] ?? []
-                if !lists.contains(targetList) {
-                    lists.append(targetList)
-                    defaults?.set(lists, forKey: "user_lists")
-                }
-                
-                // Create the list in pending lists
-                var pendingLists = defaults?.array(forKey: "pending_lists") as? [[String: Any]] ?? []
-                let newList: [String: Any] = [
-                    "name": targetList,
-                    "timestamp": Date().timeIntervalSince1970
-                ]
-                pendingLists.append(newList)
-                defaults?.set(pendingLists, forKey: "pending_lists")
-                defaults?.synchronize()
             }
         }
-        
-        // Send data to Flutter via UserDefaults (App Group)
-        let defaults = UserDefaults(suiteName: "group.com.shoply.app")
-        
-        var pendingItems = defaults?.array(forKey: "pending_items") as? [[String: Any]] ?? []
-        
-        let newItem: [String: Any] = [
-            "itemName": item,
-            "listName": targetList,
-            "quantity": quantity ?? 1.0,
-            "category": "",
-            "timestamp": Date().timeIntervalSince1970
+
+        // Hand off to the Flutter app via a deep link — mirrors the working
+        // pattern used by the recipe intents below (URL-open), instead of the
+        // old App Group "pending_items" queue that Flutter never read (it
+        // lived in a different UserDefaults suite with different key names,
+        // so items added via Siri silently vanished).
+        var components = URLComponents(string: "shoply://add-item")!
+        components.queryItems = [
+            URLQueryItem(name: "name", value: item),
+            URLQueryItem(name: "list", value: targetList),
+            URLQueryItem(name: "quantity", value: "\(quantity ?? 1.0)"),
         ]
-        
-        pendingItems.append(newItem)
-        defaults?.set(pendingItems, forKey: "pending_items")
-        defaults?.synchronize()
-        
+        if let url = components.url {
+            await UIApplication.shared.open(url)
+        }
+
         return .result(
             dialog: IntentDialog("\(item) wurde zu \(targetList) hinzugefügt"),
             view: AddItemResultView(itemName: item, listName: targetList)
@@ -191,31 +193,20 @@ struct CreateListIntent: AppIntent {
         Summary("Erstelle Liste \(\.$listName)")
     }
     
+    @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let defaults = UserDefaults(suiteName: "group.com.shoply.app")
         let name = listName.id
-        
-        var lists = defaults?.array(forKey: "user_lists") as? [String] ?? []
-        
-        if !lists.contains(name) {
-            lists.append(name)
-            defaults?.set(lists, forKey: "user_lists")
-            defaults?.synchronize()
-            
-            let newList: [String: Any] = [
-                "name": name,
-                "timestamp": Date().timeIntervalSince1970
-            ]
-            
-            var pendingLists = defaults?.array(forKey: "pending_lists") as? [[String: Any]] ?? []
-            pendingLists.append(newList)
-            defaults?.set(pendingLists, forKey: "pending_lists")
-            defaults?.synchronize()
-            
-            return .result(dialog: "Liste '\(name)' wurde erstellt")
-        } else {
-            return .result(dialog: "Liste '\(name)' existiert bereits")
+        let alreadyExists = loadShoplyListNames().contains { $0.caseInsensitiveCompare(name) == .orderedSame }
+
+        var components = URLComponents(string: "shoply://create-list")!
+        components.queryItems = [URLQueryItem(name: "name", value: name)]
+        if let url = components.url {
+            await UIApplication.shared.open(url)
         }
+
+        return .result(dialog: alreadyExists
+            ? "Liste '\(name)' existiert bereits — ich öffne sie"
+            : "Liste '\(name)' wird erstellt")
     }
 }
 
@@ -278,15 +269,9 @@ struct SearchRecipesIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetView {
         let query = searchQuery.id
-        
-        // Store search query for Flutter to pick up
-        let defaults = UserDefaults(suiteName: "group.com.shoply.app")
-        defaults?.set("searchRecipes", forKey: "siri_action")
-        defaults?.set(query, forKey: "siri_search_query")
-        defaults?.set(Date().timeIntervalSince1970, forKey: "siri_timestamp")
-        defaults?.synchronize()
-        
-        // Open app with search
+
+        // Open app with search — DeepLinkService parses the `q` query param
+        // and passes it straight to RecipesScreen's search field.
         if let url = URL(string: "shoply://recipes/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)") {
             await UIApplication.shared.open(url)
         }
@@ -332,13 +317,8 @@ struct ShowSavedRecipesIntent: AppIntent {
     
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetView {
-        // Store action for Flutter
-        let defaults = UserDefaults(suiteName: "group.com.shoply.app")
-        defaults?.set("showSavedRecipes", forKey: "siri_action")
-        defaults?.set(Date().timeIntervalSince1970, forKey: "siri_timestamp")
-        defaults?.synchronize()
-        
-        // Open app to saved recipes
+        // Open app to saved recipes — DeepLinkService routes this to
+        // /recipes/saved directly.
         if let url = URL(string: "shoply://recipes/saved") {
             await UIApplication.shared.open(url)
         }

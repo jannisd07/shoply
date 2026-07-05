@@ -22,6 +22,17 @@ class DeepLinkService {
   String? _pendingDeepLink;
   bool _isInitialized = false;
 
+  /// Handles `shoply://add-item?name=...&list=...&quantity=...` — fired by
+  /// the Siri/Shortcuts "add item" App Intent (see `AppIntents.swift`). Set
+  /// once during app init (in `app.dart`, where a Riverpod `ref` is
+  /// available) since this service itself has no provider access.
+  Future<void> Function(String itemName, String listName, double? quantity)?
+      onAddItemRequested;
+
+  /// Handles `shoply://create-list?name=...` — fired by the Siri/Shortcuts
+  /// "create list" App Intent.
+  Future<void> Function(String listName)? onCreateListRequested;
+
   /// Initialize the deep link service with the app router
   Future<void> initialize(GoRouter router) async {
     if (_isInitialized) return;
@@ -90,11 +101,55 @@ class DeepLinkService {
     debugPrint('   - Path: ${uri.path}');
     debugPrint('   - Segments: ${uri.pathSegments}');
 
+    // Action-type links (Siri/Shortcuts) perform a data mutation instead of a
+    // plain navigation — handle them before the path-based routing below.
+    if (uri.scheme == customScheme && _handleActionLink(uri)) return;
+
     // Handle different link types
     final path = _extractPath(uri);
     if (path != null) {
       debugPrint('🔗 [DEEP_LINK] Navigating to: $path');
       _router!.go(path);
+    }
+  }
+
+  /// Handles Siri/Shortcuts action links (`add-item`, `create-list`) that
+  /// mutate app data rather than just navigate. Returns true if [uri] was an
+  /// action link (handled or not — either way, normal navigation is skipped).
+  bool _handleActionLink(Uri uri) {
+    switch (uri.host) {
+      case 'add-item':
+        final name = uri.queryParameters['name'];
+        final list = uri.queryParameters['list'];
+        if (name == null || name.isEmpty || list == null || list.isEmpty) {
+          debugPrint('⚠️ [DEEP_LINK] add-item missing name/list: $uri');
+          return true;
+        }
+        final quantity = double.tryParse(uri.queryParameters['quantity'] ?? '');
+        final handler = onAddItemRequested;
+        if (handler == null) {
+          debugPrint('⚠️ [DEEP_LINK] add-item received before app was ready');
+          return true;
+        }
+        unawaited(handler(name, list, quantity));
+        return true;
+
+      case 'create-list':
+        final name = uri.queryParameters['name'];
+        if (name == null || name.isEmpty) {
+          debugPrint('⚠️ [DEEP_LINK] create-list missing name: $uri');
+          return true;
+        }
+        final handler = onCreateListRequested;
+        if (handler == null) {
+          debugPrint('⚠️ [DEEP_LINK] create-list received before app was ready');
+          return true;
+        }
+        unawaited(handler(name));
+        return true;
+
+      default:
+        return false;
     }
   }
 
@@ -166,17 +221,33 @@ class DeepLinkService {
           return '/list/${segments[0]}';
         }
         return '/home';
-        
+
+      case 'lists':
+        // No standalone "all lists" screen — Home is the lists overview.
+        return '/home';
+
+      case 'recipes':
+        if (segments.isNotEmpty) {
+          switch (segments[0]) {
+            case 'saved':
+              return '/recipes/saved';
+            case 'search':
+              final q = uri.queryParameters['q'] ?? '';
+              return Uri(path: '/recipes', queryParameters: {'q': q}).toString();
+          }
+        }
+        return '/recipes';
+
       case 'author':
         if (segments.isNotEmpty) {
           return '/author/${segments[0]}';
         }
         return '/recipes';
-        
+
       case 'addItem':
         // Google Assistant action
         return '/home';
-        
+
       default:
         // Handle path-based format (shoply:///recipe/123)
         if (uri.path.isNotEmpty) {

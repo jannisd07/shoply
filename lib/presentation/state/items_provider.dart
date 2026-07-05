@@ -59,9 +59,6 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
       state = const AsyncValue.loading();
     }
     try {
-      // Sync any pending widget toggles first
-      await _syncWidgetToggles();
-
       final items = await _repository.getListItems(listId);
       state = AsyncValue.data(items);
 
@@ -104,34 +101,6 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     }
   }
   
-  /// Sync any pending toggles that happened in the iOS widget
-  Future<void> _syncWidgetToggles() async {
-    try {
-      final pendingItemIds = await WidgetService.getPendingToggles();
-      if (pendingItemIds.isEmpty) return;
-
-      debugPrint('🔄 [Widget Sync] Processing ${pendingItemIds.length} widget toggles');
-
-      // Get current items to determine their current state
-      final currentItems = await _repository.getListItems(listId);
-      final itemMap = {for (var item in currentItems) item.id: item};
-
-      for (final itemId in pendingItemIds) {
-        final item = itemMap[itemId];
-        if (item != null) {
-          // Toggle: if currently checked -> uncheck, if unchecked -> check
-          await _repository.toggleItemChecked(itemId, !item.isChecked);
-          debugPrint('✅ [Widget Sync] Toggled "${ item.name}" -> ${!item.isChecked}');
-        }
-      }
-
-      await WidgetService.clearPendingToggles();
-      debugPrint('✅ [Widget Sync] All widget toggles synced');
-    } catch (e) {
-      debugPrint('⚠️ [Widget Sync] Failed: $e');
-    }
-  }
-
   @override
   void dispose() {
     _repository.unsubscribeFromItemChanges(listId);

@@ -159,50 +159,6 @@ class WidgetService {
       debugPrint('⚠️ [Widget] Refresh failed: $e');
     }
   }
-
-  /// Get pending toggle actions from the widget (items checked/unchecked in widget)
-  static Future<List<String>> getPendingToggles() async {
-    if (!Platform.isIOS) return [];
-
-    try {
-      final result = await _channel.invokeMethod('getPendingToggles');
-      if (result is List) {
-        final toggleCounts = <String, int>{};
-        for (final toggle in result) {
-          if (toggle is Map) {
-            final itemId = toggle['itemId'] as String?;
-            if (itemId != null && itemId.isNotEmpty) {
-              toggleCounts[itemId] = (toggleCounts[itemId] ?? 0) + 1;
-            }
-          }
-        }
-        // Only include items toggled an odd number of times (net state change)
-        final itemIds = <String>[];
-        for (final entry in toggleCounts.entries) {
-          if (entry.value % 2 == 1) {
-            itemIds.add(entry.key);
-          }
-        }
-        debugPrint('✅ [Widget] Got ${itemIds.length} net pending toggles');
-        return itemIds;
-      }
-    } catch (e) {
-      debugPrint('⚠️ [Widget] Get pending toggles failed: $e');
-    }
-    return [];
-  }
-
-  /// Clear pending toggles after they've been synced
-  static Future<void> clearPendingToggles() async {
-    if (!Platform.isIOS) return;
-
-    try {
-      await _channel.invokeMethod('clearPendingToggles');
-      debugPrint('✅ [Widget] Cleared pending toggles');
-    } catch (e) {
-      debugPrint('⚠️ [Widget] Clear pending toggles failed: $e');
-    }
-  }
 }
 
 class WidgetItem {
