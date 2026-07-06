@@ -1,8 +1,20 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-05, second run (scheduled routine — Feature 5 focus: Avo mascot consolidation, the single enforced notification gate, and real behavior-based restock nudges)_
+_Last updated: 2026-07-06 (scheduled routine — Feature 6 focus: calorie tracking built from scratch — goals/BMR calculator, food diary with Open Food Facts search/barcode/manual/AI-photo entry, weight/water tracking, weekly progress, and recipe-to-diary logging)_
 
 ## Environment note (read first)
+
+The 2026-07-06 Feature-6 session downloaded Flutter 3.35.6 stable fresh into
+`/tmp/flutter` (same approach as prior sessions) and verified every change
+with a full-project `flutter analyze` and `flutter test` before and after.
+Baseline (this branch, before this session's changes): 608 issues (0 errors,
+59 warnings, 549 info). After this session's ~20 new files + 3 touched files:
+**still 608 issues (0 errors, 59 warnings)** — byte-identical to baseline
+once new-file paths are excluded; every new/touched file is analyzer-clean
+with zero issues of any severity. `flutter test` passes ("All tests
+passed"). `flutter build ios` remains impossible here (no macOS/Xcode in the
+Linux container) — see "Not verified" in the Feature 6 section below for
+what that specifically leaves unconfirmed.
 
 Recent scheduled sessions (including the latest, 2026-07-05) download a real
 Flutter SDK into the container and verify every change with a full-project
@@ -55,8 +67,8 @@ was **never wired into any screen** — this session wired it up.
 | 3 | Widgets & quick actions | ~75% | In progress (this session) | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
 | 5 | Avo mascot & smart notifications | ~60% | In progress (this session) | Recipe/price-drop nudges still open; needs device QA for scheduled notifications |
-| 6 | Calorie tracking | 0% | Not started | Large greenfield feature; see plan below |
-| 7 | Personalized onboarding & navbar | ~30% | In progress | Goal questionnaire depends on Feature 6 |
+| 6 | Calorie tracking | ~70% | In progress (this session) | Barcode camera scan, diet challenges (16:8/no-sugar), Avo integration, and meal-photo storage not built; needs device QA |
+| 7 | Personalized onboarding & navbar | ~30% | In progress | Feature 6's goal model/calculator now exist and are ready to hook into a rebuilt onboarding flow |
 | 8 | Cross-feature UX / growth / premium | ~10% | Not started | Depends on 1–7 |
 
 ---
@@ -1018,42 +1030,169 @@ sessions is specific to newer SDKs (3.44.x) where `IconData` became `final`.
 
 ## Feature 6 — Complete calorie tracking
 
-**Not implemented this session — 0%, confirmed genuinely greenfield.**
-Full-repo search found only recipe-level, display-only nutrition (`Recipe.nutrition`
-JSONB + a Gemini one-shot estimator already exposed via Avo's
-`get_recipe_nutrition` tool) and diet-tag/allergen data (`DietType`,
-`AllergyType` — unrelated to calorie counting). No food diary, meal log,
-weight log, water log, barcode scanner (package commented out), or nutrition
-API integration exists anywhere, in Dart or in the database. Two dead-code
-duplicate `NutritionInfo`/`RecipeNutrition` classes and an unused
-`recipe_nutrition` SQL table were found as a side effect — worth a cleanup
-pass separately.
+**Before this session:** 0%, confirmed genuinely greenfield in Dart (see the
+prior session's audit above — still accurate). However, exactly like the
+Feature 1/2 precedent documented at the top of this file, **the Supabase
+schema had already been built and applied live** (`nutrition_goals`,
+`food_log_entries`, `weight_log`, `water_log`, `nutrition_challenges` — all
+with correct RLS, check constraints matching this brief's exact enums, and
+sensible indexes/unique constraints) with **zero corresponding Dart code and
+no migration file in the repo**. This session verified the live schema via
+the Supabase MCP tools (columns, constraints, indexes, RLS policies — all
+correct and exactly matching the brief), wrote the missing migration file
+for version control, and built the entire Dart/Flutter side on top of it.
 
-**Why I didn't attempt it this session:** This is the single largest item in
-the whole request — a full dashboard, food search/database, barcode
-scanning, AI photo tracking, goal calculation, meal-by-day tracking,
-weight/water tracking, progress graphs, and challenge modes is realistically
-a multi-week feature on its own, and building a database schema + ~15-20 new
-screens with zero compiler verification available in this environment would
-be irresponsible — a single typo could produce a large volume of
-unverifiable, potentially broken code. I'd rather hand you a clean plan than
-a pile of unverified files.
+**What I implemented (real, wired, persisted — not mockups):**
 
-**Suggested phased plan for a follow-up (with build verification available):**
-1. Schema: `user_nutrition_goals` (goal type, target calories/macros, target
-   weight, activity level), `food_log_entries` (day, meal, food, calories,
-   macros, source: manual/recipe/barcode/photo), `weight_log`, `water_log`.
-2. Goal calculator (Mifflin-St Jeor or similar) from onboarding inputs —
-   ties directly into Feature 7.
-3. Manual entry + "log from recipe" (the recipe nutrition data already
-   exists — this is the cheapest first slice with real payoff).
-4. Dashboard (today's totals vs. goal, ring/bar visualization).
-5. Barcode scanning (re-enable `mobile_scanner`, or an Open Food Facts
-   lookup) and AI photo tracking (Gemini vision) — external-data-dependent,
-   should come after the core logging loop works.
-6. Weight/water tracking + progress graphs.
-7. Challenges (16:8, 30-day no sugar) as a lightweight layer on top of the
-   logging data once it exists.
+*Schema & models:*
+- `supabase/migrations/20260706000000_calorie_tracking.sql` — documents the
+  already-live schema (idempotent, same pattern as the pricing/splits
+  migration).
+- `NutritionGoal`, `FoodLogEntry` (+ `DailyNutritionTotals`),
+  `WeightLogEntry`, `WaterLogEntry`, `FoodProduct` models
+  (`lib/data/models/`) — typed enums (`NutritionGoalType`, `ActivityLevel`,
+  `MealType`, `FoodLogSource`) with DB-value mapping, matching the live
+  check constraints exactly.
+
+*Services:*
+- `NutritionGoalService` + `NutritionGoalCalculator` — Mifflin-St Jeor BMR ×
+  activity factor, adjusted for goal type (deficit/surplus derived from
+  target weight + timeline, clamped to a safe 200-1000 kcal/day range and a
+  1200/1500 kcal absolute floor), with a protein-first macro split (higher
+  g/kg for muscle gain and weight loss to preserve lean mass). Sanity-tested
+  with a throwaway `dart` script against 5 realistic profiles (maintenance,
+  loss, gain, an extreme short-timeline case to confirm the safety clamp
+  holds, and the no-target-weight fallback) — all produced plausible
+  targets, no crashes, no negative/zero values, macros always sum back to
+  ~the calorie target.
+- `FoodLogService`, `WeightLogService` (upsert-per-day), `WaterLogService` —
+  straightforward CRUD + day/week aggregation, same singleton-service
+  pattern as `ExpenseSplitService`.
+- `OpenFoodFactsService` — **real, live, free, keyless** food database
+  integration (no new API key needed, unlike the Gemini features). Verified
+  against the actual API from this container: name search via
+  `search.openfoodfacts.org` (the legacy `cgi/search.pl` endpoint the docs
+  usually point to returns "temporarily unavailable" for every request
+  right now, confirmed independent of query/headers — the search-a-licious
+  endpoint is the live replacement) and exact-barcode lookup via
+  `world.openfoodfacts.org/api/v2/product/{barcode}.json` (tested live with
+  a real barcode — Nutella, `3017620422003` — full nutriment payload
+  confirmed). Never throws to callers; returns empty/null on any failure so
+  the UI shows a clean empty state instead of an error screen.
+- `MealPhotoAnalysisService` — Gemini **vision** (multimodal `Content.multi`
+  with `DataPart`), a first for this codebase (every other Gemini service
+  here is text-only). One-shot meal-photo → `{food_name, calories,
+  protein_g, carbs_g, fat_g, confidence}` JSON, using `gemini-2.0-flash`
+  (the flash-lite model used elsewhere for categorization isn't
+  multimodal). Deliberately never logs directly — always returns an
+  editable pre-fill, since a single-photo estimate can't know portion
+  weight or hidden oil/sauce; the UI shows the confidence level and lets
+  the user correct any field before saving.
+
+*UI (Riverpod, `lib/presentation/screens/calories/`):*
+- **Dashboard** (`calories_screen.dart`, replacing the old "not built yet"
+  v0 placeholder): day switcher, a 7-day mini bar strip (real weekly
+  totals, not a mockup — this is the "progress graphs" requirement),
+  a hand-rolled `CalorieRing` (consumed vs. target, no chart package in this
+  project so a small `CustomPainter` was used — same reasoning applies to
+  `WeightChart`), three macro progress bars, `WaterTrackerCard`
+  (+250/500/750 ml quick-add), and meal-grouped (breakfast/lunch/
+  dinner/snack) food log sections with swipe-to-delete.
+- **Goal setup** (`goal_setup_screen.dart`) — goal type, gender, age,
+  height, current/target weight, activity level (with plain-language
+  descriptions, not just labels), timeline slider — calculates and saves
+  targets, and syncs age/height/gender back onto the user's actual profile
+  (`UserModel`/`users` table) rather than duplicating them silently, since
+  those fields are used elsewhere (diet/allergy logic, personal info
+  screen).
+- **Food entry** (`widgets/food_entry_sheet.dart`) — four tabs in one
+  sheet: **Search** (debounced Open Food Facts search, tap a result → grams
+  dialog → logged with scaled macros), **Barcode** (manual numeric entry +
+  lookup — no camera scanner; see "Not done" below), **Photo** (camera or
+  gallery → Gemini vision → editable pre-fill), **Manual** (direct
+  calorie/macro entry for anything not in a product database, e.g. home
+  cooking).
+- **Weight tracking** (`weight_tracking_screen.dart` +
+  `widgets/weight_chart.dart`) — log today's weight, see a line chart
+  against the goal's target weight (dashed reference line).
+- **Recipe integration** (`widgets/log_recipe_sheet.dart`, wired into
+  `recipe_detail_screen.dart`) — pick a meal + serving count, logs the
+  recipe's nutrition scaled by servings, `source: 'recipe'`,
+  `source_recipe_id` set. **Also revived a real piece of dead code as part
+  of this**: `NutritionInfoWidget` (a fully-built nutrition display card)
+  existed in the repo with zero call sites — recipe nutrition was
+  completely invisible to users everywhere except one Avo chat card. It's
+  now shown on every recipe with nutrition data, tracking-enabled or not
+  (useful info on its own), with the "log to diary" button appearing only
+  when calorie tracking is enabled.
+
+**Explicitly NOT done (honest gaps, not shortcuts):**
+- **Camera barcode scanning.** `mobile_scanner` is commented out in
+  `pubspec.yaml` for iOS build issues (per `CLAUDE.md`, "don't re-enable
+  without testing" — and this container can't build iOS to verify it).
+  Manual barcode entry + Open Food Facts lookup is a real, working
+  alternative, not a stub, but it's not what a "scan the barcode" UX
+  implies. Re-enabling the camera scanner needs a session with a real
+  device/simulator build.
+- **Meal photo storage.** `photo_url` exists on `food_log_entries` but
+  photos aren't uploaded to Supabase Storage — the AI estimate is used to
+  fill the log entry, then the local image is discarded. Adding storage
+  would need a new bucket + upload path; scoped out to keep this session
+  focused on the core tracking loop.
+- **Diet challenges** (16:8 fasting, 30-day no sugar). The
+  `nutrition_challenges` table exists (live schema, migration documented)
+  but has no Dart service or UI yet — deprioritized behind the core
+  logging loop, which is the foundation everything else (including
+  challenges) needs.
+- **Avo integration** ("recommends recipes based on calories
+  remaining", `get_calories_remaining` tool). Deliberately left to Feature
+  4/5's own sessions per the single-feature-mode rule — this session
+  exposes `NutritionGoalService`/`FoodLogService` in a way that a future
+  Avo tool can call directly, but didn't touch
+  `avo_assistant_service.dart`.
+- **Onboarding integration.** The goal questionnaire is a standalone screen
+  reachable from the calorie tab, not wired into the onboarding flow —
+  that's Feature 7's job (see its updated blocker note above); the
+  goal-calculation logic it needs now exists and is ready to be called from
+  there.
+- **Weekly summary / streaks / "what can I still eat" assistant flow** —
+  not built; flagged as ideas below.
+
+**Not verified (no macOS/Xcode/device in this container):** actual
+appearance/layout on a simulator or device (ring sizing, chart rendering,
+sheet scroll behavior on a small screen); real Gemini vision output quality
+on an actual meal photo (the service is analyzer-clean and follows the
+exact same call pattern as the app's other Gemini services, but was not
+exercised against the live API from this container — doing so would need a
+real image and burn a real API call); `image_picker` camera/gallery
+permission prompts on-device.
+
+**Files changed:** `supabase/migrations/20260706000000_calorie_tracking.sql`
+(new), `lib/data/models/{nutrition_goal,food_log_entry,weight_log_entry,
+water_log_entry,food_product}.dart` (new), `lib/data/services/
+{nutrition_goal_service,food_log_service,weight_log_service,
+water_log_service,open_food_facts_service,meal_photo_analysis_service}.dart`
+(new), `lib/presentation/state/nutrition_provider.dart` (new),
+`lib/presentation/screens/calories/{calories_screen.dart (rewritten),
+goal_setup_screen.dart,weight_tracking_screen.dart}` (new/rewritten),
+`lib/presentation/screens/calories/widgets/{calorie_ring,macro_bar,
+water_tracker_card,food_log_tile,food_entry_sheet,weight_chart,
+log_recipe_sheet,weekly_calories_strip}.dart` (new),
+`lib/presentation/screens/recipes/recipe_detail_screen.dart` (nutrition
+card + "log to diary" button added), `lib/core/localization/
+app_translations.dart` (~85 new EN/DE keys).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh; `flutter analyze`
+before/after — 608 issues both times (0 errors, 59 warnings), every new file
+individually confirmed to contribute zero issues of any severity; `flutter
+test` passes. Verified the live DB schema (columns, check constraints,
+indexes, RLS policies) via the Supabase MCP tools against every table before
+writing any Dart code, instead of assuming the brief's shape. Verified the
+Open Food Facts endpoints live with `curl` (search + barcode lookup, real
+data, matching the model's parsing logic). Sanity-tested the goal calculator
+against 5 profiles with a throwaway script (not committed). Traced every new
+provider/service call site by hand for RLS-column/field-name correctness
+against the verified live schema.
 
 ---
 
@@ -1148,6 +1287,64 @@ exists, "N calories left — 3 dinner ideas from your list."
 ---
 
 ## Ideas / Needs My Approval
+
+- [ ] IDEA: Re-enable `mobile_scanner` for real camera barcode scanning in
+  the Feature 6 food-log barcode tab (currently manual numeric entry +
+  Open Food Facts lookup).
+  - Why it helps: "scan the barcode" is the expected UX for packaged food
+    logging apps; manual entry works but is more friction than users expect.
+  - Expected user value: medium-high — barcode scanning is one of the most
+    used actions in apps like this.
+  - Expected business/premium value: low-medium (retention via less
+    friction).
+  - Complexity: Medium — the package is commented out specifically for iOS
+    build issues (`CLAUDE.md`), so this needs a session with a real
+    Xcode/simulator build to verify before shipping, not a blind uncomment.
+  - Risk: Medium without build verification (that's exactly why it's
+    commented out today).
+  - Recommendation: needs decision — do this in a session with real iOS
+    build access.
+
+- [ ] IDEA: Build diet challenges (16:8 fasting, 30-day no sugar) on top of
+  the already-live `nutrition_challenges` table.
+  - Why it helps: explicitly requested in the brief; the schema already
+    exists so this is now a pure Dart/UI task with no backend risk.
+  - Expected user value: medium — a lightweight engagement layer for users
+    already using calorie tracking.
+  - Expected business/premium value: medium (a natural "premium challenges"
+    upsell surface, per the brief's own suggestion).
+  - Complexity: Low-medium (a status/timer UI + one service, similar shape
+    to `ExpenseSplitService`).
+  - Risk: Low.
+  - Recommendation: yes, as a natural next slice of Feature 6.
+
+- [ ] IDEA: Wire calorie tracking into Avo (Feature 4/5) — a
+  `get_calories_remaining` tool, "N calories left, here are 3 dinner ideas
+  from your list" nudges, and a `log_food` tool for "I just ate a banana."
+  - Why it helps: this is explicitly called out in Features 4, 5, and 8 as
+    a cross-feature win, and Feature 6 now provides the real data
+    (`NutritionGoalService`, `FoodLogService`) for it to call.
+  - Expected user value: high — this is the kind of "the app feels smart"
+    moment the brief asks for repeatedly.
+  - Expected business/premium value: medium-high.
+  - Complexity: Medium (follows the exact tool-registration pattern already
+    used for `search_offers`/`split_trip_cost` in
+    `avo_assistant_service.dart`).
+  - Risk: Low — additive, same pattern as existing tools.
+  - Recommendation: yes, as Feature 4 or 5's next dedicated session (not
+    done here per single-feature-mode).
+
+- [ ] IDEA: Upload meal photos to Supabase Storage instead of discarding
+  them after the AI estimate is extracted.
+  - Why it helps: lets a user look back at what they actually ate, and
+    gives a human way to sanity-check an old AI estimate.
+  - Expected user value: medium.
+  - Expected business/premium value: low.
+  - Complexity: Medium (new storage bucket + RLS policy + upload path +
+    `photo_url` already exists on `food_log_entries` for this).
+  - Risk: Low.
+  - Recommendation: needs decision — nice-to-have, not required for the
+    core loop to be genuinely useful.
 
 - [ ] IDEA: Delete the now-doubly-confirmed-dead Siri legacy code:
   `ios/Runner/VoiceAssistantPlugin.swift` (unbuilt, unregistered, no Dart

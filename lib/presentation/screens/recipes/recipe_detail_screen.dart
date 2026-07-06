@@ -17,6 +17,10 @@ import 'package:shoply/presentation/state/saved_recipes_provider.dart';
 import 'package:shoply/presentation/state/recipes_provider.dart';
 import 'package:shoply/presentation/widgets/recipes/star_rating_widget.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/select_list_bottom_sheet.dart';
+import 'package:shoply/core/widgets/design_system.dart';
+import 'package:shoply/presentation/screens/calories/widgets/log_recipe_sheet.dart';
+import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
+import 'package:shoply/presentation/widgets/recipes/nutrition_info_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -497,6 +501,33 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
               child: _buildCookingModeButton(context),
             ),
           ),
+
+          // Nutrition + "log to diary" (calorie tracking integration)
+          if (_recipe!.nutrition != null && _recipe!.nutrition!.hasData)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    NutritionInfoWidget(nutrition: _recipe!.nutrition!, expanded: true),
+                    if (ref.watch(calorieTrackingEnabledProvider)) ...[
+                      const SizedBox(height: 8),
+                      AppOutlineButton(
+                        text: context.tr('log_recipe_cta'),
+                        icon: Icons.add_chart_outlined,
+                        onPressed: () => showLogRecipeSheet(
+                          context,
+                          recipeId: _recipe!.id,
+                          recipeName: _recipe!.name,
+                          nutritionPerServing: _recipe!.nutrition!,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
 
           // Description Section
           SliverToBoxAdapter(
