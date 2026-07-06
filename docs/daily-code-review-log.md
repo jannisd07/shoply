@@ -28,3 +28,55 @@ Findings:
   imports/widgets/routes/localization keys verified to exist and be used).
 
 No changes were made this run (review-only).
+
+## 2026-07-06 — `lib/presentation/screens/lists/list_activities_screen.dart`
+
+Reviewed the file plus its references: `ListActivity`/`ListActivityType`
+(`lib/data/models/list_activity.dart`), `ListActivityService`
+(`lib/data/services/list_activity_service.dart`), the only caller of
+`logActivity`/`notifyCategoryChange` (`category_order_screen.dart`), the
+route (`lib/routes/app_router.dart`), and the notification-tap path
+(`NavigationService.navigateToListActivities`, `fcm_service.dart`,
+`notification_service.dart`).
+
+Findings:
+- **Feature gap**: `ListActivityType` has 13 cases, each with full
+  description/icon/color rendering support, but `logActivity()` is only
+  ever called for 3 of them (`categoryAdded`, `categoryRemoved`,
+  `categoryReordered`), all from `category_order_screen.dart`. The other
+  10 types (item added/removed/checked/unchecked, list shared, member
+  joined/left, list renamed, shopping completed, background changed) are
+  fully built out in the UI but never produced anywhere in the app — this
+  screen is effectively a "category changes log" dressed as a general
+  activity feed.
+- **Design mismatch**: activities are stored only in local
+  `SharedPreferences`, keyed by `listId` with no per-user/device scoping,
+  and there is no Supabase table or sync logic despite the file's own doc
+  comment claiming "synced when possible." For a *shared* list, each
+  member's activity feed only shows changes made on their own device —
+  other members' category edits never appear, they only trigger a push
+  notification (which doesn't write anything into the recipient's local
+  activity log).
+- **Minor bug**: `widget.listName` is threaded all the way through the
+  notification tap → `NavigationService.navigateToListActivities` → GoRouter
+  query param → this screen's constructor, but is never read in `build()`
+  — the app bar always shows the generic `list_activities` translation
+  ("List Activities"/"Listenaktivitäten") instead of naming the list.
+- **Minor bug**: `_showClearConfirmation`'s confirm handler calls
+  `setState` after `await _activityService.clearActivities(...)` with no
+  `mounted` check, unlike `_loadActivities` in the same file which does
+  check `mounted`. Could throw if the screen is popped while the clear is
+  in flight.
+- **Cleanliness**: the screen is declared as `ConsumerStatefulWidget`/
+  `ConsumerState` but never touches `ref` — could be a plain
+  `StatefulWidget`.
+- **Efficiency (minor)**: for a category reorder/add/remove,
+  `logActivity` and `notifyCategoryChange` each independently fetch the
+  current user's `display_name` from Supabase (two round-trips for one
+  event), and `notifyCategoryChange` fetches each member's `fcm_token`
+  one row at a time in a loop instead of a single batched `.in_()` query.
+- No direct security issues found (no auth/RLS logic in this file; local
+  storage is per-device and not attacker-reachable).
+
+No changes were made this run (review-only) — the feature-completeness and
+sync-architecture gaps look like product decisions, not one-line fixes.
