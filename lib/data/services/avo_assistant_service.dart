@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shoply/core/config/env.dart';
+import 'package:shoply/data/models/food_log_entry.dart';
+import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
@@ -11,12 +13,18 @@ import 'package:shoply/data/services/avo_app_knowledge.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
+import 'package:shoply/data/services/food_log_service.dart';
+import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
+import 'package:shoply/data/services/water_log_service.dart';
+import 'package:shoply/data/services/weight_log_service.dart';
+import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide FunctionResponse;
 
 // ════════════════════════════════════════════════════════════════════
@@ -67,8 +75,8 @@ When the user asks to:
 • finish shopping for a list → call complete_list
 • add an item to a list → call add_item_to_list (if multiple lists
   exist and they didn't specify, call ask_pick_list instead)
-• change ANY setting (theme, language, name, diet, allergies, etc.)
-  → call update_setting
+• change ANY setting (theme, language, name, diet, allergies,
+  calorie tracking on/off, etc.) → call update_setting
 • find prices, deals, offers, or "which store is cheapest" for a
   product → call search_offers
 • know what they might need to buy / what's running low / restock
@@ -83,6 +91,24 @@ When the user asks to:
   instead returns a confirmation question — ask the user that question
   verbatim and wait for their reply. Only call the same tool again with
   confirm=true if they clearly say yes. Never skip this step.
+• ask how many calories/macros they have left, what they ate today, or
+  their water intake → call get_nutrition_status
+• say they ate or drank something ("I just ate a banana", "log 200g
+  chicken for lunch") → call log_food. Pass portion/meal_type when the
+  user gives them. Only pass calories/protein_g/carbs_g/fat_g if the
+  USER stated the numbers — otherwise leave them out and the tool
+  estimates them (then mention it's an estimate).
+• log water ("I drank a glass of water") → call log_water
+• tell you their current body weight → call log_weight
+• remove a food diary entry → call delete_food_log (same confirm flow
+  as delete_item; get entry_id from get_nutrition_status first)
+• ask "what can I still eat today?" or want meal ideas for their
+  remaining calories → call get_nutrition_status first, then
+  search_recipes, and prefer recipes whose calories_per_serving fits
+  the remaining calories — say how many kcal each suggestion has.
+If a nutrition tool reports tracking is disabled, offer to enable it
+(update_setting key "calorie_tracking" value "true") — ask first,
+never enable it without the user agreeing.
 • know ANYTHING about Shoply itself (premium, pricing, features,
   how-tos, privacy) → call get_app_info with the topic
 
@@ -230,7 +256,8 @@ After a tool returns, write a short natural-language confirmation
             'update_setting',
             'Change any user setting. Supported keys: theme_mode (light/dark/system), '
                 'accent_color (hex), language (en/de/system), notifications (true/false), '
-                'display_name, diet_preferences (array), allergies (array), age, gender, height.',
+                'display_name, diet_preferences (array), allergies (array), age, gender, '
+                'height, calorie_tracking (true/false — shows/hides the calorie tab).',
             Schema.object(properties: {
               'key': Schema.string(description: 'Setting key'),
               'value': Schema.string(
@@ -311,6 +338,61 @@ After a tool returns, write a short natural-language confirmation
               'list_name': Schema.string(description: 'List name, for the confirmation question'),
               'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
             }, requiredProperties: ['list_id', 'list_name']),
+          ),
+          FunctionDeclaration(
+            'get_nutrition_status',
+            'Today\'s calorie tracking status: calories/protein/carbs/fat consumed '
+                'and remaining vs. the user\'s targets, water intake, and every food '
+                'diary entry logged today (with entry ids). Use for "how many calories '
+                'do I have left", "what did I eat today", or before suggesting meals '
+                'that fit the remaining budget.',
+            Schema.object(properties: {}),
+          ),
+          FunctionDeclaration(
+            'log_food',
+            'Log a food the user ate into today\'s food diary. Only pass '
+                'calories/protein_g/carbs_g/fat_g if the user explicitly stated them; '
+                'when omitted, the tool AI-estimates nutrition from food_name + portion '
+                'and reports estimated=true.',
+            Schema.object(properties: {
+              'food_name': Schema.string(description: 'What was eaten, e.g. "banana", "Spaghetti Bolognese"'),
+              'portion': Schema.string(
+                  description: 'Amount as the user said it, e.g. "200 g", "1 slice", "a large bowl"'),
+              'meal_type': Schema.string(
+                  description: 'One of: breakfast, lunch, dinner, snack. Omit to infer from the time of day.'),
+              'calories': Schema.integer(description: 'ONLY if the user stated the calories'),
+              'protein_g': Schema.number(description: 'ONLY if the user stated it'),
+              'carbs_g': Schema.number(description: 'ONLY if the user stated it'),
+              'fat_g': Schema.number(description: 'ONLY if the user stated it'),
+            }, requiredProperties: ['food_name']),
+          ),
+          FunctionDeclaration(
+            'log_water',
+            'Log drinking water. A glass is ~250 ml, a small bottle 500 ml, a large '
+                'bottle 1000 ml.',
+            Schema.object(properties: {
+              'amount_ml': Schema.integer(description: 'Amount in ml (default 250)'),
+            }),
+          ),
+          FunctionDeclaration(
+            'log_weight',
+            'Log the user\'s current body weight for today (overwrites today\'s '
+                'earlier entry if any). Use when the user tells you what they weigh.',
+            Schema.object(properties: {
+              'weight_kg': Schema.number(description: 'Weight in kilograms'),
+            }, requiredProperties: ['weight_kg']),
+          ),
+          FunctionDeclaration(
+            'delete_food_log',
+            'Delete one entry from today\'s food diary. SAFETY: call WITHOUT confirm '
+                'first — it returns a confirmation question instead of deleting. Only '
+                'call again with confirm=true after the user explicitly agrees. Get the '
+                'entry_id from get_nutrition_status.',
+            Schema.object(properties: {
+              'entry_id': Schema.string(description: 'Diary entry id from get_nutrition_status'),
+              'food_name': Schema.string(description: 'Food name, for the confirmation question'),
+              'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
+            }, requiredProperties: ['entry_id', 'food_name']),
           ),
         ]),
       ];
@@ -425,6 +507,16 @@ After a tool returns, write a short natural-language confirmation
           return await _toolDeleteItem(args, ref);
         case 'delete_list':
           return await _toolDeleteList(args, ref);
+        case 'get_nutrition_status':
+          return await _toolNutritionStatus(ref);
+        case 'log_food':
+          return await _toolLogFood(args, ref);
+        case 'log_water':
+          return await _toolLogWater(args, ref);
+        case 'log_weight':
+          return await _toolLogWeight(args, ref);
+        case 'delete_food_log':
+          return await _toolDeleteFoodLog(args, ref);
         default:
           return {'error': 'Unknown tool ${call.name}'};
       }
@@ -475,6 +567,8 @@ After a tool returns, write a short natural-language confirmation
                 'time_minutes': r.totalTimeMinutes,
                 'rating': r.averageRating,
                 'labels': r.labels,
+                if (r.nutrition?.calories != null)
+                  'calories_per_serving': r.nutrition!.calories,
               })
           .toList(),
     };
@@ -985,6 +1079,264 @@ After a tool returns, write a short natural-language confirmation
     await ref.read(listsNotifierProvider.notifier).deleteList(listId);
     return {'success': true, 'deleted': listName};
   }
+
+  // ── Nutrition / calorie-tracking tools ───────────────────────────
+
+  static const _trackingDisabledNote =
+      'Calorie tracking is turned off for this user, so nothing was logged '
+      'or read. Ask if they want to enable it — if yes, call update_setting '
+      'with key "calorie_tracking" and value "true".';
+
+  Future<Map<String, Object?>> _toolNutritionStatus(WidgetRef ref) async {
+    if (!ref.read(calorieTrackingEnabledProvider)) {
+      return {'tracking_enabled': false, 'note': _trackingDisabledNote};
+    }
+    final today = DateTime.now();
+    final goal = await NutritionGoalService.instance.getGoal();
+    final entries = await FoodLogService.instance.getEntriesForDate(today);
+    final totals = DailyNutritionTotals.fromEntries(entries);
+    final waterMl = await WaterLogService.instance.getTotalForDate(today);
+
+    final result = <String, Object?>{
+      'tracking_enabled': true,
+      'goal_configured': goal?.isConfigured ?? false,
+      'consumed_today': {
+        'calories': totals.calories,
+        'protein_g': _round1(totals.proteinG),
+        'carbs_g': _round1(totals.carbsG),
+        'fat_g': _round1(totals.fatG),
+        'water_ml': waterMl,
+      },
+      'entries_today': entries
+          .map((e) => {
+                'entry_id': e.id,
+                'meal': e.mealType.dbValue,
+                'food': e.foodName,
+                'calories': e.calories,
+              })
+          .toList(),
+    };
+    if (goal != null && goal.isConfigured) {
+      result['goal_type'] = goal.goalType.dbValue;
+      result['targets'] = {
+        'calories': goal.dailyCalorieTarget,
+        'protein_g': goal.proteinTargetG,
+        'carbs_g': goal.carbsTargetG,
+        'fat_g': goal.fatTargetG,
+        'water_ml': goal.waterTargetMl,
+      };
+      result['remaining'] = {
+        'calories': goal.dailyCalorieTarget! - totals.calories,
+        if (goal.proteinTargetG != null)
+          'protein_g': _round1(goal.proteinTargetG! - totals.proteinG),
+        if (goal.carbsTargetG != null)
+          'carbs_g': _round1(goal.carbsTargetG! - totals.carbsG),
+        if (goal.fatTargetG != null)
+          'fat_g': _round1(goal.fatTargetG! - totals.fatG),
+        'water_ml': goal.waterTargetMl - waterMl,
+      };
+    } else {
+      result['note'] =
+          'No calorie goal is configured yet, so there are no targets — '
+          'totals only. The user can set a goal in the calories tab.';
+    }
+    return result;
+  }
+
+  Future<Map<String, Object?>> _toolLogFood(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    if (!ref.read(calorieTrackingEnabledProvider)) {
+      return {'tracking_enabled': false, 'note': _trackingDisabledNote};
+    }
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return {'error': 'Not signed in'};
+    final foodName = (args['food_name'] as String?)?.trim() ?? '';
+    if (foodName.isEmpty) return {'error': 'food_name is required'};
+
+    final portion = (args['portion'] as String?)?.trim() ?? '';
+    var calories = (args['calories'] as num?)?.round();
+    var protein = (args['protein_g'] as num?)?.toDouble();
+    var carbs = (args['carbs_g'] as num?)?.toDouble();
+    var fat = (args['fat_g'] as num?)?.toDouble();
+
+    var estimated = false;
+    if (calories == null) {
+      final description = portion.isEmpty ? foodName : '$portion $foodName';
+      final estimate = await _estimateFoodNutrition(description);
+      if (estimate == null) {
+        return {
+          'error': 'Could not estimate nutrition for "$description" — ask '
+              'the user for the calories and call log_food again with them.',
+        };
+      }
+      calories = (estimate['calories'] as num?)?.round() ?? 0;
+      protein ??= (estimate['protein_g'] as num?)?.toDouble();
+      carbs ??= (estimate['carbs_g'] as num?)?.toDouble();
+      fat ??= (estimate['fat_g'] as num?)?.toDouble();
+      estimated = true;
+    }
+
+    final mealType = _mealTypeFromArg(args['meal_type'] as String?);
+    final now = DateTime.now();
+    final entry = await FoodLogService.instance.addEntry(FoodLogEntry(
+      id: '',
+      userId: userId,
+      loggedDate: now,
+      mealType: mealType,
+      source: FoodLogSource.manual,
+      foodName: portion.isEmpty ? foodName : '$foodName ($portion)',
+      calories: calories,
+      proteinG: protein,
+      carbsG: carbs,
+      fatG: fat,
+      createdAt: now,
+    ));
+    invalidateNutritionLog(ref);
+
+    // Fresh totals so Avo can say "that puts you at X of Y kcal".
+    final goal = await NutritionGoalService.instance.getGoal();
+    final totals = DailyNutritionTotals.fromEntries(
+        await FoodLogService.instance.getEntriesForDate(now));
+    return {
+      'success': true,
+      'entry_id': entry.id,
+      'logged': entry.foodName,
+      'meal': mealType.dbValue,
+      'calories': calories,
+      'estimated': estimated,
+      'consumed_today_calories': totals.calories,
+      if (goal?.dailyCalorieTarget != null)
+        'remaining_calories': goal!.dailyCalorieTarget! - totals.calories,
+      if (estimated)
+        'note': 'Nutrition was AI-estimated from the description — briefly '
+            'mention it is an estimate.',
+    };
+  }
+
+  Future<Map<String, Object?>> _toolLogWater(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    if (!ref.read(calorieTrackingEnabledProvider)) {
+      return {'tracking_enabled': false, 'note': _trackingDisabledNote};
+    }
+    final amount = ((args['amount_ml'] as num?)?.round() ?? 250).clamp(1, 3000);
+    await WaterLogService.instance.addEntry(amount);
+    invalidateNutritionLog(ref);
+    final total = await WaterLogService.instance.getTotalForDate(DateTime.now());
+    final goal = await NutritionGoalService.instance.getGoal();
+    return {
+      'success': true,
+      'added_ml': amount,
+      'total_today_ml': total,
+      'target_ml': goal?.waterTargetMl ?? 2000,
+    };
+  }
+
+  Future<Map<String, Object?>> _toolLogWeight(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    if (!ref.read(calorieTrackingEnabledProvider)) {
+      return {'tracking_enabled': false, 'note': _trackingDisabledNote};
+    }
+    final weight = (args['weight_kg'] as num?)?.toDouble();
+    if (weight == null || weight < 20 || weight > 400) {
+      return {'error': 'weight_kg must be between 20 and 400'};
+    }
+    final previous = await WeightLogService.instance.getLatest();
+    await WeightLogService.instance.logWeight(weightKg: weight);
+    invalidateNutritionLog(ref);
+    final goal = await NutritionGoalService.instance.getGoal();
+    return {
+      'success': true,
+      'weight_kg': weight,
+      if (previous != null) 'previous_weight_kg': previous.weightKg,
+      if (previous != null)
+        'previous_logged_date':
+            previous.loggedDate.toIso8601String().substring(0, 10),
+      if (goal?.targetWeightKg != null) 'target_weight_kg': goal!.targetWeightKg,
+    };
+  }
+
+  Future<Map<String, Object?>> _toolDeleteFoodLog(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final entryId = args['entry_id'] as String?;
+    final foodName = (args['food_name'] as String?) ?? 'this entry';
+    final confirm = args['confirm'] as bool? ?? false;
+    if (entryId == null || entryId.isEmpty) {
+      return {
+        'error': 'entry_id is required — call get_nutrition_status first '
+            'to find the entry id.',
+      };
+    }
+    if (!confirm) {
+      return {
+        'requires_confirmation': true,
+        'question': 'Remove "$foodName" from today\'s food diary?',
+      };
+    }
+    await FoodLogService.instance.deleteEntry(entryId);
+    invalidateNutritionLog(ref);
+    return {'success': true, 'deleted': foodName};
+  }
+
+  /// One-shot Gemini estimate for a free-text food description ("1 banana",
+  /// "200 g chicken breast") — same pattern as [_estimateNutrition] for
+  /// recipes. Returns null when no usable estimate came back.
+  Future<Map<String, Object?>?> _estimateFoodNutrition(String description) async {
+    try {
+      final model = GenerativeModel(
+        model: 'gemini-2.0-flash-lite',
+        apiKey: Env.geminiApiKey,
+        generationConfig: GenerationConfig(
+          responseMimeType: 'application/json',
+          responseSchema: Schema.object(properties: {
+            'calories': Schema.integer(),
+            'protein_g': Schema.number(),
+            'carbs_g': Schema.number(),
+            'fat_g': Schema.number(),
+          }),
+        ),
+      );
+      final prompt =
+          'Estimate the nutrition of this food as actually eaten: "$description". '
+          'If no amount is given, assume one typical portion. Return JSON with '
+          'calories (int), protein_g, carbs_g, fat_g.';
+      final resp = await model.generateContent([Content.text(prompt)]);
+      final decoded = _parseJson(resp.text ?? '{}');
+      if (decoded['calories'] == null) return null;
+      return decoded;
+    } catch (e) {
+      // ignore: avoid_print
+      print('❌ [AVO] Food nutrition estimate failed: $e');
+      return null;
+    }
+  }
+
+  static MealType _mealTypeFromArg(String? value) {
+    switch (value?.toLowerCase().trim()) {
+      case 'breakfast':
+        return MealType.breakfast;
+      case 'lunch':
+        return MealType.lunch;
+      case 'dinner':
+        return MealType.dinner;
+      case 'snack':
+        return MealType.snack;
+    }
+    final hour = DateTime.now().hour;
+    if (hour < 11) return MealType.breakfast;
+    if (hour < 15) return MealType.lunch;
+    if (hour >= 17 && hour < 22) return MealType.dinner;
+    return MealType.snack;
+  }
+
+  static double _round1(double v) => (v * 10).round() / 10;
 
   // ── Data access helpers ──────────────────────────────────────────
 

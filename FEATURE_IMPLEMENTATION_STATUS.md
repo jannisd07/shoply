@@ -1,8 +1,20 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-06 (scheduled routine — Feature 6 focus: calorie tracking built from scratch — goals/BMR calculator, food diary with Open Food Facts search/barcode/manual/AI-photo entry, weight/water tracking, weekly progress, and recipe-to-diary logging)_
+_Last updated: 2026-07-06, second run (scheduled routine — Feature 4 focus: Avo ↔ calorie tracking — get_nutrition_status / log_food / log_water / log_weight / delete_food_log tools, calorie_tracking settings key, calorie-aware recipe suggestions)_
 
 ## Environment note (read first)
+
+The 2026-07-06 **Feature-4** session (second run of the day) downloaded
+Flutter 3.35.6 stable fresh into `/tmp/flutter` and verified with
+full-project `flutter analyze`: **608 issues (0 errors, 59 warnings) —
+byte-identical to the baseline the morning Feature-6 session recorded**;
+both touched files are analyzer-clean. `flutter test` passes ("All tests
+passed"). `flutter build ios` and a live Gemini conversation test remain
+impossible here (no macOS/Xcode; `env.dart` is a gitignored stub in this
+container). `pubspec.lock` churn from `pub get` was reverted before
+committing.
+
+The earlier note from the morning Feature-6 session:
 
 The 2026-07-06 Feature-6 session downloaded Flutter 3.35.6 stable fresh into
 `/tmp/flutter` (same approach as prior sessions) and verified every change
@@ -65,7 +77,7 @@ was **never wired into any screen** — this session wired it up.
 | 1 | Pricing, offers, cheapest store | ~90% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~75% | In progress (this session) | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
-| 4 | AI assistant app control | ~70% | Implemented (needs QA) | None functional; needs a real device run |
+| 4 | AI assistant app control | ~85% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools still blocked on Feature 7 |
 | 5 | Avo mascot & smart notifications | ~60% | In progress (this session) | Recipe/price-drop nudges still open; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | ~70% | In progress (this session) | Barcode camera scan, diet challenges (16:8/no-sugar), Avo integration, and meal-photo storage not built; needs device QA |
 | 7 | Personalized onboarding & navbar | ~30% | In progress | Feature 6's goal model/calculator now exist and are ready to hook into a rebuilt onboarding flow |
@@ -869,14 +881,78 @@ each turn, not assistant-owned memory).
   widget plumbing, keeping the change low-risk.
 - Updated the system prompt with routing rules for all four new tools.
 
+**Seventh session, 2026-07-06 (scheduled routine — this feature's dedicated
+session).** Feature 6 now exists, which unblocked the one required Feature-4
+capability that had been waiting on it: "AI can interact with calorie
+tracking once implemented." Per the feature order this was the first
+feature in sequence with genuinely unblocked work (Features 1–3's remaining
+gaps all need external APIs or a real device/Xcode). Real Flutter 3.35.6
+toolchain (`/tmp/flutter`); analyzer baseline byte-identical before/after
+(608 issues, 0 errors, 59 warnings), `flutter test` passes.
+
+*What was added (same typed-function-calling architecture, additive only):*
+- **`get_nutrition_status`** — today's consumed calories/protein/carbs/fat
+  + water, the goal targets, remaining amounts (negative = over budget,
+  Gemini phrases it), goal type, and every diary entry with its `entry_id`
+  (so "what did I eat today" and entry deletion both work). Honest
+  states: reports `tracking_enabled: false` (with instructions to offer
+  enabling, never auto-enable) and `goal_configured: false` (totals
+  without targets, points at goal setup) instead of guessing.
+- **`log_food`** — "I just ate a banana" / "log 200g chicken for lunch".
+  If the user stated calories/macros they're used verbatim; otherwise a
+  one-shot Gemini JSON estimate (same pattern as the existing recipe
+  nutrition estimator) fills them in and the entry is flagged
+  `estimated: true`, with a system-prompt rule to tell the user it's an
+  estimate. Meal type comes from the user or is inferred from time of
+  day. Returns fresh "consumed today / remaining" so Avo can say "that
+  puts you at 1,450 of 2,100 kcal." Writes through the existing
+  `FoodLogService` (source `manual`), then invalidates the nutrition
+  providers so the dashboard updates live.
+- **`log_water`** ("I drank a glass of water" — glass/bottle sizes hinted
+  in the tool description, clamped 1–3000 ml) and **`log_weight`**
+  (validated 20–400 kg, upserts today's row via the existing per-day
+  upsert, returns the previous weight + goal target so Avo can mention
+  progress).
+- **`delete_food_log`** — same two-step confirmation pattern as
+  delete_item/delete_list: first call returns a question, deletion only
+  happens after an explicit confirm=true.
+- **`calorie_tracking` settings key in `AvoSettingsBridge`** — "Avo,
+  turn on calorie tracking" now flips the same local preference the
+  profile toggle and onboarding opt-in use (tab appears/disappears
+  immediately since `MainScaffold` watches that provider). All nutrition
+  tools are gated on it: when off they log/read nothing and tell Gemini
+  to offer enabling it first.
+- **Calorie-aware recipe suggestions** — `search_recipes` results now
+  include `calories_per_serving` when the recipe has stored nutrition,
+  and the system prompt wires the "what can I still eat today?" flow:
+  get_nutrition_status → search_recipes → prefer recipes fitting the
+  remaining calories, always saying kcal.
+
+*Verification:* full-project `flutter analyze` before/after —
+byte-identical 608-issue baseline, zero new issues of any severity;
+`flutter test` passes. Every new tool's argument names checked against its
+Schema declaration; all service calls verified against the real Feature-6
+service signatures (no new DB access paths were invented — everything goes
+through the same services the calorie UI already uses, so RLS coverage is
+identical). **Not run:** a live Gemini conversation (needs a real API key
+in `env.dart` + device), so tool-routing quality (does flash-lite pick the
+right tool for "wie viele Kalorien habe ich noch?") needs a manual QA pass.
+
 **Explicitly NOT done:**
 - Assistant-owned memory/preferences across sessions — architecturally this
   would mean persisting a summary or key facts to Supabase and re-injecting
   them, similar to how diet/allergies already work; not implemented this
   session (flagged as an idea below — it's a real design decision, not just
   an engineering task).
-- Calorie-tracking tools — blocked on Feature 6 not existing yet.
+- ~~Calorie-tracking tools — blocked on Feature 6 not existing yet.~~
+  **Done in the seventh session (2026-07-06), see above.**
 - Onboarding-guidance tools — blocked on Feature 7 not being rebuilt yet.
+- No rich chat card for the nutrition status (Avo answers in text; the
+  existing recipe-nutrition card payload doesn't fit a daily-status shape) —
+  same deliberate presentation-only scope cut as offers/splits, to avoid
+  touching the 1000+ line chat screen without device verification. A
+  "daily ring" chat card is a nice follow-up once someone can eyeball it
+  on a device.
 - No new rich-card UI for offers/splits results in the chat itself (Avo
   answers in text, e.g. "Milk is cheapest at Aldi for €0.89") rather than a
   new widget payload kind — deliberate scope cut to avoid touching the
@@ -884,14 +960,19 @@ each turn, not assistant-owned memory).
   The underlying split/offer actions still use the real services, so this
   is a presentation limitation, not a fake integration.
 
-**Files changed:** `lib/data/services/avo_assistant_service.dart`.
+**Files changed (earlier session):** `lib/data/services/avo_assistant_service.dart`.
+**Files changed (seventh session):** `lib/data/services/avo_assistant_service.dart`
+(5 new nutrition tools + declarations + routing + `calories_per_serving` in
+search_recipes results), `lib/data/services/avo_settings_bridge.dart`
+(`calorie_tracking` key).
 
 **Checks performed:** Verified every new tool's argument names line up with
 its `Schema.object` declaration; verified `deleteItem`/`deleteList` notifier
 method signatures against `items_provider.dart`/`lists_provider.dart`
 exactly. Brace/paren balance check. **Not run:** a live Gemini conversation
 test (needs `dart run`/simulator + a real Gemini API key in `env.dart`,
-neither available here).
+neither available here). (Seventh session: full `flutter analyze` +
+`flutter test` — see that session's notes above.)
 
 ---
 
@@ -1144,12 +1225,14 @@ for version control, and built the entire Dart/Flutter side on top of it.
   but has no Dart service or UI yet — deprioritized behind the core
   logging loop, which is the foundation everything else (including
   challenges) needs.
-- **Avo integration** ("recommends recipes based on calories
+- ~~**Avo integration** ("recommends recipes based on calories
   remaining", `get_calories_remaining` tool). Deliberately left to Feature
   4/5's own sessions per the single-feature-mode rule — this session
   exposes `NutritionGoalService`/`FoodLogService` in a way that a future
   Avo tool can call directly, but didn't touch
-  `avo_assistant_service.dart`.
+  `avo_assistant_service.dart`.~~ **Done later the same day in Feature 4's
+  seventh session** (get_nutrition_status/log_food/log_water/log_weight/
+  delete_food_log + calorie-aware recipe suggestions — see Feature 4).
 - **Onboarding integration.** The goal questionnaire is a standalone screen
   reachable from the calorie tab, not wired into the onboarding flow —
   that's Feature 7's job (see its updated blocker note above); the
@@ -1318,21 +1401,17 @@ exists, "N calories left — 3 dinner ideas from your list."
   - Risk: Low.
   - Recommendation: yes, as a natural next slice of Feature 6.
 
-- [ ] IDEA: Wire calorie tracking into Avo (Feature 4/5) — a
-  `get_calories_remaining` tool, "N calories left, here are 3 dinner ideas
-  from your list" nudges, and a `log_food` tool for "I just ate a banana."
-  - Why it helps: this is explicitly called out in Features 4, 5, and 8 as
-    a cross-feature win, and Feature 6 now provides the real data
-    (`NutritionGoalService`, `FoodLogService`) for it to call.
-  - Expected user value: high — this is the kind of "the app feels smart"
-    moment the brief asks for repeatedly.
-  - Expected business/premium value: medium-high.
-  - Complexity: Medium (follows the exact tool-registration pattern already
-    used for `search_offers`/`split_trip_cost` in
-    `avo_assistant_service.dart`).
-  - Risk: Low — additive, same pattern as existing tools.
-  - Recommendation: yes, as Feature 4 or 5's next dedicated session (not
-    done here per single-feature-mode).
+- [x] IDEA (DONE 2026-07-06, Feature 4's seventh session): Wire calorie
+  tracking into Avo — nutrition status/remaining, `log_food` for "I just
+  ate a banana", water/weight logging, diary-entry deletion with
+  confirmation, and calorie-aware recipe suggestions.
+  - **Outcome:** implemented as `get_nutrition_status`, `log_food`,
+    `log_water`, `log_weight`, `delete_food_log`, the `calorie_tracking`
+    settings key, and `calories_per_serving` in search_recipes results.
+    The Feature-5 half of the idea (proactive "N calories left — 3 dinner
+    ideas" *nudges*, i.e. notifications rather than chat answers) is NOT
+    done — that belongs to a Feature 5/8 session on top of the
+    now-existing tools. Details in Feature 4's seventh-session notes.
 
 - [ ] IDEA: Upload meal photos to Supabase Storage instead of discarding
   them after the AI estimate is extracted.

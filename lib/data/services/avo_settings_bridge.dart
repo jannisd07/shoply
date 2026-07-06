@@ -6,6 +6,7 @@ import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
 import 'package:shoply/presentation/state/user_profile_provider.dart';
@@ -60,6 +61,7 @@ class AvoSettingsBridge {
     'age',
     'gender',
     'height',
+    'calorie_tracking',
   ];
 
   /// Apply a settings change. Returns a structured result suitable for
@@ -75,6 +77,9 @@ class AvoSettingsBridge {
           return await _setLanguage(value);
         case 'notifications':
           return await _setNotifications(value);
+        case 'calorie_tracking':
+        case 'calorie_tracking_enabled':
+          return await _setCalorieTracking(value);
         case 'display_name':
         case 'name':
           return await _updateUserField(
@@ -297,6 +302,28 @@ class AvoSettingsBridge {
           .rearmRestockReminder(force: true);
     }
     return result;
+  }
+
+  Future<SettingChangeResult> _setCalorieTracking(Object? value) async {
+    final enabled = _parseBool(value);
+    if (enabled == null) {
+      return SettingChangeResult(
+        success: false,
+        key: 'calorie_tracking',
+        displayName: 'Calorie tracking',
+        newValue: '$value',
+        error: 'Calorie tracking must be true or false',
+      );
+    }
+    final current = ref.read(calorieTrackingEnabledProvider);
+    await ref.read(calorieTrackingEnabledProvider.notifier).setEnabled(enabled);
+    return SettingChangeResult(
+      success: true,
+      key: 'calorie_tracking',
+      displayName: 'Calorie tracking',
+      oldValue: current ? 'on' : 'off',
+      newValue: enabled ? 'on' : 'off',
+    );
   }
 
   Future<SettingChangeResult> _updateUserField({
