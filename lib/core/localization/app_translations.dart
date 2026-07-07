@@ -225,6 +225,21 @@ class AppTranslations {
         '{item} is probably running low – you buy it about every {days} days.',
     'restock_notification_body_many':
         '{item} and {count} more are probably running low. Avo has the details.',
+    'restock_notification_body_offer':
+        '{item} is probably running low – and on offer at {store} right now ({price} €).',
+    'restock_line_weekday': 'About every {avg} days · usually {weekday}',
+    'weekday_adverb_1': 'on Mondays',
+    'weekday_adverb_2': 'on Tuesdays',
+    'weekday_adverb_3': 'on Wednesdays',
+    'weekday_adverb_4': 'on Thursdays',
+    'weekday_adverb_5': 'on Fridays',
+    'weekday_adverb_6': 'on Saturdays',
+    'weekday_adverb_7': 'on Sundays',
+    'offer_nudge_title': 'On offer for you',
+    'offer_nudge_line': '{product} · −{pct}% · {price} € · {store}',
+    'offer_nudge_line_simple': '{product} · {price} € · {store}',
+    'milestone_trip_message':
+        '🥑 Milestone: that was your {count}th shopping trip with Shoply!',
     'all_notifications': 'Allow notifications',
     'all_notifications_desc':
         'Master switch for all Shoply notifications, including push messages from shared lists.',
@@ -1030,6 +1045,21 @@ class AppTranslations {
         '{item} ist wahrscheinlich fast aufgebraucht – du kaufst es etwa alle {days} Tage.',
     'restock_notification_body_many':
         '{item} und {count} weitere sind wahrscheinlich fast aufgebraucht. Avo hat die Details.',
+    'restock_notification_body_offer':
+        '{item} ist wahrscheinlich fast aufgebraucht – und gerade im Angebot bei {store} ({price} €).',
+    'restock_line_weekday': 'Etwa alle {avg} Tage · meistens {weekday}',
+    'weekday_adverb_1': 'montags',
+    'weekday_adverb_2': 'dienstags',
+    'weekday_adverb_3': 'mittwochs',
+    'weekday_adverb_4': 'donnerstags',
+    'weekday_adverb_5': 'freitags',
+    'weekday_adverb_6': 'samstags',
+    'weekday_adverb_7': 'sonntags',
+    'offer_nudge_title': 'Für dich im Angebot',
+    'offer_nudge_line': '{product} · −{pct} % · {price} € · {store}',
+    'offer_nudge_line_simple': '{product} · {price} € · {store}',
+    'milestone_trip_message':
+        '🥑 Meilenstein: Das war dein {count}. Einkauf mit Shoply!',
     'all_notifications': 'Mitteilungen erlauben',
     'all_notifications_desc':
         'Hauptschalter für alle Shoply-Mitteilungen, inklusive Push-Nachrichten aus geteilten Listen.',

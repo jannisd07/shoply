@@ -92,8 +92,36 @@ class MascotNotificationService {
 
       final lang = await _getLanguage();
       final first = suggestions.first;
+      final tomorrowMorning = DateTime(
+          now.year, now.month, now.day + 1, _reminderHour);
+
+      // When the top item also has a live discounted offer nearby, lead with
+      // that — "running low AND cheaper right now" is the strongest honest
+      // reason to open the app. The offer must still run when the reminder
+      // actually fires tomorrow morning. Cached in AvoNudgeService, so this
+      // does not hit the offers API on every re-arm.
+      OfferNudge? offerForFirst;
+      try {
+        final offers = await AvoNudgeService.instance.getOfferNudges();
+        for (final offer in offers) {
+          if (offer.itemName == first.itemName &&
+              (offer.validTo == null ||
+                  offer.validTo!.isAfter(tomorrowMorning))) {
+            offerForFirst = offer;
+            break;
+          }
+        }
+      } catch (_) {}
+
       final String body;
-      if (suggestions.length == 1) {
+      if (offerForFirst != null) {
+        body = AppTranslations.get('restock_notification_body_offer', lang,
+            params: {
+              'item': first.displayName,
+              'store': offerForFirst.retailerName,
+              'price': offerForFirst.price.toStringAsFixed(2),
+            });
+      } else if (suggestions.length == 1) {
         body = AppTranslations.get('restock_notification_body_one', lang,
             params: {
               'item': first.displayName,
@@ -106,9 +134,6 @@ class MascotNotificationService {
               'count': '${suggestions.length - 1}',
             });
       }
-
-      final tomorrowMorning = DateTime(
-          now.year, now.month, now.day + 1, _reminderHour);
 
       await NotificationService.instance.scheduleNotification(
         id: restockReminderId,
@@ -123,6 +148,45 @@ class MascotNotificationService {
           '(${suggestions.map((s) => s.itemName).join(', ')})');
     } catch (e) {
       debugPrint('🥑 [AVO] Failed to re-arm restock reminder: $e');
+    }
+  }
+
+  /// Trip-count milestones worth a one-line in-app celebration. Sparse on
+  /// purpose — a milestone every few weeks feels earned, one every few days
+  /// feels like a slot machine.
+  static const List<int> _tripMilestones = [10, 25, 50, 100, 250, 500, 1000];
+
+  static const String _milestonesShownKey = 'avo_milestones_shown';
+
+  /// Call right after a shopping trip was completed. Returns a localized
+  /// celebration line when the user's own completed-trip count just hit a
+  /// milestone that hasn't been celebrated yet — else null. Each milestone
+  /// fires at most once (tracked locally).
+  Future<String?> milestoneMessageForCompletedTrip() async {
+    try {
+      final userId = SupabaseService.instance.currentUser?.id;
+      if (userId == null) return null;
+
+      final rows = await SupabaseService.instance.client
+          .from('shopping_history')
+          .select('id')
+          .eq('user_id', userId);
+      final count = (rows as List).length;
+      if (!_tripMilestones.contains(count)) return null;
+
+      final prefs = await SharedPreferences.getInstance();
+      final shown = prefs.getStringList(_milestonesShownKey) ?? <String>[];
+      if (shown.contains('$count')) return null;
+      shown.add('$count');
+      await prefs.setStringList(_milestonesShownKey, shown);
+
+      final lang = await _getLanguage();
+      debugPrint('🥑 [AVO] Trip milestone reached: $count');
+      return AppTranslations.get('milestone_trip_message', lang,
+          params: {'count': '$count'});
+    } catch (e) {
+      debugPrint('🥑 [AVO] Milestone check failed: $e');
+      return null;
     }
   }
 }

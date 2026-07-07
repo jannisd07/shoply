@@ -19,6 +19,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/core/utils/diet_checker.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/purchase_tracking_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -2500,13 +2501,25 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       ref.invalidate(itemsNotifierProvider(widget.listId));
       ref.invalidate(listsNotifierProvider);
 
+      // On a trip-count milestone (10th, 25th, … trip), the confirmation
+      // becomes a small celebration instead of the generic line.
+      String? milestone;
+      try {
+        milestone = await MascotNotificationService.instance
+            .milestoneMessageForCompletedTrip();
+      } catch (_) {}
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '✅ ${checkedItems.length} Artikel erfolgreich abgeschlossen!',
+              milestone ??
+                  '✅ ${checkedItems.length} Artikel erfolgreich abgeschlossen!',
             ),
             backgroundColor: AppColors.success,
+            duration: milestone != null
+                ? const Duration(seconds: 5)
+                : const Duration(seconds: 4),
           ),
         );
       }

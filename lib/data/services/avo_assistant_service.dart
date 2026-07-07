@@ -957,6 +957,10 @@ After a tool returns, write a short natural-language confirmation
             'needs 3+ tracked purchases).',
       };
     }
+    const weekdayNames = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+      'Friday', 'Saturday', 'Sunday',
+    ];
     return {
       'found': suggestions.length,
       'suggestions': suggestions
@@ -964,6 +968,8 @@ After a tool returns, write a short natural-language confirmation
                 'item': s.displayName,
                 'buys_about_every_days': s.averageDays,
                 'last_bought_days_ago': s.daysSince,
+                if (s.usualWeekday != null)
+                  'usually_bought_on': weekdayNames[s.usualWeekday! - 1],
               })
           .toList(),
     };
