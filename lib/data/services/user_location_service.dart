@@ -15,6 +15,15 @@ class ZipInfo {
   const ZipInfo(this.zipCode, this.isReal);
 }
 
+/// Raw GPS coordinates, used for distance-based store lookups (there's no
+/// manual-entry equivalent — a zip code alone can't tell us how far a store
+/// branch is, so this is null unless the user has granted location access).
+class UserCoordinates {
+  final double latitude;
+  final double longitude;
+  const UserCoordinates(this.latitude, this.longitude);
+}
+
 class UserLocationService {
   UserLocationService._();
   static final UserLocationService instance = UserLocationService._();
@@ -25,6 +34,10 @@ class UserLocationService {
   static const _zipTimeKey = 'offers_zip_fetched_at_v2';
   static const _manualZipKey = 'offers_zip_manual';
   static const _cacheMaxAge = Duration(hours: 24);
+
+  static const _latKey = 'offers_lat_v1';
+  static const _lonKey = 'offers_lon_v1';
+  static const _coordsTimeKey = 'offers_coords_fetched_at_v1';
 
   /// Central German zip used only when we have no real location, so search
   /// suggestions still return offers from the big nationwide chains.
@@ -83,27 +96,8 @@ class UserLocationService {
 
   Future<String?> _zipFromGps() async {
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        print('⚠️ [LOCATION] Location services disabled');
-        return null;
-      }
-
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        print('⚠️ [LOCATION] Permission denied');
-        return null;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.low,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
+      final position = await _getPosition();
+      if (position == null) return null;
 
       final placemarks = await placemarkFromCoordinates(
         position.latitude,
@@ -129,6 +123,67 @@ class UserLocationService {
       return null;
     } catch (e) {
       print('❌ [LOCATION] Failed to resolve zip: $e');
+      return null;
+    }
+  }
+
+  /// Raw lat/lon for distance-based store lookups (e.g. "closest branch of
+  /// the cheapest chain"). Unlike the zip code there's no manual-entry
+  /// fallback — a zip alone can't place a store on a map — so this returns
+  /// null whenever GPS isn't available, and callers must handle that by
+  /// simply not showing distance info rather than guessing.
+  Future<UserCoordinates?> getCoordinates({bool forceRefresh = false}) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!forceRefresh) {
+      final lat = prefs.getDouble(_latKey);
+      final lon = prefs.getDouble(_lonKey);
+      final fetchedAt = DateTime.tryParse(prefs.getString(_coordsTimeKey) ?? '');
+      if (lat != null &&
+          lon != null &&
+          fetchedAt != null &&
+          DateTime.now().difference(fetchedAt) < _cacheMaxAge) {
+        return UserCoordinates(lat, lon);
+      }
+    }
+
+    final position = await _getPosition();
+    if (position == null) return null;
+
+    await prefs.setDouble(_latKey, position.latitude);
+    await prefs.setDouble(_lonKey, position.longitude);
+    await prefs.setString(_coordsTimeKey, DateTime.now().toIso8601String());
+    return UserCoordinates(position.latitude, position.longitude);
+  }
+
+  /// Shared permission-check + fix, used by both the zip resolver and
+  /// [getCoordinates] so there's only one place that requests location
+  /// permission.
+  Future<Position?> _getPosition() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        print('⚠️ [LOCATION] Location services disabled');
+        return null;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        print('⚠️ [LOCATION] Permission denied');
+        return null;
+      }
+
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+    } catch (e) {
+      print('❌ [LOCATION] Failed to get position: $e');
       return null;
     }
   }

@@ -1,8 +1,28 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-06, second run (scheduled routine — Feature 4 focus: Avo ↔ calorie tracking — get_nutrition_status / log_food / log_water / log_weight / delete_food_log tools, calorie_tracking settings key, calorie-aware recipe suggestions)_
+_Last updated: 2026-07-07 (scheduled routine — Feature 1 focus: real distance-based "closest reasonable store", closing one of Feature 1's three documented external blockers)_
 
 ## Environment note (read first)
+
+The 2026-07-07 **Feature-1** session downloaded Flutter 3.35.6 stable fresh
+into `/tmp/flutter` and verified with full-project `flutter analyze`:
+baseline **608 issues (0 errors, 59 warnings)**, confirmed byte-identical to
+the previous session's recorded baseline before any changes. After this
+session's 2 new files + 5 touched files: **612 issues (0 errors, 59
+warnings)** — the +4 are `avoid_print` info lints in the one wholly new
+service file (`store_locator_service.dart`), same accepted logging style
+used throughout the codebase (emoji-prefixed `print`, per `CLAUDE.md`), not a
+new category of issue. `flutter test` passes ("All tests passed"). Verified
+the new Overpass API (OpenStreetMap) integration live with `curl` — real
+supermarket branch data (brand, name, address, lat/lon) returned in the
+exact shape the parser expects — and verified the Haversine distance
+formula and OSM-brand→retailer-id normalization logic with a throwaway
+`dart run` script (15/15 cases passed, not committed). `flutter build ios`
+and a live in-app GPS/location-permission test remain impossible here (no
+macOS/Xcode; no simulator to grant location permission to). `pubspec.lock`
+churn from `pub get` was reverted before committing.
+
+The earlier note from the 2026-07-06 second-run (Feature 4) session:
 
 The 2026-07-06 **Feature-4** session (second run of the day) downloaded
 Flutter 3.35.6 stable fresh into `/tmp/flutter` and verified with
@@ -74,7 +94,7 @@ was **never wired into any screen** — this session wired it up.
 
 | # | Feature | Completion | Status | Blockers |
 |---|---|---|---|---|
-| 1 | Pricing, offers, cheapest store | ~90% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
+| 1 | Pricing, offers, cheapest store | ~93% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~75% | In progress (this session) | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~85% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools still blocked on Feature 7 |
@@ -267,9 +287,12 @@ not app code. No iOS build possible here (Linux).
 **Still explicitly NOT done (documented, not faked):**
 - Regular (non-promotional) shelf prices — no public API exists for German
   supermarkets; hard external constraint, not a shortcut. UI/AI copy says so.
-- Real distance-based "closest reasonable store" — `UserLocationService`
+- ~~Real distance-based "closest reasonable store" — `UserLocationService`
   only resolves a zip code, not store addresses/distances; would need a
-  store-locator API that isn't wired up.
+  store-locator API that isn't wired up.~~ **Implemented in the fourth
+  session (2026-07-07)** via the free Overpass/OpenStreetMap API — see that
+  session's notes below for what it covers and its remaining limits
+  (straight-line distance, GPS-only, marktguru-covered chains only).
 - Cross-product substitution ("buy Rama instead of Kerrygold") — the chip
   suggests the cheapest offer matching the item's own name/stem, not a
   different product class; real product-equivalence mapping would need to
@@ -420,6 +443,131 @@ before committing, to avoid unrelated dependency-version noise in the diff.
 **Not run (no macOS/Xcode available in this container):** `flutter build ios
 --simulator --debug`, or a real on-device test of the add-item-from-offer
 flow, the zip-code sheet, or the savings/expiry badges rendering correctly.
+
+**Fourth session, 2026-07-07 (scheduled routine).** Picked Feature 1 again —
+first not-fully-implemented feature in the brief's priority order — and
+audited the previously-documented "explicitly NOT done" list rather than
+re-reading it at face value. Two of the three were re-confirmed as genuine,
+unchanged external constraints (no public shelf-price API; cross-product
+substitution is out of scope for diet/allergy safety). The third —
+**"real distance-based closest reasonable store"** — turned out to be
+solvable without any paid API or key: `UserLocationService` already fetches
+a raw GPS fix (`Geolocator.getCurrentPosition`) to resolve a zip code via
+reverse geocoding, but discarded the coordinates afterward, and the
+[Overpass API](https://overpass-api.de) (OpenStreetMap's free, keyless query
+service) returns real supermarket branch locations — brand, name, address,
+lat/lon — for any coordinate, worldwide, with no account or usage cap
+beyond fair-use rate limiting. Verified this live with `curl` from this
+container before writing any Dart: a real query near central Berlin
+returned actual branches (Netto Marken-Discount, Edeka, …) with `brand`,
+`addr:street/housenumber/city/postcode`, and top-level `lat`/`lon` — an
+exact match for what the new parser expects.
+
+**What I implemented:**
+- `UserCoordinates` + `UserLocationService.getCoordinates()`
+  (`lib/data/services/user_location_service.dart`) — exposes the raw GPS
+  fix (24h cache, same pattern as the existing zip cache) instead of
+  discarding it. Refactored the permission-check-and-fix logic that used to
+  live only in `_zipFromGps()` into a shared private `_getPosition()`, used
+  by both the zip resolver and the new coordinates getter, so there's still
+  only one place in the codebase that requests location permission.
+  Zero behavior change to the existing zip flow — same permission dance,
+  same GPS accuracy/timeout settings, same fallback-to-stale-cache path.
+- `NearbyStore` (new, `lib/data/models/nearby_store.dart`) — a real branch:
+  name, address, lat/lon, distance from the user (Haversine, accurate
+  enough for "which branch is closest" — not turn-by-turn routing), plus a
+  `retailerUniqueName` when the OSM brand could be confidently mapped to one
+  of marktguru's known grocery chains (null for chains outside marktguru's
+  coverage — still a real nearby store, just not price-comparable).
+- `StoreLocatorService` (new, `lib/data/services/store_locator_service.dart`)
+  — queries Overpass for `shop=supermarket` nodes within 8km of a
+  coordinate, with a mirror endpoint fallback (`overpass.kumi.systems`) if
+  the primary times out or errors, matching the resilience pattern already
+  used for the marktguru key refresh. Results are cached in memory per
+  rounded coordinate (~110m) for 6 hours — Overpass is a shared community
+  service with informal fair-use limits, so this is called at most once per
+  store-comparison-sheet open, never polled. Never throws: returns an empty
+  list on any failure, which callers treat identically to "no location
+  data" (distance info just doesn't show).
+- Brand normalization (`_normalizeRetailer`) maps OSM's `brand`/`name` tags
+  to marktguru's exact retailer ids (`rewe`, `edeka`, `lidl`, `kaufland`,
+  `aldi-sued`/`aldi-nord`/`aldi`, `penny`, `norma`, `netto-marken-discount`
+  vs. plain `netto` — two distinct German chains that share the "Netto"
+  word, checked in the right order so the compound name wins — `nahkauf`,
+  `globus`, `famila`, `tegut`). Verified with 15 hand-written cases
+  (including the Netto ambiguity and two non-grocery brands that should
+  correctly resolve to `null`) via a throwaway `dart run` script — all
+  passed.
+- `BasketComparison.closestReasonableAlternative()` (new method,
+  `lib/data/models/store_offer.dart`) — the actual "closest reasonable
+  option" logic the brief asked for: returns null when the cheapest store
+  already has a nearby branch (≤3km — nothing to recommend instead),
+  otherwise finds the cheapest *comparable* store that does have a branch
+  within 3km, and only surfaces it when the extra cost is small (≤€3 or
+  ≤15% more than the outright cheapest total) — so it never recommends
+  "closer but meaningfully worse."
+- Wired into the store-comparison sheet
+  (`lib/presentation/screens/lists/widgets/list_price_summary_bar.dart`):
+  each ranked store row now shows a real distance chip (e.g. "1.2 km") next
+  to its name when a nearby branch was found, and a new "Closer option" card
+  appears above the estimated-total line when
+  `closestReasonableAlternative()` has a recommendation — e.g. "Netto has a
+  branch 900 m away — only 1.40 € more than the cheapest total." New
+  providers `userCoordinatesProvider` / `nearbyStoresProvider`
+  (`lib/presentation/providers/price_comparison_provider.dart`) follow the
+  same `FutureProvider`/`autoDispose` shape as the existing zip/offer
+  providers, and fail open (empty list) exactly like `bestStore` already
+  did when data isn't available — the whole comparison sheet still works
+  with zip-only data if the user denies location permission, distance info
+  is a pure addition on top.
+- Two new i18n keys (EN/DE), `closer_option_title` / `closer_option_body`,
+  added next to the existing pricing strings in
+  `lib/core/localization/app_translations.dart`.
+
+**Explicitly NOT done / known limits of this increment:**
+- This only resolves distance for chains covered by marktguru's offer data
+  (the same `groceryRetailers` set `OfferPriceService` already searches) —
+  a nearby branch of an unlisted chain is still detected by the locator but
+  won't appear in the price comparison, since there's no offer data for it
+  to compare.
+- Haversine straight-line distance, not real walking/driving distance —
+  labeled as such internally; a genuinely "closest by road" answer would
+  need a routing API (Mapbox/OSRM/Google Directions), which is a bigger
+  scope addition than this session's brief called for.
+- Coordinates are only ever sourced from GPS — a user on the manual-zip-only
+  path (no location permission) gets zip-based offers as before, but no
+  distance chips or "closer option" card, since a zip code alone can't place
+  a store on a map. This is the same tradeoff the "not done" note already
+  flagged before this session; it's now *narrower* (distance genuinely works
+  for GPS users) rather than fully unblocked for everyone.
+- Not verified on a real device/simulator: the actual location-permission
+  prompt, a live Overpass round-trip from inside the running app, or how the
+  new distance chip/callout card actually renders and wraps at real device
+  widths. The Overpass response shape, the Haversine math, and the brand
+  matching are verified (curl + throwaway script); the Flutter widget tree
+  is analyzer-clean but not visually confirmed.
+
+**Files changed (fourth session):**
+`lib/data/models/nearby_store.dart` (new),
+`lib/data/services/store_locator_service.dart` (new),
+`lib/data/services/user_location_service.dart` (`getCoordinates`,
+`_getPosition` refactor),
+`lib/data/models/store_offer.dart` (`closestReasonableAlternative`),
+`lib/presentation/providers/price_comparison_provider.dart`
+(`userCoordinatesProvider`, `nearbyStoresProvider`),
+`lib/presentation/screens/lists/widgets/list_price_summary_bar.dart`
+(distance chips, closer-option card),
+`lib/core/localization/app_translations.dart` (2 new EN/DE keys).
+
+**Checks performed (fourth session):** See the environment note at the top
+of this document for the full `flutter analyze`/`flutter test` results and
+live-data verification. Summary: 0 errors, 59 warnings (byte-identical to
+baseline), +4 info (`avoid_print` in the one new service file, same style as
+the rest of the codebase); `flutter test` passes; Overpass API verified live
+via `curl` against real coordinates; Haversine distance and brand
+normalization verified via a throwaway `dart run` script (15/15 cases
+passed, not committed); `pubspec.lock` churn from `pub get` reverted before
+committing. No iOS build/device test possible in this container.
 
 ---
 

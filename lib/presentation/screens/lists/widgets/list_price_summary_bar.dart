@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/data/models/nearby_store.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/user_location_service.dart';
@@ -340,6 +341,15 @@ class _StoreComparisonSheet extends ConsumerWidget {
     final accent = AppColors.accentColor(context);
     final stores = comparison.ranked;
     final estimate = _estimateListTotal(ref);
+    final nearby = ref.watch(nearbyStoresProvider).valueOrNull ?? const <NearbyStore>[];
+    final closerAlternative = comparison.closestReasonableAlternative(nearby);
+
+    String? distanceLabelFor(String retailerUniqueName) {
+      for (final n in nearby) {
+        if (n.retailerUniqueName == retailerUniqueName) return n.distanceLabel;
+      }
+      return null;
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -434,13 +444,35 @@ class _StoreComparisonSheet extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          stores[i].retailerName,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: textPrimary,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                stores[i].retailerName,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: textPrimary,
+                                ),
+                              ),
+                            ),
+                            if (distanceLabelFor(stores[i].retailerUniqueName) !=
+                                null) ...[
+                              const SizedBox(width: 6),
+                              Icon(Icons.place_outlined,
+                                  size: 11, color: textSecondary),
+                              const SizedBox(width: 2),
+                              Text(
+                                distanceLabelFor(stores[i].retailerUniqueName)!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         Text(
                           stores[i].savings > 0.01
@@ -476,6 +508,51 @@ class _StoreComparisonSheet extends ConsumerWidget {
                 ],
               ),
             ),
+          if (closerAlternative != null) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.near_me_outlined, size: 16, color: accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.tr('closer_option_title'),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          context.tr('closer_option_body', params: {
+                            'store': closerAlternative.retailerName,
+                            'distance':
+                                distanceLabelFor(closerAlternative.retailerUniqueName) ?? '',
+                            'extra': (closerAlternative.comparableTotal -
+                                    (comparison.bestStore?.comparableTotal ?? 0))
+                                .toStringAsFixed(2),
+                          }),
+                          style: TextStyle(
+                              fontSize: 11.5, color: textSecondary, height: 1.3),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (estimate != null) ...[
             Container(
               height: 0.5,

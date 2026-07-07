@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shoply/data/models/nearby_store.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
+import 'package:shoply/data/services/store_locator_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 
@@ -13,6 +15,26 @@ final userZipCodeProvider = FutureProvider<String?>((ref) async {
 /// so search suggestions still work on the simulator / without permission.
 final effectiveZipProvider = FutureProvider<ZipInfo>((ref) async {
   return UserLocationService.instance.getZipInfo();
+});
+
+/// Raw GPS coordinates, or null when unavailable (permission denied, GPS
+/// off, or a manual-zip-only user). Unlike the zip there's no fallback —
+/// distance info is simply omitted when this is null.
+final userCoordinatesProvider = FutureProvider<UserCoordinates?>((ref) async {
+  return UserLocationService.instance.getCoordinates();
+});
+
+/// Real nearby supermarket branches (OpenStreetMap), for showing an actual
+/// distance next to each store in the comparison sheet. Empty when location
+/// is unavailable or the lookup fails — never blocks the price comparison,
+/// which works from the zip code alone.
+final nearbyStoresProvider = FutureProvider.autoDispose<List<NearbyStore>>((ref) async {
+  final coords = await ref.watch(userCoordinatesProvider.future);
+  if (coords == null) return const [];
+  return StoreLocatorService.instance.findNearbyStores(
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+  );
 });
 
 /// All current offers for a live search query, unfiltered by retailer

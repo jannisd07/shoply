@@ -1,3 +1,5 @@
+import 'package:shoply/data/models/nearby_store.dart';
+
 /// Models for live supermarket offers (marktguru) and basket price
 /// comparison across nearby stores.
 
@@ -265,6 +267,61 @@ class BasketComparison {
   StoreBasketResult? get bestStore {
     for (final store in ranked) {
       if (store.matchedCount > 0) return store;
+    }
+    return null;
+  }
+
+  /// Among stores with a real, nearby branch (resolved via OpenStreetMap),
+  /// the cheapest one — used to recommend a "closest reasonable option"
+  /// when the outright cheapest store turns out to be far away. Returns
+  /// null when the cheapest store already has a nearby branch (no
+  /// alternative needed), when no store has distance data at all, or when
+  /// every nearby alternative costs meaningfully more than the cheapest
+  /// option (not "reasonable" anymore).
+  StoreBasketResult? closestReasonableAlternative(
+    List<NearbyStore> nearbyStores, {
+    double maxDistanceMeters = 3000,
+    double maxExtraCost = 3.0,
+    double maxExtraFraction = 0.15,
+  }) {
+    if (nearbyStores.isEmpty) return null;
+    final best = bestStore;
+    if (best == null) return null;
+
+    double? distanceTo(StoreBasketResult store) {
+      for (final n in nearbyStores) {
+        if (n.retailerUniqueName == store.retailerUniqueName) {
+          return n.distanceMeters;
+        }
+      }
+      return null;
+    }
+
+    final bestDistance = distanceTo(best);
+    if (bestDistance != null && bestDistance <= maxDistanceMeters) {
+      return null;
+    }
+
+    StoreBasketResult? closest;
+    double? closestDistance;
+    for (final store in ranked) {
+      if (store.matchedCount == 0) continue;
+      final distance = distanceTo(store);
+      if (distance == null || distance > maxDistanceMeters) continue;
+      if (closest == null || distance < closestDistance!) {
+        closest = store;
+        closestDistance = distance;
+      }
+    }
+    if (closest == null || closest.retailerUniqueName == best.retailerUniqueName) {
+      return null;
+    }
+
+    final extra = closest.comparableTotal - best.comparableTotal;
+    final extraFraction =
+        best.comparableTotal > 0 ? extra / best.comparableTotal : 0.0;
+    if (extra <= maxExtraCost || extraFraction <= maxExtraFraction) {
+      return closest;
     }
     return null;
   }
