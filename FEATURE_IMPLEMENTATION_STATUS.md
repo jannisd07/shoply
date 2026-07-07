@@ -1,8 +1,25 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-07 (scheduled routine — Feature 1 focus: real distance-based "closest reasonable store", closing one of Feature 1's three documented external blockers)_
+_Last updated: 2026-07-07, second run (scheduled routine — Feature 5 focus: offer/Angebote nudges, weekday buying patterns, trip milestones)_
 
 ## Environment note (read first)
+
+The 2026-07-07 **Feature-5** session (second run of the day) downloaded
+Flutter 3.35.6 stable fresh into `/tmp/flutter` and verified with
+full-project `flutter analyze`: **612 issues (0 errors, 59 warnings) before
+and after** — byte-identical modulo line numbers (the only diff vs. the raw
+baseline run is the two expected errors from the gitignored
+`firebase_options.dart`, which disappear once the usual throwaway stub is in
+place; the stub and `env.dart` copy are untracked and not committed).
+`flutter test` passes ("All tests passed"). The offer-nudge relevance and
+selection logic was verified **against the live marktguru API** (which
+exposed and fixed two real design flaws — see the Feature 5 session notes),
+and the weekday/eligibility/matching logic with two throwaway `dart run`
+scripts (18 + 14 cases, all passed, not committed). `pubspec.lock` churn
+from `pub get` was reverted before committing. No iOS build/device test
+possible here (no macOS/Xcode).
+
+The earlier note from the 2026-07-07 Feature-1 session:
 
 The 2026-07-07 **Feature-1** session downloaded Flutter 3.35.6 stable fresh
 into `/tmp/flutter` and verified with full-project `flutter analyze`:
@@ -98,7 +115,7 @@ was **never wired into any screen** — this session wired it up.
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~75% | In progress (this session) | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~85% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools still blocked on Feature 7 |
-| 5 | Avo mascot & smart notifications | ~60% | In progress (this session) | Recipe/price-drop nudges still open; needs device QA for scheduled notifications |
+| 5 | Avo mascot & smart notifications | ~80% | In progress (this session) | Proactive recipe-suggestion nudges still open; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | ~70% | In progress (this session) | Barcode camera scan, diet challenges (16:8/no-sugar), Avo integration, and meal-photo storage not built; needs device QA |
 | 7 | Personalized onboarding & navbar | ~30% | In progress | Feature 6's goal model/calculator now exist and are ready to hook into a rebuilt onboarding flow |
 | 8 | Cross-feature UX / growth / premium | ~10% | Not started | Depends on 1–7 |
@@ -1242,10 +1259,15 @@ sessions is specific to newer SDKs (3.44.x) where `IconData` became `final`.
   `add_item_to_list` tool.
 
 **Explicitly NOT done (honest gaps):**
-- Recipe suggestions from past meals/offers/budget, price-drop/Angebote
+- ~~Recipe suggestions from past meals/offers/budget, price-drop/Angebote
   notifications, "you usually buy this on Sundays" (weekday patterns), and
   milestone celebrations — all still open; the notification gate +
-  `AvoNudgeService` now give them a clean place to land.
+  `AvoNudgeService` now give them a clean place to land.~~ **Angebote
+  nudges, weekday patterns, and milestone celebrations were built in the
+  seventh session (2026-07-07, below). Proactive recipe-suggestion nudges
+  remain open** (Avo *chat* already does calorie-aware recipe suggestions
+  on request since Feature 4's session; the proactive-notification version
+  overlaps Feature 8 and is still to do).
 - Scheduled-notification delivery needs a real device QA pass (fires when
   app is closed? iOS pending-notification limits?). Logic is
   analyzer-verified and edge-case-tested (filter math, month/year rollover,
@@ -1254,6 +1276,105 @@ sessions is specific to newer SDKs (3.44.x) where `IconData` became `final`.
 - The nudge computation runs on app open/resume; there is no server-side
   push for it (a Supabase cron + push edge function would deliver even if
   the app is never opened — flagged as an idea below).
+
+**Seventh session, 2026-07-07 (scheduled routine, second run of the day —
+this feature's dedicated session).** Features 1–4's remaining gaps all need
+a device/Xcode or external data that doesn't exist, so per the feature
+order this session closed Feature 5's documented open items that are
+buildable here: Angebote nudges, weekday buying patterns, and milestone
+celebrations. Real Flutter 3.35.6 toolchain; analyzer byte-identical
+before/after (612 issues, 0 errors, 59 warnings), `flutter test` passes.
+
+*1. Offer/Angebote nudges ("Avo can notify about price drops or relevant
+Angebote") — done:*
+- `AvoNudgeService.getOfferNudges()`: rhythm items that are due again soon
+  (≥0.6 of their own purchase cycle, same trust rules as restock: ≥3
+  purchases, 2–60-day rhythm) and not already on any open list are checked
+  against live marktguru offers. A nudge is produced when a *relevant*
+  offer exists; offers with a disclosed regular price ("statt 1,49", ≥10%
+  off) are preferred and shown with the discount, otherwise the cheapest
+  relevant offer is shown as a plain Angebot — **no discount figure is
+  ever invented** (verified live: most staple flyer offers disclose no
+  regular price at all, so requiring one would have made the feature
+  near-dead).
+- **Two real design flaws were caught by testing against the live API
+  before shipping:** (a) the first cut required a disclosed ≥10% discount —
+  live data showed 0/30 milk offers and ~1/30 branded offers carry one, so
+  the rule was demoted from requirement to preference; (b) plain substring
+  matching picked "Milch Reis" for *milch* and "Frucht Butter Milch" for
+  *butter* — embarrassing as proactive claims. New
+  `offerMatchesItem()`: German compounds put the head noun last, so an
+  exact word only counts in last position ("Frische Milch" yes, "Milch
+  Reis" no) and compound words must *end* with the item ("Vollmilch",
+  "Räucherkäse" yes, "Milchreis" no). 14 unit cases + a live re-simulation
+  across 6 staples all produce sensible nudges (e.g. "Butter · 0,99 € ·
+  Lidl", "Fladenbrot · 1,79 € statt 2,67 · Lidl").
+- Cost control: results cached in SharedPreferences for 6h keyed by
+  zip+candidate set, max 6 offer searches per computation (the offers
+  service's own 30-min cache and 250ms throttle still apply). Only runs
+  with a **real** zip (GPS or manual) — never claims "nearby" offers from
+  the nationwide fallback zip.
+- Home card: offer rows join the existing Avo card (restock rows keep
+  priority; an offer for an already-suggested restock item shows inline
+  under it instead of duplicating). Each row names the actual offered
+  product ("Frische Vollmilch · −23 % · 0,99 € · Lidl"), one-tap add
+  carries price/retailer/pack-size onto the list item (`autoParse: false`,
+  same as the list's own offer flow), ✕ snoozes until the offer expires.
+  The card header switches to "Für dich im Angebot" when only offer rows
+  are present. Gated by the same auth/empty rules — renders nothing when
+  nothing is due.
+- Morning reminder: when the top due item also has a live offer that is
+  still valid at fire time (tomorrow 09:00), the body becomes "Milch ist
+  wahrscheinlich fast aufgebraucht – und gerade im Angebot bei Lidl
+  (0,99 €)." — same single one-shot notification, same avoNudges gate, no
+  new notification stream.
+
+*2. Weekday buying patterns ("you usually buy this on Sundays") — done:*
+- `dominantWeekday()` from the already-stored per-item `purchase_dates`
+  arrays: a weekday counts when ≥3 purchases fall on it AND it covers at
+  least half of all purchases (verified with 6 edge cases incl.
+  exactly-half and under-threshold).
+- Used in two ways: the card's rhythm line becomes "Etwa alle 7 Tage ·
+  meistens sonntags", and — the actionable part — items that are ≥0.75 of
+  the way through their cycle surface on their usual buying day even
+  before they're strictly overdue (so the Sunday-shopper sees "Milch"
+  on Sunday morning, not Tuesday).
+- The Avo chat `get_restock_suggestions` tool now reports
+  `usually_bought_on` so chat answers can mention the pattern too.
+- Localized weekday adverbs (montags…sonntags / on Mondays…on Sundays),
+  EN/DE.
+
+*3. Milestone celebrations ("without being childish") — done:*
+- `MascotNotificationService.milestoneMessageForCompletedTrip()`: on
+  completing a shopping trip, if the user's own completed-trip count just
+  hit 10/25/50/100/250/500/1000, the completion snackbar becomes "🥑
+  Meilenstein: Das war dein 50. Einkauf mit Shoply!" — each milestone
+  fires at most once (tracked locally), milestones are sparse by design,
+  it's an in-app moment (no notification), and on any error the normal
+  snackbar shows instead.
+
+**Files changed (seventh session):**
+`lib/data/services/avo_nudge_service.dart` (OfferNudge model +
+getOfferNudges + offerMatchesItem + dominantWeekday + weekday eligibility +
+offer snooze/cache), `lib/presentation/state/avo_nudge_provider.dart`
+(offerNudgesProvider), `lib/presentation/screens/home/widgets/avo_nudge_card.dart`
+(offer rows, weekday line, shared row layout, offer-aware add),
+`lib/data/services/mascot_notification_service.dart` (offer-enriched
+reminder body, milestone method),
+`lib/presentation/screens/lists/list_detail_screen.dart` (milestone
+snackbar on trip completion), `lib/data/services/avo_assistant_service.dart`
+(usually_bought_on in restock tool output),
+`lib/core/localization/app_translations.dart` (13 new EN/DE keys).
+
+**Checks performed (seventh session):** full `flutter analyze` before/after
+(612 issues both times, 0 errors, 59 warnings, diffed ignoring line
+numbers — zero new issues of any severity); `flutter test` passes; live
+marktguru verification of discount-disclosure rates and a 6-staple
+end-to-end nudge simulation with the final matcher; 18 eligibility/weekday
+cases + 14 matcher cases via throwaway `dart run` scripts (all passed, not
+committed). **Not run (no device):** actual rendering of the offer rows,
+the snackbar milestone moment, or the offer-enriched scheduled
+notification firing.
 
 ---
 
@@ -1667,6 +1788,26 @@ exists, "N calories left — 3 dinner ideas from your list."
     the `showNotification` choke point and syncs the FCM token so the
     master switch stops background pushes too. Details in Feature 5's
     sixth-session notes.
+
+- [ ] IDEA: Proactive recipe-suggestion nudge — "600 kcal left today — Avo
+  found 3 dinner ideas from your list" (the last open Feature-5 brief item,
+  overlapping Feature 8).
+  - Why it helps: connects calorie tracking (Feature 6), recipes, and the
+    nudge surface built in Feature 5 into one retention loop; the chat-side
+    version already exists (calorie-aware search_recipes), this is the
+    proactive card/notification version.
+  - Expected user value: medium-high for calorie-tracking users; zero
+    noise for others (gated on the calorie-tracking preference).
+  - Expected business/premium value: medium-high — this is the kind of
+    smart moment the premium pitch can point at.
+  - Complexity: Medium (recipe-nutrition matching against remaining
+    calories exists; needs an evening-time in-app card + optional
+    notification with careful frequency rules).
+  - Risk: Low-medium (spam potential if not capped; should reuse the
+    avoNudges gate + a max-per-day rule).
+  - Recommendation: yes, as the next Feature 5/8 slice — ideally after the
+    current nudges have had a device QA pass so the frequency feel is
+    validated before adding another stream.
 
 - [ ] IDEA: Server-side restock reminders (Supabase cron + the existing
   send-push-notification edge function) instead of the client-scheduled
