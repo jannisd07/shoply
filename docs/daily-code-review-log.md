@@ -80,3 +80,38 @@ Findings:
 
 No changes were made this run (review-only) — the feature-completeness and
 sync-architecture gaps look like product decisions, not one-line fixes.
+
+## 2026-07-07 — `lib/presentation/widgets/oauth_webview_dialog.dart`
+
+Reviewed the file plus a search for its references, and how Google Sign-In
+actually works in the app today (`login_screen.dart`, `signup_screen.dart`,
+`welcome_screen.dart`, `supabase_service.dart`).
+
+Findings:
+- **Dead code**: `OAuthWebViewDialog` has zero callers anywhere in the repo
+  (`grep`-confirmed — the class only appears in its own definition file).
+  Actual Google auth is implemented via the `google_sign_in` package
+  end-to-end; this widget is an orphaned prototype.
+- **Bug (if it were ever used)**: even ignoring the dead-code issue, the
+  widget doesn't work. `build()` branches on
+  `kIsWeb || defaultTargetPlatform == TargetPlatform.iOS`, but *both*
+  branches render a static "not supported, use email/password" message —
+  there is no actual WebView anywhere. `initState()` has a matching
+  platform check whose body is just a comment: `// WebView initialization
+  would go here for supported platforms`. The three constructor
+  parameters that give the widget its purpose — `authUrl`,
+  `redirectScheme`, `onRedirect` — are never read anywhere in the class.
+- **Provenance**: `git log --follow` shows this file was introduced in
+  commit `65b615e` ("Add avocado loading screen and video_player
+  dependency"), an unrelated bulk commit — consistent with it being
+  scaffolding that was never finished or connected.
+- No security issues (no auth logic actually executes here — it's an
+  inert placeholder), no localization keys needed fixing (its strings are
+  hardcoded English, but since it's unreachable/dead this doesn't affect
+  users).
+
+No changes were made this run (review-only). Recommendation for a future
+run/human: safe to delete `lib/presentation/widgets/oauth_webview_dialog.dart`
+outright since it has no callers, or finish wiring it to a real WebView
+package if OAuth-via-webview is still wanted as a fallback to
+`google_sign_in`.
