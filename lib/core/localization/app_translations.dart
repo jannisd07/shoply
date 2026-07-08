@@ -197,6 +197,29 @@ class AppTranslations {
     'onb_recipes_title': 'Recipes adapt\nto you.',
     'onb_recipes_sub':
         'Vegetarian, vegan, gluten-free — Avo swaps ingredients and fills your list.',
+    'onb_diet_kicker': 'Personalize',
+    'onb_diet_title': 'Eating\nanything special?',
+    'onb_diet_sub':
+        'Avo uses this to filter recipes and swap ingredients for you. Change it anytime in settings.',
+    'onb_diet_none_hint': 'Nothing selected? That just means no restrictions.',
+    'diet_vegetarian': 'Vegetarian',
+    'diet_vegan': 'Vegan',
+    'diet_gluten_free': 'Gluten-free',
+    'diet_dairy_free': 'Dairy-free',
+    'diet_pescatarian': 'Pescatarian',
+    'diet_keto': 'Keto',
+    'diet_paleo': 'Paleo',
+    'diet_low_carb': 'Low-carb',
+    'diet_halal': 'Halal',
+    'diet_kosher': 'Kosher',
+    'diet_nut_free': 'Nut-free',
+    'diet_low_sodium': 'Low-sodium',
+    'onb_goal_kicker': 'Your goal',
+    'onb_goal_title': 'A few numbers\nto get it right.',
+    'onb_goal_sub':
+        'This calculates a daily calorie and macro target for you — nothing is shared, and you can change it anytime.',
+    'onb_goal_skip_hint':
+        'Not sure yet? Skip this — you can set up your goal later from the Kalorien tab.',
     'onb_cal_kicker': 'Optional',
     'onb_cal_title': 'Track calories\ntoo?',
     'onb_cal_sub':
@@ -1017,6 +1040,29 @@ class AppTranslations {
     'onb_recipes_title': 'Rezepte passen\nsich dir an.',
     'onb_recipes_sub':
         'Vegetarisch, vegan, glutenfrei — Avo tauscht Zutaten und füllt deine Liste.',
+    'onb_diet_kicker': 'Personalisieren',
+    'onb_diet_title': 'Isst du\nbesonders?',
+    'onb_diet_sub':
+        'Avo nutzt das, um Rezepte zu filtern und Zutaten zu ersetzen. Änderbar jederzeit in den Einstellungen.',
+    'onb_diet_none_hint': 'Nichts ausgewählt? Dann isst du einfach alles.',
+    'diet_vegetarian': 'Vegetarisch',
+    'diet_vegan': 'Vegan',
+    'diet_gluten_free': 'Glutenfrei',
+    'diet_dairy_free': 'Laktosefrei',
+    'diet_pescatarian': 'Pescetarisch',
+    'diet_keto': 'Keto',
+    'diet_paleo': 'Paleo',
+    'diet_low_carb': 'Low-Carb',
+    'diet_halal': 'Halal',
+    'diet_kosher': 'Koscher',
+    'diet_nut_free': 'Nussfrei',
+    'diet_low_sodium': 'Natriumarm',
+    'onb_goal_kicker': 'Dein Ziel',
+    'onb_goal_title': 'Ein paar Zahlen\nfür die richtigen Werte.',
+    'onb_goal_sub':
+        'Damit berechnen wir dein tägliches Kalorien- und Makroziel — nichts wird geteilt, und du kannst es jederzeit ändern.',
+    'onb_goal_skip_hint':
+        'Noch unsicher? Überspringen — du kannst dein Ziel später im Kalorien-Tab einrichten.',
     'onb_cal_kicker': 'Optional',
     'onb_cal_title': 'Auch Kalorien\ntracken?',
     'onb_cal_sub':

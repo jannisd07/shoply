@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/widgets/paper/paper_widgets.dart';
+import 'package:shoply/data/services/onboarding_answers_service.dart';
+import 'package:shoply/presentation/screens/onboarding/widgets/onboarding_diet_page.dart';
+import 'package:shoply/presentation/screens/onboarding/widgets/onboarding_goal_page.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 
 /// Key used to track onboarding completion in SharedPreferences
@@ -32,11 +35,11 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  static const int _pageCount = 4;
-
   final _pageController = PageController();
   int _currentPage = 0;
   bool _caloriesOptIn = false;
+  Set<String> _dietPreferences = {};
+  OnboardingGoalDraft? _goalDraft;
 
   @override
   void dispose() {
@@ -50,13 +53,55 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     await ref
         .read(calorieTrackingEnabledProvider.notifier)
         .setEnabled(_caloriesOptIn);
+    // There's no account yet at this point (onboarding runs before
+    // signup/login) — stash the answers locally so they can be applied to
+    // the real account the moment one exists (see
+    // OnboardingAnswersService / currentUserProvider).
+    await OnboardingAnswersService.instance.savePendingAnswers(
+      dietPreferences: _dietPreferences.toList(),
+      caloriesOptedIn: _caloriesOptIn,
+      goalDraft: _caloriesOptIn ? _goalDraft : null,
+    );
     await markOnboardingComplete();
     if (!mounted) return;
     context.go('/welcome');
   }
 
-  void _nextPage() {
-    if (_currentPage < _pageCount - 1) {
+  List<Widget> get _pages => [
+        _PaperFeaturePage(
+          kicker: context.tr('onb_sorted_kicker'),
+          title: context.tr('onb_sorted_title'),
+          subtitle: context.tr('onb_sorted_sub'),
+          illustration: const _SortedListIllustration(),
+        ),
+        _PaperFeaturePage(
+          kicker: context.tr('onb_shared_kicker'),
+          title: context.tr('onb_shared_title'),
+          subtitle: context.tr('onb_shared_sub'),
+          illustration: const _SharedListIllustration(),
+        ),
+        _PaperFeaturePage(
+          kicker: context.tr('onb_recipes_kicker'),
+          title: context.tr('onb_recipes_title'),
+          subtitle: context.tr('onb_recipes_sub'),
+          illustration: const _RecipesIllustration(),
+        ),
+        OnboardingDietPage(
+          selected: _dietPreferences,
+          onChanged: (s) => setState(() => _dietPreferences = s),
+        ),
+        _CalorieOptInPage(
+          optedIn: _caloriesOptIn,
+          onChanged: (v) => setState(() => _caloriesOptIn = v),
+        ),
+        if (_caloriesOptIn)
+          OnboardingGoalPage(
+            onDraftChanged: (draft) => _goalDraft = draft,
+          ),
+      ];
+
+  void _nextPage(int pageCount) {
+    if (_currentPage < pageCount - 1) {
       _pageController.animateToPage(
         _currentPage + 1,
         duration: const Duration(milliseconds: 400),
@@ -69,7 +114,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLast = _currentPage == _pageCount - 1;
+    final pages = _pages;
+    final pageCount = pages.length;
+    // Swiping back past the goal page (or toggling calorie tracking off
+    // while ahead of it) can leave the page index pointing past the end of
+    // a now-shorter page list — clamp instead of letting PageView throw.
+    if (_currentPage > pageCount - 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _pageController.jumpToPage(pageCount - 1);
+          setState(() => _currentPage = pageCount - 1);
+        }
+      });
+    }
+    final isLast = _currentPage == pageCount - 1;
 
     return Scaffold(
       backgroundColor: PaperColors.paper,
@@ -96,30 +154,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               child: PageView(
                 controller: _pageController,
                 onPageChanged: (i) => setState(() => _currentPage = i),
-                children: [
-                  _PaperFeaturePage(
-                    kicker: context.tr('onb_sorted_kicker'),
-                    title: context.tr('onb_sorted_title'),
-                    subtitle: context.tr('onb_sorted_sub'),
-                    illustration: const _SortedListIllustration(),
-                  ),
-                  _PaperFeaturePage(
-                    kicker: context.tr('onb_shared_kicker'),
-                    title: context.tr('onb_shared_title'),
-                    subtitle: context.tr('onb_shared_sub'),
-                    illustration: const _SharedListIllustration(),
-                  ),
-                  _PaperFeaturePage(
-                    kicker: context.tr('onb_recipes_kicker'),
-                    title: context.tr('onb_recipes_title'),
-                    subtitle: context.tr('onb_recipes_sub'),
-                    illustration: const _RecipesIllustration(),
-                  ),
-                  _CalorieOptInPage(
-                    optedIn: _caloriesOptIn,
-                    onChanged: (v) => setState(() => _caloriesOptIn = v),
-                  ),
-                ],
+                children: pages,
               ),
             ),
             Padding(
@@ -128,7 +163,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    children: List.generate(_pageCount, (i) {
+                    children: List.generate(pageCount, (i) {
                       final active = i == _currentPage;
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
@@ -150,7 +185,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     label: isLast
                         ? context.tr('get_started')
                         : context.tr('next'),
-                    onPressed: _nextPage,
+                    onPressed: () => _nextPage(pageCount),
                   ),
                 ],
               ),

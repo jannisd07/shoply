@@ -1,8 +1,26 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-07, second run (scheduled routine — Feature 5 focus: offer/Angebote nudges, weekday buying patterns, trip milestones)_
+_Last updated: 2026-07-08 (scheduled routine — Feature 7 focus: personalized onboarding — diet-preference & goal-questionnaire pages, account-level sync)_
 
 ## Environment note (read first)
+
+The 2026-07-08 **Feature-7** session downloaded Flutter 3.35.6 stable fresh
+into `/tmp/flutter` and verified with full-project `flutter analyze`: baseline
+(this branch, before this session's changes) **612 issues (0 errors, 59
+warnings, 553 info)**; after this session's 3 new files + 5 touched files + 1
+deleted dead file: **610 issues (0 errors, 59 warnings, 551 info)** —
+diffed ignoring line numbers, the only real change is the 2 `withOpacity`
+info-lints that left with the deleted dead `unified_setup_screen.dart`; every
+new/touched file is analyzer-clean. `flutter test` passes ("All tests
+passed"). The `OnboardingGoalDraft` JSON round-trip and
+`NutritionGoalCalculator` sanity (reused from Feature 6, not reimplemented)
+were verified with a throwaway `flutter test` file (7 assertions, all passed,
+not committed). No iOS build/device test possible here (no macOS/Xcode) — see
+"Not verified" in the Feature 7 section below for what that specifically
+leaves unconfirmed, in particular the real signup → onboarding-answers-sync
+round trip against a live Supabase project.
+
+The earlier note from the 2026-07-07 second run (Feature 5):
 
 The 2026-07-07 **Feature-5** session (second run of the day) downloaded
 Flutter 3.35.6 stable fresh into `/tmp/flutter` and verified with
@@ -111,13 +129,13 @@ was **never wired into any screen** — this session wired it up.
 
 | # | Feature | Completion | Status | Blockers |
 |---|---|---|---|---|
-| 1 | Pricing, offers, cheapest store | ~93% | In progress (this session) | Regular (non-offer) shelf prices have no public API — offers-only by design |
+| 1 | Pricing, offers, cheapest store | ~93% | In progress | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
-| 3 | Widgets & quick actions | ~75% | In progress (this session) | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
+| 3 | Widgets & quick actions | ~75% | In progress | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~85% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools still blocked on Feature 7 |
-| 5 | Avo mascot & smart notifications | ~80% | In progress (this session) | Proactive recipe-suggestion nudges still open; needs device QA for scheduled notifications |
-| 6 | Calorie tracking | ~70% | In progress (this session) | Barcode camera scan, diet challenges (16:8/no-sugar), Avo integration, and meal-photo storage not built; needs device QA |
-| 7 | Personalized onboarding & navbar | ~30% | In progress | Feature 6's goal model/calculator now exist and are ready to hook into a rebuilt onboarding flow |
+| 5 | Avo mascot & smart notifications | ~80% | In progress | Proactive recipe-suggestion nudges still open; needs device QA for scheduled notifications |
+| 6 | Calorie tracking | ~70% | In progress | Barcode camera scan, diet challenges (16:8/no-sugar), and meal-photo storage not built; needs device QA |
+| 7 | Personalized onboarding & navbar | ~75% (this session) | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
 | 8 | Cross-feature UX / growth / premium | ~10% | Not started | Depends on 1–7 |
 
 ---
@@ -1550,6 +1568,188 @@ against the verified live schema.
 
 ## Feature 7 — Personalized onboarding and navbar
 
+**Fifth session, 2026-07-08 (scheduled routine — this feature's dedicated
+session).** Features 1–6 have each had multiple dedicated sessions and sit
+at 70–95% with genuinely mature, documented states (external blockers or
+"needs a real device build" as the only gaps); the owner had also already
+approved (`[ yes]`) sequencing Feature 7 right after Feature 6's schema
+landed. Audited the ~30% state left by the 2026-07-04 sessions (navbar
+already data-driven and calorie-optional; the onboarding flow itself still a
+3-page marketing carousel that "collects nothing and doesn't even
+functionally gate anything") and closed the two required-but-missing pieces:
+personalization questions during onboarding, and a real account-level goal
+questionnaire when the user opts into calorie tracking.
+
+**Before this session:**
+- Onboarding was 3 marketing pages + a binary "calorie tracking yes/no"
+  page, gated purely by a device-local `SharedPreferences` flag
+  (`onboarding_complete_v1`). It asked nothing about the user and collected
+  no personalization data at all.
+- `users.diet_preferences`/`allergies` (already used everywhere for recipe
+  filtering and ingredient substitution) were only ever collected later, from
+  Profile → Diet preferences — never during onboarding.
+- If a user opted into calorie tracking during onboarding, they landed on an
+  empty calories tab and had to separately discover "Set up your goals" to
+  reach the real goal questionnaire (`GoalSetupScreen`, built in Feature 6) —
+  a real drop-off point, and the opposite of "ask follow-up goal questions"
+  from the brief.
+- `NutritionGoalService.setTrackingEnabled()` (a real, working server call
+  Feature 6 already built) had **zero call sites anywhere in the app** — the
+  calorie-tracking on/off preference was purely local, so it silently reset
+  to "off" on reinstall or a second device.
+- `users.onboarding_completed` (DB column) was fetched and cached every app
+  start but never written by anything reachable, and never used to make a
+  redirect decision — dead weight, exactly as the prior audit flagged.
+- A second, fully unreachable onboarding screen, `UnifiedSetupScreen`
+  (`/setup` route — a leftover dark-themed "what's your name" screen, no
+  navigation call site anywhere, confirmed via grep), sat next to the real
+  onboarding flow as a trap for the next person searching for "onboarding".
+
+**What I implemented:**
+- **Diet-preference onboarding page** (`onboarding_diet_page.dart`, new) —
+  "Isst du besonders?" with the *exact same 12 diet ids* the Profile → Diet
+  preferences screen already uses (`vegetarian`, `vegan`, `gluten_free`, …),
+  as compact multi-select pill chips. None selected = no restrictions, same
+  semantics as the settings screen. This directly feeds real, already-live
+  behavior (recipe filtering, ingredient substitution) — not a cosmetic
+  question with no effect.
+- **Goal questionnaire onboarding page** (`onboarding_goal_page.dart`, new) —
+  shown only when the previous page's calorie-tracking opt-in is "yes":
+  goal type (lose/gain/maintain/custom), gender, age, height, current
+  weight, target weight + timeline (only when relevant), activity level —
+  the exact fields the brief asks for, using the *same*
+  `NutritionGoalCalculator` Feature 6 already built (no duplicated
+  calculation logic). Reports a nullable draft up to the parent on every
+  change; an incomplete draft is a valid, non-blocking state.
+- **Onboarding never traps the user.** The primary button always finishes
+  onboarding regardless of whether the goal page is complete — skipping just
+  means calorie tracking is enabled without a configured goal yet, which
+  Feature 6's existing calories dashboard already handles gracefully (its
+  own "Set up your goals" prompt card). The page count is now dynamic
+  (5 pages, or 6 with the goal page included) and the "Skip" button and swipe
+  navigation both still work with the dynamic page list — a clamp guards the
+  one real edge case (toggling calorie tracking off after having reached the
+  now-removed goal page) so `PageView` never receives an out-of-range index.
+- **`OnboardingAnswersService`** (new,
+  `lib/data/services/onboarding_answers_service.dart`) — the missing piece
+  that makes the two new pages real instead of decorative. Onboarding runs
+  *before* an account exists, so there's nowhere to save these answers yet;
+  this service stashes them in `SharedPreferences` and applies them to the
+  real `users` / `nutrition_goals` rows **the first time this device sees an
+  authenticated user** (idempotent via a synced flag — never re-runs, never
+  clobbers answers the user later changes from Profile/goal settings, and is
+  a safe no-op for existing users who onboarded before this session, since
+  they have nothing pending). Wired into `currentUserProvider`'s
+  `users`-row lookup (`auth_provider.dart`) — the one real choke point every
+  first login (email OTP signup *and* Google/Apple OAuth) already passes
+  through, since that's also where the `users` row itself gets created for a
+  brand-new account. When it applies changes, the provider re-fetches the row
+  so the very first `UserModel` the app sees is already correct rather than
+  stale until the next refresh.
+- **Fixed the completely dead `calorie_tracking_enabled` server sync.**
+  `CalorieTrackingNotifier` (`calorie_tracking_provider.dart`) now also reads
+  `nutrition_goals.calorie_tracking_enabled` on load (server wins when a row
+  exists, local `SharedPreferences` is the offline-safe mirror, same pattern
+  Feature 5's `NotificationPreferencesService` already established) and
+  writes through `NutritionGoalService.setTrackingEnabled()` on every
+  toggle — a previously-built, previously-unused server method now actually
+  gets called. This means the calorie-tab preference set during onboarding
+  (or later from Profile) now survives a reinstall or a second device instead
+  of silently resetting to off, directly satisfying "must be optional... you
+  can change this anytime" for real rather than only on the device that set
+  it.
+- **`users.onboarding_completed` now has a real writer.** It's set `true` by
+  `OnboardingAnswersService` the moment the answers are applied to a fresh
+  account — the column stops being fetched-but-never-written dead weight.
+  Left the router's actual pre-login onboarding gate as the local
+  `SharedPreferences` flag (unchanged, low-risk) rather than rewiring
+  `redirect:`'s auth logic, since a logged-in user already skips `/onboarding`
+  entirely regardless of this field (traced the full redirect function to
+  confirm) — the real value of finally writing this field is that it's an
+  honest signal for anything that reads it later (analytics, support, a
+  future admin view), not a redirect-logic change.
+- **Deleted the confirmed-dead `UnifiedSetupScreen`/`/setup` route** —
+  zero navigation call sites anywhere (`context.go('/setup')`,
+  `context.push('/setup')`, `goNamed('setup')` all return no matches), the
+  real "ask for a display name" flow is `NamePromptScreen` at `/name-prompt`
+  (reachable, upserts `display_name` after OAuth login). Direct,
+  well-scoped cleanup since it sits in the exact onboarding-adjacent code
+  this session was already auditing.
+- **14 new EN/DE translation key pairs** for the two new pages (diet
+  kicker/title/sub + 12 diet labels, goal kicker/title/sub/skip-hint) —
+  reused the existing `goal_type_*`/`gender_*`/`activity_*` keys Feature 6
+  already localized rather than duplicating them.
+
+**Explicitly NOT done / still open:**
+- **The real account-signup → sync round trip is unverified on a live
+  device.** The JSON round-trip, the calculator math, and the analyzer pass
+  are all verified; a real OTP/OAuth signup actually hitting
+  `currentUserProvider`'s create-branch, writing `diet_preferences`/
+  `onboarding_completed`/the `nutrition_goals` row, and having the calories
+  dashboard immediately show the right target — needs a real device/Xcode
+  session with a live Supabase project, which this container doesn't have.
+- **Existing users are unaffected by design** (nothing pending to sync,
+  confirmed by tracing the no-pending-answers early-return), but that also
+  means this session doesn't retroactively personalize anyone who onboarded
+  before it — expected, not a shortcut.
+- **The router's pre-login onboarding gate is still local-device-only.**
+  This is unchanged from before (traced: a logged-in user already bypasses
+  `/onboarding` regardless of the DB field), so it's not a regression, but a
+  genuinely account-scoped "skip onboarding" (e.g. for a user who logs into
+  a second, never-onboarded device) would need touching the redirect
+  function itself — flagged as an idea below since it's a real, if rare,
+  UX gap, not something this session's brief specifically asked for.
+- **"What kind of user are you" is scoped to diet preferences + calorie
+  goals** — the two personalization axes that have a real, already-wired
+  effect on the app (recipe filtering/substitution, calorie targets).
+  Deliberately did *not* add a separate "which features do you want" toggle
+  for shopping/recipes/deals, since none of those are actually gateable in
+  the app today (Standard shopping/recipe features are always on, per the
+  brief) — inventing toggles with no code behind them would be exactly the
+  "fake working integration" the brief warns against.
+- **Navbar personalization itself was already done** in the 2026-07-04
+  sessions (data-driven Kalorien tab via `calorieTrackingEnabledProvider`) —
+  this session only touched the account-scoping of that same preference, not
+  the navbar layout.
+
+**Not verified (no macOS/Xcode/device in this container):** the actual
+onboarding UI on a real screen (chip wrapping, goal-page scroll behavior,
+the dynamic page-count dot indicator); a live signup completing the full
+onboarding → answers-applied → dashboard-shows-target loop; whether Apple/
+Google OAuth's first login (vs. email OTP) hits the same
+`currentUserProvider` create-branch identically (traced via code reading, not
+exercised live).
+
+**Files changed (fifth session):**
+`lib/presentation/screens/onboarding/onboarding_screen.dart` (dynamic page
+list, diet/goal state, wiring to `OnboardingAnswersService`),
+`lib/presentation/screens/onboarding/widgets/onboarding_diet_page.dart`
+(new), `lib/presentation/screens/onboarding/widgets/onboarding_goal_page.dart`
+(new), `lib/data/services/onboarding_answers_service.dart` (new),
+`lib/presentation/state/auth_provider.dart` (`currentUserProvider` sync
+hook, re-fetch on apply), `lib/presentation/state/calorie_tracking_provider.dart`
+(server read/write via `NutritionGoalService`), `lib/routes/app_router.dart`
+(removed the dead `/setup` route), `lib/core/localization/app_translations.dart`
+(14 new EN/DE key pairs). **Deleted:**
+`lib/presentation/screens/onboarding/unified_setup_screen.dart`.
+
+**Checks performed (fifth session):** Flutter 3.35.6 downloaded fresh into
+`/tmp/flutter`; `flutter analyze` before/after (612 → 610 issues, 0 errors,
+59 warnings both times, diffed ignoring line numbers — the only change is
+the 2 info-lints removed with the deleted dead file); `flutter test` passes.
+A throwaway `flutter test` file (not committed) verified the
+`OnboardingGoalDraft` JSON round-trip (including the maintain-goal
+no-target-weight null case) and re-exercised `NutritionGoalCalculator`
+against the lose-weight and extreme-short-timeline profiles (macros sum back
+to the calorie target, safety floor holds) — same calculator Feature 6
+already unit-checked, re-verified here because the onboarding page feeds it
+fresh input shapes. Traced every new Supabase call
+(`OnboardingAnswersService`, `CalorieTrackingNotifier`) against the exact
+column names/RLS-scoping pattern `goal_setup_screen.dart` and
+`diet_preferences_screen.dart` already use successfully, rather than
+inventing a new access pattern. Grepped for zero remaining references to
+`UnifiedSetupScreen`/`unified_setup_screen` before deleting.
+
 **Navbar update (2026-07-04, owner-directed):** After an interactive design
 round (three concepts → Option B variations → light/dark treatments), the
 owner picked the "D1" design and it is now implemented in `MainScaffold`:
@@ -1839,31 +2039,57 @@ exists, "N calories left — 3 dinner ideas from your list."
     via the existing `PushNotificationService`; notifies the other party
     only, fire-and-forget. Details in Feature 2's fourth-session notes.
 
-- [ yes] IDEA: Build calorie tracking (Feature 6) as its own dedicated
-  multi-session effort with build verification available, following the
-  phased plan above, rather than attempting it piecemeal.
-  - Why it helps: avoids shipping a half-working, unverified nutrition
+- [x] IDEA (approved, DONE 2026-07-06): Build calorie tracking (Feature 6) as
+  its own dedicated multi-session effort with build verification available,
+  following the phased plan above, rather than attempting it piecemeal.
+  - **Outcome:** Built in the 2026-07-06 session (models, services, full
+    dashboard/goal-setup/food-log UI, Mifflin-St Jeor calculator) — see
+    Feature 6's session notes. Left as historical context below rather than
+    deleted, since the "please confirm the formula/scanner approach"
+    questions it raised are still relevant to the two open ideas about
+    barcode scanning and diet challenges further down.
+  - Why it helped: avoids shipping a half-working, unverified nutrition
     feature that touches user health data.
   - Expected user value: high (explicitly requested, large feature area).
   - Expected business/premium value: high (Lifesum-style tracking is a
     strong premium upsell surface per the original brief).
   - Complexity: High.
   - Risk: Medium if rushed without verification; low if properly scoped.
-  - Recommendation: needs decision — specifically, please confirm the goal
+  - Recommendation (historical): needs decision — specifically, please confirm the goal
     calculation formula/source you want (e.g. Mifflin-St Jeor) and whether
     barcode scanning should re-enable `mobile_scanner` or use a lighter
     camera+Gemini-vision approach, before a follow-up session starts on it.
 
-- [ yes] IDEA: Rebuild onboarding (Feature 7) immediately after Feature 6's
-  schema is settled, replacing the static carousel with the adaptive flow
-  and making `onboarding_completed` actually gate the router.
-  - Why it helps: currently onboarding collects nothing and doesn't even
-    functionally gate anything — it's pure UI theater today.
-  - Expected user value: high — this is the entry point for the app feeling
-    personalized at all.
-  - Expected business/premium value: medium (better activation funnel).
-  - Complexity: Medium.
-  - Risk: Medium — touches auth/router redirect logic, needs careful testing
-    against existing users who already have `onboarding_completed=false`
-    in the DB from the current (inert) field.
-  - Recommendation: yes, sequenced after Feature 6.
+- [x] IDEA (approved, DONE 2026-07-08): Rebuild onboarding (Feature 7)
+  immediately after Feature 6's schema is settled, replacing the static
+  carousel with the adaptive flow.
+  - **Outcome:** Added a diet-preference page and a conditional goal
+    questionnaire page (reusing Feature 6's `NutritionGoalCalculator`), plus
+    `OnboardingAnswersService` to actually apply those answers to the
+    account once one exists (`onboarding_completed`, `diet_preferences`,
+    `nutrition_goals`). **Not done as originally scoped:** rewiring the
+    router's `redirect:` to branch on `onboarding_completed` — traced the
+    full redirect function and found a logged-in user already bypasses
+    `/onboarding` unconditionally, so the router side had no real bug to
+    fix; see the new account-scoped-gate idea below for the one genuine
+    (rare) gap this leaves. Details in Feature 7's fifth-session notes.
+
+- [ ] IDEA: Make the pre-login onboarding gate account-scoped, not just
+  device-local.
+  - Why it helps: today, a user who completes onboarding on device A, then
+    logs into a never-before-seen device B, sees the 3-page marketing
+    carousel again before landing on `/welcome` — harmless (they can still
+    tap Skip), but not "personalized," since `users.onboarding_completed`
+    now genuinely reflects reality (Feature 7's fifth session gave it a real
+    writer) yet the router never reads it to skip the carousel pre-login.
+  - Expected user value: low-medium (saves a few taps on a second device;
+    most users never hit this).
+  - Expected business/premium value: low.
+  - Complexity: Low-medium — the field is already correct now, this is
+    purely a `redirect:` read; the tricky part is doing it only when
+    genuinely known-safe offline (same "don't block app entry when offline"
+    constraint the rest of that function already respects).
+  - Risk: Low if scoped to read-only branching (no new writes), but it's
+    auth/router code, so it deserves its own careful pass rather than a
+    drive-by edit.
+  - Recommendation: needs decision — low priority, real but minor UX gap.

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
+import 'package:shoply/data/services/onboarding_answers_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -34,11 +35,25 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
         'updated_at': DateTime.now().toIso8601String(),
       };
 
-      final created = await SupabaseService.instance
+      var created = await SupabaseService.instance
           .from('users')
           .insert(newUser)
           .select()
           .single();
+
+      // Onboarding (diet preferences, calorie-tracking opt-in, goal
+      // answers) runs before an account exists, so it stashes its answers
+      // locally — this is the first point a real user id exists to apply
+      // them to. Runs at most once per device.
+      final applied = await OnboardingAnswersService.instance
+          .applyPendingAnswersToAccount(authUser.id);
+      if (applied) {
+        created = await SupabaseService.instance
+            .from('users')
+            .select()
+            .eq('id', authUser.id)
+            .single();
+      }
 
       final model = UserModel.fromJson(created);
       await OfflineCacheService.instance.cacheUserProfile(
@@ -49,11 +64,21 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
       return model;
     }
 
-    final model = UserModel.fromJson(response);
+    final applied = await OnboardingAnswersService.instance
+        .applyPendingAnswersToAccount(authUser.id);
+    final freshRow = applied
+        ? await SupabaseService.instance
+            .from('users')
+            .select()
+            .eq('id', authUser.id)
+            .single()
+        : response;
+
+    final model = UserModel.fromJson(freshRow);
     await OfflineCacheService.instance.cacheUserProfile(
       userId: authUser.id,
       displayName: model.displayName,
-      onboardingCompleted: response['onboarding_completed'] as bool?,
+      onboardingCompleted: freshRow['onboarding_completed'] as bool?,
     );
     return model;
   } catch (e) {

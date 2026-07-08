@@ -24,7 +24,6 @@ import 'package:shoply/presentation/screens/lists/list_activities_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_background_selection_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_background_picker_screen.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
-import 'package:shoply/presentation/screens/onboarding/unified_setup_screen.dart';
 import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart'
     show OnboardingScreen, hasCompletedOnboarding;
 import 'package:shoply/presentation/screens/legal/privacy_policy_screen.dart';
@@ -113,13 +112,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/name-prompt',
         name: 'name-prompt',
         builder: (context, state) => const NamePromptScreen(),
-      ),
-
-      // Setup route (mandatory after signup)
-      GoRoute(
-        path: '/setup',
-        name: 'setup',
-        builder: (context, state) => const UnifiedSetupScreen(),
       ),
 
       // Main app with bottom navigation – StatefulShellRoute keeps each tab's
