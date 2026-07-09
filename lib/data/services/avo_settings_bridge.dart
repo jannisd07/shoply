@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart'
 import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/notification_preferences_service.dart';
+import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
+import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
 import 'package:shoply/presentation/state/user_profile_provider.dart';
@@ -62,6 +64,7 @@ class AvoSettingsBridge {
     'gender',
     'height',
     'calorie_tracking',
+    'zip_code',
   ];
 
   /// Apply a settings change. Returns a structured result suitable for
@@ -80,6 +83,10 @@ class AvoSettingsBridge {
         case 'calorie_tracking':
         case 'calorie_tracking_enabled':
           return await _setCalorieTracking(value);
+        case 'zip_code':
+        case 'zip':
+        case 'plz':
+          return await _setZipCode(value);
         case 'display_name':
         case 'name':
           return await _updateUserField(
@@ -327,6 +334,32 @@ class AvoSettingsBridge {
       displayName: 'Calorie tracking',
       oldValue: current ? 'on' : 'off',
       newValue: enabled ? 'on' : 'off',
+    );
+  }
+
+  Future<SettingChangeResult> _setZipCode(Object? value) async {
+    final zip = value?.toString().trim() ?? '';
+    // Empty clears the manual override; otherwise a 4-5 digit PLZ
+    // (Germany uses 5, Austria 4 — same data the offer search expects).
+    if (zip.isNotEmpty && !RegExp(r'^\d{4,5}$').hasMatch(zip)) {
+      return SettingChangeResult(
+        success: false,
+        key: 'zip_code',
+        displayName: 'Zip code',
+        newValue: zip,
+        error: 'Zip code must be 4-5 digits (or empty to clear it)',
+      );
+    }
+    final current = await UserLocationService.instance.getManualZipCode();
+    await UserLocationService.instance.setManualZipCode(zip);
+    // Same refresh the zip-code sheet does, so live offer UIs pick it up.
+    ref.invalidate(userZipCodeProvider);
+    return SettingChangeResult(
+      success: true,
+      key: 'zip_code',
+      displayName: 'Zip code',
+      oldValue: current ?? 'none',
+      newValue: zip.isEmpty ? 'none' : zip,
     );
   }
 

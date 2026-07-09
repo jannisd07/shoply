@@ -1,8 +1,20 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-09 (scheduled routine — Feature 8 focus: first cross-feature win — calorie-aware "dinner ideas" nudge connecting Feature 6 calorie tracking, recipes, and the Feature 5 Avo nudge surface)_
+_Last updated: 2026-07-09, second run (scheduled routine — Feature 4 focus: onboarding/preference-guidance tools, the one Feature-4 item that was blocked on Feature 7 and became unblocked when Feature 7 shipped yesterday)_
 
 ## Environment note (read first)
+
+The 2026-07-09 **Feature-4** session (second run of the day) downloaded
+Flutter 3.35.6 stable fresh into `/tmp/flutter` and verified with
+full-project `flutter analyze` before (via `git stash`) and after this
+session's changes — see the Feature 4 eighth-session notes for the exact
+counts — plus `flutter test` ("All tests passed") and a throwaway
+calculator/validation test file (not committed). No iOS build/device test
+possible here (no macOS/Xcode); a live Gemini conversation QA pass (does
+flash-lite route "hilf mir ein Kalorienziel einzurichten" to the new tools
+correctly?) still needs a real device + API key.
+
+The earlier note from the 2026-07-09 Feature-8 session (first run of the day):
 
 The 2026-07-09 **Feature-8** session downloaded Flutter 3.35.6 stable fresh
 into `/tmp/flutter` and verified with full-project `flutter analyze`: baseline
@@ -150,7 +162,7 @@ was **never wired into any screen** — this session wired it up.
 | 1 | Pricing, offers, cheapest store | ~93% | In progress | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~75% | In progress | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
-| 4 | AI assistant app control | ~85% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools still blocked on Feature 7 |
+| 4 | AI assistant app control | ~90% (this session) | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools shipped this session (goal setup, profile read, zip code) |
 | 5 | Avo mascot & smart notifications | ~80% | In progress | Proactive recipe-suggestion nudges still open; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | ~70% | In progress | Barcode camera scan, diet challenges (16:8/no-sugar), and meal-photo storage not built; needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% (this session) | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
@@ -1139,6 +1151,80 @@ identical). **Not run:** a live Gemini conversation (needs a real API key
 in `env.dart` + device), so tool-routing quality (does flash-lite pick the
 right tool for "wie viele Kalorien habe ich noch?") needs a manual QA pass.
 
+**Eighth session, 2026-07-09 (scheduled routine, second run of the day —
+this feature's dedicated session).** Selected per the feature order:
+Features 1–3's remaining gaps still need external APIs or a real
+device/Xcode, and Feature 4 had the one documented item that just became
+unblocked — "Onboarding-guidance tools still blocked on Feature 7" — since
+Feature 7's goal questionnaire + `NutritionGoalCalculator` wiring shipped
+yesterday. Real Flutter 3.35.6 toolchain; full-project `flutter analyze`
+verified before/after via `git stash` (zero new issues of any severity);
+`flutter test` passes.
+
+*What was added (same typed-function-calling architecture, additive only):*
+- **`get_user_profile`** (read tool) — Avo previously had *write* access to
+  settings via `update_setting` but no way to READ current state beyond the
+  context string (which only carries diet/allergies/name). The new tool
+  returns name, age, gender, height, diet preferences, allergies, language,
+  theme, notifications on/off, calorie-tracking on/off, manual zip code, and
+  a goal summary (type + calorie/macro targets) when one is configured —
+  with honest `'not set'` markers so Gemini knows what it may ask about vs.
+  what it already knows. Deliberately reads only the *manual* zip
+  (`getManualZipCode`), never `getZipCode()`, so a profile read can never
+  trigger a GPS permission prompt mid-chat.
+- **`setup_nutrition_goal`** — the actual "AI can guide the user through
+  onboarding/preferences" capability. Before this session, when
+  `get_nutrition_status` reported `goal_configured: false` the only thing
+  Avo could do was point the user at the calories tab. Now the goal
+  questionnaire runs conversationally: the tool takes whatever is known
+  (goal type, gender, age, height, weight, target weight, timeline,
+  activity level), prefills the rest from the profile / existing goal /
+  latest weight-log entry (the *same* prefill sources and priority as
+  `GoalSetupScreen._loadExisting()`), and returns a `missing` list so
+  Gemini asks only for genuinely unknown fields (system prompt: at most two
+  questions per message, conversational, never a form). When complete it
+  calculates targets via the *same* `NutritionGoalCalculator` (no
+  duplicated math), saves through `NutritionGoalService.saveGoal`, logs the
+  current weight, syncs age/height/gender back onto the profile, and
+  invalidates the same providers — mirroring `GoalSetupScreen._save()`
+  line for line. Replacing an already-configured goal uses the established
+  two-step confirmation pattern (first call returns a question naming the
+  old goal + kcal target; only `confirm_replace=true` saves), including an
+  explicit instruction to re-pass all field values on the confirm call so
+  the prefill can't silently resurrect the old goal type.
+- **`zip_code` setting key** (`AvoSettingsBridge` + `update_setting`
+  schema) — fixes a real dead-end: `search_offers` used to respond "ask the
+  user to set their zip code in Profile settings"; now Avo asks for the PLZ
+  and sets it directly (validated 4–5 digits, empty clears, writes through
+  the same `UserLocationService.setManualZipCode` the zip sheet uses), then
+  can immediately re-search offers. The `search_offers` no-location note
+  now routes to this instead of to the settings screen.
+- **Dead-end note fixes**: `get_nutrition_status`'s no-goal note now offers
+  the in-chat setup flow; system-prompt routing rules added for both new
+  tools (profile-read-first, ask-only-missing, confirm-replace).
+
+*Verification (eighth session):* full-project `flutter analyze` before
+(`git stash`: 610 issues, 0 errors, 59 warnings) and after (610 issues, 0
+errors, 59 warnings) — the issue sets are **identical** once line numbers
+are normalized out, i.e. zero new issues of any severity from this
+session's additions. `flutter test` passes ("All tests passed"). A
+throwaway `flutter test` file (5 cases, all passed, not committed)
+exercised `NutritionGoalCalculator` with the exact input shapes the new
+tool passes (maintain with no target weight, lose_weight with target +
+timeline produces a real deficit, extreme-short-timeline safety floor
+holds), the zip-code validation regex (valid 4/5-digit, rejects
+letters/too-short/too-long), and the timeline clamp. Every service call in
+the new tools was traced against the real signatures
+(`NutritionGoalService.saveGoal`, `WeightLogService.logWeight/getLatest`,
+`UserService.instance.updateUserProfile`,
+`UserLocationService.setManualZipCode/getManualZipCode`,
+`MascotNotificationService.rearmDinnerIdeasReminder`) — no new DB access
+paths were invented, so RLS coverage is identical to the existing goal/
+profile screens. **Not run (no device/API key here):** a live Gemini
+conversation confirming flash-lite routes goal-setup requests to the new
+tools and carries field values across the multi-turn ask-missing-fields
+loop — this is the most important manual QA item for this session's work.
+
 **Explicitly NOT done:**
 - Assistant-owned memory/preferences across sessions — architecturally this
   would mean persisting a summary or key facts to Supabase and re-injecting
@@ -1147,7 +1233,9 @@ right tool for "wie viele Kalorien habe ich noch?") needs a manual QA pass.
   an engineering task).
 - ~~Calorie-tracking tools — blocked on Feature 6 not existing yet.~~
   **Done in the seventh session (2026-07-06), see above.**
-- Onboarding-guidance tools — blocked on Feature 7 not being rebuilt yet.
+- ~~Onboarding-guidance tools — blocked on Feature 7 not being rebuilt
+  yet.~~ **Done in the eighth session (2026-07-09), see above**
+  (`get_user_profile`, `setup_nutrition_goal`, `zip_code` setting key).
 - No rich chat card for the nutrition status (Avo answers in text; the
   existing recipe-nutrition card payload doesn't fit a daily-status shape) —
   same deliberate presentation-only scope cut as offers/splits, to avoid
@@ -1166,6 +1254,10 @@ right tool for "wie viele Kalorien habe ich noch?") needs a manual QA pass.
 (5 new nutrition tools + declarations + routing + `calories_per_serving` in
 search_recipes results), `lib/data/services/avo_settings_bridge.dart`
 (`calorie_tracking` key).
+**Files changed (eighth session):** `lib/data/services/avo_assistant_service.dart`
+(`get_user_profile` + `setup_nutrition_goal` tools: declarations, routing,
+implementations, system-prompt rules, dead-end note fixes),
+`lib/data/services/avo_settings_bridge.dart` (`zip_code` key).
 
 **Checks performed:** Verified every new tool's argument names line up with
 its `Schema.object` declaration; verified `deleteItem`/`deleteList` notifier
@@ -1984,6 +2076,30 @@ read against real content, not just schema/RLS shape).
 ---
 
 ## Ideas / Needs My Approval
+
+- [ ] IDEA: Assistant-owned memory across chat sessions — persist a small
+  set of durable facts Avo learns in conversation ("household of 3",
+  "shops at Lidl on Saturdays", "doesn't eat pork") to a `users` JSONB
+  column or a small `assistant_memory` table, re-injected into the system
+  context each session.
+  - Why it helps: Feature 4's original brief lists "assistant
+    memory/preferences if the architecture supports it"; today the context
+    is rebuilt from live app state each turn, so anything the user *told*
+    Avo that isn't a formal setting is forgotten when the chat resets.
+    (This idea was referenced in Feature 4's notes as "flagged below" but
+    had never actually been added to this list — fixed now.)
+  - Expected user value: medium-high — the assistant stops re-asking known
+    things and feels genuinely personal.
+  - Expected business/premium value: medium (retention; plausible premium
+    surface as "Avo remembers you").
+  - Complexity: Medium — needs a schema decision (what's allowed to be
+    remembered), a size cap, and a way for the user to view/delete memory
+    (privacy — this is the real design work, not the plumbing).
+  - Risk: Medium — storing free-text inferences about a user touches
+    privacy expectations; needs an explicit user-visible memory list with
+    delete, not a silent store.
+  - Recommendation: needs decision — worth doing, but only with the
+    view/delete UI included from day one.
 
 - [ ] IDEA: Re-enable `mobile_scanner` for real camera barcode scanning in
   the Feature 6 food-log barcode tab (currently manual numeric entry +

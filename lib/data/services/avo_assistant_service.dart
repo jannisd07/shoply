@@ -14,17 +14,23 @@ import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/food_log_service.dart';
+import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
+import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/data/services/water_log_service.dart';
 import 'package:shoply/data/services/weight_log_service.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
+import 'package:shoply/presentation/state/theme_provider.dart';
+import 'package:shoply/presentation/state/user_profile_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide FunctionResponse;
 
 // ════════════════════════════════════════════════════════════════════
@@ -109,6 +115,17 @@ When the user asks to:
 If a nutrition tool reports tracking is disabled, offer to enable it
 (update_setting key "calorie_tracking" value "true") — ask first,
 never enable it without the user agreeing.
+• ask about their current settings, preferences, or profile ("what is
+  my diet set to?", "is calorie tracking on?", "what are my goals?")
+  → call get_user_profile
+• want a calorie/nutrition goal set up or changed ("help me set up my
+  calorie goal", "I want to lose 5 kg") → call get_user_profile first,
+  then setup_nutrition_goal with everything already known. If it
+  returns missing fields, ask the user for JUST those — at most two
+  questions per message, conversationally, never as a form. If it
+  returns requires_confirmation, ask that question and only re-call
+  with confirm_replace=true after a clear yes. When it succeeds,
+  present the calculated daily calories and macros.
 • know ANYTHING about Shoply itself (premium, pricing, features,
   how-tos, privacy) → call get_app_info with the topic
 
@@ -257,7 +274,8 @@ After a tool returns, write a short natural-language confirmation
             'Change any user setting. Supported keys: theme_mode (light/dark/system), '
                 'accent_color (hex), language (en/de/system), notifications (true/false), '
                 'display_name, diet_preferences (array), allergies (array), age, gender, '
-                'height, calorie_tracking (true/false — shows/hides the calorie tab).',
+                'height, calorie_tracking (true/false — shows/hides the calorie tab), '
+                'zip_code (4-5 digit PLZ for local offer search; empty clears it).',
             Schema.object(properties: {
               'key': Schema.string(description: 'Setting key'),
               'value': Schema.string(
@@ -338,6 +356,47 @@ After a tool returns, write a short natural-language confirmation
               'list_name': Schema.string(description: 'List name, for the confirmation question'),
               'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
             }, requiredProperties: ['list_id', 'list_name']),
+          ),
+          FunctionDeclaration(
+            'get_user_profile',
+            'Read the user\'s current profile and settings: name, age, gender, '
+                'height, diet preferences, allergies, language, theme, notifications, '
+                'calorie tracking on/off, zip code, and the calorie goal summary if one '
+                'is configured. Call this BEFORE guiding the user through settings or '
+                'goal setup, so you never re-ask something already known.',
+            Schema.object(properties: {}),
+          ),
+          FunctionDeclaration(
+            'setup_nutrition_goal',
+            'Set up (or replace) the user\'s calorie/macro goal — the same '
+                'questionnaire as the goal-setup screen, done conversationally. Pass '
+                'whatever is already known (from get_user_profile and the chat); the '
+                'tool prefills the rest from the profile and returns missing fields '
+                'to ask about. It calculates daily calorie + macro targets and saves '
+                'them. If a configured goal already exists, it returns a confirmation '
+                'question first — only pass confirm_replace=true after the user '
+                'clearly agrees.',
+            Schema.object(properties: {
+              'goal_type': Schema.string(
+                  description:
+                      'One of: lose_weight, gain_muscle, maintain, custom'),
+              'activity_level': Schema.string(
+                  description:
+                      'One of: sedentary, light, moderate, active, very_active'),
+              'age': Schema.integer(description: 'Age in years'),
+              'gender': Schema.string(
+                  description: 'male or female (used for the BMR formula)'),
+              'height_cm': Schema.number(description: 'Height in cm'),
+              'current_weight_kg': Schema.number(description: 'Current weight in kg'),
+              'target_weight_kg': Schema.number(
+                  description: 'Target weight in kg — only for lose_weight/gain_muscle'),
+              'timeline_weeks': Schema.integer(
+                  description:
+                      'Weeks to reach the target (default 12) — only for lose_weight/gain_muscle'),
+              'confirm_replace': Schema.boolean(
+                  description:
+                      'Set true only after the user agreed to replace their existing goal'),
+            }),
           ),
           FunctionDeclaration(
             'get_nutrition_status',
@@ -507,6 +566,10 @@ After a tool returns, write a short natural-language confirmation
           return await _toolDeleteItem(args, ref);
         case 'delete_list':
           return await _toolDeleteList(args, ref);
+        case 'get_user_profile':
+          return await _toolGetUserProfile(ref);
+        case 'setup_nutrition_goal':
+          return await _toolSetupNutritionGoal(args, ref);
         case 'get_nutrition_status':
           return await _toolNutritionStatus(ref);
         case 'log_food':
@@ -917,8 +980,9 @@ After a tool returns, write a short natural-language confirmation
     if (zip == null || zip.isEmpty) {
       return {
         'found': 0,
-        'note': 'No location available — ask the user to set their zip code '
-            'in Profile settings to enable offer search.',
+        'note': 'No location available — ask the user for their zip code '
+            '(PLZ), set it via update_setting key "zip_code", then search '
+            'again.',
       };
     }
 
@@ -1086,6 +1150,242 @@ After a tool returns, write a short natural-language confirmation
     return {'success': true, 'deleted': listName};
   }
 
+  // ── Profile & preference-guidance tools ─────────────────────────
+
+  Future<Map<String, Object?>> _toolGetUserProfile(WidgetRef ref) async {
+    final user = await ref.read(currentUserProvider.future);
+    if (user == null) return {'error': 'Not signed in'};
+
+    final trackingOn = ref.read(calorieTrackingEnabledProvider);
+    final zip = await UserLocationService.instance.getManualZipCode();
+    final goal =
+        trackingOn ? await NutritionGoalService.instance.getGoal() : null;
+
+    return {
+      'display_name': user.displayName ?? 'not set',
+      'age': user.age ?? 'not set',
+      'gender': user.gender ?? 'not set',
+      'height': user.height == null
+          ? 'not set'
+          : '${user.height!.round()} ${user.heightUnit ?? 'cm'}',
+      'diet_preferences':
+          user.dietPreferences.isEmpty ? 'none' : user.dietPreferences,
+      'allergies': user.allergies.isEmpty ? 'none' : user.allergies,
+      'language': ref.read(languageProvider.notifier).savedSetting,
+      'theme': ref.read(themeModeProvider).name,
+      'notifications_enabled': user.notificationEnabled,
+      'calorie_tracking_enabled': trackingOn,
+      'zip_code_for_offers': zip ?? 'not set',
+      if (trackingOn)
+        'nutrition_goal': (goal != null && goal.isConfigured)
+            ? {
+                'goal_type': goal.goalType.dbValue,
+                'daily_calorie_target': goal.dailyCalorieTarget,
+                'protein_target_g': goal.proteinTargetG,
+                'carbs_target_g': goal.carbsTargetG,
+                'fat_target_g': goal.fatTargetG,
+                if (goal.targetWeightKg != null)
+                  'target_weight_kg': goal.targetWeightKg,
+              }
+            : 'not configured — offer setup_nutrition_goal',
+      'note': 'Anything "not set" can be changed via update_setting; the '
+          'calorie goal via setup_nutrition_goal.',
+    };
+  }
+
+  Future<Map<String, Object?>> _toolSetupNutritionGoal(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    if (!ref.read(calorieTrackingEnabledProvider)) {
+      return {'tracking_enabled': false, 'note': _trackingDisabledNote};
+    }
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return {'error': 'Not signed in'};
+
+    // Validate the enum-ish args strictly so a hallucinated value can't be
+    // silently coerced into the wrong goal.
+    NutritionGoalType? goalType;
+    final goalArg = (args['goal_type'] as String?)?.toLowerCase().trim();
+    if (goalArg != null && goalArg.isNotEmpty) {
+      const valid = {'lose_weight', 'gain_muscle', 'maintain', 'custom'};
+      if (!valid.contains(goalArg)) {
+        return {'error': 'goal_type must be one of: ${valid.join(', ')}'};
+      }
+      goalType = NutritionGoalTypeX.fromDb(goalArg);
+    }
+    ActivityLevel? activityLevel;
+    final activityArg =
+        (args['activity_level'] as String?)?.toLowerCase().trim();
+    if (activityArg != null && activityArg.isNotEmpty) {
+      const valid = {'sedentary', 'light', 'moderate', 'active', 'very_active'};
+      if (!valid.contains(activityArg)) {
+        return {'error': 'activity_level must be one of: ${valid.join(', ')}'};
+      }
+      activityLevel = ActivityLevelX.fromDb(activityArg);
+    }
+    var gender = (args['gender'] as String?)?.toLowerCase().trim();
+    if (gender != null && gender.isNotEmpty &&
+        gender != 'male' && gender != 'female') {
+      return {
+        'error': 'gender must be "male" or "female" — it is only used to pick '
+            'the BMR formula variant.',
+      };
+    }
+
+    // Prefill everything not passed from the profile, the existing goal and
+    // the weight log — the same sources the goal-setup screen prefills from.
+    final user = await ref.read(currentUserProvider.future);
+    final existing = await NutritionGoalService.instance.getGoal();
+    final hasConfiguredGoal = existing != null && existing.isConfigured;
+
+    if (gender == null || gender.isEmpty) {
+      gender = (user?.gender == 'male' || user?.gender == 'female')
+          ? user!.gender
+          : null;
+    }
+    final age = (args['age'] as num?)?.round() ?? user?.age;
+    if (age != null && (age < 10 || age > 120)) {
+      return {'error': 'age must be between 10 and 120'};
+    }
+    var heightCm = (args['height_cm'] as num?)?.toDouble() ?? existing?.heightCm;
+    if (heightCm == null &&
+        user?.height != null &&
+        (user!.heightUnit == null || user.heightUnit == 'cm')) {
+      heightCm = user.height;
+    }
+    if (heightCm != null && (heightCm < 100 || heightCm > 250)) {
+      return {'error': 'height_cm must be between 100 and 250'};
+    }
+    var weight = (args['current_weight_kg'] as num?)?.toDouble() ??
+        existing?.currentWeightKg;
+    weight ??= (await WeightLogService.instance.getLatest())?.weightKg;
+    if (weight != null && (weight < 20 || weight > 400)) {
+      return {'error': 'current_weight_kg must be between 20 and 400'};
+    }
+    goalType ??= hasConfiguredGoal ? existing.goalType : null;
+    activityLevel ??= hasConfiguredGoal ? existing.activityLevel : null;
+    final needsTarget = goalType == NutritionGoalType.loseWeight ||
+        goalType == NutritionGoalType.gainMuscle;
+    final targetWeight = (args['target_weight_kg'] as num?)?.toDouble() ??
+        existing?.targetWeightKg;
+    if (needsTarget && targetWeight != null &&
+        (targetWeight < 20 || targetWeight > 400)) {
+      return {'error': 'target_weight_kg must be between 20 and 400'};
+    }
+    final timelineWeeks =
+        ((args['timeline_weeks'] as num?)?.round() ?? existing?.timelineWeeks ?? 12)
+            .clamp(4, 104)
+            .toInt();
+
+    final missing = <String>[
+      if (goalType == null) 'goal_type',
+      if (gender == null) 'gender',
+      if (age == null) 'age',
+      if (heightCm == null) 'height_cm',
+      if (weight == null) 'current_weight_kg',
+      if (needsTarget && targetWeight == null) 'target_weight_kg',
+      if (activityLevel == null) 'activity_level',
+    ];
+    if (missing.isNotEmpty) {
+      return {
+        'incomplete': true,
+        'missing': missing,
+        'known': {
+          if (goalType != null) 'goal_type': goalType.dbValue,
+          if (activityLevel != null) 'activity_level': activityLevel.dbValue,
+          if (age != null) 'age': age,
+          if (gender != null) 'gender': gender,
+          if (heightCm != null) 'height_cm': heightCm,
+          if (weight != null) 'current_weight_kg': weight,
+          if (needsTarget && targetWeight != null)
+            'target_weight_kg': targetWeight,
+        },
+        'note': 'Ask the user for the missing fields (at most two per '
+            'message), then call setup_nutrition_goal again with everything. '
+            'The "known" values were prefilled from their profile — mention '
+            'them briefly so the user can correct any that changed.',
+      };
+    }
+
+    // Replacing an already-configured goal needs an explicit yes.
+    final confirm = args['confirm_replace'] as bool? ?? false;
+    if (hasConfiguredGoal && !confirm) {
+      return {
+        'requires_confirmation': true,
+        'question':
+            'Replace the current ${existing.goalType.dbValue} goal '
+            '(${existing.dailyCalorieTarget} kcal/day) with a new '
+            '${goalType!.dbValue} goal?',
+        'note': 'If the user agrees, call setup_nutrition_goal again with '
+            'confirm_replace=true AND all the same field values — do not '
+            'drop any of them.',
+      };
+    }
+
+    final targets = NutritionGoalCalculator.calculate(
+      goalType: goalType!,
+      activityLevel: activityLevel!,
+      currentWeightKg: weight!,
+      heightCm: heightCm!,
+      age: age!,
+      gender: gender!,
+      targetWeightKg: needsTarget ? targetWeight : null,
+      timelineWeeks: needsTarget ? timelineWeeks : null,
+    );
+
+    final now = DateTime.now();
+    await NutritionGoalService.instance.saveGoal(NutritionGoal(
+      userId: userId,
+      calorieTrackingEnabled: true,
+      goalType: goalType,
+      activityLevel: activityLevel,
+      currentWeightKg: weight,
+      targetWeightKg: needsTarget ? targetWeight : null,
+      heightCm: heightCm,
+      timelineWeeks: needsTarget ? timelineWeeks : null,
+      dailyCalorieTarget: targets.dailyCalorieTarget,
+      proteinTargetG: targets.proteinTargetG,
+      carbsTargetG: targets.carbsTargetG,
+      fatTargetG: targets.fatTargetG,
+      waterTargetMl: existing?.waterTargetMl ?? 2000,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    ));
+    await WeightLogService.instance.logWeight(weightKg: weight);
+
+    // Keep the profile fields in sync — same as the goal-setup screen, since
+    // age/height/gender are used elsewhere (personal info, diet logic).
+    if (user != null) {
+      await UserService.instance.updateUserProfile(user.copyWith(
+        age: age,
+        height: heightCm,
+        heightUnit: 'cm',
+        gender: gender,
+      ));
+    }
+    ref.invalidate(nutritionGoalProvider);
+    ref.invalidate(currentUserProvider);
+    ref.invalidate(userProfileProvider);
+    invalidateNutritionLog(ref);
+    await MascotNotificationService.instance
+        .rearmDinnerIdeasReminder(force: true);
+
+    return {
+      'success': true,
+      'goal_type': goalType.dbValue,
+      'daily_calorie_target': targets.dailyCalorieTarget,
+      'protein_target_g': targets.proteinTargetG,
+      'carbs_target_g': targets.carbsTargetG,
+      'fat_target_g': targets.fatTargetG,
+      if (needsTarget) 'target_weight_kg': targetWeight,
+      if (needsTarget) 'timeline_weeks': timelineWeeks,
+      'note': 'Goal saved. Tell the user their daily calorie target and '
+          'macros, and that they can fine-tune it anytime in the calories '
+          'tab or by asking you.',
+    };
+  }
+
   // ── Nutrition / calorie-tracking tools ───────────────────────────
 
   static const _trackingDisabledNote =
@@ -1144,7 +1444,8 @@ After a tool returns, write a short natural-language confirmation
     } else {
       result['note'] =
           'No calorie goal is configured yet, so there are no targets — '
-          'totals only. The user can set a goal in the calories tab.';
+          'totals only. Offer to set one up right here in chat via '
+          'setup_nutrition_goal.';
     }
     return result;
   }
