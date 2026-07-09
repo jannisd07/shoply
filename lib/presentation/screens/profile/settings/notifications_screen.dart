@@ -55,8 +55,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final newValue = !_masterEnabled;
     setState(() => _masterEnabled = newValue);
     _prefs.setMasterEnabled(newValue).then((_) {
-      // Clears or re-arms Avo's scheduled reminder to match the new gate.
+      // Clears or re-arms Avo's scheduled reminders to match the new gate.
       MascotNotificationService.instance.rearmRestockReminder(force: true);
+      MascotNotificationService.instance.rearmDinnerIdeasReminder(force: true);
     });
   }
 
@@ -67,6 +68,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _prefs.setCategoryEnabled(category, newValue).then((_) {
       if (category == NotificationCategory.avoNudges) {
         MascotNotificationService.instance.rearmRestockReminder(force: true);
+        MascotNotificationService.instance
+            .rearmDinnerIdeasReminder(force: true);
       }
     });
   }

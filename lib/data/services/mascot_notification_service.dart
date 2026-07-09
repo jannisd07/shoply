@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/localization/app_translations.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
+import 'package:shoply/data/services/calorie_recipe_nudge_service.dart';
 import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -38,7 +39,15 @@ class MascotNotificationService {
   /// Local hour (9 AM) the reminder fires at.
   static const int _reminderHour = 9;
 
+  /// Fixed id for the "dinner ideas" reminder (Feature 8: calorie tracking
+  /// × recipes × Avo nudges).
+  static const int dinnerIdeasReminderId = 700002;
+
+  /// Local hour (6 PM) the dinner-ideas reminder fires at.
+  static const int _dinnerHour = 18;
+
   DateTime? _lastRearm;
+  DateTime? _lastDinnerRearm;
 
   /// Get stored language preference (default to 'en')
   Future<String> _getLanguage() async {
@@ -148,6 +157,108 @@ class MascotNotificationService {
           '(${suggestions.map((s) => s.itemName).join(', ')})');
     } catch (e) {
       debugPrint('🥑 [AVO] Failed to re-arm restock reminder: $e');
+    }
+  }
+
+  /// (Re-)schedule today's "dinner ideas" reminder for [_dinnerHour] local
+  /// time, or cancel it when it no longer applies. Unlike the restock
+  /// reminder this is never pushed to a future day: the remaining-calorie
+  /// budget and the food log are specific to *today*, so if it's already
+  /// past dinner time (or nothing fits) there's simply nothing to arm until
+  /// the next re-arm recomputes it fresh tomorrow. Call on the same
+  /// lifecycle events as [rearmRestockReminder].
+  ///
+  /// Throttled to once per 15 minutes unless [force] is set.
+  Future<void> rearmDinnerIdeasReminder({bool force = false}) async {
+    try {
+      final now = DateTime.now();
+      if (!force &&
+          _lastDinnerRearm != null &&
+          now.difference(_lastDinnerRearm!).inMinutes < 15) {
+        return;
+      }
+      _lastDinnerRearm = now;
+
+      // Always replace the previously scheduled reminder — its content and
+      // due-state are stale the moment the app is opened again.
+      await NotificationService.instance.cancel(dinnerIdeasReminderId);
+
+      if (SupabaseService.instance.currentUser == null) return;
+
+      if (!await NotificationPreferencesService.instance
+          .shouldShow(NotificationCategory.avoNudges)) {
+        debugPrint('🥑 [AVO] Dinner-ideas reminder disabled by preferences');
+        return;
+      }
+
+      final dinnerTimeToday =
+          DateTime(now.year, now.month, now.day, _dinnerHour);
+      if (!now.isBefore(dinnerTimeToday)) {
+        debugPrint('🥑 [AVO] Past dinner time — no reminder for today');
+        return;
+      }
+
+      final remaining =
+          await CalorieRecipeNudgeService.instance.getRemainingCaloriesToday();
+      if (remaining == null ||
+          remaining < CalorieRecipeNudgeService.minRemainingCalories) {
+        debugPrint('🥑 [AVO] No calorie budget to suggest dinner ideas for');
+        return;
+      }
+
+      final userModel = await _currentUserDietAndAllergies();
+      final suggestions = await CalorieRecipeNudgeService.instance.getSuggestions(
+        remainingCalories: remaining,
+        dietPreferences: userModel.$1,
+        allergies: userModel.$2,
+      );
+      if (suggestions.isEmpty) return;
+
+      final lang = await _getLanguage();
+      final first = suggestions.first;
+      final body = suggestions.length == 1
+          ? AppTranslations.get('calorie_nudge_notification_body_one', lang,
+              params: {'kcal': '$remaining', 'recipe': first.name})
+          : AppTranslations.get('calorie_nudge_notification_body_many', lang,
+              params: {
+                'kcal': '$remaining',
+                'count': '${suggestions.length}',
+                'recipe': first.name,
+              });
+
+      await NotificationService.instance.scheduleNotification(
+        id: dinnerIdeasReminderId,
+        title: AppTranslations.get('calorie_nudge_notification_title', lang),
+        body: body,
+        scheduledFor: dinnerTimeToday,
+        payload: jsonEncode({'type': 'avo_dinner_ideas'}),
+        category: NotificationCategory.avoNudges,
+      );
+      debugPrint('🥑 [AVO] Dinner-ideas reminder armed for $dinnerTimeToday '
+          '(${suggestions.map((r) => r.name).join(', ')})');
+    } catch (e) {
+      debugPrint('🥑 [AVO] Failed to re-arm dinner-ideas reminder: $e');
+    }
+  }
+
+  /// (dietPreferences, allergies) for the current user, or ([], []) when
+  /// signed out or the lookup fails — a fail-open default is safe here since
+  /// [CalorieRecipeNudgeService.getSuggestions] only ever narrows results.
+  Future<(List<String>, List<String>)> _currentUserDietAndAllergies() async {
+    try {
+      final userId = SupabaseService.instance.currentUser?.id;
+      if (userId == null) return (<String>[], <String>[]);
+      final row = await SupabaseService.instance.client
+          .from('users')
+          .select('diet_preferences, allergies')
+          .eq('id', userId)
+          .maybeSingle();
+      if (row == null) return (<String>[], <String>[]);
+      final diet = (row['diet_preferences'] as List?)?.cast<String>() ?? const [];
+      final allergies = (row['allergies'] as List?)?.cast<String>() ?? const [];
+      return (diet, allergies);
+    } catch (e) {
+      return (<String>[], <String>[]);
     }
   }
 

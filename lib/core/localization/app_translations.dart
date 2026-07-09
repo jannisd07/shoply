@@ -261,15 +261,22 @@ class AppTranslations {
     'offer_nudge_title': 'On offer for you',
     'offer_nudge_line': '{product} · −{pct}% · {price} € · {store}',
     'offer_nudge_line_simple': '{product} · {price} € · {store}',
+    'calorie_nudge_title': '{kcal} kcal left · dinner ideas',
+    'calorie_nudge_line': '{kcal} kcal · {time} min',
+    'calorie_nudge_notification_title': '🥑 Dinner idea?',
+    'calorie_nudge_notification_body_one':
+        'You have about {kcal} kcal left today — Avo found a recipe that fits: {recipe}.',
+    'calorie_nudge_notification_body_many':
+        'You have about {kcal} kcal left today — Avo found {count} recipes that fit, starting with {recipe}.',
     'milestone_trip_message':
         '🥑 Milestone: that was your {count}th shopping trip with Shoply!',
     'all_notifications': 'Allow notifications',
     'all_notifications_desc':
         'Master switch for all Shoply notifications, including push messages from shared lists.',
     'avo_section': 'Avo',
-    'avo_restock_reminders': 'Restock reminders',
+    'avo_restock_reminders': 'Restock & dinner-idea reminders',
     'avo_restock_reminders_desc':
-        'A morning reminder when items you buy regularly are probably running low.',
+        'A morning reminder when items you buy regularly are probably running low, and an evening nudge with recipe ideas that fit your remaining calories (if you track them).',
     'show_label': 'Show',
     'new_list_plus': '+ New list',
     'items_open_suffix': 'open',
@@ -1104,15 +1111,22 @@ class AppTranslations {
     'offer_nudge_title': 'Für dich im Angebot',
     'offer_nudge_line': '{product} · −{pct} % · {price} € · {store}',
     'offer_nudge_line_simple': '{product} · {price} € · {store}',
+    'calorie_nudge_title': 'Noch {kcal} kcal · Ideen fürs Abendessen',
+    'calorie_nudge_line': '{kcal} kcal · {time} Min.',
+    'calorie_nudge_notification_title': '🥑 Idee fürs Abendessen?',
+    'calorie_nudge_notification_body_one':
+        'Du hast heute noch etwa {kcal} kcal übrig – Avo hat ein passendes Rezept gefunden: {recipe}.',
+    'calorie_nudge_notification_body_many':
+        'Du hast heute noch etwa {kcal} kcal übrig – Avo hat {count} passende Rezepte gefunden, z. B. {recipe}.',
     'milestone_trip_message':
         '🥑 Meilenstein: Das war dein {count}. Einkauf mit Shoply!',
     'all_notifications': 'Mitteilungen erlauben',
     'all_notifications_desc':
         'Hauptschalter für alle Shoply-Mitteilungen, inklusive Push-Nachrichten aus geteilten Listen.',
     'avo_section': 'Avo',
-    'avo_restock_reminders': 'Nachkauf-Erinnerungen',
+    'avo_restock_reminders': 'Nachkauf- & Abendessen-Erinnerungen',
     'avo_restock_reminders_desc':
-        'Eine morgendliche Erinnerung, wenn regelmäßig gekaufte Artikel wahrscheinlich zur Neige gehen.',
+        'Eine morgendliche Erinnerung, wenn regelmäßig gekaufte Artikel wahrscheinlich zur Neige gehen, sowie ein abendlicher Hinweis mit Rezeptideen passend zu deinen verbleibenden Kalorien (falls du diese trackst).',
     'show_label': 'Zeigen',
     'new_list_plus': '+ Neue Liste',
     'items_open_suffix': 'offen',

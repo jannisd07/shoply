@@ -1,8 +1,26 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-08 (scheduled routine — Feature 7 focus: personalized onboarding — diet-preference & goal-questionnaire pages, account-level sync)_
+_Last updated: 2026-07-09 (scheduled routine — Feature 8 focus: first cross-feature win — calorie-aware "dinner ideas" nudge connecting Feature 6 calorie tracking, recipes, and the Feature 5 Avo nudge surface)_
 
 ## Environment note (read first)
+
+The 2026-07-09 **Feature-8** session downloaded Flutter 3.35.6 stable fresh
+into `/tmp/flutter` and verified with full-project `flutter analyze`: baseline
+(this branch, before this session's changes) **610 issues (0 errors, 59
+warnings)**; after this session's 3 new files + 7 touched files: **still 610
+issues, byte-identical** — every new/touched file is analyzer-clean, confirmed
+by also running `flutter analyze` scoped to just the 3 new files (0 issues).
+`flutter test` passes ("All tests passed"). The new `filterAndSort` selection
+logic (calorie fit, diet-preference matching, allergen exclusion, closest-fit
+sort, rating tie-break) was verified with a throwaway `flutter test` file (8
+cases: no-nutrition exclusion, over-budget exclusion, zero/negative-calorie
+guard, closest-fit ordering, rating tie-break, diet AND-matching, allergen
+exclusion, limit — all passed, not committed). No iOS build/device test
+possible here (no macOS/Xcode) — see "Not verified" in the Feature 8 section
+below for what that leaves unconfirmed, in particular the actual card
+rendering and the real evening-notification delivery.
+
+The earlier note from the 2026-07-08 Feature-7 session:
 
 The 2026-07-08 **Feature-7** session downloaded Flutter 3.35.6 stable fresh
 into `/tmp/flutter` and verified with full-project `flutter analyze`: baseline
@@ -136,7 +154,7 @@ was **never wired into any screen** — this session wired it up.
 | 5 | Avo mascot & smart notifications | ~80% | In progress | Proactive recipe-suggestion nudges still open; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | ~70% | In progress | Barcode camera scan, diet challenges (16:8/no-sugar), and meal-photo storage not built; needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% (this session) | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~10% | Not started | Depends on 1–7 |
+| 8 | Cross-feature UX / growth / premium | ~30% (this session) | In progress | First win shipped (calorie × recipes × Avo nudges); price-comparison home card and premium-gating audit still open |
 
 ---
 
@@ -1829,12 +1847,139 @@ composes Features 1–7. Audited the current premium/growth surface:
   cross-feature card should follow the pattern of the (functional) Avo hint
   strip above it, not the (non-functional) Angebote strip.
 
-**Recommended first cross-feature wins** (not started, listed for
-prioritization): a home-screen card surfacing "€X cheaper at [store] this
-week" using the now-wired `basketComparisonProvider` (Feature 1 infra);
-"you usually buy milk every 5 days" using the already-populated
-`item_purchase_stats` (Feature 5's recommended first nudge); once Feature 6
-exists, "N calories left — 3 dinner ideas from your list."
+**Recommended first cross-feature wins** (audited pre-session): a home-screen
+card surfacing "€X cheaper at [store] this week" using the now-wired
+`basketComparisonProvider` (Feature 1 infra); "you usually buy milk every 5
+days" using the already-populated `item_purchase_stats` — **this one shipped
+in Feature 5's sixth session** (`AvoNudgeCard`, already live); once Feature 6
+exists, "N calories left — 3 dinner ideas from your list" — **this is what
+this session built.**
+
+**Second session, 2026-07-09 (scheduled routine — this feature's dedicated
+session).** Features 1–7 all sit at 70–95% with mature, documented states
+(external blockers or "needs a real device build" as the only remaining
+gaps) — Feature 8 (~10%, not started) is clearly the feature that most needs
+a session now, and it's explicitly sequenced last since it composes 1–7.
+Picked the most concretely-scoped, already-approved-in-spirit item from the
+ideas list: the proactive recipe-suggestion nudge ("N calories left — Avo
+found dinner ideas"), flagged in the ideas section as "the last open
+Feature-5 brief item, overlapping Feature 8" with recommendation "yes, as the
+next Feature 5/8 slice." It's a genuine three-feature connection (Feature 6
+calorie tracking → Feature-2-recipe nutrition data → Feature 5's Avo nudge
+surface) and, unlike a live-pricing home card, needed no new caching/rate-limit
+design since it only reads already-stored data.
+
+**What I implemented:**
+- `CalorieRecipeNudgeService` (new,
+  `lib/data/services/calorie_recipe_nudge_service.dart`) —
+  `getRemainingCaloriesToday()` (today's `dailyCalorieTarget` minus the food
+  log's summed calories, or null when tracking is off/unconfigured/signed
+  out) and `getSuggestions()`, which pools candidates from saved + popular +
+  recent recipes (deduplicated by id) and keeps only recipes that: already
+  carry a stored `nutrition.calories` (never calls Gemini — this never
+  competes with the 1.1s-throttled categorization pipeline and costs nothing
+  beyond ordinary Supabase reads), fit within the remaining budget, satisfy
+  every one of the user's diet preferences against the recipe's labels (same
+  AND-matching rule Avo's `search_recipes` tool already uses), and contain no
+  allergen keyword in their ingredient names (same rule too). Survivors sort
+  by closest fit to the remaining budget without exceeding it, tie-broken by
+  rating. The filter/sort step is split into a `@visibleForTesting static
+  filterAndSort()` so it's unit-testable without a live Supabase connection.
+  Below 150 kcal remaining, nothing is suggested — there isn't enough budget
+  left for a real meal idea to make sense.
+- `calorieRecipeSuggestionsProvider` / `remainingCaloriesTodayProvider` /
+  `calorieNudgeDismissedProvider` (new,
+  `lib/presentation/state/calorie_recipe_nudge_provider.dart`) — standard
+  `autoDispose` `FutureProvider`s, same shape as the existing
+  `restockSuggestionsProvider`.
+- `CalorieRecipeNudgeCard` (new home-screen widget,
+  `lib/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart`) —
+  same visual language as `AvoNudgeCard`/`PendingSplitsBanner` (paper card,
+  Avo mascot header, dismiss ✕), showing up to 3 recipe rows (thumbnail,
+  name, "X kcal · Y min", tap → `/recipes/:id`, the same in-shell route
+  `RecipeOfTheWeekCard` already uses). Renders nothing for users who haven't
+  opted into calorie tracking, haven't configured a goal, have too little
+  budget left, already dismissed it today, or have no stored-nutrition recipe
+  that fits — never a fake/empty card. Dismissal is a simple date-scoped
+  SharedPreferences flag (resets automatically the next day), invalidated via
+  `ref.invalidate` on tap, same pattern the restock card's snooze uses.
+  Wired into `home_screen.dart` directly under the existing `AvoNudgeCard`.
+- **Evening reminder.** `MascotNotificationService.rearmDinnerIdeasReminder()`
+  (new method, same file as the existing restock reminder — kept in one
+  service since the file is explicitly "Avo's notification voice"): schedules
+  a local notification for 18:00 *today* (never pushed to a future day, since
+  the remaining-calorie budget is date-specific — if it's already past 18:00
+  or nothing fits, it simply arms nothing until the next re-arm recomputes it
+  fresh tomorrow), gated by the same `NotificationCategory.avoNudges`
+  preference the restock reminder already uses (per the idea's own
+  recommendation: "reuse the avoNudges gate"). Wired into the *exact* same
+  four re-arm call sites as `rearmRestockReminder` (`app.dart` init + resume,
+  `main.dart` sign-in/sign-out, `avo_settings_bridge.dart`'s notification
+  toggle, `notifications_screen.dart`'s master/category toggles), plus one
+  extra call site specific to this feature: `avo_settings_bridge.dart`'s
+  `_setCalorieTracking` handler, so turning calorie tracking on/off via Avo
+  chat immediately re-arms (or clears) the reminder instead of waiting for
+  the next natural resume.
+- Broadened the existing `avo_restock_reminders`/`_desc` settings-screen
+  strings (EN/DE) to describe both reminder types under the one toggle,
+  rather than adding a second category — there's one Avo-nudges preference,
+  it should describe what it actually controls.
+- 8 new EN/DE translation key pairs for the card and notification copy.
+
+**Design decisions:**
+- No live API calls anywhere in this feature — deliberately scoped to only
+  recipes that already have stored nutrition data, so there's no Gemini-rate
+  or Supabase-load concern to design around (unlike the home-price-card idea,
+  which would need real caching before it's safe to auto-run on every home
+  visit — see the still-open idea below).
+- The evening reminder recomputes fresh on every re-arm rather than being a
+  recurring daily alarm — consistent with the restock reminder's philosophy
+  of "only fire when the in-app card hasn't been the surface," and avoids
+  ever sending a stale suggestion for calories already eaten.
+- Recipes without stored nutrition are silently skipped, not estimated on
+  the spot — an explicit non-goal, to avoid a background/passive feature
+  quietly burning Gemini calls or showing a slow-loading card.
+
+**Not verified (no macOS/Xcode/device in this container):** the card's actual
+rendering on a real screen (thumbnail loading/wrapping, dismiss animation);
+a live evening notification actually firing at 18:00 on a device; whether a
+real account's saved/popular/recent recipes contain enough
+`nutrition.calories`-populated rows for the card to ever have something to
+show in practice (this depends on how many recipes in the live DB have had
+nutrition estimated via `get_recipe_nutrition` or the recipe-detail screen —
+not itself verifiable from this container, since it requires a live Supabase
+read against real content, not just schema/RLS shape).
+
+**Explicitly NOT done this session (still open):**
+- The other two recommended cross-feature wins:
+  - Home-screen "€X cheaper at [store] this week" card
+    (`basketComparisonProvider`) — deliberately deferred: unlike this
+    feature, auto-running it on every home-screen visit for every user would
+    fire a live marktguru search per unchecked item on the user's
+    most-recently-touched list, and the existing basket-comparison provider
+    has no caching layer (it's `autoDispose`, recomputed fresh every mount) —
+    doing this safely needs a TTL-cached wrapper (same pattern
+    `AvoNudgeService.getOfferNudges` already uses for its 6h offer cache)
+    designed and reasoned through on its own, not bolted on as a second
+    half-feature in the same session as a properly-scoped first one.
+  - The premium-gating audit / `dealBonus` cleanup / four-recommendation-engine
+    consolidation flagged in the pre-session audit above — real, but each is
+    its own scoped decision, not a natural pairing with this session's work.
+- No new premium upsell moment was added — the brief says "only when
+  genuinely useful," and a calorie/recipe nudge card felt like the wrong
+  place to introduce the first one cold; flagged as a question below instead
+  of guessed at.
+
+**Files changed:** `lib/data/services/calorie_recipe_nudge_service.dart`
+(new), `lib/presentation/state/calorie_recipe_nudge_provider.dart` (new),
+`lib/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart` (new),
+`lib/data/services/mascot_notification_service.dart` (`rearmDinnerIdeasReminder`),
+`lib/app.dart`, `lib/main.dart`, `lib/data/services/avo_settings_bridge.dart`,
+`lib/presentation/screens/profile/settings/notifications_screen.dart`,
+`lib/presentation/screens/home/home_screen.dart`,
+`lib/core/localization/app_translations.dart`.
+
+**Checks performed:** See the environment note at the top of this document.
 
 ---
 
@@ -1989,25 +2134,44 @@ exists, "N calories left — 3 dinner ideas from your list."
     master switch stops background pushes too. Details in Feature 5's
     sixth-session notes.
 
-- [ ] IDEA: Proactive recipe-suggestion nudge — "600 kcal left today — Avo
-  found 3 dinner ideas from your list" (the last open Feature-5 brief item,
-  overlapping Feature 8).
-  - Why it helps: connects calorie tracking (Feature 6), recipes, and the
-    nudge surface built in Feature 5 into one retention loop; the chat-side
-    version already exists (calorie-aware search_recipes), this is the
-    proactive card/notification version.
-  - Expected user value: medium-high for calorie-tracking users; zero
-    noise for others (gated on the calorie-tracking preference).
-  - Expected business/premium value: medium-high — this is the kind of
-    smart moment the premium pitch can point at.
-  - Complexity: Medium (recipe-nutrition matching against remaining
-    calories exists; needs an evening-time in-app card + optional
-    notification with careful frequency rules).
-  - Risk: Low-medium (spam potential if not capped; should reuse the
-    avoNudges gate + a max-per-day rule).
-  - Recommendation: yes, as the next Feature 5/8 slice — ideally after the
-    current nudges have had a device QA pass so the frequency feel is
-    validated before adding another stream.
+- [x] IDEA (approved, DONE 2026-07-09, Feature 8's first session): Proactive
+  recipe-suggestion nudge — "600 kcal left today — Avo found 3 dinner ideas
+  from your list."
+  - **Outcome:** Implemented as `CalorieRecipeNudgeService` +
+    `CalorieRecipeNudgeCard` (home screen) +
+    `MascotNotificationService.rearmDinnerIdeasReminder()` (18:00 local,
+    reuses the `avoNudges` gate, capped at one card/one notification a day via
+    the same dismiss-for-today + re-arm-per-day pattern the restock reminder
+    uses). Details in Feature 8's second-session notes above.
+
+- [ ] IDEA: Home-screen "€X cheaper at [store] this week" card, using the
+  now-wired `basketComparisonProvider` (Feature 1 infra) — the other
+  recommended first cross-feature win, deliberately not done in the same
+  session as the calorie/recipe nudge above.
+  - Why it helps: surfaces Feature 1's price-comparison work (currently only
+    reachable by opening a list and tapping the summary bar) proactively on
+    the home screen, the highest-traffic screen in the app.
+  - Expected user value: medium-high — real savings, shown without the user
+    having to think to look for them.
+  - Expected business/premium value: medium — a strong "look how smart this
+    app is" moment, and a plausible premium-gate candidate ("unlimited price
+    comparisons" is already marketed on the paywall with zero enforcement
+    today — see the premium-gating audit note above).
+  - Complexity: Medium — the comparison logic itself is done
+    (`basketComparisonProvider`/`BasketComparison.bestStore`), but it isn't
+    safe to auto-run on every home-screen visit as-is: it fires one live
+    marktguru search per unchecked item on a list, and the provider is
+    `autoDispose` with no caching, unlike `AvoNudgeService.getOfferNudges`'s
+    6h TTL cache for the same style of background computation. This idea
+    needs a caching wrapper designed first (which list to compare — most
+    recently updated? — and how long a result stays fresh), not a
+    straight reuse of the existing provider.
+  - Risk: Medium if built without the caching layer (real risk of hammering
+    an unofficial, keyless-auth third-party API on every app open, across
+    every user); low once a TTL cache is in place.
+  - Recommendation: yes, as Feature 8's next slice — but design the cache
+    first, ideally in its own session rather than paired with another
+    feature.
 
 - [ ] IDEA: Server-side restock reminders (Supabase cron + the existing
   send-push-notification edge function) instead of the client-scheduled
@@ -2093,3 +2257,29 @@ exists, "N calories left — 3 dinner ideas from your list."
     auth/router code, so it deserves its own careful pass rather than a
     drive-by edit.
   - Recommendation: needs decision — low priority, real but minor UX gap.
+
+- [ ] IDEA: Decide where the app's *first* real, enforced premium gate
+  should go, now that Feature 8 is adding genuinely smart cross-feature
+  moments (price comparison, calorie-aware recipe ideas) that are plausible
+  "premium" hooks.
+  - Why it helps: today, literally every premium perk on the paywall screen
+    except recipe cooking-mode is unenforced marketing copy (see the
+    premium-gating audit in Feature 8 above) — the app has real
+    infrastructure for this (`PremiumFeatureGate`/`GoProButton`) sitting
+    unused. Cross-feature moments like the new calorie/recipe nudge or the
+    still-open price-comparison card are natural candidates ("unlimited
+    price comparisons," "unlimited AI meal ideas"), but picking which
+    feature to gate, and how generous the free tier should be, is a business
+    call, not an engineering one — this session deliberately did not gate
+    anything it built.
+  - Expected user value: neutral-to-negative if done wrong (gating something
+    users already expect for free feels like a bait-and-switch); positive if
+    scoped to something genuinely "more" rather than "less."
+  - Expected business/premium value: potentially high — this is the actual
+    monetization gap in the app today.
+  - Complexity: Low to wire (the gating widgets already exist) once the
+    product decision is made.
+  - Risk: Low technically, but a real product/trust risk if the free tier is
+    cut too aggressively after users are already used to it being free.
+  - Recommendation: needs decision — please confirm which feature(s) should
+    get a real free-tier limit before a follow-up session wires any gating.

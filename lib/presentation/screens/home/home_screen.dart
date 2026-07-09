@@ -25,6 +25,7 @@ import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
 import 'package:shoply/presentation/screens/home/widgets/avo_nudge_card.dart';
+import 'package:shoply/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/pending_splits_banner.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
@@ -448,6 +449,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
             // Avo restock nudges ("you buy milk about every 5 days")
             const SliverToBoxAdapter(child: AvoNudgeCard()),
+
+            // "N kcal left today — dinner ideas from your list" (calorie
+            // tracking users only; renders nothing otherwise)
+            const SliverToBoxAdapter(child: CalorieRecipeNudgeCard()),
 
             const SliverToBoxAdapter(
               child: SizedBox(height: AppDimensions.spacingLarge),

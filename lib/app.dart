@@ -45,6 +45,7 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
       // being used, the in-app card is the surface — the notification should
       // only fire when the app has NOT been opened since yesterday.
       unawaited(MascotNotificationService.instance.rearmRestockReminder());
+      unawaited(MascotNotificationService.instance.rearmDinnerIdeasReminder());
     });
 
     _authSubscription = SupabaseService.instance.authStateChanges.listen((
@@ -166,6 +167,7 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // Re-arm on every return to the app (throttled inside the service).
       unawaited(MascotNotificationService.instance.rearmRestockReminder());
+      unawaited(MascotNotificationService.instance.rearmDinnerIdeasReminder());
     }
   }
 

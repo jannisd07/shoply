@@ -300,6 +300,8 @@ class AvoSettingsBridge {
           .applyMasterChangedRemotely(enabled);
       await MascotNotificationService.instance
           .rearmRestockReminder(force: true);
+      await MascotNotificationService.instance
+          .rearmDinnerIdeasReminder(force: true);
     }
     return result;
   }
@@ -317,6 +319,8 @@ class AvoSettingsBridge {
     }
     final current = ref.read(calorieTrackingEnabledProvider);
     await ref.read(calorieTrackingEnabledProvider.notifier).setEnabled(enabled);
+    await MascotNotificationService.instance
+        .rearmDinnerIdeasReminder(force: true);
     return SettingChangeResult(
       success: true,
       key: 'calorie_tracking',

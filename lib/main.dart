@@ -135,6 +135,8 @@ Future<void> _initializeServicesInBackground() async {
         await FCMService.instance.saveTokenForCurrentUser();
         await MascotNotificationService.instance
             .rearmRestockReminder(force: true);
+        await MascotNotificationService.instance
+            .rearmDinnerIdeasReminder(force: true);
         _runRecipeLabelMigration();
       }
 
@@ -142,6 +144,8 @@ Future<void> _initializeServicesInBackground() async {
         // Clears the scheduled restock reminder (no user = nothing due).
         await MascotNotificationService.instance
             .rearmRestockReminder(force: true);
+        await MascotNotificationService.instance
+            .rearmDinnerIdeasReminder(force: true);
       }
     });
   } catch (e) {
