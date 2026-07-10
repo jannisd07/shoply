@@ -27,6 +27,12 @@ class StoreOffer {
   /// computed by the API as `price / (volume * packQuantity)`.
   final double? referencePrice;
 
+  /// True when this offer was only found by broadening the user's search to
+  /// a generic stem (e.g. "Toastbrötchen" → "toast") rather than matching
+  /// the typed product directly — a lower-confidence match worth flagging
+  /// so the user can double-check it's the right product before adding it.
+  final bool isBroadMatch;
+
   const StoreOffer({
     required this.id,
     required this.productName,
@@ -43,7 +49,28 @@ class StoreOffer {
     this.volume,
     this.packQuantity,
     this.referencePrice,
+    this.isBroadMatch = false,
   });
+
+  /// Same offer, flagged as having been found via generic-term broadening.
+  StoreOffer asBroadMatch() => StoreOffer(
+        id: id,
+        productName: productName,
+        brandName: brandName,
+        description: description,
+        price: price,
+        oldPrice: oldPrice,
+        unitShortName: unitShortName,
+        retailerName: retailerName,
+        retailerUniqueName: retailerUniqueName,
+        categoryName: categoryName,
+        validFrom: validFrom,
+        validTo: validTo,
+        volume: volume,
+        packQuantity: packQuantity,
+        referencePrice: referencePrice,
+        isBroadMatch: true,
+      );
 
   /// Non-food categories to hide (marktguru mixes appliances, drugstore,
   /// furniture into grocery-term searches — e.g. "Toaster" for "Toast").
@@ -324,6 +351,29 @@ class BasketComparison {
       return closest;
     }
     return null;
+  }
+
+  /// Number of comparable-basket items where every offer found (at any
+  /// store) was only a broad/generic-term match, not an exact match of the
+  /// item's name — i.e. items whose price data is lower-confidence and
+  /// worth a heads-up in the comparison sheet.
+  int get broadMatchOnlyCount {
+    final itemNames = <String>{
+      for (final store in stores)
+        for (final match in store.matches) match.itemName,
+    };
+    var count = 0;
+    for (final name in itemNames) {
+      final offersForItem = [
+        for (final store in stores)
+          for (final match in store.matches)
+            if (match.itemName == name && match.hasOffer) match.offer!,
+      ];
+      if (offersForItem.isNotEmpty && offersForItem.every((o) => o.isBroadMatch)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   /// The cheapest current offer for a single list item across all stores,

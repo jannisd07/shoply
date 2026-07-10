@@ -588,6 +588,15 @@ class _StoreComparisonSheet extends ConsumerWidget {
                 params: {'count': '${comparison.comparableItemCount}'}),
             style: TextStyle(fontSize: 10.5, color: textSecondary, height: 1.4),
           ),
+          if (comparison.broadMatchOnlyCount > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              context.tr('broad_match_items_note',
+                  params: {'count': '${comparison.broadMatchOnlyCount}'}),
+              style:
+                  TextStyle(fontSize: 10.5, color: AppColors.warning, height: 1.4),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             context.tr('offers_source_note'),

@@ -53,12 +53,16 @@ class ItemOfferChip extends StatelessWidget {
             const SizedBox(width: 4),
             Flexible(
               child: Text(
-                savings != null
-                    ? context.tr('save_at_store', params: {
-                        'amount': savings.toStringAsFixed(2),
-                        'store': offer.retailerName,
-                      })
-                    : '${offer.price.toStringAsFixed(2)} € · ${offer.retailerName}',
+                [
+                  if (savings != null)
+                    context.tr('save_at_store', params: {
+                      'amount': savings.toStringAsFixed(2),
+                      'store': offer.retailerName,
+                    })
+                  else
+                    '${offer.price.toStringAsFixed(2)} € · ${offer.retailerName}',
+                  if (offer.isBroadMatch) context.tr('similar_product_match'),
+                ].join(' · '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -254,6 +258,27 @@ class _ItemOfferSheetState extends State<_ItemOfferSheet> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 12, color: textSecondary),
                     ),
+                    if (offer.isBroadMatch) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline_rounded,
+                              size: 12, color: AppColors.warning),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              context.tr('similar_product_note'),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: AppColors.warning,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

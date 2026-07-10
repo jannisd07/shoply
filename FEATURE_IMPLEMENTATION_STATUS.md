@@ -1,10 +1,29 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-09, second run (scheduled routine — Feature 4 focus: onboarding/preference-guidance tools, the one Feature-4 item that was blocked on Feature 7 and became unblocked when Feature 7 shipped yesterday)_
+_Last updated: 2026-07-10 (scheduled routine — Feature 1 focus: price-confidence labeling for broad/generic-term product matches, the one explicit brief item ("Add price confidence labels if data quality varies") still open on this feature)_
 
 ## Environment note (read first)
 
-The 2026-07-09 **Feature-4** session (second run of the day) downloaded
+The 2026-07-10 **Feature-1** session downloaded Flutter 3.35.6 stable
+fresh into `/tmp/flutter` and verified with full-project `dart analyze`:
+baseline (via `git stash`, this branch before this session's changes) and
+after-change counts are **byte-identical: 610 issues (0 errors, 0
+warnings, 610 info)** — every touched file is analyzer-clean on its own
+(`dart analyze` scoped to the 6 changed files: 6 pre-existing `avoid_print`
+info lints in `offer_price_service.dart`, same style as the rest of the
+codebase, 0 new issues). `flutter test` passes ("All tests passed"). The
+new `asBroadMatch()`/`broadMatchOnlyCount` confidence logic was verified
+with a throwaway `flutter test` file (4 cases: flag-without-mutating,
+zero-count-when-an-exact-match-exists-anywhere, counts-an-item-only-broad-
+matched-everywhere, excluded-once-any-store-has-an-exact-match — all
+passed, not committed, deleted before finishing). `pubspec.lock` churn from
+`flutter pub get` with the freshly-downloaded SDK was reverted before
+committing. No iOS build/device test possible here (no macOS/Xcode) — see
+"Not verified" in the Feature 1 session notes below for what that leaves
+unconfirmed, in particular how the new "Similar product" badge and warning
+note actually render and wrap at real device widths.
+
+The earlier note from the 2026-07-09 **Feature-4** session (second run of the day) downloaded
 Flutter 3.35.6 stable fresh into `/tmp/flutter` and verified with
 full-project `flutter analyze` before (via `git stash`) and after this
 session's changes — see the Feature 4 eighth-session notes for the exact
@@ -159,7 +178,7 @@ was **never wired into any screen** — this session wired it up.
 
 | # | Feature | Completion | Status | Blockers |
 |---|---|---|---|---|
-| 1 | Pricing, offers, cheapest store | ~93% | In progress | Regular (non-offer) shelf prices have no public API — offers-only by design |
+| 1 | Pricing, offers, cheapest store | ~95% | In progress | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~75% | In progress | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~90% (this session) | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools shipped this session (goal setup, profile read, zip code) |
@@ -633,6 +652,103 @@ via `curl` against real coordinates; Haversine distance and brand
 normalization verified via a throwaway `dart run` script (15/15 cases
 passed, not committed); `pubspec.lock` churn from `pub get` reverted before
 committing. No iOS build/device test possible in this container.
+
+**Fifth session, 2026-07-10 (scheduled routine).** Picked Feature 1 again —
+first not-fully-implemented feature in the brief's priority order, and the
+next un-actioned item in that priority order since the fourth session. Went
+back to the brief's "Autonomy improvements" bullets rather than re-reading
+the "explicitly NOT done" list at face value, and found one genuinely
+unaddressed, low-risk item: **"Add price confidence labels if data quality
+varies."** No such signal existed anywhere in the pricing UI.
+
+Digging into why it mattered here specifically: `OfferPriceService`'s
+generic-term fallback (added in an earlier session, `_genericTerm()`)
+already broadens a branded/compound search ("Toastbrötchen", "Golden
+Toast") to a generic stem when the exact query returns offers from fewer
+than 2 retailers, then merges in the stem-matched results so more stores
+show up. That's a good recall fix, but the merged results were
+indistinguishable from an exact match in the UI — a user searching
+"Golden Toast" could be shown a generic "Toastbrötchen" offer at a
+different price with no indication it wasn't literally the product they
+typed. Cross-product substitution suggestions ("swap to a cheaper
+alternative brand") remain correctly out of scope per the fourth session's
+note (diet/allergy safety), but *labeling an already-shown broad match as
+lower-confidence* is a strictly additive trust fix, not a new
+substitution feature.
+
+**What I implemented:**
+- `StoreOffer.isBroadMatch` (new field, defaults `false`) +
+  `StoreOffer.asBroadMatch()` (new method) in
+  `lib/data/models/store_offer.dart` — tags a copy of an offer as having
+  been found via generic-term broadening rather than the user's literal
+  query.
+- `OfferPriceService.searchOffers` (`lib/data/services/offer_price_service.dart`)
+  now tags every fallback-sourced offer with `.asBroadMatch()` before
+  merging it into the results — the only place broad matches enter the
+  system, so every downstream consumer (search suggestions, per-item offer
+  chip, basket comparison) now carries the confidence flag automatically.
+- `BasketComparison.broadMatchOnlyCount` (new getter,
+  `lib/data/models/store_offer.dart`) — counts comparable-basket items
+  where *every* offer found for that item, at every store, was only a
+  broad match (i.e. no store had a real exact-name match) — the aggregate
+  confidence signal for the store-comparison sheet.
+- `OfferSuggestionsBar`/`_OfferRow` (`lib/presentation/screens/lists/widgets/offer_suggestions_bar.dart`)
+  — broad-match offers in the top-3 add-bar suggestions now show a small
+  "Similar product" badge under the retailer line. The "save up to €X"
+  header comparison was also tightened to only compare confidently-matched
+  (non-broad) offers, so it can no longer claim a saving based on two
+  different products' prices.
+- `ItemOfferChip` / `_ItemOfferSheet` (`lib/presentation/screens/lists/widgets/item_offer_sheet.dart`)
+  — the compact per-item chip appends "· Similar product" when relevant;
+  the full offer sheet (shown before a user applies an offer's price to an
+  existing item) shows an explicit warning-colored note: "Matched by
+  category, not the exact name you typed — double-check it's the right
+  product before adding."
+- `_StoreComparisonSheet` (`lib/presentation/screens/lists/widgets/list_price_summary_bar.dart`)
+  — shows a new note ("{count} item(s) priced from a similar product, not
+  an exact name match — worth a quick check") when
+  `broadMatchOnlyCount > 0`, next to the existing comparable-basket and
+  offers-source disclaimers.
+- 4 new EN/DE i18n keys in `lib/core/localization/app_translations.dart`:
+  `similar_product_match`, `similar_product_note`, `broad_match_items_note`.
+
+**Explicitly NOT done / known limits of this increment:**
+- This labels *broad-term* matches, not general "data quality" in a wider
+  sense (e.g. it doesn't flag an offer as lower-confidence just because it
+  has no disclosed regular price, or because the retailer's product-name
+  formatting is unusually terse) — scoped to the one concrete
+  precision-vs-recall tradeoff the codebase actually makes today.
+- Cross-product substitution suggestions ("cheaper alternative saves you
+  X") remain out of scope, unchanged from the fourth session's assessment —
+  still a diet/allergy-safety concern, not attempted here.
+- Not verified on a real device/simulator: how the new badge/warning note
+  actually renders and wraps at real device widths, or whether the
+  generic-term fallback is triggered often enough in practice for a typical
+  German grocery list that this label will actually be seen regularly (it
+  only shows when the exact query returned offers from fewer than 2
+  retailers).
+
+**Files changed (fifth session):**
+`lib/data/models/store_offer.dart` (`isBroadMatch`, `asBroadMatch()`,
+`broadMatchOnlyCount`),
+`lib/data/services/offer_price_service.dart` (tag fallback offers),
+`lib/presentation/screens/lists/widgets/offer_suggestions_bar.dart`
+(badge, tightened savings comparison),
+`lib/presentation/screens/lists/widgets/item_offer_sheet.dart` (chip +
+sheet confidence note),
+`lib/presentation/screens/lists/widgets/list_price_summary_bar.dart`
+(aggregate confidence note),
+`lib/core/localization/app_translations.dart` (4 new EN/DE keys).
+
+**Checks performed (fifth session):** See the environment note at the top
+of this document for the full `dart analyze`/`flutter test` results.
+Summary: 0 errors, 0 new warnings, 610 issues before and after (byte-
+identical); every touched file individually analyzer-clean (only the 6
+pre-existing `avoid_print` info lints); `flutter test` passes; the new
+`asBroadMatch`/`broadMatchOnlyCount` logic verified with a throwaway
+4-case `flutter test` file (all passed, not committed, deleted after the
+run); `pubspec.lock` churn from `pub get` reverted before committing. No
+iOS build/device test possible in this container.
 
 ---
 

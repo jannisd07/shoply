@@ -46,12 +46,17 @@ class OfferSuggestionsBar extends ConsumerWidget {
 
     final allOffers =
         ref.watch(offerSearchAllProvider(query)).valueOrNull ?? offers;
-    final maxPrice = allOffers.isEmpty
+    // Exclude broad-term matches from the savings comparison — they may be a
+    // different (if related) product, so "save up to X" shouldn't be based
+    // on comparing prices across two non-identical items.
+    final confidentOffers = allOffers.where((o) => !o.isBroadMatch).toList();
+    final maxPrice = confidentOffers.isEmpty
         ? null
-        : allOffers.map((o) => o.price).reduce((a, b) => a > b ? a : b);
-    final savings =
-        maxPrice != null ? maxPrice - offers.first.price : 0.0;
-    final showSavings = allOffers.length > 1 && savings >= 0.20;
+        : confidentOffers.map((o) => o.price).reduce((a, b) => a > b ? a : b);
+    final savings = (maxPrice != null && !offers.first.isBroadMatch)
+        ? maxPrice - offers.first.price
+        : 0.0;
+    final showSavings = confidentOffers.length > 1 && savings >= 0.20;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -292,6 +297,26 @@ class _OfferRow extends StatelessWidget {
                       color: AppColors.textSecondary(context),
                     ),
                   ),
+                  if (offer.isBroadMatch) ...[
+                    const SizedBox(height: 1),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            size: 9.5, color: AppColors.textTertiary(context)),
+                        const SizedBox(width: 3),
+                        Text(
+                          context.tr('similar_product_match'),
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textTertiary(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (_expiryLabel(context) != null) ...[
                     const SizedBox(height: 1),
                     Text(

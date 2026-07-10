@@ -88,8 +88,10 @@ class OfferPriceService {
       final seen = results.map((o) => o.id).toSet();
       results = [
         ...results,
-        ...fallback.where((o) =>
-            seen.add(o.id) && o.productName.toLowerCase().contains(generic)),
+        ...fallback
+            .where((o) =>
+                seen.add(o.id) && o.productName.toLowerCase().contains(generic))
+            .map((o) => o.asBroadMatch()),
       ]..sort((a, b) => a.price.compareTo(b.price));
     }
 
