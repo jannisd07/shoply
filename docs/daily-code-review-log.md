@@ -179,3 +179,91 @@ correctly memoized provider would mean the expensive N×M matching only
 reruns when the list truly changes, and parallelizing/batching the deal
 lookups (e.g. fetch `getActiveDeals()` once per `getRecommendations()`
 call instead of once per item) would cut it from N queries to 1.
+
+## 2026-07-13 — `lib/presentation/widgets/recommendations/ml_recommendations_section.dart`
+
+Reviewed the file plus its references: `mlRecommendationsProvider`
+(`lib/presentation/providers/ml_recommendations_provider.dart`),
+`MLRecommendationService`
+(`lib/data/services/ml_recommendation_service.dart`, 665 lines),
+`ShoppingHistoryService`/`PurchaseTrackingService` (the Supabase-backed
+data sources it queries), `GeminiCategorizationService` (the
+complementary-items call), `RecommendationCard` (the row widget it
+renders), and the one caller wiring it up (`list_detail_screen.dart`).
+The section widget itself (collapsible paper card, `AnimatedCrossFade`) is
+clean — all issues are in the service layer it depends on.
+
+Findings:
+- **Efficiency bug (real, in the live path)**: `getRecommendations()` calls
+  `ShoppingHistoryService.getRecentHistory(limit: 10)` directly, and then
+  `_calculateAssociationScore()` independently calls
+  `getRecentHistory(limit: 50)` again — same method, same user, just a
+  different limit. Each `getRecentHistory` call issues 2-3 separate
+  Supabase round-trips internally (own history, `list_members`, shared
+  history), so *every* recommendation computation makes ~4-6 network
+  queries fetching heavily overlapping data. The limit-10 result is a
+  strict prefix of the limit-50 result and could be reused/sliced instead
+  of queried twice.
+- **Efficiency/cost bug (real, in the live path)**:
+  `_calculateComplementaryScore()` calls
+  `GeminiCategorizationService.getSmartRecommendations()` with **no
+  caching** — unlike `categorizeItem()` in the same service, which caches
+  via `_categoryCache`/`SharedPreferences`. Because
+  `mlRecommendationsProvider` (`FutureProvider.autoDispose.family`)
+  `ref.watch`es `itemsNotifierProvider(listId)`, the *entire* recommendation
+  pipeline — including this Gemini call — reruns on every list mutation
+  (add/remove/check an item), so routine shopping-list use can trigger a
+  fresh, billed Gemini API request every time, gated only by the service's
+  rate limiter.
+- **Convention violation**: `GeminiCategorizationService._rateLimitMs` is
+  `1000` (`gemini_categorization_service.dart:20`), but CLAUDE.md's Gemini
+  convention says "Always maintain 1100ms minimum delay between requests
+  ... Never reduce this delay." `git log -p` shows it's been 1000ms since
+  the constant was introduced, i.e. a pre-existing gap between code and
+  documented convention rather than a regression — flagging since it's
+  directly in this feature's call chain.
+- **Bilingual-UX bug**: every recommendation "reason" string produced by
+  `MLRecommendationService` is a hardcoded German literal — `'Oft
+  gekauft'`, `'Passt gut dazu'`, `'Ergänzt deine Liste'`, `'Wieder Zeit zu
+  kaufen'`, `'Oft auf dieser Liste'`, `'Beliebtes Produkt'` — and
+  `RecommendationCard` (`recommendation_card.dart:65`) renders
+  `recommendation.reason` verbatim with no localization lookup. English-
+  locale users see German subtext under every AI recommendation. Compounding
+  this, the Gemini prompt in `getSmartRecommendations()`
+  (`gemini_categorization_service.dart:313-326`) explicitly instructs
+  "Antworte NUR mit Artikelnamen auf Deutsch" — so the complementary-item
+  *suggestions themselves* are always German words, regardless of app
+  locale. This contradicts the project's stated bilingual DE/EN design and
+  the language-agnostic-ID pattern used elsewhere (e.g. `category_id`).
+- **Dead category-icon matching**: `_getStarterRecommendations()` hardcodes
+  German display-name categories (`'Milchprodukte'`, `'Obst'`, `'Gemüse'`,
+  `'Backwaren'`, `'Eier & Milchprodukte'`), but
+  `RecommendationCard._getCategoryIcon()` matches against English keyword
+  substrings (`'fruit'`, `'dairy'`, `'bread'`, ...). None of the German
+  strings contain their English counterparts, so starter recommendations
+  (shown to brand-new users with no purchase history — the "cold start"
+  experience) always fall through to the generic `shopping_basket_outlined`
+  icon instead of a category-specific one.
+- **Dead code**: `MLRecommendationService._normalizeScore()`
+  (`ml_recommendation_service.dart:392`) has zero callers anywhere in the
+  file or repo (`grep`-confirmed) — every other scoring helper normalizes
+  inline instead of using it.
+- **Doc/logic mismatch (minor)**: `_filterByConfidence()`'s docstring says
+  tiers "fill up to 4 total" (good) / "fill up to 3 total" (decent) / "fill
+  up to 2 total" (acceptable), but the actual fill logic is
+  cumulative-remaining-slots against `maxRecommendations = 5`, so e.g. 3
+  excellent + 2 good already reaches 5 total, not capped at 4. Cosmetic —
+  the code's behavior (fill 5 slots, prioritizing higher tiers) is
+  reasonable, the comment just doesn't describe it precisely.
+- No direct security issues: all Supabase queries in the reviewed chain
+  use parameterized `.eq()`/`.inFilter()`, no raw SQL or string
+  interpolation into queries.
+
+No changes were made this run (review-only). Recommendation for a future
+run/human: collapse the two `getRecentHistory` calls into one (fetch once
+at the larger limit, slice for the smaller use), add a
+content-based/short-TTL cache around `getSmartRecommendations()` so a
+single Gemini call doesn't re-fire on every item toggle, and route both
+the reason strings and the Gemini prompt output through
+`context.tr(...)`/locale-aware generation the way the rest of the app's
+category system already does.
