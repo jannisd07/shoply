@@ -742,5 +742,6 @@ struct ShoppingListWidget: Widget {
 struct ShoppingListWidgetBundle: WidgetBundle {
     var body: some Widget {
         ShoppingListWidget()
+        QuickAddWidget()
     }
 }

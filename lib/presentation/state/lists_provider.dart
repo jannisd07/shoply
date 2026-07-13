@@ -1,7 +1,11 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
+import 'package:shoply/data/services/purchase_tracking_service.dart';
 import 'package:shoply/data/services/widget_service.dart';
 
 /// List repository provider
@@ -24,6 +28,7 @@ final listByIdProvider = FutureProvider.family<ShoppingListModel?, String>((ref,
 /// State notifier for managing lists
 class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
   final ListRepository _repository;
+  final PurchaseTrackingService _trackingService = PurchaseTrackingService();
 
   ListsNotifier(this._repository) : super(const AsyncValue.loading()) {
     loadLists();
@@ -49,6 +54,8 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
       OfflineCacheService.instance.cacheLists(lists);
       // Update widget with available lists for configuration
       _updateWidgetAvailableLists(lists);
+      // Refresh the Quick-Add widget's frequently-bought-item suggestions
+      unawaited(_updateWidgetRecentItems());
     } catch (error, stackTrace) {
       // Try offline cache
       final cached = await OfflineCacheService.instance.getCachedLists();
@@ -63,6 +70,37 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
   void _updateWidgetAvailableLists(List<ShoppingListModel> lists) {
     final widgetLists = lists.map((l) => {'id': l.id, 'name': l.name}).toList();
     WidgetService.updateAvailableLists(widgetLists);
+  }
+
+  /// Pushes the user's most frequently bought items to the App Group so the
+  /// Quick-Add widget can offer one-tap suggestions. Best-effort: purchase
+  /// stats are a nice-to-have for the widget, never worth failing list load
+  /// over.
+  Future<void> _updateWidgetRecentItems() async {
+    try {
+      final stats = await _trackingService.getFrequentItems(limit: 8);
+      final items = stats
+          .map((s) => WidgetRecentItem(
+                name: _titleCase(s.itemName),
+                category: s.preferredCategory,
+                quantity: s.preferredQuantity ?? 1.0,
+              ))
+          .toList();
+      await WidgetService.updateRecentItems(items);
+    } catch (e) {
+      debugPrint('⚠️ [Widget] Failed to refresh recent-items suggestions: $e');
+    }
+  }
+
+  String _titleCase(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return trimmed;
+    return trimmed
+        .split(' ')
+        .map((word) => word.isEmpty
+            ? word
+            : '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
   }
 
   @override

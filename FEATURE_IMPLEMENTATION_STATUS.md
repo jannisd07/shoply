@@ -1,8 +1,28 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-10 (scheduled routine — Feature 1 focus: price-confidence labeling for broad/generic-term product matches, the one explicit brief item ("Add price confidence labels if data quality varies") still open on this feature)_
+_Last updated: 2026-07-13 (scheduled routine — Feature 3 focus: built the "quick-add item to shopping list from widget" required capability, which was completely missing — the existing widget could only view/check off items, not add new ones)_
 
 ## Environment note (read first)
+
+The 2026-07-13 **Feature-3** session downloaded Flutter 3.35.6 stable fresh
+into `/tmp/flutter` and verified with full-project `dart analyze`: baseline
+(via `git stash`, this branch before this session's changes) and after-change
+counts are **byte-identical: 610 issues (0 errors, 59 warnings, 551 info)**.
+`flutter test` passes ("All tests passed"). The three touched/new Swift
+files (`ios/ShoppingListWidget/QuickAddWidget.swift` (new),
+`ios/ShoppingListWidget/ShoppingListWidget.swift`, `ios/Runner/AppDelegate.swift`)
+were verified with a brace/bracket/paren-balance parser (Python, string- and
+comment-aware) rather than a real Swift compiler — no Swift toolchain exists
+in this Linux container and no `swiftc`/`swift` binary is installed. The new
+widget file was **not** added to `project.pbxproj` — it didn't need to be:
+`ios/ShoppingListWidget` is a `PBXFileSystemSynchronizedRootGroup` (confirmed
+by reading the project file directly), so Xcode auto-discovers any `.swift`
+file dropped into that folder and compiles it into the
+`ShoppingListWidgetExtension` target with zero project-file edits, the same
+mechanism that already covers `ShoppingListWidget.swift` and
+`ShoppingListWidgetControl.swift`. `pubspec.lock` churn from `flutter pub get`
+was reverted before committing. No iOS build/device test possible here (no
+macOS/Xcode) — see "Not verified" in the Feature 3 sixth-session notes below.
 
 The 2026-07-10 **Feature-1** session downloaded Flutter 3.35.6 stable
 fresh into `/tmp/flutter` and verified with full-project `dart analyze`:
@@ -180,7 +200,7 @@ was **never wired into any screen** — this session wired it up.
 |---|---|---|---|---|
 | 1 | Pricing, offers, cheapest store | ~95% | In progress | Regular (non-offer) shelf prices have no public API — offers-only by design |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
-| 3 | Widgets & quick actions | ~75% | In progress | Home-screen widget fix + Siri/Shortcuts now actually wired end-to-end; needs a real Xcode/device build to confirm |
+| 3 | Widgets & quick actions | ~85% (this session) | In progress (needs device QA) | New Quick-Add widget (required "quick-add item from widget" capability) shipped this session; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~90% (this session) | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools shipped this session (goal setup, profile read, zip code) |
 | 5 | Avo mascot & smart notifications | ~80% | In progress | Proactive recipe-suggestion nudges still open; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | ~70% | In progress | Barcode camera scan, diet challenges (16:8/no-sugar), and meal-photo storage not built; needs device QA |
@@ -1175,6 +1195,139 @@ that `widget_pending_toggles` had zero writers anywhere before deleting the
 code that read it. **Not run (no macOS/Xcode in this container):** an
 actual Xcode build, Siri/Shortcuts appearing on a real device, or the
 add-item/create-list flow end-to-end on a device.
+
+**Sixth session, 2026-07-13 (scheduled routine — this feature's dedicated
+session).** Feature 1's remaining gaps are genuine external blockers (no
+public shelf-price API) and Feature 2 is 95%/device-QA-blocked, so per the
+feature order this session picked Feature 3. Re-read the brief's **required**
+capability list rather than the "explicitly NOT done" list, and found the
+biggest real gap wasn't an autonomy nice-to-have — it was one of the two
+literal required capabilities: *"Quick-add item to shopping list from
+widget"*. The existing widget (fixed in earlier sessions) can display a list
+and toggle items checked/unchecked, but there was **no way to add a new item
+without opening the app** — the "quick actions" half of "Widgets and quick
+actions" didn't exist yet.
+
+**Why a plain text-entry widget isn't the answer:** WidgetKit interactive
+elements are limited to `Button` and `Toggle` (no `TextField`) — a Home
+Screen widget fundamentally cannot offer freeform text entry. The realistic
+version of "quick-add from widget" is tap-to-add on a small set of
+suggestions, which conveniently also satisfies the brief's separately-listed
+autonomy idea *"recently used items quick-add widget"* — one feature closes
+both asks.
+
+**What I implemented:**
+- **New `QuickAddWidget` (Swift, new file
+  `ios/ShoppingListWidget/QuickAddWidget.swift`)** — a second WidgetKit
+  widget ("Schnell hinzufügen" / Quick Add) registered in the existing
+  `ShoppingListWidgetBundle`, systemSmall/systemMedium, reusing the existing
+  `SelectListIntent` (same list-picker config as the shopping-list widget) so
+  the user can pin it to whichever list they want quick-add suggestions for.
+  Shows up to 4 frequently-bought items as tappable rows; tapping one runs
+  `QuickAddItemIntent`, which does a **direct Supabase REST insert**
+  (`POST /rest/v1/shopping_items`) using the same cached-credentials pattern
+  `ToggleItemIntent`/`syncToggleToSupabase` already established for
+  checkbox toggling — the widget process has no Flutter/Dart runtime, so it
+  can't call `ItemRepository.addItem()`; it has to talk to Supabase directly.
+  On a successful insert, the new item is also appended to the widget's own
+  cached copy of that list (`widget_list_<id>`) so the shopping-list widget
+  reflects it immediately instead of waiting for its next 30-minute timeline
+  refresh — mirrors how `toggleItemInDefaults` already updates the local
+  cache eagerly. Fails open and silent on any error (missing/expired
+  credentials, network failure), same as the existing toggle sync — a failed
+  tap just does nothing rather than crashing the widget.
+- **Data source: reused, not reinvented.** `PurchaseTrackingService.getFrequentItems()`
+  already existed (used by `RecommendationService` for in-app "you might also
+  need" suggestions) and does exactly the aggregation a "recently/frequently
+  used items" widget needs (`item_purchase_stats`, ≥2 purchases, sorted by
+  count) — no new backend logic was written for this.
+- **`WidgetService.updateRecentItems()`** (new,
+  `lib/data/services/widget_service.dart`) + `WidgetRecentItem` model —
+  pushes up to 8 frequent items (title-cased for display; purchase stats are
+  stored lowercase) to the App Group via a new `updateRecentItems` method
+  channel call. Wired into `ListsNotifier.loadLists()`
+  (`lib/presentation/state/lists_provider.dart`) right next to the existing
+  `_updateWidgetAvailableLists()` call, so the widget's suggestions refresh
+  on every app foreground and every realtime item-change event, same
+  cadence as the list-selection cache. Best-effort/`unawaited`: a failed
+  purchase-stats fetch never blocks list loading.
+- **`AppDelegate.swift`** gained the native handler for `updateRecentItems`
+  (writes `widget_recent_items` to the App Group, reloads the
+  `QuickAddWidget` timeline) and `updateSupabaseCredentials` now also stores
+  a `widget_supabase_user_id` key — required because a direct widget-side
+  insert needs a value for `shopping_items.added_by`, which the widget
+  process has no other way to obtain. `home_screen.dart`'s
+  `_syncWidgetCredentials()` now passes `SupabaseService.instance.currentUser?.id`
+  through.
+- Confirmed via reading `project.pbxproj` directly (not guessed) that
+  `ios/ShoppingListWidget` is a `PBXFileSystemSynchronizedRootGroup` with
+  only `Info.plist` excluded from the build-sources membership exception
+  list — meaning the new `QuickAddWidget.swift` file needed **zero**
+  project-file edits to compile into the extension target, unlike the
+  higher-risk manual `project.pbxproj` surgery the fifth session had to do
+  to get `AppIntents.swift` into the main `Runner` target (which has no such
+  synchronized group).
+
+**Explicitly NOT done / known limits of this increment:**
+- **Not verified on a real device/simulator** — no macOS/Xcode in this
+  container, same limitation every prior Feature 3 session has flagged. This
+  is the single most important thing to check before considering this done:
+  does the widget actually appear in the widget gallery, does the tap-to-add
+  button work, does the new item show up in the app.
+- **Cached Supabase access token can expire.** `_syncWidgetCredentials()`
+  only refreshes the App Group's cached token on app launch / auth-state
+  change, not on Supabase's background token refresh — so a widget tap more
+  than ~1 hour after the app was last opened could hit an expired-token 401
+  and silently no-op. This is a **pre-existing** limitation of the toggle-sync
+  design this session's insert reuses, not a new one — flagged as a shared
+  idea below rather than fixed here, since fixing it properly means the app
+  proactively re-pushing the token on every Supabase auth refresh event, a
+  change that would also benefit the existing checkbox-toggle sync and felt
+  like more than this session's one-widget scope.
+- **No duplicate-merge check on quick-add.** The app's own `addItem()` merges
+  into an existing unchecked item with the same name; the widget's direct
+  REST insert always creates a new row. Tapping "Milch" twice quickly (or
+  once from the widget when "Milch" is already unchecked on the list) creates
+  two rows instead of bumping quantity. Accepted as a v1 tradeoff — a
+  merge-safe insert would need an extra round-trip GET before the POST,
+  adding latency to a widget interaction that should feel instant.
+- **New suggestions need ≥2 real purchases** (`getFrequentItems`'s existing
+  threshold) before they show up — a brand-new user's Quick-Add widget shows
+  the "Noch keine Vorschläge" (no suggestions yet) empty state until they've
+  completed a couple of real shopping trips. Not a bug, just worth knowing
+  when testing on a fresh account.
+- Did **not** touch the two smaller pre-existing issues flagged by earlier
+  sessions (dead `SiriService.dart` method-channel/`_checkSiriPendingItems()`
+  code; the widget extension's `IPHONEOS_DEPLOYMENT_TARGET = 26.0` vs.
+  Runner's `15.6`/`13.0`) — both are unrelated to the required-capability gap
+  this session closed, and touching either felt like scope creep into
+  low-value/higher-risk cleanup rather than the one selected feature.
+
+**Files changed (sixth session):**
+`ios/ShoppingListWidget/QuickAddWidget.swift` (new — widget, timeline
+provider, quick-add intent, direct REST insert),
+`ios/ShoppingListWidget/ShoppingListWidget.swift` (register `QuickAddWidget()`
+in the bundle), `ios/Runner/AppDelegate.swift` (`updateRecentItems` handler,
+`userId` in `updateSupabaseCredentials`), `lib/data/services/widget_service.dart`
+(`updateRecentItems()`, `WidgetRecentItem`, `userId` param),
+`lib/presentation/state/lists_provider.dart` (push recent-item suggestions
+on every list load), `lib/presentation/screens/home/home_screen.dart`
+(pass `userId` to the widget credentials sync).
+
+**Checks performed (sixth session):** See the environment note at the top of
+this document. Summary: Flutter 3.35.6 downloaded fresh; `dart analyze`
+byte-identical before/after (610 issues, 0 errors, 0 new warnings/info);
+`flutter test` passes; the three touched/new Swift files verified with a
+custom string/comment-aware brace-balance checker (no Swift toolchain
+available in this container) and by manually diffing every new pattern
+(REST insert, App Group read/write, `AppIntentTimelineProvider` conformance)
+against the already-compiling code it was modeled on
+(`ToggleItemIntent`/`syncToggleToSupabase`/`ShoppingListProvider`);
+confirmed via direct `project.pbxproj` inspection that the new widget file
+needs no project-file changes to build. `pubspec.lock` churn from `pub get`
+reverted before committing. **Not run (no macOS/Xcode in this container):**
+an actual Xcode build, the widget appearing in the widget gallery, or a
+live on-device quick-add tap.
 
 ---
 
@@ -2270,6 +2423,47 @@ read against real content, not just schema/RLS shape).
   - Risk: Low.
   - Recommendation: needs decision — nice-to-have, not required for the
     core loop to be genuinely useful.
+
+- [ ] IDEA: Proactively re-push the widget's cached Supabase access token on
+  every token refresh, not just app launch/auth-state change.
+  - Why it helps: the widget's checkbox-toggle sync (existing) and the new
+    Quick-Add insert (this session) both do a direct REST call using a
+    cached token from `home_screen.dart`'s `_syncWidgetCredentials()`, which
+    only runs on launch/login. If a user leaves the app open in the
+    background for longer than the token's lifetime, a widget tap after that
+    silently fails (fails open — no crash, just a no-op) until they next open
+    the app.
+  - Expected user value: medium — "the widget button did nothing" with no
+    visible error is a confusing failure mode, though it self-heals on next
+    app open.
+  - Expected business/premium value: low.
+  - Complexity: Low — hook `SupabaseService`'s existing
+    `onAuthStateChange`/token-refresh event (already listened to for user-id
+    changes in `home_screen.dart`) and call `_syncWidgetCredentials()` on a
+    token-refreshed event too, not just a user-changed event.
+  - Risk: Low.
+  - Recommendation: yes — small, safe, fixes a real (if rare) silent-failure
+    edge case for both the existing toggle sync and the new quick-add.
+
+- [ ] IDEA: Remove the confirmed-dead Siri method-channel plumbing
+  (`SiriService.dart`'s `com.shoply.app/siri` channel, `home_screen.dart`'s
+  `_checkSiriPendingItems()`) now that Feature 3's fifth session replaced it
+  with the working deep-link-based flow.
+  - Why it helps: two independent sessions have now confirmed no native code
+    calls this channel — it's a harmless no-op that runs on every app
+    launch, purely code-cleanliness/clarity for the next person reading
+    `home_screen.dart`'s `initState`.
+  - Expected user value: none (invisible to users).
+  - Expected business/premium value: none.
+  - Complexity: Low (delete ~30 lines across 2 files), but touches
+    `home_screen.dart`'s `initState` init sequence, which is why the last two
+    sessions both deliberately left it alone rather than risk it alongside
+    other changes.
+  - Risk: Low-medium — low because it's confirmed dead by grep across the
+    whole repo twice; medium only because `initState` ordering bugs are easy
+    to introduce by accident and hard to catch without a device.
+  - Recommendation: yes, but do it as its own tiny, isolated change in a
+    future Feature 3 session — not bundled with a feature-shipping session.
 
 - [ ] IDEA: Delete the now-doubly-confirmed-dead Siri legacy code:
   `ios/Runner/VoiceAssistantPlugin.swift` (unbuilt, unregistered, no Dart

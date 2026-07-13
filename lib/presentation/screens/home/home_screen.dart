@@ -166,6 +166,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         url: Env.supabaseUrl,
         anonKey: Env.supabaseAnonKey,
         accessToken: session.accessToken,
+        userId: SupabaseService.instance.currentUser?.id,
       );
     }
   }

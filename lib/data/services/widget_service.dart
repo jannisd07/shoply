@@ -53,11 +53,29 @@ class WidgetService {
     }
   }
 
+  /// Save the user's most frequently bought items so the Quick-Add widget
+  /// can offer one-tap "add to list" suggestions without opening the app.
+  static Future<void> updateRecentItems(List<WidgetRecentItem> items) async {
+    if (!Platform.isIOS) return;
+
+    try {
+      await _channel.invokeMethod('updateRecentItems', {
+        'items': items.map((item) => item.toJson()).toList(),
+      });
+      debugPrint('✅ [Widget] Updated recent items: ${items.length}');
+    } catch (e) {
+      debugPrint('⚠️ [Widget] Update recent items failed: $e');
+    }
+  }
+
   /// Save Supabase credentials to App Group so widget can sync toggles directly
+  /// and insert quick-added items directly (userId is required for the
+  /// `added_by` column on a direct insert from the widget process).
   static Future<void> updateSupabaseCredentials({
     required String url,
     required String anonKey,
     required String accessToken,
+    String? userId,
   }) async {
     if (!Platform.isIOS) return;
 
@@ -66,6 +84,7 @@ class WidgetService {
         'url': url,
         'anonKey': anonKey,
         'accessToken': accessToken,
+        if (userId != null) 'userId': userId,
       });
       debugPrint('✅ [Widget] Updated Supabase credentials');
     } catch (e) {
@@ -187,6 +206,29 @@ class WidgetItem {
     quantity: json['quantity'] as int,
     isChecked: json['isChecked'] as bool,
   );
+}
+
+/// A frequently-bought item offered as a one-tap suggestion in the
+/// Quick-Add widget. `name` is display-ready (title-cased), `category` is
+/// the language-agnostic category id (e.g. `'dairy'`) used elsewhere in the
+/// app, so a quick-added item categorizes the same way a manually typed one
+/// would.
+class WidgetRecentItem {
+  final String name;
+  final String? category;
+  final double quantity;
+
+  WidgetRecentItem({
+    required this.name,
+    this.category,
+    this.quantity = 1.0,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'category': category,
+    'quantity': quantity,
+  };
 }
 
 /// Recipe data for widget display

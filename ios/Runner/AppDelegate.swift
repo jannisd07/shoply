@@ -79,6 +79,8 @@ import WidgetKit
         self.updateAvailableLists(call.arguments as? [String: Any], result: result)
       case "updateSupabaseCredentials":
         self.updateSupabaseCredentials(call.arguments as? [String: Any], result: result)
+      case "updateRecentItems":
+        self.updateRecentItems(call.arguments as? [String: Any], result: result)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -206,8 +208,34 @@ import WidgetKit
       if let token = data["accessToken"] as? String {
         defaults.set(token, forKey: "widget_supabase_token")
       }
+      if let userId = data["userId"] as? String {
+        defaults.set(userId, forKey: "widget_supabase_user_id")
+      }
       defaults.synchronize()
       print("✅ [Widget] Supabase credentials saved to App Group")
+    }
+
+    result(true)
+  }
+
+  private func updateRecentItems(_ data: [String: Any]?, result: FlutterResult) {
+    guard let data = data,
+          let items = data["items"] as? [[String: Any]] else {
+      result(FlutterError(code: "INVALID_DATA", message: "No items data", details: nil))
+      return
+    }
+
+    if let defaults = UserDefaults(suiteName: appGroupId) {
+      if let jsonData = try? JSONSerialization.data(withJSONObject: items),
+         let jsonString = String(data: jsonData, encoding: .utf8) {
+        defaults.set(jsonString, forKey: "widget_recent_items")
+        defaults.synchronize()
+        print("✅ [Widget] Recent items saved: \(items.count)")
+      }
+    }
+
+    if #available(iOS 14.0, *) {
+      WidgetCenter.shared.reloadTimelines(ofKind: "QuickAddWidget")
     }
 
     result(true)
