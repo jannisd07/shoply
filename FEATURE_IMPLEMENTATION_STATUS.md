@@ -1,6 +1,26 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-13 (scheduled routine — Feature 3 focus: built the "quick-add item to shopping list from widget" required capability, which was completely missing — the existing widget could only view/check off items, not add new ones)_
+_Last updated: 2026-07-14 (scheduled routine — Feature 6 focus: built diet challenges (16:8 fasting, 30-day no sugar) from scratch — a required capability that had a live DB schema but zero Dart code — and added real meal-photo storage so photo-tracked food log entries keep their source image instead of discarding it)_
+
+The 2026-07-14 **Feature-6** session downloaded Flutter 3.35.6 stable fresh
+into `/tmp/flutter` and verified with full-project `dart analyze`: baseline
+(via `git stash`, this branch before this session's changes) and after-change
+counts are **byte-identical: 610 issues (0 errors, 59 warnings, 551 info)** —
+confirmed by also scoping `dart analyze` to just the 10 new/touched files (2
+issues found on the first pass, both `unnecessary_import` on a redundant
+`dart:typed_data` import already re-exported by `flutter/services.dart`/
+`flutter/foundation.dart`; fixed, re-scoped analyze came back clean).
+`flutter test` passes ("All tests passed"). The new `DietChallenge.currentStreak`/
+`adherenceRate`/`daysRemaining`/`isPastTargetEnd` logic was verified with a
+throwaway `dart run` script (21 cases) — **one real bug caught and fixed
+before committing**: `currentStreak` used `!= true` to decide whether to fall
+back to checking yesterday, which couldn't distinguish "no check-in yet
+today" from "explicitly checked in as missed today" — an explicit miss
+incorrectly kept yesterday's streak alive instead of resetting to 0. Fixed by
+checking `containsKey` first. `pubspec.lock` churn from `flutter pub get`
+with the freshly-downloaded SDK was reverted before committing. No iOS
+build/device test possible here (no macOS/Xcode) — see "Not verified" in the
+Feature 6 session notes below.
 
 ## Environment note (read first)
 
@@ -203,7 +223,7 @@ was **never wired into any screen** — this session wired it up.
 | 3 | Widgets & quick actions | ~85% (this session) | In progress (needs device QA) | New Quick-Add widget (required "quick-add item from widget" capability) shipped this session; needs a real Xcode/device build to confirm |
 | 4 | AI assistant app control | ~90% (this session) | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools shipped this session (goal setup, profile read, zip code) |
 | 5 | Avo mascot & smart notifications | ~80% | In progress | Proactive recipe-suggestion nudges still open; needs device QA for scheduled notifications |
-| 6 | Calorie tracking | ~70% | In progress | Barcode camera scan, diet challenges (16:8/no-sugar), and meal-photo storage not built; needs device QA |
+| 6 | Calorie tracking | ~85% (this session) | In progress (needs device QA) | Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); diet challenges + meal-photo storage shipped this session; needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% (this session) | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
 | 8 | Cross-feature UX / growth / premium | ~30% (this session) | In progress | First win shipped (calorie × recipes × Avo nudges); price-comparison home card and premium-gating audit still open |
 
@@ -1943,6 +1963,161 @@ against 5 profiles with a throwaway script (not committed). Traced every new
 provider/service call site by hand for RLS-column/field-name correctness
 against the verified live schema.
 
+**Second session, 2026-07-14 (scheduled routine).** Features 1–5's remaining
+gaps are all device-QA/external-only per the feature order (see the top-level
+environment note and each feature's status row), so this session picked
+Feature 6 and re-read the required-capability list against the "explicitly
+NOT done" list from the first session, rather than re-reading the writeup at
+face value. Picked the two biggest concrete gaps that don't need a device to
+build: **diet challenges** (a literal required capability — "16:8 fasting,
+30-day no sugar challenge") and **meal-photo storage** (the food log's photo
+tab analyzes a photo with Gemini vision, then silently discarded the image).
+Camera barcode scanning was re-confirmed as still genuinely blocked
+(`mobile_scanner` commented out in `pubspec.yaml`, can't verify an iOS build
+here) — left alone, not touched.
+
+**Same backend-ahead-of-Dart pattern found again:** exactly like Features
+1/2/6's first session, the `nutrition_challenges` table already had a
+`daily_checkins jsonb` column and a `nutrition_challenges_one_active_per_type`
+partial unique index live in Supabase (migration `20260710062531
+challenge_daily_checkins`, applied 4 days before this session, likely a stray
+backend-only pass from an earlier Feature-1 run) — with **zero Dart code**
+referencing challenges anywhere in `lib/`. Verified via the Supabase MCP
+tools before writing anything, then wrote the missing migration file for
+version control (idempotent, same pattern as every prior "undocumented live
+schema" fix in this repo).
+
+**What I implemented:**
+
+*Diet challenges (16:8 fasting, 30-day no sugar):*
+- `DietChallenge` model (`lib/data/models/diet_challenge.dart`) —
+  `ChallengeType` (`fasting16_8`, `noSugar30`, `custom` for future use),
+  `ChallengeStatus` (active/completed/abandoned), and the `daily_checkins`
+  map (`'yyyy-MM-dd' -> kept?`). Deliberately modeled the two challenge types
+  differently to match how they actually work: `noSugar30` has a
+  `fixedDurationDays` of 30 (so it auto-completes when the target end date
+  passes), `fasting16_8` is an ongoing daily habit with no fixed finish line
+  — the user ends it themselves whenever they like (matches the brief's
+  "16:8 fasting" being a lifestyle habit, not a countdown).
+- `DietChallengeService` (`lib/data/services/diet_challenge_service.dart`) —
+  `getActiveChallenges()` (auto-closes any `noSugar30` challenge that just
+  passed its target end date to `completed`, so the user gets a final result
+  instead of an indefinitely-lingering "active" challenge), `getHistory()`,
+  `startChallenge(type)` (throws a typed `ChallengeAlreadyActiveException` on
+  the DB's unique-constraint violation — server-enforced, not a client-side
+  race-prone check), `checkIn(challenge, kept:)` (read-merge-write of the
+  jsonb map — the Supabase Dart client has no partial-jsonb-patch without an
+  RPC), `completeChallenge()`/`abandonChallenge()`.
+- `ChallengesScreen` (`lib/presentation/screens/calories/challenges_screen.dart`)
+  — three sections: **Active** (streak chip, day-X-of-Y or open-ended day
+  counter, days-remaining for fixed-length challenges, adherence %,
+  kept-it/not-today check-in buttons that become a "Checked in — kept/not"
+  status + change link once today's already logged, "Mark complete"/"Give
+  up" actions with a confirmation dialog on give-up), **Start a new
+  challenge** (catalog cards for types the user doesn't already have active —
+  hides a type once it's running so you can't double-start it client-side
+  either), **Past challenges** (completed vs. ended-early, final adherence
+  %).
+- `ChallengesEntryCard` (`lib/presentation/screens/calories/widgets/
+  challenges_entry_card.dart`) — a compact, tappable card on the calorie
+  dashboard: shows the active-challenge count once you have one, or a
+  low-key "Try a challenge" invite otherwise. Entirely optional, doesn't
+  block or clutter the rest of the dashboard — matches the brief's "make
+  calorie tracking optional and not forced" ethos extended to challenges
+  specifically.
+- `diet_challenge_provider.dart` — `activeChallengesProvider`,
+  `challengeHistoryProvider`, `invalidateChallenges()`.
+- 40 new EN/DE keys in `app_translations.dart`.
+
+*Meal-photo storage (the other concrete gap):*
+- New `meal-photos` Supabase Storage bucket (public read, write/delete
+  restricted to the uploader's own `{user_id}/...` folder) — mirrors the
+  existing `profile-pictures`/`recipe-images` buckets' shape exactly, for
+  consistency with the rest of the app's storage security posture. Written
+  as part of the same migration file as the challenges schema documentation
+  (`supabase/migrations/20260714000000_diet_challenges_and_meal_photos.sql`),
+  applied live via the Supabase MCP tools and verified (`storage.buckets`
+  row + `pg_policies` both confirmed).
+- `MealPhotoStorageService` (`lib/data/services/meal_photo_storage_service.dart`)
+  — uploads the already-in-memory photo bytes (the food entry sheet already
+  reads them for the Gemini vision call) via `uploadBinary`, returns the
+  public URL. Best-effort: a failed upload never blocks saving the food log
+  entry, it just leaves `photo_url` unset (same fail-open philosophy as the
+  rest of this feature's services).
+- Wired into `food_entry_sheet.dart`'s `_savePhotoEntry`: the picked photo's
+  bytes are now retained in state (previously discarded right after the
+  Gemini call), uploaded on save, and the resulting URL is attached to the
+  `FoodLogEntry` (`photoUrl` — the model and DB column already existed from
+  the first Feature-6 session, just never populated). The "Add" button now
+  shows a loading state during upload.
+- `FoodLogTile` now renders a 32×32 thumbnail from `photoUrl` when present
+  (falls back to the existing source icon on load error or when absent) —
+  the photo was being saved-and-forgotten with no way to ever see it again
+  before this.
+
+**Bug found and fixed while verifying (not a "not done" item — actually
+fixed before committing):** the throwaway test script for
+`DietChallenge.currentStreak` caught a real logic bug: the original
+implementation used `dailyCheckins[key] != true` to decide whether to fall
+back to checking yesterday, which can't distinguish "no check-in yet today"
+from "explicitly checked in as missed today" — so marking today as
+"Not today" (an explicit miss) incorrectly left yesterday's streak count
+intact instead of resetting to 0. Fixed by checking `containsKey` first; all
+21 throwaway test cases (streak continuity/breaks/explicit-miss, adherence
+rate incl. zero-checkins, fixed-duration day counting or its absence,
+days-remaining clamping, past-target-end detection incl. suppression once a
+challenge is already closed out) pass.
+
+**Explicitly NOT done (honest gaps, not shortcuts):**
+- Camera barcode scanning — still genuinely blocked (`mobile_scanner`
+  commented out in `pubspec.yaml` for iOS build issues, unchanged from the
+  first session; this container still can't build iOS to verify a fix).
+- Weekly nutrition summary / a dedicated in-app "what can I still eat today"
+  screen — not built (the *chat* version of "what can I still eat" already
+  works via Avo's `get_nutrition_status` → `search_recipes` chaining from
+  Feature 4's seventh session; this is about a first-class UI surface for
+  it, which is still open); flagged as an idea below.
+- Avo/assistant awareness of challenges (e.g. "how's my fasting streak
+  going?") — deliberately not touched, per the single-feature-mode rule;
+  Feature 4/5's own sessions are the right place for that, same precedent as
+  the first Feature-6 session's calorie-tool integration being finished
+  later in a Feature-4 session.
+- `custom` challenge type — exists in the DB check constraint and the Dart
+  enum for forward compatibility, but has no catalog card or dedicated UI;
+  only `fasting_16_8` and `no_sugar_30` are user-facing today, matching what
+  the brief actually asked for.
+
+**Not verified (no macOS/Xcode/device in this container):** actual
+appearance of the new challenge cards/thumbnails on a simulator or device;
+whether `uploadBinary` against the real `meal-photos` bucket succeeds
+end-to-end from a real device camera photo (the bucket, policies, and
+service code are all live/analyzer-clean and follow the exact same
+call pattern as `ProfilePictureService`/`recipe_service.dart`'s existing
+storage uploads, but weren't exercised with a real authenticated upload from
+this container — doing so would need a real signed-in session); the
+give-up confirmation dialog and check-in button states on a small screen.
+
+**Files changed (second session):**
+`supabase/migrations/20260714000000_diet_challenges_and_meal_photos.sql`
+(new), `lib/data/models/diet_challenge.dart` (new),
+`lib/data/services/diet_challenge_service.dart` (new),
+`lib/data/services/meal_photo_storage_service.dart` (new),
+`lib/presentation/state/diet_challenge_provider.dart` (new),
+`lib/presentation/screens/calories/challenges_screen.dart` (new),
+`lib/presentation/screens/calories/widgets/challenges_entry_card.dart` (new),
+`lib/presentation/screens/calories/calories_screen.dart` (entry card wired
+in), `lib/presentation/screens/calories/widgets/food_entry_sheet.dart`
+(photo upload wiring), `lib/presentation/screens/calories/widgets/
+food_log_tile.dart` (photo thumbnail), `lib/core/localization/
+app_translations.dart` (40 new EN/DE keys).
+
+**Checks performed (second session):** see the environment note at the top
+of this file for the full `dart analyze`/`flutter test` verification detail
+(610 issues before and after, byte-identical; `flutter test` passes; 21/21
+throwaway logic tests pass, one real bug caught and fixed). Verified the
+live Supabase schema and the new bucket/policies via the Supabase MCP tools
+before and after applying the migration.
+
 ---
 
 ## Feature 7 — Personalized onboarding and navbar
@@ -2387,18 +2562,15 @@ read against real content, not just schema/RLS shape).
   - Recommendation: needs decision — do this in a session with real iOS
     build access.
 
-- [ ] IDEA: Build diet challenges (16:8 fasting, 30-day no sugar) on top of
-  the already-live `nutrition_challenges` table.
-  - Why it helps: explicitly requested in the brief; the schema already
-    exists so this is now a pure Dart/UI task with no backend risk.
-  - Expected user value: medium — a lightweight engagement layer for users
-    already using calorie tracking.
-  - Expected business/premium value: medium (a natural "premium challenges"
-    upsell surface, per the brief's own suggestion).
-  - Complexity: Low-medium (a status/timer UI + one service, similar shape
-    to `ExpenseSplitService`).
-  - Risk: Low.
-  - Recommendation: yes, as a natural next slice of Feature 6.
+- [x] IDEA (DONE 2026-07-14, Feature 6's second session): Build diet
+  challenges (16:8 fasting, 30-day no sugar) on top of the already-live
+  `nutrition_challenges` table.
+  - **Outcome:** implemented as `DietChallenge`/`DietChallengeService`/
+    `ChallengesScreen`/`ChallengesEntryCard` — catalog, daily check-in,
+    streaks, auto-completion at day 30 for the fixed-length challenge,
+    history. The "premium challenges" upsell angle from this idea's original
+    write-up is not done — flagged as its own idea below since it's a
+    Feature 8 (monetization) concern, not core Feature 6 scope.
 
 - [x] IDEA (DONE 2026-07-06, Feature 4's seventh session): Wire calorie
   tracking into Avo — nutrition status/remaining, `log_food` for "I just
@@ -2412,17 +2584,47 @@ read against real content, not just schema/RLS shape).
     done — that belongs to a Feature 5/8 session on top of the
     now-existing tools. Details in Feature 4's seventh-session notes.
 
-- [ ] IDEA: Upload meal photos to Supabase Storage instead of discarding
-  them after the AI estimate is extracted.
-  - Why it helps: lets a user look back at what they actually ate, and
-    gives a human way to sanity-check an old AI estimate.
+- [x] IDEA (DONE 2026-07-14, Feature 6's second session): Upload meal photos
+  to Supabase Storage instead of discarding them after the AI estimate is
+  extracted.
+  - **Outcome:** new `meal-photos` bucket (public read, own-folder write,
+    same shape as `profile-pictures`) + `MealPhotoStorageService` + wired
+    into `food_entry_sheet.dart`'s save flow + a thumbnail in `FoodLogTile`.
+    Not verified against a real device/camera photo end-to-end (no
+    macOS/Xcode in this container) — see Feature 6's second-session "Not
+    verified" note.
+
+- [ ] IDEA: "Premium: unlock challenge history / advanced adherence stats"
+  or a premium-only third challenge type, as a Feature 8 monetization touch
+  on top of the now-existing challenges feature.
+  - Why it helps: the brief explicitly calls out premium upsells "only where
+    genuinely useful" — challenges are a natural low-pressure spot once a
+    user has run one to completion and wants to see long-term patterns.
+  - Expected user value: low-medium (most value is in using a challenge, not
+    reviewing its stats).
+  - Expected business/premium value: medium — a soft, non-blocking upsell
+    moment, unlike gating the core check-in loop itself.
+  - Complexity: Low once Feature 8's premium-gating audit happens.
+  - Risk: Low, as long as basic challenge participation stays fully free
+    (gating the core loop would contradict "optional, not forced").
+  - Recommendation: needs decision — belongs in a Feature 8 session, not
+    this one.
+
+- [ ] IDEA: A weekly nutrition summary screen/card ("you averaged X kcal,
+  hit your protein target Y/7 days") and a first-class in-app "what can I
+  still eat today?" surface — the chat version already works via Avo, but
+  there's no dedicated UI for a user who doesn't want to open chat for it.
+  - Why it helps: explicit autonomy item from the brief; gives the dashboard
+    a look-back view instead of only today's numbers.
   - Expected user value: medium.
-  - Expected business/premium value: low.
-  - Complexity: Medium (new storage bucket + RLS policy + upload path +
-    `photo_url` already exists on `food_log_entries` for this).
+  - Expected business/premium value: low-medium (a reasonable "premium:
+    monthly trends" upsell surface later, not required now).
+  - Complexity: Medium — mostly aggregation over `getWeeklyTotals()`
+    (already exists) plus a new screen; the "what can I eat" card would
+    reuse the same recipe-filtering logic Feature 4's Avo tool already has.
   - Risk: Low.
-  - Recommendation: needs decision — nice-to-have, not required for the
-    core loop to be genuinely useful.
+  - Recommendation: needs decision — natural next Feature 6 slice, but not
+    a required capability, so flagging rather than building unprompted.
 
 - [ ] IDEA: Proactively re-push the widget's cached Supabase access token on
   every token refresh, not just app launch/auth-state change.

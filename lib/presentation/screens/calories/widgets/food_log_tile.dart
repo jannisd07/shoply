@@ -42,7 +42,19 @@ class FoodLogTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
-            Icon(_sourceIcon, size: 18, color: textSecondary),
+            if (entry.photoUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  entry.photoUrl!,
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Icon(_sourceIcon, size: 18, color: textSecondary),
+                ),
+              )
+            else
+              Icon(_sourceIcon, size: 18, color: textSecondary),
             const SizedBox(width: 10),
             Expanded(
               child: Column(

@@ -10,6 +10,7 @@ import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/food_product.dart';
 import 'package:shoply/data/services/meal_photo_analysis_service.dart';
+import 'package:shoply/data/services/meal_photo_storage_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 
@@ -49,6 +50,8 @@ class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
   bool _analyzingPhoto = false;
   MealPhotoEstimate? _photoEstimate;
   bool _photoAnalysisFailed = false;
+  Uint8List? _photoBytes;
+  bool _savingPhotoEntry = false;
   final _photoNameController = TextEditingController();
   final _photoCaloriesController = TextEditingController();
   final _photoProteinController = TextEditingController();
@@ -83,6 +86,7 @@ class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
       _analyzingPhoto = false;
       _photoEstimate = estimate;
       _photoAnalysisFailed = estimate == null;
+      _photoBytes = estimate != null ? bytes : null;
       if (estimate != null) {
         _photoNameController.text = estimate.foodName;
         _photoCaloriesController.text = '${estimate.calories}';
@@ -97,7 +101,15 @@ class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
     final authUser = ref.read(authUserProvider).valueOrNull;
     if (authUser == null) return;
     final calories = int.tryParse(_photoCaloriesController.text.trim()) ?? 0;
-    if (_photoNameController.text.trim().isEmpty) return;
+    if (_photoNameController.text.trim().isEmpty || _savingPhotoEntry) return;
+    setState(() => _savingPhotoEntry = true);
+    // Best-effort: the photo is uploaded so the log entry keeps its source
+    // image, but a failed upload never blocks saving the (already-editable,
+    // already-confirmed) nutrition estimate itself.
+    final photoBytes = _photoBytes;
+    final photoUrl =
+        photoBytes != null ? await MealPhotoStorageService.instance.uploadPhoto(photoBytes) : null;
+    if (!mounted) return;
     await _logEntry(FoodLogEntry(
       id: '',
       userId: authUser.id,
@@ -109,8 +121,10 @@ class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
       proteinG: double.tryParse(_photoProteinController.text.trim()),
       carbsG: double.tryParse(_photoCarbsController.text.trim()),
       fatG: double.tryParse(_photoFatController.text.trim()),
+      photoUrl: photoUrl,
       createdAt: DateTime.now(),
     ));
+    if (mounted) setState(() => _savingPhotoEntry = false);
   }
 
   void _onSearchChanged(String value) {
@@ -384,7 +398,11 @@ class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
             ],
           ),
           const SizedBox(height: 16),
-          AppButton(text: context.tr('add'), onPressed: _savePhotoEntry),
+          AppButton(
+            text: context.tr('add'),
+            onPressed: _savingPhotoEntry ? null : _savePhotoEntry,
+            isLoading: _savingPhotoEntry,
+          ),
         ],
       );
     }
