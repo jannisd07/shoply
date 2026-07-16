@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shoply/data/models/home_price_highlight.dart';
 import 'package:shoply/data/models/nearby_store.dart';
 import 'package:shoply/data/models/store_offer.dart';
+import 'package:shoply/data/services/home_price_comparison_cache_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/store_locator_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
 
 /// The user's real zip code (GPS or manual override), or null if unknown.
 final userZipCodeProvider = FutureProvider<String?>((ref) async {
@@ -162,3 +165,125 @@ final basketComparisonProvider = FutureProvider.autoDispose
     stores: stores,
   );
 });
+
+/// Minimum open items a list needs before a home-screen comparison is worth
+/// computing at all — avoids a weak claim based on 1-2 items.
+const _homeHighlightMinItems = 3;
+
+/// Minimum comparable (matched) items and savings before the highlight is
+/// worth surfacing on the home screen — a stricter bar than the in-list
+/// comparison sheet, since this is a proactive claim, not something the
+/// user asked to see.
+const _homeHighlightMinMatched = 3;
+const _homeHighlightMinSavings = 1.5;
+
+/// "This list is €X cheaper at [store] than [store]" — Feature 8's home
+/// screen surface for Feature 1's price-comparison infra. Checks up to 5
+/// recently-updated lists cheaply (unchecked-item count, then real item
+/// names — both local reads), but only ever runs the expensive live
+/// [basketComparisonProvider] computation for the first one that both
+/// qualifies and has no fresh cache entry — so a home-screen visit costs at
+/// most one basket comparison, not one per list. Cached per exact
+/// (list, items, zip) signature for [HomePriceComparisonCacheService.cacheTtl]
+/// so repeat visits with an unchanged list don't re-trigger it at all.
+/// Renders nothing (null) when there's no candidate list, no real zip, or no
+/// comparison worth showing.
+final homePriceHighlightProvider =
+    FutureProvider.autoDispose<HomePriceHighlight?>((ref) async {
+  final zipInfo = await ref.watch(effectiveZipProvider.future);
+  if (!zipInfo.isReal) return null;
+
+  final lists = ref.watch(listsNotifierProvider).valueOrNull ?? const [];
+  if (lists.isEmpty) return null;
+  final sorted = [...lists]
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+  // Plain repository reads for the candidate scan (not `itemsNotifierProvider`
+  // — that creates a persistent StateNotifier with a realtime subscription,
+  // which would otherwise leak an open subscription for every candidate list
+  // this scans past, not just the one it ends up comparing).
+  final itemRepository = ref.watch(itemRepositoryProvider);
+
+  for (final list in sorted.take(5)) {
+    if ((list.uncheckedCount ?? 0) < _homeHighlightMinItems) continue;
+
+    final items = await itemRepository.getListItems(list.id);
+    final openNames = <String>{
+      for (final i in items)
+        if (!i.isChecked && i.name.trim().length >= 2) i.name.trim(),
+    }.toList()
+      ..sort();
+    if (openNames.length < _homeHighlightMinItems) continue;
+
+    final signature = '${list.id}|${zipInfo.zipCode}|${openNames.join(',')}';
+    final cached = await HomePriceComparisonCacheService.instance.load(signature);
+    final highlight = cached.isHit
+        ? cached.highlight
+        : await _computeAndCacheHighlight(
+            ref,
+            listId: list.id,
+            listName: list.name,
+            signature: signature,
+            totalItemCount: openNames.length,
+          );
+
+    if (highlight == null) return null;
+    final dismissed =
+        await HomePriceComparisonCacheService.instance.isDismissed(signature);
+    return dismissed ? null : highlight;
+  }
+  return null;
+});
+
+Future<HomePriceHighlight?> _computeAndCacheHighlight(
+  Ref ref, {
+  required String listId,
+  required String listName,
+  required String signature,
+  required int totalItemCount,
+}) async {
+  final comparison = await ref.watch(basketComparisonProvider(listId).future);
+  final highlight = _deriveHomeHighlight(
+    comparison,
+    listId: listId,
+    listName: listName,
+    signature: signature,
+    totalItemCount: totalItemCount,
+  );
+  await HomePriceComparisonCacheService.instance.save(signature, highlight);
+  return highlight;
+}
+
+HomePriceHighlight? _deriveHomeHighlight(
+  BasketComparison? comparison, {
+  required String listId,
+  required String listName,
+  required String signature,
+  required int totalItemCount,
+}) {
+  if (comparison == null) return null;
+  if (comparison.comparableItemCount < _homeHighlightMinMatched) return null;
+
+  final ranked = comparison.ranked.where((s) => s.matchedCount > 0).toList();
+  if (ranked.length < 2) return null;
+
+  final cheapest = ranked.first;
+  // Compare against the next-best real alternative, not the priciest
+  // outlier — a fair "X cheaper here than there" claim, not a cherry-picked
+  // worst case.
+  final pricier = ranked[1];
+  final savings = pricier.comparableTotal - cheapest.comparableTotal;
+  if (savings < _homeHighlightMinSavings) return null;
+
+  return HomePriceHighlight(
+    listId: listId,
+    listName: listName,
+    cheaperRetailerName: cheapest.retailerName,
+    pricierRetailerName: pricier.retailerName,
+    cheaperTotal: cheapest.comparableTotal,
+    savings: savings,
+    matchedItemCount: comparison.comparableItemCount,
+    totalItemCount: totalItemCount,
+    signature: signature,
+  );
+}

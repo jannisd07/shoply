@@ -1,6 +1,50 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-14 (scheduled routine — Feature 6 focus: built diet challenges (16:8 fasting, 30-day no sugar) from scratch — a required capability that had a live DB schema but zero Dart code — and added real meal-photo storage so photo-tracked food log entries keep their source image instead of discarding it)_
+_Last updated: 2026-07-16 (scheduled routine — Feature 8 focus: built the home-screen "this list is €X cheaper at [store] than [store]" price-comparison card, the highest-value still-open Feature 8 idea, with a persistent TTL cache so it doesn't hammer the marktguru API on every home-screen visit)_
+
+**2026-07-16 session — why Feature 8, not Feature 1.** Per the brief's
+priority order, Feature 1 (pricing/offers) is first and technically still
+"In progress" (~95%), so this session started there and did a full code
+audit rather than trusting the log: read every pricing/offers file
+end-to-end, live-`curl`-verified the marktguru API pipeline is still healthy
+with the shipped fallback keys, and checked every required/autonomy
+capability from the brief against the current code. Result: **all of
+Feature 1's required and autonomy capabilities are implemented**; the only
+remaining gaps are the same two the fifth session (2026-07-10) already
+documented as genuinely blocked — no public shelf-price API for German
+supermarkets (hard external constraint) and cross-product substitution
+(deliberately out of scope for diet/allergy safety) — plus device-only
+rendering verification, which every feature in this file shares as a
+permanent constraint of this Linux container. This matches the precedent
+the Feature 2 fourth-session (2026-07-04) note already established
+explicitly for this exact situation ("Feature 1's remaining gaps are all
+genuinely blocked externally, so per the feature order this session
+selected Feature 2") — so this session moved to the next feature with
+genuine, unblocked, buildable-here work. Features 2–7 were spot-checked
+against their own documented blockers (mostly "needs a real device/Xcode
+session," a constraint that applies identically to every feature here) and
+Feature 8 stood out as the clear next pick: lowest completion (~30%) *and*
+the Ideas list already contained a fully-scoped, owner-recommendation-`yes`
+item with no open product decision — the home-screen price-comparison card
+— unlike Feature 8's other open items (premium gating, a weekly nutrition
+summary) which explicitly need an owner decision first.
+
+The 2026-07-16 **Feature-8** session downloaded Flutter 3.35.6 stable fresh
+into `/tmp/flutter` and verified with full-project `flutter analyze`:
+baseline (via `git stash`, this branch before this session's changes) and
+after-change counts are **byte-identical: 610 issues (0 errors, 59 warnings,
+551 info)** — confirmed by also scoping `flutter analyze` to just the 6
+new/touched files (2 real bugs caught on the first pass and fixed before
+committing — see below; re-scoped analyze came back clean). `flutter test`
+passes ("All tests passed"). The new `_deriveHomeHighlight` selection logic
+(which store to call "cheaper," which to compare against, the minimum-
+savings/minimum-matched-items gates) was verified with a throwaway `dart
+run` script (4 cases, all passed, not committed, deleted before finishing) —
+notably confirming the deliberate design choice to compare the cheapest
+store against the *second*-cheapest, not the priciest outlier, so the
+on-screen claim is a fair comparison rather than a cherry-picked worst case.
+No iOS build/device test possible here (no macOS/Xcode) — see "Not
+verified" in the Feature 8 session notes below.
 
 The 2026-07-14 **Feature-6** session downloaded Flutter 3.35.6 stable fresh
 into `/tmp/flutter` and verified with full-project `dart analyze`: baseline
@@ -218,14 +262,14 @@ was **never wired into any screen** — this session wired it up.
 
 | # | Feature | Completion | Status | Blockers |
 |---|---|---|---|---|
-| 1 | Pricing, offers, cheapest store | ~95% | In progress | Regular (non-offer) shelf prices have no public API — offers-only by design |
+| 1 | Pricing, offers, cheapest store | ~95% | Implemented (blocked on hard externals) | Re-audited 2026-07-16, code-verified against every brief bullet: all required + autonomy capabilities implemented. Only remaining gaps are a genuine external constraint (no public non-offer shelf-price API) and an out-of-scope-by-design item (cross-product substitution, diet/allergy safety) |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
-| 3 | Widgets & quick actions | ~85% (this session) | In progress (needs device QA) | New Quick-Add widget (required "quick-add item from widget" capability) shipped this session; needs a real Xcode/device build to confirm |
-| 4 | AI assistant app control | ~90% (this session) | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA. Onboarding-guidance tools shipped this session (goal setup, profile read, zip code) |
-| 5 | Avo mascot & smart notifications | ~80% | In progress | Proactive recipe-suggestion nudges still open; needs device QA for scheduled notifications |
-| 6 | Calorie tracking | ~85% (this session) | In progress (needs device QA) | Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); diet challenges + meal-photo storage shipped this session; needs device QA |
-| 7 | Personalized onboarding & navbar | ~75% (this session) | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~30% (this session) | In progress | First win shipped (calorie × recipes × Avo nudges); price-comparison home card and premium-gating audit still open |
+| 3 | Widgets & quick actions | ~85% | In progress (needs device QA) | Quick-Add widget (required "quick-add item from widget" capability) shipped 2026-07-13; needs a real Xcode/device build to confirm |
+| 4 | AI assistant app control | ~90% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA |
+| 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications |
+| 6 | Calorie tracking | ~85% | In progress (needs device QA) | Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
+| 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
+| 8 | Cross-feature UX / growth / premium | ~40% (this session) | In progress | Home-screen price-comparison card shipped this session (cached, gated); premium-gating audit and weekly nutrition summary still open, both need an owner product decision first |
 
 ---
 
@@ -2517,6 +2561,138 @@ read against real content, not just schema/RLS shape).
 
 **Checks performed:** See the environment note at the top of this document.
 
+**Second session, 2026-07-16 (scheduled routine — this feature's dedicated
+session).** Built the other "recommended first cross-feature win" flagged
+by the first session and the Ideas list: the home-screen "€X cheaper at
+[store] this week" card, using Feature 1's already-wired
+`basketComparisonProvider`/`BasketComparison` infra — deliberately *not*
+built in the same session as the calorie/recipe nudge, per that session's
+own note, specifically so the required TTL-cache design got its own focused
+pass instead of being bolted on.
+
+**Before this session:** `basketComparisonProvider` (Feature 1) computes a
+full per-store price comparison for a list's open items, but was only ever
+reachable by opening a list and tapping its summary bar — the home screen,
+the highest-traffic screen in the app, never surfaced it. Running it blind
+on every home visit was flagged as unsafe: it fires one live marktguru
+search per open list item (up to 25), and the provider itself has no
+persistent cache (`autoDispose`, recomputed fresh every mount) — doing this
+for every user on every app open would be a real risk of hammering an
+unofficial, keyless-auth third-party API.
+
+**What I implemented:**
+- **`HomePriceHighlight`** (new, `lib/data/models/home_price_highlight.dart`)
+  — a small, JSON-serializable result: which list, which store is cheaper,
+  which store it's being compared against, the savings amount, and
+  matched/total item counts. Carries its own `signature` (the exact
+  list+items+zip snapshot it was computed from) so the cache and the
+  dismiss action both key off the same value without recomputing it twice.
+- **`HomePriceComparisonCacheService`** (new,
+  `lib/data/services/home_price_comparison_cache_service.dart`) — persistent
+  SharedPreferences cache, same shape as `AvoNudgeService`'s existing 6h
+  offer-nudge cache: `load(signature)` returns a hit/miss (a cached *null*
+  result — "checked this snapshot, no meaningful highlight" — is a valid,
+  storable answer, distinct from "not computed yet"), `save`, plus
+  `isDismissed`/`dismiss` keyed by the same signature so dismissing one
+  specific claim doesn't suppress a genuinely different one that shows up
+  later.
+- **`homePriceHighlightProvider`** (new,
+  `lib/presentation/providers/price_comparison_provider.dart`) — the
+  caching wrapper this idea explicitly called for:
+  1. Requires a **real** zip (GPS or manual) — never claims a "this week"
+     saving from the nationwide fallback zip, same rule the offer nudges
+     already follow.
+  2. Scans up to 5 recently-updated lists using only cheap local reads
+     (`uncheckedCount` from the already-loaded list summary, then a plain
+     `ItemRepository.getListItems` call — deliberately *not*
+     `itemsNotifierProvider`, since that creates a persistent
+     `StateNotifier` with an open realtime subscription; using it here
+     would leak a live subscription for every candidate list scanned past,
+     not just the one actually compared).
+  3. Only for the **first** list that both has ≥3 real open items and has
+     no fresh cache entry does it run the actual `basketComparisonProvider`
+     computation — so a single home-screen visit costs at most one basket
+     comparison, never one per candidate list.
+  4. Caches the result (including a "no highlight" outcome) for 6h per
+     exact signature, so a repeat visit with an unchanged list is a pure
+     cache read with zero network calls.
+- **Selection logic** (`_deriveHomeHighlight`): requires ≥3 comparable
+  (multi-store-matched) items and ≥2 stores with real offers, and only
+  surfaces the highlight when the saving is ≥€1.50 — a stricter bar than
+  the in-list comparison sheet, since this is a proactive claim the user
+  didn't ask to see, not something they opened a sheet to check. Compares
+  the cheapest store against the **second**-cheapest, not the priciest
+  outlier — verified with a throwaway test (see Checks) — so "cheaper at
+  Aldi than Rewe" is a fair comparison between two real options, not a
+  cherry-picked worst case that would overstate the saving.
+- **`PriceComparisonNudgeCard`** (new,
+  `lib/presentation/screens/home/widgets/price_comparison_nudge_card.dart`)
+  — placed on the home screen right after the calorie/recipe nudge card,
+  matching the existing card style (paper surface, rounded, dismiss ✕).
+  Tapping it opens the relevant list; the ✕ dismisses this exact
+  comparison (via the cache service's signature-keyed dismiss) and
+  invalidates the provider so the card disappears immediately rather than
+  waiting for the next cache expiry.
+- 2 new EN/DE translation keys (`home_price_highlight_title`,
+  `home_price_highlight_subtitle`).
+
+**Two real bugs caught by `flutter analyze` before committing (not just
+style nits):**
+1. The first draft used `ref.watch(listsNotifierProvider.future)` and
+   `ref.watch(itemsNotifierProvider(id).future)` — but both are plain
+   `StateNotifierProvider`s, which don't expose a `.future` combinator (only
+   `FutureProvider`/`StreamProvider` families do). This would have failed
+   to compile, not silently misbehaved — caught immediately by the analyzer
+   (`undefined_getter`), fixed by reading `.valueOrNull` synchronously, the
+   same pattern `basketComparisonProvider` itself already uses for the same
+   providers.
+2. `HomePriceCacheLookup` (a supporting result type) was originally
+   private (`_CacheLookup`) but returned from a public method — an
+   `library_private_types_in_public_api` info-lint. Fixed by making the
+   type public, since real callers outside the file need it.
+
+**Explicitly not done / deliberately deferred:**
+- **No premium gating.** The idea's own write-up flags this card as "a
+  plausible premium-gate candidate," but per the Feature 8 first-session
+  note, that's a business decision requiring an explicit answer to the
+  still-open "where should the app's first real premium gate go" question
+  — not guessed at here.
+- **Only one list is compared per visit**, by design (see point 3 above) —
+  a user with several long, equally-recently-updated lists only ever sees a
+  highlight for one of them per cache window, not the objectively best
+  saving across all their lists. A cross-list "best saving anywhere" version
+  would need to run the expensive comparison for every candidate, which is
+  exactly the API-hammering risk this session's caching design exists to
+  avoid.
+- **The `dealBonus`/four-recommendation-engine cleanup and the premium-gating
+  decision remain open**, unchanged from the first session's audit — still
+  flagged as their own scoped follow-ups below.
+
+**Not verified (no macOS/Xcode/device in this container):** the actual card
+rendering on a real screen, tap-through to the list, or the dismiss-then-
+reappear-after-cache-expiry behavior end to end. The selection logic,
+caching gate, and signature/dismiss keying are analyzer-verified and
+unit-tested via a throwaway script (see Checks).
+
+**Files changed (second session):**
+`lib/data/models/home_price_highlight.dart` (new),
+`lib/data/services/home_price_comparison_cache_service.dart` (new),
+`lib/presentation/screens/home/widgets/price_comparison_nudge_card.dart`
+(new), `lib/presentation/providers/price_comparison_provider.dart`
+(`homePriceHighlightProvider` + helpers),
+`lib/presentation/screens/home/home_screen.dart` (card wired in),
+`lib/core/localization/app_translations.dart` (2 new EN/DE keys).
+
+**Checks performed (second session):** See the environment note at the top
+of this document for the full `flutter analyze`/`flutter test` results and
+the live marktguru API re-verification (done as part of this session's
+Feature 1 audit, not repeated here). The `_deriveHomeHighlight` selection
+logic was verified with a throwaway `dart run` script (4 cases — below-
+threshold matched count, only one comparable store, savings below the €1.50
+floor, and the cheapest-vs-second-cheapest comparison choice with a
+deliberately extreme third "worst outlier" store present to confirm it's
+correctly ignored — all passed, not committed, deleted before finishing).
+
 ---
 
 ## Ideas / Needs My Approval
@@ -2772,34 +2948,21 @@ read against real content, not just schema/RLS shape).
     the same dismiss-for-today + re-arm-per-day pattern the restock reminder
     uses). Details in Feature 8's second-session notes above.
 
-- [ ] IDEA: Home-screen "€X cheaper at [store] this week" card, using the
-  now-wired `basketComparisonProvider` (Feature 1 infra) — the other
-  recommended first cross-feature win, deliberately not done in the same
-  session as the calorie/recipe nudge above.
-  - Why it helps: surfaces Feature 1's price-comparison work (currently only
-    reachable by opening a list and tapping the summary bar) proactively on
-    the home screen, the highest-traffic screen in the app.
-  - Expected user value: medium-high — real savings, shown without the user
-    having to think to look for them.
-  - Expected business/premium value: medium — a strong "look how smart this
-    app is" moment, and a plausible premium-gate candidate ("unlimited price
-    comparisons" is already marketed on the paywall with zero enforcement
-    today — see the premium-gating audit note above).
-  - Complexity: Medium — the comparison logic itself is done
-    (`basketComparisonProvider`/`BasketComparison.bestStore`), but it isn't
-    safe to auto-run on every home-screen visit as-is: it fires one live
-    marktguru search per unchecked item on a list, and the provider is
-    `autoDispose` with no caching, unlike `AvoNudgeService.getOfferNudges`'s
-    6h TTL cache for the same style of background computation. This idea
-    needs a caching wrapper designed first (which list to compare — most
-    recently updated? — and how long a result stays fresh), not a
-    straight reuse of the existing provider.
-  - Risk: Medium if built without the caching layer (real risk of hammering
-    an unofficial, keyless-auth third-party API on every app open, across
-    every user); low once a TTL cache is in place.
-  - Recommendation: yes, as Feature 8's next slice — but design the cache
-    first, ideally in its own session rather than paired with another
-    feature.
+- [x] IDEA (DONE 2026-07-16, Feature 8's second session): Home-screen "€X
+  cheaper at [store] this week" card, using the now-wired
+  `basketComparisonProvider` (Feature 1 infra) — the other recommended
+  first cross-feature win, deliberately not done in the same session as the
+  calorie/recipe nudge above.
+  - **Outcome:** Implemented as `HomePriceHighlight` +
+    `HomePriceComparisonCacheService` (the caching wrapper this idea called
+    for — 6h TTL, signature-keyed, mirrors `AvoNudgeService`'s offer-nudge
+    cache) + `homePriceHighlightProvider` (scans up to 5 recent lists with
+    cheap local reads, runs the actual comparison for at most one) +
+    `PriceComparisonNudgeCard`. Compares the cheapest store against the
+    second-cheapest (not the priciest outlier) for a fair, non-inflated
+    claim. Details in Feature 8's second-session notes above. The premium-
+    gate angle this idea's own write-up floated was deliberately **not**
+    done — still needs the owner's premium-gating decision below.
 
 - [ ] IDEA: Server-side restock reminders (Supabase cron + the existing
   send-push-notification edge function) instead of the client-scheduled

@@ -27,6 +27,7 @@ import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
 import 'package:shoply/presentation/screens/home/widgets/avo_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/pending_splits_banner.dart';
+import 'package:shoply/presentation/screens/home/widgets/price_comparison_nudge_card.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
 import 'package:shoply/presentation/widgets/common/success_alert.dart';
@@ -454,6 +455,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // "N kcal left today — dinner ideas from your list" (calorie
             // tracking users only; renders nothing otherwise)
             const SliverToBoxAdapter(child: CalorieRecipeNudgeCard()),
+
+            // "This list is €X cheaper at [store] than [store]" — proactive
+            // surface for Feature 1's price comparison; renders nothing
+            // without a real zip or a meaningful comparison.
+            const SliverToBoxAdapter(child: PriceComparisonNudgeCard()),
 
             const SliverToBoxAdapter(
               child: SizedBox(height: AppDimensions.spacingLarge),
