@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shoply/core/config/env.dart';
+import 'package:shoply/data/services/supabase_service.dart';
 
 /// Service for managing home screen widgets
 class WidgetService {
@@ -90,6 +93,25 @@ class WidgetService {
     } catch (e) {
       debugPrint('⚠️ [Widget] Update Supabase credentials failed: $e');
     }
+  }
+
+  /// Push the current session's credentials to the App Group. The widget
+  /// process does its own Supabase REST calls (checkbox-toggle sync,
+  /// quick-add insert) with this cached token, so it must be re-pushed on
+  /// every token refresh — not just app launch — or widget taps silently
+  /// no-op once the last-pushed token expires (~1h).
+  static Future<void> syncCredentialsFromSession({Session? session}) async {
+    if (!Platform.isIOS) return;
+
+    final s = session ?? SupabaseService.instance.currentSession;
+    if (s == null) return;
+
+    await updateSupabaseCredentials(
+      url: Env.supabaseUrl,
+      anonKey: Env.supabaseAnonKey,
+      accessToken: s.accessToken,
+      userId: s.user.id,
+    );
   }
 
   /// Get current shopping list widget data

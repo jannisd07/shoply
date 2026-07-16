@@ -147,8 +147,14 @@ import WidgetKit
   
   private func clearWidgetData(result: FlutterResult) {
     if let defaults = UserDefaults(suiteName: appGroupId) {
-      defaults.removeObject(forKey: "widget_shopping_list")
-      defaults.removeObject(forKey: "widget_saved_recipes")
+      // Every App-Group key this app writes uses the "widget_" prefix
+      // (per-list caches "widget_list_<id>", available lists, recent items,
+      // and the cached Supabase credentials the widget's REST calls use), so
+      // sweep by prefix instead of naming keys — called on sign-out, nothing
+      // of the previous account may survive in the shared container.
+      for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("widget_") {
+        defaults.removeObject(forKey: key)
+      }
       defaults.synchronize()
       print("✅ [Widget] Widget data cleared")
     }

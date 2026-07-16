@@ -19,6 +19,7 @@ import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/app_review_service.dart';
 import 'package:shoply/data/services/subscription_service.dart';
+import 'package:shoply/data/services/widget_service.dart';
 import 'package:shoply/core/services/siri_service.dart';
 import 'package:shoply/core/config/env.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -127,6 +128,16 @@ Future<void> _initializeServicesInBackground() async {
       final event = data.event;
       debugPrint('🔐 [AUTH] State changed: $event');
 
+      // Keep the widget's cached Supabase credentials fresh. The widget
+      // process syncs toggles / quick-adds via direct REST calls with this
+      // cached token, so it must follow every token refresh, not just app
+      // launch (home_screen only re-pushes on launch/user change).
+      if (event == AuthChangeEvent.initialSession ||
+          event == AuthChangeEvent.signedIn ||
+          event == AuthChangeEvent.tokenRefreshed) {
+        unawaited(WidgetService.syncCredentialsFromSession(session: data.session));
+      }
+
       if (event == AuthChangeEvent.signedIn && (Platform.isIOS || Platform.isAndroid)) {
         // Sync the master notification switch first: saveTokenForCurrentUser
         // respects it, so a user who disabled notifications on another
@@ -146,6 +157,11 @@ Future<void> _initializeServicesInBackground() async {
             .rearmRestockReminder(force: true);
         await MascotNotificationService.instance
             .rearmDinnerIdeasReminder(force: true);
+        // Drop all widget data + cached credentials from the App Group —
+        // without this, home-screen widgets keep showing the signed-out
+        // account's list contents (and Siri keeps suggesting its lists)
+        // indefinitely.
+        await WidgetService.clearWidget();
       }
     });
   } catch (e) {

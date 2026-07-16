@@ -32,7 +32,6 @@ import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
 import 'package:shoply/presentation/widgets/common/success_alert.dart';
 import 'package:shoply/data/services/widget_service.dart';
-import 'package:shoply/core/config/env.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -161,15 +160,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _syncWidgetCredentials() {
-    final session = SupabaseService.instance.currentSession;
-    if (session != null) {
-      WidgetService.updateSupabaseCredentials(
-        url: Env.supabaseUrl,
-        anonKey: Env.supabaseAnonKey,
-        accessToken: session.accessToken,
-        userId: SupabaseService.instance.currentUser?.id,
-      );
-    }
+    unawaited(WidgetService.syncCredentialsFromSession());
   }
 
   Future<void> _checkSiriPendingItems() async {

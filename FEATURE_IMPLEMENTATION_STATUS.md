@@ -1,8 +1,42 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-16 (scheduled routine — Feature 8 focus: built the home-screen "this list is €X cheaper at [store] than [store]" price-comparison card, the highest-value still-open Feature 8 idea, with a persistent TTL cache so it doesn't hammer the marktguru API on every home-screen visit)_
+_Last updated: 2026-07-16, second run of the day (scheduled routine — Feature 3 focus: widget credential-freshness + sign-out hygiene. Implemented the owner-recommendation-`yes` idea "re-push the widget's cached Supabase token on every token refresh," and fixed a related real gap found while auditing that code path: nothing ever cleared widget data on sign-out, so home-screen widgets kept showing the signed-out account's list contents indefinitely)_
 
-**2026-07-16 session — why Feature 8, not Feature 1.** Per the brief's
+**2026-07-16 second run — why Feature 3.** Per the brief's priority order:
+Feature 1 was re-audited by the morning session (all required + autonomy
+capabilities implemented; remaining gaps are hard external constraints),
+Feature 2 is ~95% with only device-QA items left (a constraint every
+feature here shares — no macOS/Xcode in this container). Feature 3 is the
+first feature in the order that is genuinely "In progress" **and** had
+concrete, unblocked, buildable-here work: the Ideas list carried a
+fully-scoped, recommendation-`yes` item from Feature 3's own sixth session
+(proactively re-push the widget's cached Supabase access token on token
+refresh — without it, a widget tap silently no-ops once the cached token
+expires, ~1h after the app was last opened). Auditing that code path also
+surfaced a second, related real gap fixed this session: `WidgetService.clearWidget()`
+existed but had **zero call sites**, and the native `clearWidgetData`
+handler only removed 2 of the ~8+ `widget_*` App Group keys — so signing
+out never cleared the widget's cached list contents, credentials, or
+Siri's cached list names. The other two open Feature 3 ideas were
+deliberately NOT bundled in (the dead-Siri-code deletions explicitly ask to
+be their own isolated change; the new "today's list" widget kind is marked
+needs-decision).
+
+The 2026-07-16 **Feature-3** session (second run of the day) downloaded
+Flutter 3.35.6 stable fresh into `/tmp/flutter` and verified with
+full-project `flutter analyze`: baseline (via `git stash`, this branch
+before this session's changes) and after-change counts are **byte-identical:
+610 issues (0 errors, 59 warnings, 551 info)**, diffed with line numbers
+normalized out. `flutter test` passes ("All tests passed"). The one touched
+Swift file (`ios/Runner/AppDelegate.swift`) was verified with a string- and
+comment-aware brace/paren/bracket-balance parser (no Swift toolchain in
+this container) — the edit is a small mechanical change inside an existing
+function (prefix sweep instead of two hardcoded `removeObject` calls).
+`pubspec.lock` churn from `flutter pub get` was reverted before committing.
+No iOS build/device test possible here (no macOS/Xcode) — see "Not
+verified" in the Feature 3 seventh-session notes below.
+
+**Earlier 2026-07-16 session — why Feature 8, not Feature 1.** Per the brief's
 priority order, Feature 1 (pricing/offers) is first and technically still
 "In progress" (~95%), so this session started there and did a full code
 audit rather than trusting the log: read every pricing/offers file
@@ -264,7 +298,7 @@ was **never wired into any screen** — this session wired it up.
 |---|---|---|---|---|
 | 1 | Pricing, offers, cheapest store | ~95% | Implemented (blocked on hard externals) | Re-audited 2026-07-16, code-verified against every brief bullet: all required + autonomy capabilities implemented. Only remaining gaps are a genuine external constraint (no public non-offer shelf-price API) and an out-of-scope-by-design item (cross-product substitution, diet/allergy safety) |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
-| 3 | Widgets & quick actions | ~85% | In progress (needs device QA) | Quick-Add widget (required "quick-add item from widget" capability) shipped 2026-07-13; needs a real Xcode/device build to confirm |
+| 3 | Widgets & quick actions | ~88% | In progress (needs device QA) | Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; all of it needs a real Xcode/device build to confirm. Remaining in-code work is two cleanup ideas that ask to be their own isolated change |
 | 4 | AI assistant app control | ~90% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | ~85% | In progress (needs device QA) | Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
@@ -1392,6 +1426,107 @@ needs no project-file changes to build. `pubspec.lock` churn from `pub get`
 reverted before committing. **Not run (no macOS/Xcode in this container):**
 an actual Xcode build, the widget appearing in the widget gallery, or a
 live on-device quick-add tap.
+
+**Seventh session, 2026-07-16 (scheduled routine, second run of the day —
+this feature's dedicated session).** Selected per the priority order (see
+the selection note at the top of this file). Scope: the two ways the
+widget's shared-container state could go stale or leak — credential
+freshness while signed in, and data hygiene on sign-out.
+
+**What I implemented:**
+
+1. **Token re-push on every Supabase token refresh** (the Ideas-list item
+   from the sixth session, recommendation-`yes` — now done). Both
+   widget-side REST calls (the existing checkbox-toggle sync and the
+   Quick-Add insert) authenticate with an access token cached in the App
+   Group, which until now was only written by `home_screen.dart`'s
+   `_syncWidgetCredentials()` on app launch / user change. Supabase access
+   tokens expire after ~1h, so any widget tap later than that silently
+   no-oped until the next app open. Now:
+   - `WidgetService.syncCredentialsFromSession({Session? session})` (new,
+     `lib/data/services/widget_service.dart`) — the one shared
+     implementation: reads the given session (or
+     `SupabaseService.instance.currentSession`), no-ops on null or
+     non-iOS, pushes url/anonKey/accessToken/userId via the existing
+     `updateSupabaseCredentials` channel call.
+   - `main.dart`'s existing global `onAuthStateChange` listener now calls
+     it on `initialSession`, `signedIn`, and `tokenRefreshed` (fire-and-
+     forget via `unawaited` — a failed push must never affect auth
+     handling). Placing this in the **global** listener rather than
+     `home_screen.dart`'s (which the original idea suggested) means it
+     fires no matter which screen is mounted when the SDK refreshes the
+     token mid-session — home_screen's listener only reacts to user-id
+     *changes*, and a refresh isn't one.
+   - `home_screen.dart`'s `_syncWidgetCredentials()` now just delegates to
+     the shared helper (same behavior on its existing launch/user-change
+     call sites; duplicated credential-assembly logic removed, and its
+     now-unused `env.dart` import dropped).
+   - Honest limit: this keeps the cached token fresh **while the app
+     process is alive** (foreground or briefly backgrounded — Supabase's
+     auto-refresh runs ~every 50min in-process). A widget tap hours/days
+     after the app was last alive still hits an expired token and no-ops.
+     The genuinely-always-fresh alternative — the widget process using the
+     refresh token itself — was deliberately NOT built: Supabase rotates
+     refresh tokens on use, and two processes independently refreshing the
+     same token family risks revoking the user's whole session (a logout
+     bug is far worse than a no-op tap). Flagged in the ideas list below.
+
+2. **Widget data + credentials now actually cleared on sign-out.**
+   `WidgetService.clearWidget()` existed since the widget was first built
+   but had zero call sites, and its native handler only removed
+   `widget_shopping_list` + `widget_saved_recipes` — not the per-list
+   caches (`widget_list_<id>`) the configurable widget actually renders
+   from, not `widget_available_lists` (which Siri's list picker also
+   reads), not `widget_recent_items`, and not the four cached credential
+   keys. Net effect: after sign-out, a home-screen widget kept displaying
+   the signed-out account's shopping list indefinitely — a real privacy
+   gap on shared/handed-over devices, and stale-credential clutter
+   besides. Now:
+   - `AppDelegate.swift`'s `clearWidgetData` sweeps **every** App Group
+     key with the `widget_` prefix (verified by grep that every key this
+     app writes to the shared container uses it), then reloads all widget
+     timelines — widgets drop to their signed-out empty state immediately.
+   - `main.dart`'s `signedOut` handler calls `WidgetService.clearWidget()`
+     (first-ever call site).
+   - Race-checked the surrounding sign-out flow: `home_screen`'s listener
+     fires `loadLists()` on user change, which on a signed-out client can
+     only write *empty* available-lists/recent-items arrays — so whichever
+     order the two handlers run in, nothing of the previous account
+     survives. On account *switch*, `signedOut` clears and the subsequent
+     `signedIn` + list load repopulate for the new user.
+
+**Explicitly NOT done / known limits:**
+- The two standing cleanup ideas (delete the confirmed-dead
+  `SiriService.dart` method-channel path + `_checkSiriPendingItems()`;
+  delete `VoiceAssistantPlugin.swift`) — both explicitly ask to be their
+  own tiny, isolated change, not bundled with a feature-shipping session.
+  Unchanged.
+- The "today's list" / new widget-kind ideas — still marked needs-decision.
+- Widget taps after the app process has been dead for >1h still silently
+  no-op (see the honest limit above — a deliberate safety tradeoff, now
+  documented as its own idea below rather than half-fixed).
+- The `IPHONEOS_DEPLOYMENT_TARGET = 26.0` question on the widget target is
+  unchanged — still worth checking in a real Xcode session.
+
+**Files changed (seventh session):**
+`lib/data/services/widget_service.dart` (`syncCredentialsFromSession`),
+`lib/main.dart` (credential re-push on initialSession/signedIn/
+tokenRefreshed; `clearWidget()` on signedOut),
+`lib/presentation/screens/home/home_screen.dart` (`_syncWidgetCredentials`
+delegates to the shared helper; unused import dropped),
+`ios/Runner/AppDelegate.swift` (`clearWidgetData` prefix sweep).
+
+**Checks performed (seventh session):** See the environment note at the top
+of this document. Summary: Flutter 3.35.6 downloaded fresh; full-project
+`flutter analyze` byte-identical before/after via `git stash` baseline (610
+issues: 0 errors, 59 warnings, 551 info; line numbers normalized out of the
+diff); `flutter test` passes ("All tests passed"); `AppDelegate.swift`
+verified with the string/comment-aware brace/paren/bracket-balance checker
+(all balanced) — the Swift edit is a small mechanical change inside an
+existing function, using only APIs already used elsewhere in the same file;
+`pubspec.lock` churn reverted before committing. **Not run (no macOS/Xcode
+in this container):** an Xcode build; a real token-refresh → widget-tap
+round trip; a real sign-out → widget-shows-empty check on device.
 
 ---
 
@@ -2802,26 +2937,36 @@ correctly ignored — all passed, not committed, deleted before finishing).
   - Recommendation: needs decision — natural next Feature 6 slice, but not
     a required capability, so flagging rather than building unprompted.
 
-- [ ] IDEA: Proactively re-push the widget's cached Supabase access token on
-  every token refresh, not just app launch/auth-state change.
-  - Why it helps: the widget's checkbox-toggle sync (existing) and the new
-    Quick-Add insert (this session) both do a direct REST call using a
-    cached token from `home_screen.dart`'s `_syncWidgetCredentials()`, which
-    only runs on launch/login. If a user leaves the app open in the
-    background for longer than the token's lifetime, a widget tap after that
-    silently fails (fails open — no crash, just a no-op) until they next open
-    the app.
-  - Expected user value: medium — "the widget button did nothing" with no
-    visible error is a confusing failure mode, though it self-heals on next
-    app open.
-  - Expected business/premium value: low.
-  - Complexity: Low — hook `SupabaseService`'s existing
-    `onAuthStateChange`/token-refresh event (already listened to for user-id
-    changes in `home_screen.dart`) and call `_syncWidgetCredentials()` on a
-    token-refreshed event too, not just a user-changed event.
-  - Risk: Low.
-  - Recommendation: yes — small, safe, fixes a real (if rare) silent-failure
-    edge case for both the existing toggle sync and the new quick-add.
+- [x] IDEA (DONE 2026-07-16, Feature 3's seventh session): Proactively
+  re-push the widget's cached Supabase access token on every token refresh,
+  not just app launch/auth-state change.
+  - **Outcome:** implemented as `WidgetService.syncCredentialsFromSession()`
+    called from `main.dart`'s global `onAuthStateChange` listener on
+    `initialSession`/`signedIn`/`tokenRefreshed` (global rather than
+    `home_screen.dart` as originally suggested, so it fires regardless of
+    which screen is mounted); `home_screen.dart` now delegates to the same
+    helper. Details in Feature 3's seventh-session notes.
+
+- [ ] IDEA: Widget-side "token stale" UX — when a widget REST call fails
+  with 401 (app hasn't been opened in >1h so the cached token expired),
+  have the widget render a small "Open the app to sync" hint instead of
+  silently no-oping the tap.
+  - Why it helps: the re-push fix above keeps the token fresh while the app
+    process is alive, but a tap days after last app use still silently does
+    nothing — the one remaining silent-failure mode. A *real* fix (widget
+    refreshing the token itself with the cached refresh token) was
+    deliberately rejected: Supabase rotates refresh tokens on use, and two
+    processes racing on one token family can revoke the whole session —
+    a forced logout is far worse than a no-op tap.
+  - Expected user value: medium — turns a confusing dead tap into an
+    actionable instruction.
+  - Expected business/premium value: low (trust/retention).
+  - Complexity: Medium — the intent would write a "stale" flag to the App
+    Group on 401 and the widget views would render the hint until the next
+    credential push clears it; needs a real device to verify the flow.
+  - Risk: Low-medium (Swift-only change, unverifiable in this container).
+  - Recommendation: needs decision — worth it if device QA confirms the
+    expired-token no-op actually bites in practice.
 
 - [ ] IDEA: Remove the confirmed-dead Siri method-channel plumbing
   (`SiriService.dart`'s `com.shoply.app/siri` channel, `home_screen.dart`'s
