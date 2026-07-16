@@ -267,3 +267,59 @@ single Gemini call doesn't re-fire on every item toggle, and route both
 the reason strings and the Gemini prompt output through
 `context.tr(...)`/locale-aware generation the way the rest of the app's
 category system already does.
+
+## 2026-07-16 — `lib/presentation/widgets/premium_feature_gate.dart`
+
+Reviewed the file (three widgets: `PremiumFeatureGate`, `GoProButton`,
+`PremiumLockedOverlay`) plus its references: `isSubscribedProvider`/
+`subscriptionStatusProvider` (`lib/presentation/providers/subscription_provider.dart`),
+`showSubscriptionSheet` (`lib/presentation/screens/subscription/subscription_screen.dart`),
+and every real premium-gating call site in the app
+(`profile_screen.dart`, `recipe_detail_screen.dart`, `avo_chat_screen.dart`).
+
+Findings:
+- **Dead code (whole file)**: all three exported widgets have zero callers
+  anywhere in the repo (`grep`-confirmed, no barrel export either). Every
+  actual premium gate in the app — the Premium/email line and Pro banner in
+  `profile_screen.dart`, the cooking-mode button in
+  `recipe_detail_screen.dart`, the Premium chip in `avo_chat_screen.dart` —
+  hand-rolls its own `if (ref.watch(isSubscribedProvider)) {...} else
+  {...}` UI instead of using this dedicated gating widget, duplicating the
+  same branch four times over instead of centralizing it here. Same
+  pattern as the `oauth_webview_dialog.dart` finding from 2026-07-07:
+  built, never wired in.
+- **Dead field / bug (latent, inside the dead code)**: `PremiumFeatureGate`
+  takes a `featureName` constructor parameter (line 13) but never reads it
+  anywhere in `build()`/`_buildPremiumBadge()`/`_buildSmallBadge()` — the
+  overlay always shows the generic `premium_feature`/`unlock_with_pro`
+  strings regardless of what feature the caller says is being gated. (The
+  same-named `featureName` field on the unrelated `PremiumLockedOverlay`
+  class, line 245, is used correctly — only the `PremiumFeatureGate` one is
+  dropped.)
+- **Latent gesture conflict (inside the dead code)**: when
+  `showBadgeOnly: true`, `IgnorePointer.ignoring` is set to `!showBadgeOnly`
+  = `false`, so the wrapped `child` keeps receiving touches at full
+  opacity, while the enclosing `GestureDetector.onTap` also wants to open
+  the subscription sheet on any tap in the same region. If `child` itself
+  contains interactive elements, the two tap handlers would compete in the
+  gesture arena instead of the paywall reliably winning. Never observed in
+  practice since the widget is unreferenced.
+- **Doc/code mismatch (tangential)**: CLAUDE.md's Premium section says
+  "Features gated via `subscription.isPremium`", but no `isPremium`
+  property exists anywhere in `lib/` (`grep`-confirmed) — real gating is
+  `ref.watch(isSubscribedProvider)` (backed by
+  `SubscriptionService.status == SubscriptionStatus.subscribed`) called ad
+  hoc at each site. Worth a docs fix independent of this file.
+- **Minor style**: `PremiumFeatureGate._showSubscriptionSheet` is a
+  private one-line wrapper that just calls the top-level
+  `showSubscriptionSheet(context)` — adds indirection for a single call
+  site, could call the top-level function directly.
+- No security issues (no auth/entitlement logic lives in this file itself
+  — it only reads a provider computed elsewhere).
+
+No changes were made this run (review-only). Recommendation for a future
+run/human: either delete `premium_feature_gate.dart` outright (like the
+`oauth_webview_dialog.dart` recommendation) since none of its three widgets
+are reachable, or — if centralized premium gating is still wanted — wire
+`PremiumFeatureGate`/`PremiumLockedOverlay` into the four existing hand-rolled
+call sites and fix the dropped `featureName` while doing so.
