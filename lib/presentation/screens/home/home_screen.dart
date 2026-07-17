@@ -20,8 +20,6 @@ import 'package:shoply/presentation/screens/history/shopping_history_screen.dart
 import 'package:shoply/presentation/state/last_list_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
-import 'package:shoply/core/services/siri_service.dart';
-import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
 import 'package:shoply/presentation/screens/home/widgets/avo_nudge_card.dart';
@@ -54,7 +52,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(listsNotifierProvider.notifier).loadLists();
       _autoOpenLastList();
-      _checkSiriPendingItems();
       _syncWidgetCredentials();
       unawaited(_ensureTutorialListExists());
     });
@@ -161,89 +158,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _syncWidgetCredentials() {
     unawaited(WidgetService.syncCredentialsFromSession());
-  }
-
-  Future<void> _checkSiriPendingItems() async {
-    try {
-      final siriService = SiriService();
-      final pendingItems = await siriService.getPendingItems();
-
-      if (pendingItems.isEmpty) return;
-
-      String? targetListId;
-      String? targetListName;
-
-      for (final item in pendingItems) {
-        final itemName = item['itemName'] as String;
-        final listName = item['listName'] as String;
-        final quantity = item['quantity'] as double? ?? 1.0;
-
-        // Find or create the list
-        final listsAsync = ref.read(listsNotifierProvider);
-        await listsAsync.whenData((lists) async {
-          var targetList = lists.cast<dynamic>().firstWhere(
-            (l) => l.name.toLowerCase() == listName.toLowerCase(),
-            orElse: () => null,
-          );
-
-          // Create list if it doesn't exist
-          if (targetList == null) {
-            await ref.read(listsNotifierProvider.notifier).createList(listName);
-
-            // Wait a moment for the list to be created
-            await Future.delayed(const Duration(milliseconds: 500));
-
-            // Refresh and get the new list
-            ref.invalidate(listsNotifierProvider);
-            await Future.delayed(const Duration(milliseconds: 300));
-
-            final newLists = ref.read(listsNotifierProvider).value;
-            if (newLists != null) {
-              targetList = newLists.cast<dynamic>().firstWhere(
-                (l) => l.name.toLowerCase() == listName.toLowerCase(),
-                orElse: () => null,
-              );
-            }
-          }
-
-          if (targetList != null) {
-            targetListId = targetList.id;
-            targetListName = targetList.name;
-
-            // Detect category
-            final category = await CategoryDetector.detectCategory(itemName);
-
-            // Add item to list
-            await ref
-                .read(itemsNotifierProvider(targetList.id).notifier)
-                .addItem(
-                  name: itemName,
-                  quantity: quantity,
-                  category: category,
-                );
-          }
-        });
-      }
-
-      // Refresh the lists view
-      if (mounted) {
-        ref.invalidate(listsNotifierProvider);
-
-        // Navigate to the list after a short delay
-        if (targetListId != null && targetListName != null) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (mounted) {
-            final listId = targetListId!;
-            final listName = targetListName!;
-            context.push(
-              '/lists/$listId?name=${Uri.encodeComponent(listName)}',
-            );
-          }
-        }
-      }
-    } catch (e) {
-      // Silently handle Siri errors
-    }
   }
 
   Future<void> _autoOpenLastList() async {

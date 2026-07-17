@@ -1,6 +1,21 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-16, second run of the day (scheduled routine — Feature 3 focus: widget credential-freshness + sign-out hygiene. Implemented the owner-recommendation-`yes` idea "re-push the widget's cached Supabase token on every token refresh," and fixed a related real gap found while auditing that code path: nothing ever cleared widget data on sign-out, so home-screen widgets kept showing the signed-out account's list contents indefinitely)_
+_Last updated: 2026-07-17 (scheduled routine — Feature 3 focus: deleted the confirmed-dead `SiriService.dart` method-channel plumbing and `home_screen.dart`'s `_checkSiriPendingItems()`, per the standing recommendation-`yes` Ideas-list item asking for this as its own isolated cleanup change)_
+
+**2026-07-17 — why Feature 3, again.** Feature 1 (~95%, blocked on genuine
+external constraints) and Feature 2 (~95%, device-QA-only) were
+re-confirmed as having no unblocked buildable-here work, per the same
+precedent prior sessions established. Feature 3 is the first feature
+genuinely marked "In progress," and its Ideas list had exactly one
+fully-scoped, unconditional recommendation-`yes` item with no owner decision
+or device dependency attached: deleting the now-triply-confirmed-dead Siri
+method-channel code (`SiriService.dart`, `home_screen.dart`'s
+`_checkSiriPendingItems()`) that the working `AppIntents.swift` deep-link
+flow (fifth session) already superseded. The broader, related idea
+(also deleting `VoiceAssistantPlugin.swift`) was deliberately left alone —
+its own write-up asks to wait for a real-device confirmation of the
+`AppIntents.swift` fix first, which this container still can't provide. See
+Feature 3's eighth-session notes below for the full change and verification.
 
 **2026-07-16 second run — why Feature 3.** Per the brief's priority order:
 Feature 1 was re-audited by the morning session (all required + autonomy
@@ -298,7 +313,7 @@ was **never wired into any screen** — this session wired it up.
 |---|---|---|---|---|
 | 1 | Pricing, offers, cheapest store | ~95% | Implemented (blocked on hard externals) | Re-audited 2026-07-16, code-verified against every brief bullet: all required + autonomy capabilities implemented. Only remaining gaps are a genuine external constraint (no public non-offer shelf-price API) and an out-of-scope-by-design item (cross-product substitution, diet/allergy safety) |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
-| 3 | Widgets & quick actions | ~88% | In progress (needs device QA) | Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; all of it needs a real Xcode/device build to confirm. Remaining in-code work is two cleanup ideas that ask to be their own isolated change |
+| 3 | Widgets & quick actions | ~89% | In progress (needs device QA) | Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
 | 4 | AI assistant app control | ~90% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | ~85% | In progress (needs device QA) | Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
@@ -1527,6 +1542,119 @@ existing function, using only APIs already used elsewhere in the same file;
 `pubspec.lock` churn reverted before committing. **Not run (no macOS/Xcode
 in this container):** an Xcode build; a real token-refresh → widget-tap
 round trip; a real sign-out → widget-shows-empty check on device.
+
+**Eighth session, 2026-07-17 (scheduled routine — this feature's dedicated
+session).** Per the priority order, Feature 1 (~95%, blocked on genuine
+external constraints — no public shelf-price API, cross-product substitution
+out of scope) and Feature 2 (~95%, device-QA-only) were re-confirmed as
+having no unblocked buildable-here work, same precedent prior sessions
+established. Feature 3 is the first feature genuinely marked "In progress,"
+and its own Ideas list carried exactly one fully-scoped, unconditional
+recommendation-`yes` item with no owner decision or device-QA prerequisite
+attached: **"Remove the confirmed-dead Siri method-channel plumbing"** (the
+sixth/seventh sessions' Ideas entry) — explicitly asking to be done "as its
+own tiny, isolated change," which is exactly this session's scope. The
+broader idea right below it (deleting `VoiceAssistantPlugin.swift` too) was
+deliberately **not** done — that one's own recommendation text says to wait
+until the fifth session's `AppIntents.swift` deep-link fix is confirmed
+working on a real device, which still hasn't happened in this container.
+
+**What I implemented — pure dead-code removal, re-verified reachability
+before deleting anything (not trusting the prior sessions' audit at face
+value):**
+- Grepped the whole repo (Dart *and* Swift/`ios/`) for
+  `SiriService`/`siri_service`/`com.shoply.app/siri` — confirmed, as the
+  fifth and seventh sessions already found, that **no native code anywhere**
+  registers or calls that method channel, and the only two Dart call sites
+  left were `main.dart`'s `SiriService().initialize()` (sets up the
+  never-answered channel handler and fires a `syncLists` call into the void)
+  and `home_screen.dart`'s `_checkSiriPendingItems()` (reads a
+  `SharedPreferences` key, `siri_pending_items`, that nothing has ever
+  written to, since the only would-be writer lived in an App Group
+  `UserDefaults` suite `SiriService.dart` never actually read from — the
+  process-boundary bug the fifth session already diagnosed in detail).
+  Every other public method on `SiriService` (`donateAddItemInteraction`,
+  `donateRecipeSearchInteraction`, `donateSavedRecipesInteraction`,
+  `getPendingSiriAction`, `getPendingLists`, `updateUserLists`) had **zero**
+  callers anywhere in the repo, confirmed via grep before removal.
+- **Deleted `lib/core/services/siri_service.dart` outright** (349 lines) —
+  once its only two call sites are gone, every one of its methods only
+  serves the same dead channel/dead-SharedPreferences-key round trip, so
+  there was nothing in the file left to keep.
+- **`lib/main.dart`**: removed the `import 'package:shoply/core/services/siri_service.dart'`
+  and the `if (Platform.isIOS) { await SiriService().initialize(); }` block
+  from `_initializeServicesInBackground()`.
+- **`lib/presentation/screens/home/home_screen.dart`**: removed the
+  `_checkSiriPendingItems()` call from `initState`'s post-frame callback and
+  deleted the method itself (82 lines — the find-or-create-list-then-add-item
+  logic that could never run because its input source could never be
+  written to), plus the now-unused `siri_service.dart` and
+  `category_detector.dart` imports (the latter was only used inside the
+  deleted method's `CategoryDetector.detectCategory(itemName)` call).
+- **Corrected `CLAUDE.md`'s iOS Native Components note**, which still
+  referenced `SiriService.dart`'s method-channel path as existing-but-dead —
+  updated to say it's now fully removed, not just orphaned.
+- Deliberately did **not** touch `ios/Runner/VoiceAssistantPlugin.swift` (per
+  the broader idea's own device-QA gate, see above) — it remains unbuilt and
+  unregistered in the Xcode project, exactly as before this session.
+
+**Why this was worth doing now rather than leaving it flagged again:** three
+independent sessions (fifth, sixth/seventh's idea write-up, and this one's
+own re-verification) had each confirmed this exact code path dead by
+whole-repo grep with zero live callers found — the risk this idea's own
+write-up worried about (accidentally breaking something by touching
+`home_screen.dart`'s `initState` ordering) turned out to be low in practice:
+removing the call was a one-line deletion with no reordering of the
+remaining calls, and `flutter analyze`/`flutter test` catch a broken
+reference immediately (see Checks below). Leaving three confirmed-dead
+implementations of the same already-superseded feature sitting in the
+codebase is exactly the kind of trap the fifth session's own history
+warns about ("the fifth session almost built on top of the wrong one before
+tracing the process boundary all the way through").
+
+**Explicitly NOT done / still open:**
+- `ios/Runner/VoiceAssistantPlugin.swift` (unbuilt, unregistered, no Dart
+  caller) is still present — its own idea explicitly wants the
+  `AppIntents.swift` deep-link fix confirmed on a real device first, which
+  remains blocked on this container having no macOS/Xcode.
+- The "today's list" / "recently used items as a distinct widget kind"
+  ideas are unchanged — still marked needs-decision.
+- The `IPHONEOS_DEPLOYMENT_TARGET = 26.0` widget-target question is
+  unchanged.
+- The single most important remaining step for Feature 3 overall is still
+  the same as every prior session: a real Xcode build + on-device test of
+  the widget, the Siri/Shortcuts intents, and the token-refresh/sign-out
+  credential handling shipped in the sixth/seventh sessions.
+
+**Files changed (eighth session):** `lib/main.dart` (removed `SiriService`
+init), `lib/presentation/screens/home/home_screen.dart` (removed
+`_checkSiriPendingItems()` + its call site + 2 now-unused imports),
+`CLAUDE.md` (corrected Siri doc note). **Deleted:**
+`lib/core/services/siri_service.dart`.
+
+**Checks performed (eighth session):** Flutter 3.35.6 downloaded fresh into
+`/tmp/flutter`. Baseline taken from a separate `git worktree` checked out at
+this session's starting commit (`git stash` hit a pathspec error against the
+already-`git rm`'d file, so a worktree was used instead for a clean,
+uncontaminated baseline) — `flutter analyze`: **610 issues (0 errors, 59
+warnings, 551 info)**. After this session's changes: **603 issues (0 errors,
+59 warnings, 544 info)**. Diffed both outputs with line/column numbers
+normalized out: every one of the 7 fewer issues is fully accounted for and
+none are new-elsewhere regressions — 6 `empty_catches` info lints that lived
+entirely inside the now-deleted `siri_service.dart`, plus one genuine
+pre-existing bug that left with the deleted `_checkSiriPendingItems()`
+method: an `await_only_futures` warning on `await listsAsync.whenData(...)`
+(`whenData` returns `void`/`Null`, not a `Future` — awaiting it was already a
+no-op bug in the dead code, not something this session introduced). Zero new
+issues of any severity anywhere else in the project. `flutter test` passes
+("All tests passed"). Grepped the full repo (Dart + `ios/`) for every
+`SiriService`/`siri_service`/`com.shoply.app/siri` reference before and
+after deleting, confirming zero remaining live references outside this
+Markdown file and `CLAUDE.md`. `pubspec.lock` churn from `pub get` reverted
+before committing. **Not run (no macOS/Xcode in this container):** an actual
+Xcode build — though this change is pure Dart-side deletion with no Swift
+edits, so the existing device-QA backlog for Feature 3 is unchanged in
+scope, not added to.
 
 ---
 
@@ -2968,51 +3096,44 @@ correctly ignored — all passed, not committed, deleted before finishing).
   - Recommendation: needs decision — worth it if device QA confirms the
     expired-token no-op actually bites in practice.
 
-- [ ] IDEA: Remove the confirmed-dead Siri method-channel plumbing
-  (`SiriService.dart`'s `com.shoply.app/siri` channel, `home_screen.dart`'s
+- [x] IDEA (DONE 2026-07-17, Feature 3's eighth session): Remove the
+  confirmed-dead Siri method-channel plumbing (`SiriService.dart`'s
+  `com.shoply.app/siri` channel, `home_screen.dart`'s
   `_checkSiriPendingItems()`) now that Feature 3's fifth session replaced it
   with the working deep-link-based flow.
-  - Why it helps: two independent sessions have now confirmed no native code
-    calls this channel — it's a harmless no-op that runs on every app
-    launch, purely code-cleanliness/clarity for the next person reading
-    `home_screen.dart`'s `initState`.
-  - Expected user value: none (invisible to users).
-  - Expected business/premium value: none.
-  - Complexity: Low (delete ~30 lines across 2 files), but touches
-    `home_screen.dart`'s `initState` init sequence, which is why the last two
-    sessions both deliberately left it alone rather than risk it alongside
-    other changes.
-  - Risk: Low-medium — low because it's confirmed dead by grep across the
-    whole repo twice; medium only because `initState` ordering bugs are easy
-    to introduce by accident and hard to catch without a device.
-  - Recommendation: yes, but do it as its own tiny, isolated change in a
-    future Feature 3 session — not bundled with a feature-shipping session.
+  - **Outcome:** `lib/core/services/siri_service.dart` deleted outright (its
+    only two live call sites — `main.dart`'s `initialize()` and
+    `home_screen.dart`'s `_checkSiriPendingItems()` — were both removed, and
+    every other method on the class had zero callers to begin with);
+    `home_screen.dart`'s dead method + its now-unused `siri_service.dart`/
+    `category_detector.dart` imports removed. `flutter analyze` came back
+    with *fewer* issues than baseline, not just byte-identical — the deleted
+    code carried 6 pre-existing `empty_catches` lints plus one genuine
+    `await_only_futures` bug (`await`ing `AsyncValue.whenData()`, which
+    returns `void`) that's now gone along with the rest of the dead method.
+    Details in Feature 3's eighth-session notes.
 
-- [ ] IDEA: Delete the now-doubly-confirmed-dead Siri legacy code:
+- [ ] IDEA: Delete the last remaining dead Siri legacy code:
   `ios/Runner/VoiceAssistantPlugin.swift` (unbuilt, unregistered, no Dart
-  caller), `SiriService.dart`'s method-channel path
-  (`com.shoply.app/siri`'s `addItemToList`/`createList`/`getLists` handling,
-  the `siri_pending_items`/`siri_pending_lists` SharedPreferences
-  bookkeeping), and `home_screen.dart`'s `_checkSiriPendingItems()` (a
-  permanent no-op called on every app launch, since nothing can ever write
-  to a plain-`SharedPreferences` key from an App Intents extension process
-  — see Feature 3's fifth-session note for why).
-  - Why it helps: three confirmed-dead code paths for the exact same
-    feature (Siri add-item) is confusing for whoever touches this next —
-    the fifth session almost built on top of the wrong one before tracing
-    the App-Group-vs-standard-UserDefaults process boundary all the way
-    through.
+  caller — `SiriService.dart` and `home_screen.dart`'s
+  `_checkSiriPendingItems()` were already deleted in Feature 3's eighth
+  session, see above).
+  - Why it helps: one last confirmed-dead code path for the superseded Siri
+    architecture is confusing for whoever touches this next — the fifth
+    session almost built on top of the wrong one before tracing the
+    App-Group-vs-standard-UserDefaults process boundary all the way through.
   - Expected user value: none directly (already invisible; the real path is
     the new `shoply://add-item` deep link).
   - Expected business/premium value: none directly; prevents a future
     regression where someone "fixes" the dead path instead of the live one.
-  - Complexity: Low (pure deletion, already confirmed zero live callers this
-    session) to Medium (`home_screen.dart`'s `_checkSiriPendingItems` touches
-    `initState`, worth a careful look rather than a blind delete).
-  - Risk: Low — all three paths are provably unreachable today.
+  - Complexity: Low (pure deletion, one Swift file, already confirmed zero
+    build-target membership and zero Dart caller).
+  - Risk: Low, but it's a Swift-only file this container cannot compile —
+    unlike the Dart-side deletion above, there's no `flutter analyze`/
+    `flutter test` safety net for a Swift-only deletion.
   - Recommendation: yes, as a small follow-up once the Feature 3 deep-link
-    fix has been confirmed working on a real device (don't want two Siri
-    changes unverified at the same time).
+    fix (`AppIntents.swift`) has been confirmed working on a real device
+    (don't want two Siri changes unverified at the same time).
 
 - [ ] IDEA: Build a distinct "Today's list" and/or "recently used items"
   WidgetKit widget, per the original Feature 3 brief.

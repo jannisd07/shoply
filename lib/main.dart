@@ -20,7 +20,6 @@ import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/app_review_service.dart';
 import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/data/services/widget_service.dart';
-import 'package:shoply/core/services/siri_service.dart';
 import 'package:shoply/core/config/env.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -102,11 +101,6 @@ Future<void> _initializeServicesInBackground() async {
     // Gemini AI
     final geminiService = GeminiCategorizationService();
     await geminiService.initialize(Env.geminiApiKey);
-
-    // Siri (iOS only)
-    if (Platform.isIOS) {
-      await SiriService().initialize();
-    }
 
     // Notifications & Subscriptions
     if (Platform.isIOS || Platform.isAndroid) {
