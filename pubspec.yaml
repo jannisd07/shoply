@@ -94,15 +94,11 @@ dependencies:
   file_picker: ^8.0.0
   path_provider: ^2.1.1
   permission_handler: ^11.0.1
-  sqflite: ^2.3.0
 
   # Location (for nearby supermarket offers / price comparison)
   geolocator: ^13.0.2
   geocoding: ^3.0.0
-  
-  # String Matching for Product Recognition
-  string_similarity: ^2.0.0
-  
+
   # Other
   reorderables: ^0.6.0
   equatable: ^2.0.5

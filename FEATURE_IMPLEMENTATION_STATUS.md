@@ -1,6 +1,22 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-17 (scheduled routine — Feature 3 focus: deleted the confirmed-dead `SiriService.dart` method-channel plumbing and `home_screen.dart`'s `_checkSiriPendingItems()`, per the standing recommendation-`yes` Ideas-list item asking for this as its own isolated cleanup change)_
+_Last updated: 2026-07-17, second run (scheduled routine — Feature 8 focus: the recommendation-engine consolidation pass the Ideas list flagged as recommendation-`yes`. Headline finding: the `dealBonus` path the idea asked to "strip from a live ranking path" turned out not to be live at all — `RecommendationsSection` has zero call sites, so the entire non-ML recommendation chain (9 files, ~2,000 lines) was verifiably dead and was deleted whole, along with the now-unused `sqflite`/`string_similarity` direct dependencies)_
+
+**2026-07-17 second run — why Feature 8.** Same walk as every recent
+session: Features 1–2 re-confirmed blocked on hard externals/device QA;
+Feature 3's two open items explicitly wait on a real-device confirmation
+(`VoiceAssistantPlugin.swift` deletion) or an owner decision ("today's
+list" widget); Features 4–7's open items are all needs-decision or
+device-QA. Feature 8 (~40%, lowest completion) carried the one
+fully-scoped, unconditional recommendation-`yes` item with no owner
+decision or device dependency: the `dealBonus`/recommendation-engine
+cleanup, whose own write-up suggested folding it into "a future Feature 8
+pass on the recommendation engines." This session was that pass — see
+Feature 8's third-session notes for the significant correction it
+uncovered (two prior write-ups wrongly believed `RecommendationService`
+was live because of a substring-grep pitfall: every grep for
+`RecommendationsSection`/`recommendation_service.dart` also matches
+`MLRecommendationsSection`/`ml_recommendation_service.dart`).
 
 **2026-07-17 — why Feature 3, again.** Feature 1 (~95%, blocked on genuine
 external constraints) and Feature 2 (~95%, device-QA-only) were
@@ -318,7 +334,7 @@ was **never wired into any screen** — this session wired it up.
 | 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications |
 | 6 | Calorie tracking | ~85% | In progress (needs device QA) | Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~40% (this session) | In progress | Home-screen price-comparison card shipped this session (cached, gated); premium-gating audit and weekly nutrition summary still open, both need an owner product decision first |
+| 8 | Cross-feature UX / growth / premium | ~45% | In progress | Recommendation-engine consolidation done 2026-07-17 (second run): 3 dead engines + dead deal-matching chain deleted, `MLRecommendationService` confirmed as the one live engine; premium-gating audit and weekly nutrition summary still open, both need an owner product decision first |
 
 ---
 
@@ -440,6 +456,11 @@ changed:
   `RecommendationService` is flagged as a new idea below rather than done
   here, since it touches the (separate, Feature 8-ish) recommendations
   engine, not pricing/offers directly.
+  *[2026-07-17 correction: this paragraph's "**is** live" claim was itself
+  wrong — a substring-grep artifact (`MLRecommendationsSection` contains
+  `RecommendationsSection`). `RecommendationsSection` has never been
+  mounted by any screen; the whole chain incl. these three files was
+  deleted in Feature 8's third session. See that section's notes.]*
 
 **Second session, 2026-07-03 (scheduled routine).** Started by reconciling
 two divergent lines of Feature-1 work: your own `ac54af5` on `main`
@@ -2956,6 +2977,97 @@ floor, and the cheapest-vs-second-cheapest comparison choice with a
 deliberately extreme third "worst outlier" store present to confirm it's
 correctly ignored — all passed, not committed, deleted before finishing).
 
+**Third session, 2026-07-17 (scheduled routine, second run of the day —
+this feature's dedicated session).** Executed the recommendation-engine
+consolidation pass that both prior Feature 8 sessions deferred and the
+Ideas list carried as recommendation-`yes` ("strip the now-fully-inert
+`dealBonus` hook from `RecommendationService`, and decide whether
+`ProductMatchingService`/`DealsDatabaseService`/`ExtractedDeal` should go
+too").
+
+**The headline finding — a correction to two prior write-ups.** The idea
+(and the 2026-07-03 Feature 1 session, and the 2026-07-08 daily code
+review of `product_matching_service.dart`) all described
+`RecommendationService` as *live*, "reachable from `list_detail_screen.dart`
+via `RecommendationsSection`," which is why the idea asked for a cautious
+surgical strip of one scoring term rather than deletion. That belief was
+wrong, and traceably so: `list_detail_screen.dart` has only ever mounted
+`MLRecommendationsSection` (verified against commit `65b615e`, the commit
+that created the screen — it never contained the non-ML section), and every
+grep that "confirmed" the non-ML path live was hitting a substring trap —
+`MLRecommendationsSection` contains `RecommendationsSection`, and
+`ml_recommendation_service.dart` literally ends with the substring
+`recommendation_service.dart`, so filename greps matched the wrong file.
+Re-run with word-boundary-safe patterns, the whole non-ML chain closes on
+itself with zero external references:
+
+`RecommendationsSection` (0 users) → `recommendations_provider.dart` (only
+user: the section) → `RecommendationService` (only user: that provider) →
+`ProductMatchingService` (only user: that service) → `DealsDatabaseService`
+(only user: that service; its SQLite table `shoply_deals.db` is its own
+file, shared with nothing, and has been permanently empty since the OCR
+extractor deletion — nothing ever wrote to it even before that) →
+`ExtractedDealModel` (only users: the two services above).
+
+**What was deleted (every file verified zero external references, whole
+repo including `test/`, word-boundary-safe):**
+- The dead non-ML chain (6 files): `lib/presentation/widgets/recommendations/recommendations_section.dart`,
+  `lib/presentation/state/recommendations_provider.dart`,
+  `lib/data/services/recommendation_service.dart`,
+  `lib/data/services/product_matching_service.dart`,
+  `lib/data/services/deals_database_service.dart`,
+  `lib/data/models/extracted_deal_model.dart`.
+- The two other dead engines from the first session's "four recommendation
+  engines" audit (3 files): `lib/data/services/shopping_recommender_service.dart`
+  (0 references anywhere — it even declared its own conflicting
+  `RecommendationItem` class), `lib/data/services/smart_recommendation_engine.dart`
+  + its sole user `lib/presentation/widgets/recommendations/smart_recommendations_widget.dart`
+  (the widget itself has 0 users).
+- **Dependency cleanup:** `sqflite` and `string_similarity` were direct
+  `pubspec.yaml` dependencies used *only* by the deleted files. Both
+  removed. `sqflite` stays in the dependency tree transitively (pulled by
+  `cached_network_image`'s cache manager), so the iOS Pod set is unchanged
+  — zero native-build risk; `string_similarity` (pure Dart) drops out of
+  `pubspec.lock` entirely. The lockfile was hand-edited minimally (sqflite
+  `direct main` → `transitive`, string_similarity block removed) rather
+  than committed from this container's `pub get`, which would have smuggled
+  in unrelated version downgrades (this container's Flutter 3.35.6 is older
+  than the SDK the committed lock was resolved with).
+
+**What this leaves (the consolidation result):** exactly one
+recommendation engine — `MLRecommendationService` →
+`ml_recommendations_provider.dart` → `MLRecommendationsSection`, live in
+`list_detail_screen.dart` — plus the shared `recommendation_item.dart`
+model and `recommendation_card.dart` widget, both of which the live ML
+path uses (kept). The `dealBonus` question from the idea is fully
+resolved: not stripped from a live path, but gone with the dead path it
+lived on.
+
+**Explicitly NOT done (unchanged):** the premium-gating decision and the
+weekly nutrition summary — both still need an owner call (see Ideas). No
+new user-visible surface was added this session; this was the flagged
+cleanup pass, and bundling a needs-decision feature into it would have
+contradicted the very flag that scoped it.
+
+**Files changed (third session):** the 9 deletions above, `pubspec.yaml`,
+`pubspec.lock`, this file.
+
+**Checks performed (third session):** downloaded Flutter 3.35.6 stable
+fresh into `/tmp/flutter`; full-project `flutter analyze` baseline (via
+`git stash`) **603 issues (0 errors, 59 warnings, 544 info)** vs.
+after-change **601 issues (0 errors, 59 warnings, 542 info)** — diffed
+with line numbers normalized: the only two lines that left are info lints
+inside two of the deleted files (`unintended_html_in_doc_comment` in
+`extracted_deal_model.dart`, `depend_on_referenced_packages` in
+`deals_database_service.dart`); zero new issues of any severity.
+`flutter test` passes ("All tests passed"). Reachability of every deleted
+symbol re-verified with word-boundary-safe greps across `lib/` and `test/`
+(the substring trap that misled prior sessions is exactly why). No iOS
+build/device test possible here (no macOS/Xcode) — but this change is
+pure deletion of never-mounted Dart code plus a dependency-graph no-op
+(pods unchanged, see above), so device risk is limited to "the app builds,"
+which `flutter analyze`'s zero errors already covers at the Dart level.
+
 ---
 
 ## Ideas / Needs My Approval
@@ -3171,28 +3283,23 @@ correctly ignored — all passed, not committed, deleted before finishing).
     above for the full explanation.
   - See the new idea directly below for the follow-up this uncovered.
 
-- [ ] IDEA: Strip the now-fully-inert `dealBonus` hook from
+- [x] IDEA (DONE 2026-07-17, Feature 8's third session — with a major
+  correction): Strip the now-fully-inert `dealBonus` hook from
   `RecommendationService` (and decide whether `ProductMatchingService`/
   `DealsDatabaseService`/`ExtractedDeal` should go too).
-  - Why it helps: `RecommendationService.dealBonus` scoring can never
-    contribute anything now — its only real data source (the OCR extractor)
-    was just deleted as dead code, and it was already permanently empty
-    before that (nothing ever populated `DealsDatabaseService`'s local
-    table). Right now it's a live call that always no-ops, which is subtler
-    and easier to miss than obviously-dead code.
-  - Expected user value: none directly (already invisible).
-  - Expected business/premium value: none directly; reduces confusion for
-    whoever next touches the recommendations engine.
-  - Complexity: Low-medium — touches `RecommendationService` (used by
-    `RecommendationsSection`, which is live in `list_detail_screen.dart`),
-    so it's a recommendations-engine change, not a pure pricing one. Slightly
-    out of Feature 1's scope, closer to Feature 8 (cross-feature
-    recommendations) — flagging rather than doing it opportunistically.
-  - Risk: Low if done carefully (just remove the dead scoring term), but
-    touches a live, user-facing ranking path, so it deserves its own
-    focused pass rather than a drive-by edit.
-  - Recommendation: yes, as a small follow-up — either standalone or folded
-    into a future Feature 8 pass on the recommendation engines.
+  - **Outcome:** the premise ("touches a live, user-facing ranking path")
+    was wrong — `RecommendationsSection` has zero call sites, so
+    `RecommendationService` was never reachable from any screen; the
+    "live" claim in this idea, the 2026-07-03 Feature 1 notes, and the
+    2026-07-08 daily code review all trace back to the same substring-grep
+    trap (`MLRecommendationsSection` contains the string
+    `RecommendationsSection`). The entire dead chain was deleted (9 files:
+    the 3 asked-about deal files, `RecommendationService` + its provider +
+    section, plus the two other dead engines `ShoppingRecommenderService`
+    and `SmartRecommendationEngine`/`SmartRecommendationsWidget`), along
+    with the now-unused `sqflite`/`string_similarity` direct dependencies.
+    `MLRecommendationService` is now verifiably the app's one
+    recommendation engine. Details in Feature 8's third-session notes.
 
 - [x] IDEA (approved, DONE 2026-07-05): Consolidate the two dead
   mascot/gamification systems into one, and make
