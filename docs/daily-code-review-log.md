@@ -323,3 +323,69 @@ run/human: either delete `premium_feature_gate.dart` outright (like the
 are reachable, or — if centralized premium gating is still wanted — wire
 `PremiumFeatureGate`/`PremiumLockedOverlay` into the four existing hand-rolled
 call sites and fix the dropped `featureName` while doing so.
+
+## 2026-07-17 — `lib/data/repositories/admin_repository.dart` (deleted)
+
+Randomly selected file (64 lines, two methods:
+`fixAllListOwnership`/`deleteAllLists`). Checked for callers (`grep`-
+confirmed zero — only self-reference and a `CLAUDE.md` architecture-doc
+mention), then, because the methods looked destructive, queried the live
+**ShoplyAI** Supabase project's actual RLS policies (`pg_policies` on
+`shopping_lists`/`list_members`) via the Supabase MCP tool to determine
+real-world exploitability rather than guessing from the code alone.
+
+Findings:
+- **Latent privilege-escalation bug (would work against production RLS,
+  not just inert)**: `fixAllListOwnership()` has no admin/role check —
+  only `userId != null` (i.e. any signed-in user). It fetches every list
+  visible to the caller (RLS's `SELECT` policy on `shopping_lists` allows
+  this for lists you own, are a member of, **or** any list with
+  `is_shared = true` and a `share_code`, whether or not you've joined it),
+  then loops `UPDATE shopping_lists SET owner_id = <caller>`. The RLS
+  `UPDATE` policy only permits this for lists the caller already owns or
+  is a member of, so share-code-only lists are silently skipped — but for
+  every shared list the caller is already a plain **member** of, the
+  update succeeds and makes them owner. The very next step,
+  `DELETE FROM list_members WHERE user_id != caller` (no `list_id`
+  filter), is scoped by RLS's `DELETE` policy to
+  "self" rows or rows in lists the caller owns — and since the update loop
+  just made the caller owner of every shared list they belonged to, this
+  delete now sweeps across all of them, evicting every other member.
+  Net effect: **any member of any shared list can call this one method to
+  unilaterally seize ownership and kick out everyone else — including the
+  real owner — from every shared list they belong to**, with no
+  confirmation and no role gate. This is squarely in Shoply's core
+  "shared lists" feature.
+- **Related RLS gap surfaced by this code path (not fixed here, flagging
+  separately)**: the insert step re-adds the caller to every fetched list
+  with `role: 'owner'`. The `list_members` `INSERT` policies
+  ("Users can join lists" / "Anyone can join shared lists") only check
+  `user_id = auth.uid()` in `with_check` — they don't constrain `role` — so
+  self-inserting as `'owner'` on a share-code-visible list you were never
+  invited to is accepted by RLS. Worth a follow-up to add a `WITH CHECK
+  (role = 'member')`-style constraint (or a trigger) so only the ownership-
+  transfer path (or an explicit invite flow) can grant `'owner'`.
+- **Misleading comments, but RLS saves it from being worse than
+  described**: `deleteAllLists()`'s comment says "nuclear option" /
+  delete-everything, and the query (`.neq('id', <dummy-uuid>)`) reads as
+  "delete all rows in the table" — but RLS's `DELETE` policy on
+  `shopping_lists` (`owner_id = auth.uid()`) actually confines it to lists
+  the caller owns. Still a zero-confirmation bulk-delete of everything a
+  user owns, reachable by any authenticated user, with a class name
+  (`AdminRepository`) implying a permission level the code never checks.
+- **Provenance**: `git log --follow` traces the file to the same
+  unrelated bulk commit (`65b615e`, "Add avocado loading screen and
+  video_player dependency") that introduced `oauth_webview_dialog.dart`
+  (flagged 2026-07-07) — another never-wired-in prototype from the same
+  drop, not something added and later intentionally left as a dev tool.
+
+Action taken this run: deleted `lib/data/repositories/admin_repository.dart`
+and removed its stale mention from the `CLAUDE.md` architecture tree.
+Unlike the `oauth_webview_dialog.dart`/`premium_feature_gate.dart` findings
+(inert dead code, left for a human decision), this one combined dead code
+with a real destructive RLS-adjacent exploit path, so deletion — the same
+disposition already flagged as safe for the other two — was applied
+directly rather than left as a recommendation. The separate `list_members`
+`role` INSERT-policy gap is a live RLS issue independent of this file and
+still needs a human/DBA decision; not changed here since it requires a
+Supabase migration, not an app-code change.

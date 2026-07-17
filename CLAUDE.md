@@ -128,7 +128,7 @@ lib/
 │   └── gamification/            # Mascot ("Avo") greeting & gamification
 ├── data/
 │   ├── models/                  # Data classes (see Model Location Map below)
-│   ├── repositories/            # ItemRepository, ListRepository, AdminRepository
+│   ├── repositories/            # ItemRepository, ListRepository
 │   └── services/                # ~50 service classes (business logic, API clients)
 ├── presentation/
 │   ├── screens/                 # Feature-organized: home/, recipes/, ai/, profile/, auth/, lists/
