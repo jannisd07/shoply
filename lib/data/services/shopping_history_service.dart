@@ -7,8 +7,10 @@ class ShoppingHistoryService {
   final _supabase = Supabase.instance.client;
   final _trackingService = PurchaseTrackingService();
 
-  /// Complete a shopping trip and move items to history
-  Future<void> completeShoppingTrip({
+  /// Complete a shopping trip and move items to history. Returns the created
+  /// history entry so callers can offer an immediate follow-up action (e.g.
+  /// splitting the cost) without a redundant re-fetch.
+  Future<ShoppingHistory> completeShoppingTrip({
     required String listId,
     required String listName,
     required List<ShoppingItemModel> items,
@@ -83,6 +85,16 @@ class ShoppingHistoryService {
         // Ignore tracking errors
       }
 
+      return ShoppingHistory(
+        id: historyId,
+        userId: userId,
+        listId: listId,
+        listName: listName,
+        totalItems: items.length,
+        completedAt: DateTime.parse(historyData['completed_at'] as String),
+        completedByName: userName,
+        totalCost: pricedTotal > 0 ? pricedTotal : null,
+      );
     } catch (e) {
       rethrow;
     }

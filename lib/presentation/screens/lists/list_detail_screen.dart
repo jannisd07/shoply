@@ -21,7 +21,6 @@ import 'package:shoply/core/utils/diet_checker.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
-import 'package:shoply/data/services/purchase_tracking_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/contextual_prompt_service.dart';
@@ -46,6 +45,7 @@ import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/item_offer_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_price_summary_bar.dart';
+import 'package:shoply/presentation/screens/history/widgets/split_cost_sheet.dart';
 
 class ListDetailScreen extends ConsumerStatefulWidget {
   final String listId;
@@ -2456,22 +2456,16 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     if (!confirmed) return;
 
     try {
-      // Save only checked items to history
+      // Save only checked items to history. Purchase tracking (for the
+      // "you usually buy X every N days" nudges) happens inside this call —
+      // it used to also be called again right here, silently double-counting
+      // every completed trip's items in item_purchase_stats.
       final historyService = ShoppingHistoryService();
-      await historyService.completeShoppingTrip(
+      final historyEntry = await historyService.completeShoppingTrip(
         listId: widget.listId,
         listName: widget.listName,
         items: checkedItems,
       );
-
-      // Track purchases for recommendations
-      try {
-        final trackingService = PurchaseTrackingService();
-        await trackingService.trackPurchases(checkedItems);
-      } catch (e) {
-        // Log but don't fail the whole operation if tracking fails
-        debugPrint('Purchase tracking failed: $e');
-      }
 
       // Delete only checked items from the list
       final itemIds = checkedItems.map((item) => item.id).toList();
@@ -2509,6 +2503,16 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             .milestoneMessageForCompletedTrip();
       } catch (_) {}
 
+      // Offer an immediate "split this trip" shortcut when the list has
+      // someone else to split with — the home-screen SplitTripNudgeCard
+      // covers the same case for anyone who doesn't act on it right now.
+      var canSplit = false;
+      try {
+        final members =
+            await ref.read(listRepositoryProvider).getListMembers(widget.listId);
+        canSplit = members.length >= 2;
+      } catch (_) {}
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2517,9 +2521,19 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   '✅ ${checkedItems.length} Artikel erfolgreich abgeschlossen!',
             ),
             backgroundColor: AppColors.success,
-            duration: milestone != null
-                ? const Duration(seconds: 5)
-                : const Duration(seconds: 4),
+            duration: canSplit
+                ? const Duration(seconds: 6)
+                : (milestone != null
+                    ? const Duration(seconds: 5)
+                    : const Duration(seconds: 4)),
+            action: canSplit
+                ? SnackBarAction(
+                    label: context.tr('split_trip_cost'),
+                    textColor: Colors.white,
+                    onPressed: () =>
+                        showSplitCostSheet(context, ref, entry: historyEntry),
+                  )
+                : null,
           ),
         );
       }

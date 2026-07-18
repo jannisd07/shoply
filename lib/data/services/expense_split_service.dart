@@ -19,6 +19,26 @@ class SplitShare {
   });
 }
 
+/// A completed, shared-list trip with nobody assigned to split it yet —
+/// candidate for the home-screen "split this trip?" nudge.
+class UnsplitTripCandidate {
+  final String historyId;
+  final String listId;
+  final String listName;
+  final DateTime completedAt;
+  final double? totalCost;
+  final int totalItems;
+
+  const UnsplitTripCandidate({
+    required this.historyId,
+    required this.listId,
+    required this.listName,
+    required this.completedAt,
+    this.totalCost,
+    required this.totalItems,
+  });
+}
+
 /// Splits a completed shopping trip's cost between people and tracks who
 /// has paid. Backed by the `expense_splits` table (per-share rows) plus
 /// `shopping_history.total_cost` / `paid_by_user_id` / `paid_by_name`
@@ -230,6 +250,63 @@ class ExpenseSplitService {
       ));
     }
     return result;
+  }
+
+  /// The most recent completed shared-list trip that has nobody assigned to
+  /// split it yet — for the home-screen "split this trip?" nudge. Returns
+  /// null when there's no such trip within the last week, the most recent
+  /// eligible trip is a solo list (nothing to split), or it's already been
+  /// split. Scans at most [scanLimit] recent trips, stopping as soon as one
+  /// candidate older than a week is hit (trips are returned newest-first, so
+  /// everything after that point is stale too).
+  Future<UnsplitTripCandidate?> getUnsplitTripNudgeCandidate({
+    int scanLimit = 5,
+  }) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _supabase
+        .from('shopping_history')
+        .select('id, list_id, list_name, completed_at, total_cost, total_items')
+        .eq('user_id', userId)
+        .not('list_id', 'is', null)
+        .order('completed_at', ascending: false)
+        .limit(scanLimit);
+
+    for (final row in response as List) {
+      final map = row as Map<String, dynamic>;
+      final completedAt = DateTime.parse(map['completed_at'] as String);
+      if (DateTime.now().difference(completedAt) > const Duration(days: 7)) {
+        break;
+      }
+
+      final historyId = map['id'] as String;
+      final listId = map['list_id'] as String;
+
+      final existingSplit = await _supabase
+          .from('expense_splits')
+          .select('id')
+          .eq('history_id', historyId)
+          .limit(1);
+      if ((existingSplit as List).isNotEmpty) continue;
+
+      final members = await _supabase
+          .from('list_members')
+          .select('user_id')
+          .eq('list_id', listId)
+          .limit(2);
+      if ((members as List).length < 2) continue;
+
+      return UnsplitTripCandidate(
+        historyId: historyId,
+        listId: listId,
+        listName: map['list_name'] as String,
+        completedAt: completedAt,
+        totalCost: (map['total_cost'] as num?)?.toDouble(),
+        totalItems: map['total_items'] as int? ?? 0,
+      );
+    }
+    return null;
   }
 
   List<TripSplitSummary> _summariesWithUnpaid(List response) {

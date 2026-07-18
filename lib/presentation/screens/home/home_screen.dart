@@ -26,6 +26,7 @@ import 'package:shoply/presentation/screens/home/widgets/avo_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/pending_splits_banner.dart';
 import 'package:shoply/presentation/screens/home/widgets/price_comparison_nudge_card.dart';
+import 'package:shoply/presentation/screens/home/widgets/split_trip_nudge_card.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
 import 'package:shoply/presentation/widgets/common/success_alert.dart';
@@ -353,6 +354,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
 
             const SliverToBoxAdapter(child: PendingSplitsBanner()),
+
+            // "Split [list]'s trip with your group?" — proactively offers
+            // Feature 2's cost-split flow for the most recent unsplit
+            // shared-list trip; renders nothing without one.
+            const SliverToBoxAdapter(child: SplitTripNudgeCard()),
 
             // Avo restock nudges ("you buy milk about every 5 days")
             const SliverToBoxAdapter(child: AvoNudgeCard()),

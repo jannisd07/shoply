@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/expense_split.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
+import 'package:shoply/data/services/split_nudge_cache_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 
@@ -43,6 +44,21 @@ final tripsIOweProvider =
   if (authUser == null) return const [];
   final service = ref.watch(expenseSplitServiceProvider);
   return service.getTripsIOwe();
+});
+
+/// The most recent completed shared-list trip with nobody assigned to split
+/// it yet, for the home-screen nudge card. Null once split, dismissed, or
+/// stale (>7 days old) — see `ExpenseSplitService.getUnsplitTripNudgeCandidate`.
+final unsplitTripNudgeProvider =
+    FutureProvider.autoDispose<UnsplitTripCandidate?>((ref) async {
+  final authUser = await ref.watch(authUserProvider.future);
+  if (authUser == null) return null;
+  final service = ref.watch(expenseSplitServiceProvider);
+  final candidate = await service.getUnsplitTripNudgeCandidate();
+  if (candidate == null) return null;
+  final dismissed =
+      await SplitNudgeCacheService.instance.isDismissed(candidate.historyId);
+  return dismissed ? null : candidate;
 });
 
 /// Combined count of unpaid-split trips relevant to the current user, for

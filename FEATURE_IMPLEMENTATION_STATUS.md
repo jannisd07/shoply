@@ -1,6 +1,18 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-17, second run (scheduled routine — Feature 8 focus: the recommendation-engine consolidation pass the Ideas list flagged as recommendation-`yes`. Headline finding: the `dealBonus` path the idea asked to "strip from a live ranking path" turned out not to be live at all — `RecommendationsSection` has zero call sites, so the entire non-ML recommendation chain (9 files, ~2,000 lines) was verifiably dead and was deleted whole, along with the now-unused `sqflite`/`string_similarity` direct dependencies)_
+_Last updated: 2026-07-18 (scheduled routine — Feature 8 focus: a proactive "split this trip?" nudge (snackbar action + home-screen card) closing the gap between Feature 2's cost-split mechanics and the brief's own headline cross-feature example. Also fixed a real pre-existing bug found while tracing the touched code path: shopping-trip completion was double-counting every item into `item_purchase_stats`, corrupting the data Feature 5's restock nudges and the live ML recommendation engine both read)_
+
+**2026-07-18 — why Feature 8, again.** Same walk as every recent session:
+Features 1–2 re-confirmed blocked on hard externals/device QA; Feature 3's
+open items are device-confirmation- or decision-gated; Features 4–7's open
+items are all needs-decision or device-QA (re-checked each section's
+"Explicitly NOT done" list, not just the summary table). Feature 8's own
+Ideas list had nothing left at unconditional recommendation-`yes` (weekly
+nutrition summary and premium gating both explicitly need a decision; the
+one `yes` item left, deleting `VoiceAssistantPlugin.swift`, belongs to
+Feature 3 and is still waiting on real-device confirmation). So this session
+did fresh discovery on Feature 8 itself rather than picking from the log —
+see the fourth-session notes below for what that surfaced.
 
 **2026-07-17 second run — why Feature 8.** Same walk as every recent
 session: Features 1–2 re-confirmed blocked on hard externals/device QA;
@@ -331,10 +343,10 @@ was **never wired into any screen** — this session wired it up.
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~89% | In progress (needs device QA) | Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
 | 4 | AI assistant app control | ~90% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA |
-| 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications |
+| 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~85% | In progress (needs device QA) | Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~45% | In progress | Recommendation-engine consolidation done 2026-07-17 (second run): 3 dead engines + dead deal-matching chain deleted, `MLRecommendationService` confirmed as the one live engine; premium-gating audit and weekly nutrition summary still open, both need an owner product decision first |
+| 8 | Cross-feature UX / growth / premium | ~55% | In progress | Proactive "split this trip?" nudge (snackbar action + home-screen card) shipped 2026-07-18, closing the brief's own headline cross-feature example; recommendation-engine consolidation done 2026-07-17; premium-gating audit and weekly nutrition summary still open, both need an owner product decision first |
 
 ---
 
@@ -3068,6 +3080,144 @@ pure deletion of never-mounted Dart code plus a dependency-graph no-op
 (pods unchanged, see above), so device risk is limited to "the app builds,"
 which `flutter analyze`'s zero errors already covers at the Dart level.
 
+**Fourth session, 2026-07-18 (scheduled routine — this feature's dedicated
+session).** Per the same walk every recent session does: Features 1–2 remain
+blocked on hard externals/device QA; Feature 3's two open items are
+device-confirmation- or decision-gated; Features 4–7's open items are all
+needs-decision or device-QA (confirmed by re-reading each section's
+"Explicitly NOT done" list, not just trusting the table). Feature 8's own
+Ideas list had nothing left at unconditional recommendation-`yes` (the
+weekly-nutrition-summary and premium-gating items are both explicitly
+"needs decision", and the one `yes` item — deleting `VoiceAssistantPlugin.swift`
+— is Feature 3's and still waiting on real-device confirmation of the
+`AppIntents.swift` fix). So this session did fresh discovery instead of
+picking from the log: audited the Feature 2 (splitting) ↔ Feature 8
+(cross-feature UX) boundary directly, since the original brief's own
+worked example is "Split yesterday's Lidl trip with Max and Jonas" / "Split
+this trip with your roommates?" — a case Feature 2's sessions built the
+*mechanics* for (the split sheet, paid/unpaid tracking, the
+already-owed/owing home banner) but never a *proactive prompt*. Today,
+after completing a shared list, the app silently deletes the checked items
+and shows a plain success snackbar — nothing ever suggests splitting the
+cost, even though `ExpenseSplitService`/`showSplitCostSheet` have existed
+since Feature 2's first session. A user only discovers cost-splitting by
+independently opening Shopping History and tapping a trip. This is exactly
+the brief's own headline cross-feature example, fully scoped, and needs no
+business/premium decision — a clean, unconditional pick.
+
+**What I implemented:**
+- **Real bug fixed while reading the code path this session touches:**
+  `ShoppingHistoryService.completeShoppingTrip()` already calls
+  `PurchaseTrackingService.trackPurchases(items)` internally — but
+  `list_detail_screen.dart`'s `_completeShoppingTrip()` called
+  `trackingService.trackPurchases(checkedItems)` a **second time** right
+  after, for every single completed trip. `_trackSingleItem`'s upsert isn't
+  idempotent (it appends to `purchase_dates`, doubles `purchase_count`, and
+  recomputes `average_days_between` from now-duplicated same-day
+  timestamps), so this was silently corrupting `item_purchase_stats` on
+  every trip completion — the exact table `AvoNudgeCard`'s "you usually buy
+  milk every 5 days" nudge (Feature 5) and the live `MLRecommendationService`
+  (Feature 8's third session confirmed it the one real recommendation
+  engine) both read. Removed the redundant call site; the service's own
+  call is the single source of truth. This was pre-existing, not introduced
+  by this session's other changes — found by tracing exactly what the
+  `_completeShoppingTrip` function this session's work touches actually
+  does end to end.
+- **`ShoppingHistoryService.completeShoppingTrip()` now returns the created
+  `ShoppingHistory`** (was `Future<void>`) instead of discarding it — the
+  one caller (`list_detail_screen.dart`) needed it to open the split sheet
+  without a redundant re-fetch; every field is already known synchronously
+  at insert time, so this costs nothing extra.
+- **Immediate in-context nudge:** after a shared-list trip completes (list
+  has ≥2 members, checked via the existing `ListRepository.getListMembers`),
+  the completion `SnackBar` now carries a "Split cost" action button that
+  opens the existing `showSplitCostSheet` pre-filled with the just-completed
+  trip. Solo lists get the plain snackbar unchanged — no new UI noise for
+  the common case.
+- **Persistent home-screen nudge**, for anyone who doesn't act on the
+  snackbar (or wasn't looking at the screen when the trip completed):
+  - `ExpenseSplitService.getUnsplitTripNudgeCandidate()` (new) — scans the
+    user's 5 most recent shared-list trips (newest first) and returns the
+    first one that has no `expense_splits` row yet and has ≥2 list members,
+    stopping the scan entirely once a candidate older than 7 days is hit
+    (everything after is stale too, by sort order) so it never resurfaces
+    an old forgotten trip. `UnsplitTripCandidate` (new, same file) is the
+    lightweight result DTO.
+  - `SplitNudgeCacheService` (new,
+    `lib/data/services/split_nudge_cache_service.dart`) — single
+    last-dismissed-trip-id in SharedPreferences, same shape as
+    `HomePriceComparisonCacheService`'s dismiss key: dismissing this exact
+    trip suppresses it permanently, but any different trip (older or newer)
+    still surfaces normally.
+  - `unsplitTripNudgeProvider` (new, `expense_split_provider.dart`) —
+    combines the candidate fetch with the dismiss check, `autoDispose` so it
+    re-evaluates fresh each time the home screen mounts.
+  - `SplitTripNudgeCard` (new home-screen widget,
+    `lib/presentation/screens/home/widgets/split_trip_nudge_card.dart`) —
+    same visual language as `PriceComparisonNudgeCard`/`PendingSplitsBanner`
+    (paper card, icon, dismiss ✕); shows the amount when known
+    ("≈ €X total — tap to split") or a plain prompt when not; tapping opens
+    the same `showSplitCostSheet`. Wired into `home_screen.dart` directly
+    under `PendingSplitsBanner` (existing pending splits above, "here's a
+    trip you haven't split yet" right below — a natural grouping).
+  - 6 new EN/DE translation keys.
+
+**Design decisions:**
+- No live/expensive calls: the candidate scan is plain Supabase reads
+  (`shopping_history`, `expense_splits`, `list_members`), same complexity
+  class as `_sendShoppingCompleteNotifications` (an existing N+1-style scan
+  in the same file) — nothing like the marktguru-API-per-item concern that
+  justified `homePriceHighlightProvider`'s TTL cache, so no caching layer
+  was needed here, only the dismiss flag.
+- Deliberately did **not** gate the nudge on `total_cost` being known — the
+  split sheet already lets the user type a total manually, so requiring a
+  priced trip first would silently exclude every trip whose items never
+  matched a live offer.
+- The snackbar action and the home card are two surfaces for the same
+  underlying state (an unsplit trip), not two separate features — the
+  snackbar is the immediate opportunity, the card is the persistent one for
+  anyone who skips it. Neither duplicates the other's data source
+  (`historyEntry` returned in-hand vs. a fresh provider fetch).
+
+**Not verified (no macOS/Xcode/device in this container):** the actual
+`SplitTripNudgeCard`/`SnackBarAction` rendering on a real screen; the
+purchase-tracking bug fix's real-world effect on `AvoNudgeCard` (would need
+a live account with a purchase history already skewed by the old
+double-counting to observe a visible change — the fix itself is a
+straightforward call-site deletion, verified by grepping for remaining call
+sites, not something that needs a device to confirm is *correct*, only to
+watch it *render*).
+
+**Files changed:** `lib/data/services/shopping_history_service.dart`
+(`completeShoppingTrip` returns `ShoppingHistory`),
+`lib/presentation/screens/lists/list_detail_screen.dart` (duplicate
+`trackPurchases` call removed, split SnackBarAction added),
+`lib/data/services/expense_split_service.dart`
+(`getUnsplitTripNudgeCandidate` + `UnsplitTripCandidate`),
+`lib/data/services/split_nudge_cache_service.dart` (new),
+`lib/presentation/state/expense_split_provider.dart`
+(`unsplitTripNudgeProvider`),
+`lib/presentation/screens/home/widgets/split_trip_nudge_card.dart` (new),
+`lib/presentation/screens/home/home_screen.dart` (card wired in),
+`lib/core/localization/app_translations.dart` (6 new EN/DE keys).
+
+**Checks performed (fourth session):** downloaded Flutter 3.35.6 stable
+fresh into `/tmp/flutter`; full-project `flutter analyze` baseline (via
+`git stash`) **601 issues (0 errors, 59 warnings, 542 info)** vs.
+after-change **601 issues, byte-identical** — confirmed by also scoping
+`flutter analyze` to just the 8 new/touched files (1 issue, a pre-existing
+`unnecessary_cast` in `expense_split_service.dart` re-verified present at
+its original line in the pre-session baseline too, i.e. not new — every
+other touched/new file is fully clean). `flutter test` passes ("All tests
+passed"). The candidate-scan selection logic (newest-first scan, skip
+already-split, skip solo lists, stop entirely past the 7-day cutoff, and
+the boundary case of exactly 7 days still counting as fresh) was verified
+with a throwaway `dart run` script mirroring the exact loop (6 cases, all
+passed, not committed, deleted before finishing). `pubspec.lock` churn from
+`flutter pub get` with the freshly-downloaded SDK was reverted before
+committing. No iOS build/device test possible here (no macOS/Xcode) — see
+"Not verified" above.
+
 ---
 
 ## Ideas / Needs My Approval
@@ -3336,6 +3486,21 @@ which `flutter analyze`'s zero errors already covers at the Dart level.
     claim. Details in Feature 8's second-session notes above. The premium-
     gate angle this idea's own write-up floated was deliberately **not**
     done — still needs the owner's premium-gating decision below.
+
+- [x] IDEA (DONE 2026-07-18, Feature 8's fourth session): Proactive "split
+  this trip with your roommates?" nudge after completing a shared-list
+  shopping trip — the brief's own headline cross-feature example, which
+  Feature 2's sessions built the mechanics for but never a proactive prompt.
+  - **Outcome:** a `SnackBarAction` on the completion snackbar (immediate,
+    when the list has ≥2 members) plus a persistent home-screen
+    `SplitTripNudgeCard` (for the most recent unsplit shared trip, ≤7 days
+    old, dismissible per-trip) — both open the existing `showSplitCostSheet`.
+    Also fixed a real pre-existing bug found while tracing this exact code
+    path: `_completeShoppingTrip` was calling `trackPurchases` a second time
+    on top of `ShoppingHistoryService`'s own internal call, double-counting
+    every completed trip into `item_purchase_stats` (the table Feature 5's
+    "you usually buy X every N days" nudge and the live `MLRecommendationService`
+    both read). Details in Feature 8's fourth-session notes above.
 
 - [ ] IDEA: Server-side restock reminders (Supabase cron + the existing
   send-push-notification edge function) instead of the client-scheduled
