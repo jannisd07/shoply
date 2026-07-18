@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/food_product.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
+import 'package:shoply/data/models/weekly_nutrition_summary.dart';
 import 'package:shoply/data/models/weight_log_entry.dart';
 import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
@@ -66,6 +67,46 @@ final dailyWaterTotalProvider = FutureProvider.autoDispose<int>((ref) async {
   return service.getTotalForDate(date);
 });
 
+/// Per-day calorie/macro totals for the last 7 days — powers the dashboard's
+/// weekly strip and the weekly summary screen.
+final weeklyNutritionTotalsProvider =
+    FutureProvider.autoDispose<Map<DateTime, DailyNutritionTotals>>((ref) async {
+  final service = ref.watch(foodLogServiceProvider);
+  return service.getWeeklyTotals();
+});
+
+/// Per-day water totals for the last 7 days.
+final weeklyWaterTotalsProvider =
+    FutureProvider.autoDispose<Map<DateTime, int>>((ref) async {
+  final service = ref.watch(waterLogServiceProvider);
+  return service.getWeeklyTotals();
+});
+
+/// Days with any food logged in the recent past — for the logging streak.
+final recentLoggedDatesProvider = FutureProvider.autoDispose<Set<DateTime>>((ref) async {
+  final service = ref.watch(foodLogServiceProvider);
+  return service.getRecentLoggedDates();
+});
+
+/// The assembled weekly look-back, or null while no goal is configured.
+final weeklyNutritionSummaryProvider =
+    FutureProvider.autoDispose<WeeklyNutritionSummary?>((ref) async {
+  final goal = await ref.watch(nutritionGoalProvider.future);
+  if (goal == null || !goal.isConfigured) return null;
+  final dailyTotals = await ref.watch(weeklyNutritionTotalsProvider.future);
+  final waterTotals = await ref.watch(weeklyWaterTotalsProvider.future);
+  final weightHistory = await ref.watch(weightHistoryProvider.future);
+  final loggedDates = await ref.watch(recentLoggedDatesProvider.future);
+  return WeeklyNutritionSummary.compute(
+    dailyTotals: dailyTotals,
+    waterTotals: waterTotals,
+    weightHistory: weightHistory,
+    loggedDates: loggedDates,
+    goal: goal,
+    today: DateTime.now(),
+  );
+});
+
 /// Weight history for the progress chart (last 90 days).
 final weightHistoryProvider = FutureProvider.autoDispose<List<WeightLogEntry>>((ref) async {
   final service = ref.watch(weightLogServiceProvider);
@@ -93,4 +134,7 @@ void invalidateNutritionLog(WidgetRef ref) {
   ref.invalidate(dailyFoodLogProvider);
   ref.invalidate(dailyWaterTotalProvider);
   ref.invalidate(weightHistoryProvider);
+  ref.invalidate(weeklyNutritionTotalsProvider);
+  ref.invalidate(weeklyWaterTotalsProvider);
+  ref.invalidate(recentLoggedDatesProvider);
 }

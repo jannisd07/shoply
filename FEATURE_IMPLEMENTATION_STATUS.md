@@ -1,6 +1,27 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-18 (scheduled routine — Feature 8 focus: a proactive "split this trip?" nudge (snackbar action + home-screen card) closing the gap between Feature 2's cost-split mechanics and the brief's own headline cross-feature example. Also fixed a real pre-existing bug found while tracing the touched code path: shopping-trip completion was double-counting every item into `item_purchase_stats`, corrupting the data Feature 5's restock nudges and the live ML recommendation engine both read)_
+_Last updated: 2026-07-18, second run (scheduled routine — Feature 6 focus: the
+weekly nutrition summary screen ("Wochenrückblick") — average calories vs.
+target, per-day bars, macro averages, protein-days, water, weight trend, and a
+gentle logging streak — plus a real pre-existing staleness bug fix: the
+dashboard's weekly calorie strip never refreshed after logging food because its
+provider was defined inside the widget file and missed by
+`invalidateNutritionLog`)_
+
+**2026-07-18 second run — why Feature 6.** Same walk as every recent session:
+Features 1–2 blocked on hard externals/device QA; Feature 3's open items are
+device-confirmation- or decision-gated; Features 4–5 and 7 have only
+needs-decision or device-QA items; Feature 8's two open items (premium gating,
+weekly nutrition summary) both carried needs-decision flags. But re-reading the
+weekly-summary idea against the original brief showed the flag was
+over-cautious: "Weekly progress summary" is an explicit *autonomy bullet of
+Feature 6 itself* in the brief ("Weekly progress summary", "Streaks, but not
+too aggressive"), i.e. work the brief already authorizes — the prior session
+had flagged it only because it isn't in Feature 6's *required* list. So this
+session built it as a Feature 6 session. The other half of that same idea (a
+dedicated in-app "what can I still eat today?" surface) is NOT covered by an
+explicit brief bullet and stays flagged for a decision — see the updated idea
+below.
 
 **2026-07-18 — why Feature 8, again.** Same walk as every recent session:
 Features 1–2 re-confirmed blocked on hard externals/device QA; Feature 3's
@@ -344,9 +365,9 @@ was **never wired into any screen** — this session wired it up.
 | 3 | Widgets & quick actions | ~89% | In progress (needs device QA) | Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
 | 4 | AI assistant app control | ~90% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
-| 6 | Calorie tracking | ~85% | In progress (needs device QA) | Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
+| 6 | Calorie tracking | ~90% | In progress (needs device QA) | Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~55% | In progress | Proactive "split this trip?" nudge (snackbar action + home-screen card) shipped 2026-07-18, closing the brief's own headline cross-feature example; recommendation-engine consolidation done 2026-07-17; premium-gating audit and weekly nutrition summary still open, both need an owner product decision first |
+| 8 | Cross-feature UX / growth / premium | ~55% | In progress | Proactive "split this trip?" nudge (snackbar action + home-screen card) shipped 2026-07-18, closing the brief's own headline cross-feature example; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first (the weekly nutrition summary was built 2026-07-18 as Feature 6 work — see that section) |
 
 ---
 
@@ -2458,6 +2479,75 @@ throwaway logic tests pass, one real bug caught and fixed). Verified the
 live Supabase schema and the new bucket/policies via the Supabase MCP tools
 before and after applying the migration.
 
+**Third session, 2026-07-18 (scheduled routine, second run of the day — this
+feature's dedicated session).** Built the weekly nutrition summary — an
+explicit Feature 6 autonomy bullet from the brief ("Weekly progress summary",
+"Streaks, but not too aggressive") that had been sitting mis-flagged as
+needs-decision in the Ideas list (see the top-of-file walk note). No schema
+changes needed — everything aggregates data the existing tables already hold.
+
+*What was built:*
+- **`WeeklyNutritionSummary`** (`lib/data/models/weekly_nutrition_summary.dart`,
+  new) — a pure, I/O-free computation over the last 7 days with deliberately
+  honest semantics, documented in the class comment: averages are per *logged*
+  day (an unlogged day is unknown, not 0 kcal); "within budget" = logged and
+  ≤ 105% of the calorie target (unlogged days never count); "protein reached"
+  = ≥ 90% of target; water averages only over days with water logged; the
+  weight delta is only reported when two weigh-ins fall inside the window (no
+  trend claimed from one data point); the logging streak counts consecutive
+  logged days ending today, or yesterday when today has nothing yet (an
+  unfinished day doesn't break it).
+- **`WeeklySummaryScreen`**
+  (`lib/presentation/screens/calories/weekly_summary_screen.dart`, new) —
+  date-range header, a quiet streak row (only shown from 2 days up — the
+  brief's "not too aggressive"), a calories card (Ø kcal vs. target, "{n} of 7
+  days logged · {m} within budget", and a larger 7-day bar chart with per-day
+  kcal labels), a macros card (Ø protein/carbs/fat vs. targets via the
+  existing `MacroBar`, plus the protein-days line), a water card, and a
+  tappable weight card (weekly delta when two weigh-ins exist, otherwise an
+  honest "weigh in a couple of times a week" hint; opens the existing weight
+  screen). Clean `AppEmptyState` when nothing was logged this week.
+- **Entry points:** the dashboard's weekly strip is now tappable, plus an
+  explicit "Wochenrückblick ›" link above it — no navbar/tab changes.
+- **Service/provider additions:** `FoodLogService.getRecentLoggedDates()`
+  (single-column fetch for the streak), `WaterLogService.getWeeklyTotals()`,
+  and `weeklyWaterTotalsProvider`/`recentLoggedDatesProvider`/
+  `weeklyNutritionSummaryProvider` in `nutrition_provider.dart`.
+- **Real pre-existing bug fixed:** `weeklyNutritionTotalsProvider` was defined
+  inside `weekly_calories_strip.dart` and was missing from
+  `invalidateNutritionLog` (whose own doc comment claims it refreshes "the
+  weekly summary") — so while the dashboard stayed mounted, the weekly strip
+  never updated after logging/deleting food; today's bar only caught up after
+  leaving the tab long enough for autoDispose to kick in. The provider now
+  lives in `nutrition_provider.dart` with the others and is invalidated
+  alongside the daily providers (as are the two new weekly providers).
+- 15 new EN/DE translation key pairs.
+
+*Explicitly NOT done:*
+- The dedicated "what can I still eat today?" surface — see the updated idea
+  below (needs an owner decision; the chat version already works via Avo).
+- No Avo tool for the weekly summary ("how was my week?") — Feature 4's
+  session is the right place, same precedent as the calorie tools.
+- No notification/nudge angle (that would be Feature 5/8 territory), and no
+  premium gating (still owner-decision-gated).
+
+*Checks performed (third session):* fresh Flutter 3.35.6 in `/tmp/flutter`;
+full-project `flutter analyze` before/after — **byte-identical (621 issues
+both times, diffed with line numbers normalized out; zero issues in any
+touched/new file)**; `flutter test` passes ("All tests passed") after
+recreating the gitignored `env.dart` from `env.example.dart` (needed by the
+pre-existing smoke test, not by this session's code). The summary math ships
+with a **committed** unit test (`test/weekly_summary_logic_test.dart`, 10
+cases: empty week, per-logged-day averaging, the 105%-budget and 90%-protein
+boundaries inclusive, no-target behavior, water averaging/reached counts,
+weight-delta two-weigh-in rule, streak with/without today, streak across a
+month boundary, non-midnight timestamp normalization) — a deliberate upgrade
+from the throwaway-script pattern of earlier sessions, since the repo's test
+suite runs fine here and the logic is pure Dart. `pubspec.lock` churn from
+`pub get` reverted before committing. **Not verified (no macOS/Xcode/device):**
+actual rendering (bar-label fit at 7 columns on narrow screens, card layout,
+dark mode appearance) — needs a device pass like everything else here.
+
 ---
 
 ## Feature 7 — Personalized onboarding and navbar
@@ -3311,21 +3401,35 @@ committing. No iOS build/device test possible here (no macOS/Xcode) — see
   - Recommendation: needs decision — belongs in a Feature 8 session, not
     this one.
 
-- [ ] IDEA: A weekly nutrition summary screen/card ("you averaged X kcal,
-  hit your protein target Y/7 days") and a first-class in-app "what can I
-  still eat today?" surface — the chat version already works via Avo, but
-  there's no dedicated UI for a user who doesn't want to open chat for it.
-  - Why it helps: explicit autonomy item from the brief; gives the dashboard
-    a look-back view instead of only today's numbers.
+- [x] IDEA (weekly-summary half DONE 2026-07-18, Feature 6's third session):
+  A weekly nutrition summary screen/card ("you averaged X kcal, hit your
+  protein target Y/7 days").
+  - **Outcome:** built as `WeeklySummaryScreen` + `WeeklyNutritionSummary`
+    (pure, unit-tested computation) + a tappable weekly strip/"Wochenrückblick"
+    link on the dashboard, including a gentle ≥2-day logging streak row (the
+    brief's "Streaks, but not too aggressive" bullet). The original
+    needs-decision flag was re-examined against the brief: "Weekly progress
+    summary" is an explicit Feature 6 autonomy bullet, so it didn't actually
+    need an owner decision. Details in Feature 6's third-session notes.
+  - The "premium: monthly trends" upsell angle was NOT built (still part of
+    the open premium-gating decision below).
+
+- [ ] IDEA: A first-class in-app "what can I still eat today?" surface — the
+  chat version already works via Avo (`get_nutrition_status` →
+  `search_recipes`), but there's no dedicated UI for a user who doesn't want
+  to open chat for it.
+  - Why it helps: turns remaining-calories into an actionable "here are 3
+    dinner ideas that fit" moment right on the dashboard.
   - Expected user value: medium.
-  - Expected business/premium value: low-medium (a reasonable "premium:
-    monthly trends" upsell surface later, not required now).
-  - Complexity: Medium — mostly aggregation over `getWeeklyTotals()`
-    (already exists) plus a new screen; the "what can I eat" card would
-    reuse the same recipe-filtering logic Feature 4's Avo tool already has.
+  - Expected business/premium value: low-medium.
+  - Complexity: Medium — would reuse the recipe-filtering logic Feature 4's
+    Avo tool and Feature 8's `CalorieRecipeNudgeService` already have; the
+    real question is placement/overlap with the existing home-screen
+    calorie-recipe nudge card, which is a product call.
   - Risk: Low.
-  - Recommendation: needs decision — natural next Feature 6 slice, but not
-    a required capability, so flagging rather than building unprompted.
+  - Recommendation: needs decision — split out from the (now done) weekly
+    summary idea above; unlike that one, this has no explicit brief bullet
+    and overlaps an existing surface.
 
 - [x] IDEA (DONE 2026-07-16, Feature 3's seventh session): Proactively
   re-push the widget's cached Supabase access token on every token refresh,

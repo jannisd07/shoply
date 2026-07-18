@@ -46,6 +46,30 @@ class FoodLogService {
     await _supabase.from('food_log_entries').delete().eq('id', id);
   }
 
+  /// Days (normalized to midnight) with at least one food entry in the last
+  /// [days] days — a single-column fetch, used for the logging streak.
+  Future<Set<DateTime>> getRecentLoggedDates({int days = 60}) async {
+    final userId = _userId;
+    if (userId == null) return {};
+    final since = DateTime.now().subtract(Duration(days: days));
+    try {
+      final response = await _supabase
+          .from('food_log_entries')
+          .select('logged_date')
+          .eq('user_id', userId)
+          .gte('logged_date', _dateKey(since));
+      return (response as List)
+          .map((row) {
+            final d = DateTime.parse((row as Map)['logged_date'] as String);
+            return DateTime(d.year, d.month, d.day);
+          })
+          .toSet();
+    } catch (e) {
+      debugPrint('⚠️ [FoodLog] Failed to load logged dates: $e');
+      return {};
+    }
+  }
+
   /// Last 7 days of daily totals, oldest first — for a weekly summary.
   Future<Map<DateTime, DailyNutritionTotals>> getWeeklyTotals() async {
     final userId = _userId;

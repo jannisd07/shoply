@@ -10,6 +10,7 @@ import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/presentation/screens/calories/goal_setup_screen.dart';
+import 'package:shoply/presentation/screens/calories/weekly_summary_screen.dart';
 import 'package:shoply/presentation/screens/calories/weight_tracking_screen.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_ring.dart';
 import 'package:shoply/presentation/screens/calories/widgets/challenges_entry_card.dart';
@@ -174,7 +175,36 @@ class _Dashboard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          WeeklyCaloriesStrip(target: goal.dailyCalorieTarget ?? 2000),
+          Row(
+            children: [
+              const Spacer(),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => Navigator.of(context)
+                    .push(CupertinoPageRoute(builder: (_) => const WeeklySummaryScreen())),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    children: [
+                      Text(context.tr('weekly_summary_entry'),
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.accentColor(context))),
+                      Icon(Icons.chevron_right,
+                          size: 16, color: AppColors.accentColor(context)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          WeeklyCaloriesStrip(
+            target: goal.dailyCalorieTarget ?? 2000,
+            onTap: () => Navigator.of(context)
+                .push(CupertinoPageRoute(builder: (_) => const WeeklySummaryScreen())),
+          ),
           const SizedBox(height: 16),
           Center(
             child: CalorieRing(
