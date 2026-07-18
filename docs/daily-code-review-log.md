@@ -389,3 +389,75 @@ directly rather than left as a recommendation. The separate `list_members`
 `role` INSERT-policy gap is a live RLS issue independent of this file and
 still needs a human/DBA decision; not changed here since it requires a
 Supabase migration, not an app-code change.
+
+## 2026-07-18 — `lib/presentation/screens/home/home_screen.dart`
+
+Randomly selected file (1854 lines — the home tab screen). Read the whole
+file plus its references: every widget it composes
+(`GreetingHeader`, `AvoNudgeCard`, `CalorieRecipeNudgeCard`,
+`PendingSplitsBanner`, `PriceComparisonNudgeCard`, `SplitTripNudgeCard`,
+`_PaperListRow`, `_LatestActivityLine`), the providers it reads
+(`listsNotifierProvider`, `lastAccessedListProvider`,
+`recentHistoryProvider`, `currentUserProvider`), `DynamicTutorialService`,
+`WidgetService.syncCredentialsFromSession`, `SupabaseService`, the
+`app_router.dart` `StatefulShellRoute` wiring that hosts this screen, and
+`git log --follow -p` / `git log -S` on the file to trace how its two
+halves came to diverge.
+
+Findings:
+- **Dead code (~46% of the file)**: `_ShoppingHistorySection` (a
+  `ConsumerStatefulWidget`) and everything it exclusively owned —
+  `_ShoppingHistorySectionState`, `_HomeExpandedItemsContent`,
+  `_HomeExpandedItemsContentState`, plus their private helpers
+  (`_buildHistoryCard`, `_addAllItemsToList`, `_addSingleItem`,
+  `_buildListCard`, `_formatDate`) — were never instantiated anywhere
+  (`grep`-confirmed zero call sites, including within this file). 853 of
+  the file's 1854 lines. `git log -S "_LatestActivityLine"` pinpoints the
+  cause: commit `8e2d84e` ("feat: refresh app UI and add nearby offers")
+  replaced the old expandable-history-cards section with the current
+  one-line "Aktivitätszeile → full history screen" row
+  (`_LatestActivityLine`, tap navigates to `ShoppingHistoryScreen`) but
+  never deleted the superseded class it replaced — same pattern as the
+  `oauth_webview_dialog.dart`/`premium_feature_gate.dart`/dead-engines
+  findings from earlier runs, just larger (853 vs. ~250 lines).
+- **Bug (live path, real leak)**: `initState()` subscribes to
+  `SupabaseService.instance.client.auth.onAuthStateChange.listen(...)`
+  without storing the `StreamSubscription`, and `dispose()` never
+  cancelled it. `HomeScreen` lives inside a `StatefulShellRoute`
+  (`app_router.dart`), whose branches normally stay alive for the app
+  session — but sign-out redirects to the auth screens *outside* the
+  shell and back in on sign-in, which disposes and recreates
+  `HomeScreen`, registering a fresh listener each cycle with the old ones
+  never freed. The `mounted` guard inside the callback prevents a
+  post-dispose `setState` crash, but each stale closure (and the `State`
+  object it closes over) is kept alive forever by the stream, so repeated
+  sign-out/sign-in cycles accumulate permanently-leaked listeners.
+- **Bilingual-UX bug (live path)**: the empty-lists state (`'Noch keine
+  Listen erstellt'`) and the lists-loading-error state (`'Fehler beim
+  Laden'`) were hardcoded German literals with no `context.tr(...)`, so
+  English-locale users saw German text on a brand-new account or on a
+  network error — same class of bug flagged in the
+  `ml_recommendations_section.dart` review. Matching translation keys
+  already existed and were unused (`no_lists_yet`, `loading_error`).
+- No security issues (no auth/RLS logic in this file — it only reads
+  `SupabaseService.instance.currentUser` for id comparison and delegates
+  all list mutations to `listsNotifierProvider`).
+
+Action taken this run: deleted the 853-line dead
+`_ShoppingHistorySection`/`_HomeExpandedItemsContent` chain (and the
+imports — `shopping_history.dart` model types, `items_provider.dart`,
+`success_alert.dart` — that only that dead code used; the underlying
+`ShoppingHistory` model, `SuccessAlert`, and `itemsNotifierProvider`
+remain alive via their real callers elsewhere in the app, e.g.
+`ShoppingHistoryScreen`/`avo_chat_screen.dart`). Fixed the
+`StreamSubscription` leak by storing it in a field and cancelling it in
+`dispose()`. Routed both hardcoded strings through `context.tr(...)` to
+the existing `no_lists_yet`/`loading_error` keys. Verified brace/paren
+balance and that every remaining import still has a live use site by hand
+(`dart analyze`/`flutter build` aren't available in this remote
+environment per CLAUDE.md — no Flutter SDK — so this run's verification
+was static: full-file read, grep-confirmed zero remaining references to
+the deleted symbols, and import-by-import usage check). Recommendation
+for a future run/human: run `flutter build ios --simulator --debug` on
+this file once a Flutter toolchain is available, as an extra check beyond
+the static review done here.
