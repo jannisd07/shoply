@@ -81,6 +81,15 @@ When the user asks to:
 • finish shopping for a list → call complete_list
 • add an item to a list → call add_item_to_list (if multiple lists
   exist and they didn't specify, call ask_pick_list instead)
+• edit an item ("make it 2 liters", "rename the milk", "add a note")
+  → call update_item with ONLY the fields that change. Resolve the
+  item_id via get_list_contents first if you don't have it yet.
+• move items to a different list → call move_items (resolve item_ids
+  via get_list_contents and the destination list via get_lists first)
+• create a new shopping list ("make me a list for the party") → call
+  create_list, then add any requested items to the returned list_id
+  via add_item_to_list
+• rename a list → call rename_list
 • change ANY setting (theme, language, name, diet, allergies,
   calorie tracking on/off, etc.) → call update_setting
 • find prices, deals, offers, or "which store is cheapest" for a
@@ -358,6 +367,51 @@ After a tool returns, write a short natural-language confirmation
             }, requiredProperties: ['list_id', 'list_name']),
           ),
           FunctionDeclaration(
+            'update_item',
+            'Edit an existing shopping list item: rename it and/or change its '
+                'quantity, unit, or note. Pass ONLY the fields that should change. '
+                'Get item_id from get_list_contents first.',
+            Schema.object(properties: {
+              'list_id': Schema.string(description: 'List the item is on'),
+              'item_id': Schema.string(description: 'Item ID from get_list_contents'),
+              'new_name': Schema.string(description: 'New item name — only when renaming'),
+              'quantity': Schema.number(description: 'New quantity — only when changing it'),
+              'unit': Schema.string(
+                  description: 'New unit (g, ml, pcs, …) — only when changing it. '
+                      'Pass an empty string to clear the unit.'),
+              'notes': Schema.string(
+                  description: 'New note — only when changing it. Pass an empty '
+                      'string to remove the note.'),
+            }, requiredProperties: ['list_id', 'item_id']),
+          ),
+          FunctionDeclaration(
+            'move_items',
+            'Move one or more items from one shopping list to another. Items keep '
+                'their checked state, category, and price. Get item_ids from '
+                'get_list_contents and the destination list_id from get_lists.',
+            Schema.object(properties: {
+              'from_list_id': Schema.string(description: 'List the items are on now'),
+              'to_list_id': Schema.string(description: 'Destination list ID'),
+              'item_ids': Schema.array(items: Schema.string()),
+            }, requiredProperties: ['from_list_id', 'to_list_id', 'item_ids']),
+          ),
+          FunctionDeclaration(
+            'create_list',
+            'Create a new, empty shopping list. Returns its list_id so items can '
+                'be added to it right away with add_item_to_list.',
+            Schema.object(properties: {
+              'name': Schema.string(description: 'Name of the new list'),
+            }, requiredProperties: ['name']),
+          ),
+          FunctionDeclaration(
+            'rename_list',
+            'Rename an existing shopping list.',
+            Schema.object(properties: {
+              'list_id': Schema.string(),
+              'new_name': Schema.string(description: 'The new list name'),
+            }, requiredProperties: ['list_id', 'new_name']),
+          ),
+          FunctionDeclaration(
             'get_user_profile',
             'Read the user\'s current profile and settings: name, age, gender, '
                 'height, diet preferences, allergies, language, theme, notifications, '
@@ -566,6 +620,14 @@ After a tool returns, write a short natural-language confirmation
           return await _toolDeleteItem(args, ref);
         case 'delete_list':
           return await _toolDeleteList(args, ref);
+        case 'update_item':
+          return await _toolUpdateItem(args, ref);
+        case 'move_items':
+          return await _toolMoveItems(args, ref);
+        case 'create_list':
+          return await _toolCreateList(args, ref);
+        case 'rename_list':
+          return await _toolRenameList(args, ref);
         case 'get_user_profile':
           return await _toolGetUserProfile(ref);
         case 'setup_nutrition_goal':
@@ -1148,6 +1210,111 @@ After a tool returns, write a short natural-language confirmation
     }
     await ref.read(listsNotifierProvider.notifier).deleteList(listId);
     return {'success': true, 'deleted': listName};
+  }
+
+  Future<Map<String, Object?>> _toolUpdateItem(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final listId = args['list_id'] as String?;
+    final itemId = args['item_id'] as String?;
+    if (listId == null || itemId == null) {
+      return {'error': 'list_id and item_id are required'};
+    }
+    final newName = (args['new_name'] as String?)?.trim();
+    final quantity = (args['quantity'] as num?)?.toDouble();
+    final unit = args['unit'] as String?;
+    final notes = args['notes'] as String?;
+
+    // Same update keys the list detail screen's own edit sheet writes.
+    final updates = <String, dynamic>{
+      if (newName != null && newName.isNotEmpty) 'name': newName,
+      if (quantity != null && quantity > 0) 'quantity': quantity,
+      if (unit != null) 'unit': unit.trim().isEmpty ? null : unit.trim(),
+      if (notes != null) 'notes': notes.trim().isEmpty ? null : notes.trim(),
+    };
+    if (updates.isEmpty) {
+      return {
+        'error':
+            'Nothing to change — pass new_name, quantity, unit, or notes',
+      };
+    }
+    await ref
+        .read(itemsNotifierProvider(listId).notifier)
+        .updateItem(itemId, updates);
+    ref.invalidate(listsNotifierProvider);
+    return {'success': true, 'updated_fields': updates.keys.toList()};
+  }
+
+  Future<Map<String, Object?>> _toolMoveItems(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final fromListId = args['from_list_id'] as String?;
+    final toListId = args['to_list_id'] as String?;
+    final itemIds = _stringList(args['item_ids']);
+    if (fromListId == null || toListId == null || itemIds.isEmpty) {
+      return {'error': 'from_list_id, to_list_id and item_ids are required'};
+    }
+    if (fromListId == toListId) {
+      return {'error': 'Those items are already on that list'};
+    }
+    // Changing list_id keeps the item's id, checked state, category, and
+    // price. RLS only permits this when the user is a member of BOTH lists
+    // (the UPDATE policy's USING clause applies to old and new row alike),
+    // so a move to a foreign list fails closed instead of silently leaking.
+    final notifier = ref.read(itemsNotifierProvider(fromListId).notifier);
+    var moved = 0;
+    String? failure;
+    for (final id in itemIds) {
+      try {
+        await notifier.updateItem(id, {'list_id': toListId});
+        moved++;
+      } catch (e) {
+        failure = e.toString();
+        break;
+      }
+    }
+    ref.invalidate(itemsNotifierProvider(toListId));
+    ref.invalidate(listsNotifierProvider);
+    if (failure != null) {
+      return {
+        'error': 'Move failed after $moved of ${itemIds.length} items: $failure',
+        'moved_count': moved,
+      };
+    }
+    return {'success': true, 'moved_count': moved, 'to_list_id': toListId};
+  }
+
+  Future<Map<String, Object?>> _toolCreateList(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final name = (args['name'] as String?)?.trim();
+    if (name == null || name.isEmpty) return {'error': 'name is required'};
+    final newList =
+        await ref.read(listsNotifierProvider.notifier).createList(name);
+    return {
+      'success': true,
+      'list_id': newList.id,
+      'name': newList.name,
+      'hint': 'Use this list_id with add_item_to_list to add items.',
+    };
+  }
+
+  Future<Map<String, Object?>> _toolRenameList(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final listId = args['list_id'] as String?;
+    final newName = (args['new_name'] as String?)?.trim();
+    if (listId == null || newName == null || newName.isEmpty) {
+      return {'error': 'list_id and new_name are required'};
+    }
+    await ref
+        .read(listsNotifierProvider.notifier)
+        .updateList(listId, {'name': newName});
+    return {'success': true, 'renamed_to': newName};
   }
 
   // ── Profile & preference-guidance tools ─────────────────────────

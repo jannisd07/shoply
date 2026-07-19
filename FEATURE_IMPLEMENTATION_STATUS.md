@@ -1,11 +1,27 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-19 (scheduled routine — Feature 3 focus: found and
-fixed a real, high-impact regression every prior Feature-3 session had
-flagged but never actually touched — the widget extension's
-`IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (vs. Runner's `15.6`), meaning the
-ShoppingListWidget/QuickAddWidget could never install on any device below
-iOS 26 regardless of every earlier entitlements/App-Intents fix)_
+_Last updated: 2026-07-19, second run (scheduled routine — Feature 4 focus:
+closed the item/list CRUD gap in Avo's tool registry — the brief requires
+"AI can add, **edit**, remove, and **organize** items" and "AI can **change
+shopping lists**", but no tool existed to edit an item, move items between
+lists, create a list, or rename a list; all four added)_
+
+**2026-07-19 second run — why Feature 4.** Same walk as every recent
+session: Features 1–2 re-confirmed blocked on hard externals/device QA;
+Feature 3 had the morning session (deployment-target fix) and its remaining
+items are device-confirmation- or decision-gated. Feature 4 is next in
+order, marked "Implemented (needs QA)" — but per the fresh-discovery
+precedent (re-audit the feature itself against the brief, don't just trust
+the table), this session diffed the actual 25-tool registry in
+`avo_assistant_service.dart` against the brief's required capabilities and
+found four unconditional, buildable-here gaps: Avo could **add**, check,
+delete, and read list items, but a user saying "change the milk to 2
+liters," "move the butter to the party list," "make me a list for the
+weekend," or "rename this list" hit a dead end — no `update_item`,
+`move_items`, `create_list`, or `rename_list` tool existed. These are
+explicit brief bullets ("add, edit, remove, and organize items"; "AI can
+change shopping lists"), need no owner decision, and are Dart-only. See
+Feature 4's ninth-session notes below.
 
 **2026-07-19 — why Feature 3, again.** Same walk as every recent session:
 Features 1–2 re-confirmed blocked on hard externals/device QA (re-checked
@@ -380,7 +396,7 @@ was **never wired into any screen** — this session wired it up.
 | 1 | Pricing, offers, cheapest store | ~95% | Implemented (blocked on hard externals) | Re-audited 2026-07-16, code-verified against every brief bullet: all required + autonomy capabilities implemented. Only remaining gaps are a genuine external constraint (no public non-offer shelf-price API) and an out-of-scope-by-design item (cross-product substitution, diet/allergy safety) |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~93% | In progress (needs device QA) | **2026-07-19: fixed a real, likely-severe regression** — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26 no matter how correct the entitlements/App-Intents fixes were; corrected to `17.0`, the code's real minimum (unguarded `Button(intent:)` interactive widgets). Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
-| 4 | AI assistant app control | ~90% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA |
+| 4 | AI assistant app control | ~93% | Implemented (needs QA) | Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list` — Avo can now edit and organize items and create/rename lists, not just add/delete. None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~90% | In progress (needs device QA) | Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
@@ -1997,6 +2013,76 @@ conversation confirming flash-lite routes goal-setup requests to the new
 tools and carries field values across the multi-turn ask-missing-fields
 loop — this is the most important manual QA item for this session's work.
 
+**Ninth session, 2026-07-19 (scheduled routine, second run of the day —
+this feature's dedicated session).** Fresh-discovery audit of the actual
+tool registry against the brief's required-capability list (rather than
+trusting the section's own "Implemented" status) found that the registry's
+item/list write surface was **add/check/delete-only**: the brief requires
+"AI can add, *edit*, remove, and *organize* items" and "AI can *change
+shopping lists*", but there was no way for Avo to edit an existing item
+(rename / quantity / unit / note), move items between lists, create a new
+list, or rename a list. Four new tools close that gap — same typed
+function-calling architecture, additive only, zero new DB access paths:
+
+- **`update_item`** — edits name/quantity/unit/notes of a list item.
+  Writes through `ItemsNotifier.updateItem` with the *exact same* update
+  keys the list detail screen's own edit sheet writes (`name`, `quantity`,
+  `unit`, `notes`; empty string clears unit/note to null, blank rename and
+  non-positive quantities are ignored rather than written). Only the
+  fields the model passes are touched; an all-empty call returns an error
+  instead of a no-op write. Non-destructive → no confirmation step, same
+  as the UI's own edit sheet.
+- **`move_items`** — moves one or more items to another list by updating
+  `shopping_items.list_id`, which keeps the item's id, checked state,
+  category, and price fields intact (vs. a delete+re-add, which would
+  lose them). **RLS verified live before choosing this design** (Supabase
+  MCP, `pg_policy` on `shopping_items`): the UPDATE policies use a
+  `USING` clause scoped to lists the user owns/is a member of, with no
+  separate `WITH CHECK` — in Postgres the `USING` expression then applies
+  to the *new* row too, so moving is permitted exactly when the user is a
+  member of **both** source and destination lists, and fails closed (0
+  rows / PostgrestException) for a foreign destination. A mid-loop
+  failure reports partial progress honestly ("moved N of M") instead of
+  discarding the count. Invalidates both lists' item providers + the list
+  summaries after the move.
+- **`create_list`** — `ListsNotifier.createList`; returns the new
+  `list_id` plus a hint so Gemini can chain "create a party list and add
+  chips and dip" into create → add_item_to_list in one turn.
+- **`rename_list`** — `ListsNotifier.updateList(listId, {'name': …})`,
+  the same call the list screen's own rename dialog makes.
+- System-prompt routing rules for all four (edit → only changed fields,
+  resolve item ids via get_list_contents first; move → resolve ids and
+  destination via get_list_contents/get_lists; create → chain adds onto
+  the returned list_id; rename).
+
+*Deliberate scope choices:* no confirmation step for any of the four —
+they're edits, not destructions (delete_item/delete_list keep theirs), and
+every one of them is user-reversible in-app; `move_items` deliberately does
+**not** pre-validate the destination against the service's `_fetchLists`
+helper (that helper only returns *owned* lists — a shared list the user is
+merely a member of is a perfectly valid move target that RLS alone
+correctly permits); item `order_index` is left untouched on move (the
+destination list sorts moved items by their existing/absent index — same
+behavior as items created before ordering existed, no interleaving bug,
+just appended-feeling placement).
+
+*Verification (ninth session):* Flutter 3.35.6 (`/tmp/flutter`, cached from
+the morning session); full-project `flutter analyze` baseline via `git
+stash` **601 issues (0 errors, 59 warnings)** vs. after-change **601
+issues — byte-identical** with line numbers normalized out; `dart analyze`
+scoped to the one touched file: **No issues found**. `flutter test` passes
+("All tests passed", 11 tests). The `update_item` argument-normalization
+logic (trim-then-rename, blank-rename excluded, quantity 0/negative
+excluded, Gemini-int → double, empty-string-clears-unit/note, no-op →
+error) was verified with a throwaway `dart run` script mirroring the exact
+expressions — 10/10 cases passed (not committed, deleted). RLS policies
+for the `list_id`-change move verified live via Supabase MCP (see above).
+`pubspec.lock` churn from `pub get` reverted before committing. **Not run
+(no device/API key here):** a live Gemini conversation confirming
+flash-lite routes "verschieb die Butter auf die Party-Liste" / "mach mir
+eine Liste fürs Wochenende" to the new tools — same manual QA item as
+every prior Feature 4 session.
+
 **Explicitly NOT done:**
 - Assistant-owned memory/preferences across sessions — architecturally this
   would mean persisting a summary or key facts to Supabase and re-injecting
@@ -2030,6 +2116,9 @@ search_recipes results), `lib/data/services/avo_settings_bridge.dart`
 (`get_user_profile` + `setup_nutrition_goal` tools: declarations, routing,
 implementations, system-prompt rules, dead-end note fixes),
 `lib/data/services/avo_settings_bridge.dart` (`zip_code` key).
+**Files changed (ninth session):** `lib/data/services/avo_assistant_service.dart`
+(`update_item` + `move_items` + `create_list` + `rename_list`: declarations,
+dispatch cases, implementations, system-prompt routing rules).
 
 **Checks performed:** Verified every new tool's argument names line up with
 its `Schema.object` declaration; verified `deleteItem`/`deleteList` notifier
