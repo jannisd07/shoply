@@ -17,12 +17,12 @@ final mlRecommendationsProvider = FutureProvider.autoDispose
   final service = ref.watch(mlRecommendationServiceProvider);
   final currentItemsAsync = ref.watch(itemsNotifierProvider(listId));
 
-  // Handle AsyncValue - return empty if loading or error
-  final currentItems = currentItemsAsync.when(
-    data: (items) => items,
-    loading: () => <ShoppingItemModel>[],
-    error: (_, __) => <ShoppingItemModel>[],
-  );
+  // The service uses currentListItems to exclude items already on the list
+  // from its suggestions, so scoring before that data has arrived (loading
+  // or error) would exclude nothing and could recommend items the user
+  // already has. Wait for a real value instead of falling back to [].
+  final List<ShoppingItemModel>? currentItems = currentItemsAsync.valueOrNull;
+  if (currentItems == null) return [];
 
   return await service.getRecommendations(
     currentListItems: currentItems,
@@ -30,6 +30,3 @@ final mlRecommendationsProvider = FutureProvider.autoDispose
     limit: 5,
   );
 });
-
-/// Loading state for recommendations
-final mlRecommendationsLoadingProvider = StateProvider<bool>((ref) => false);

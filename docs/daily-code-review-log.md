@@ -461,3 +461,58 @@ the deleted symbols, and import-by-import usage check). Recommendation
 for a future run/human: run `flutter build ios --simulator --debug` on
 this file once a Flutter toolchain is available, as an extra check beyond
 the static review done here.
+
+## 2026-07-19 — `lib/presentation/providers/ml_recommendations_provider.dart`
+
+Reviewed the file plus its references: `MLRecommendationService`
+(`lib/data/services/ml_recommendation_service.dart`, whose service chain
+— `ShoppingHistoryService`, `GeminiCategorizationService`,
+`RecommendationCard` — was already covered in depth by the
+2026-07-13 `ml_recommendations_section.dart` review, so not re-litigated
+here), `itemsNotifierProvider`
+(`lib/presentation/state/items_provider.dart`), and the one consumer,
+`ml_recommendations_section.dart`.
+
+Findings:
+- **Correctness bug (live path)**: `MLRecommendationService.getRecommendations`
+  uses `currentListItems` to build the `excludeItems` set that filters
+  out items already on the list from suggestions
+  (`ml_recommendation_service.dart:74-76`, consumed at line 513+ in
+  `_calculateCategoryAffinityScore` and elsewhere). The provider's
+  `currentItemsAsync.when(... loading: () => [], error: (_,__) => [])`
+  fell back to an **empty** list whenever `itemsNotifierProvider` was
+  still loading or had errored, meaning the exclusion set was empty at
+  exactly the moment it mattered — right after opening a list, before its
+  items had loaded. Because `mlRecommendationsProvider` is a
+  `FutureProvider.autoDispose.family` that `ref.watch`es
+  `itemsNotifierProvider(listId)`, this ran the *entire* (network- and
+  Gemini-backed) recommendation pipeline once with the wrong empty
+  exclusion set, then again from scratch once items resolved — so users
+  could briefly see a recommendation for an item already sitting in their
+  cart, sandwiched between two loading spinners in
+  `ml_recommendations_section.dart`. An `AsyncError` from
+  `itemsNotifierProvider` was silently swallowed the same way, with
+  recommendations computed forever after as if the list were empty.
+- **Dead code**: `mlRecommendationsLoadingProvider`
+  (line 35, `StateProvider<bool>`) had zero readers/writers anywhere in
+  the repo (`grep`-confirmed) — likely a leftover from before
+  `mlRecommendationsProvider` became a `FutureProvider` (whose `AsyncValue`
+  already carries loading state natively, making a parallel bool provider
+  redundant even if it had been wired up).
+
+Action taken this run: replaced the `.when` fallback with
+`currentItemsAsync.valueOrNull` and an early `return []` when null, so the
+service only ever runs once items have actually resolved — this also
+fixes the wasted duplicate network/Gemini call, since the provider now
+resolves instantly to `[]` instead of running the full pipeline during
+the loading window. Deleted the unused `mlRecommendationsLoadingProvider`.
+Verified via `grep` that nothing else in the repo references
+`mlRecommendationsLoadingProvider`, that `itemsNotifierProvider`'s
+declared type (`AsyncValue<List<ShoppingItemModel>>`) matches the new
+`valueOrNull` usage, and that the `ShoppingItemModel` import stays live
+(now referenced via the explicit local type annotation, since it's no
+longer used inside `.when` branch literals). `flutter build`/`dart
+analyze` aren't available in this remote environment (no Flutter SDK per
+CLAUDE.md), so this run's verification was static only — recommend a
+`dart analyze` + `flutter build ios --simulator --debug` pass once a
+toolchain is available.
