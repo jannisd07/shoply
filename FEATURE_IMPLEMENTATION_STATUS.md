@@ -1,12 +1,29 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-18, second run (scheduled routine — Feature 6 focus: the
-weekly nutrition summary screen ("Wochenrückblick") — average calories vs.
-target, per-day bars, macro averages, protein-days, water, weight trend, and a
-gentle logging streak — plus a real pre-existing staleness bug fix: the
-dashboard's weekly calorie strip never refreshed after logging food because its
-provider was defined inside the widget file and missed by
-`invalidateNutritionLog`)_
+_Last updated: 2026-07-19 (scheduled routine — Feature 3 focus: found and
+fixed a real, high-impact regression every prior Feature-3 session had
+flagged but never actually touched — the widget extension's
+`IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (vs. Runner's `15.6`), meaning the
+ShoppingListWidget/QuickAddWidget could never install on any device below
+iOS 26 regardless of every earlier entitlements/App-Intents fix)_
+
+**2026-07-19 — why Feature 3, again.** Same walk as every recent session:
+Features 1–2 re-confirmed blocked on hard externals/device QA (re-checked
+their summary-table status, unchanged since 2026-07-16/17). Feature 3 is the
+first feature genuinely marked "In progress." Its own Ideas list had nothing
+left at an unconditional recommendation-`yes` (the `VoiceAssistantPlugin.swift`
+deletion explicitly waits on a real-device confirmation this container still
+can't provide; the new-widget-kind ideas are needs-decision) — so, following
+the same precedent Feature 8's 2026-07-17/18 sessions set ("do fresh
+discovery on the selected feature itself rather than picking from the
+Ideas log"), this session re-read Feature 3's own "Explicitly NOT done"
+history line by line instead of just the Ideas section, and picked the one
+item repeatedly flagged as "worth checking" but never actually investigated:
+*"The widget target's `IPHONEOS_DEPLOYMENT_TARGET = 26.0` vs. Runner's
+`15.6`/`13.0` is unusually high and worth double-checking against your
+actual target device/simulator OS versions"* (first flagged in the fourth
+session, repeated unchanged through the eighth). See Feature 3's ninth-session
+notes below for what investigating it actually found.
 
 **2026-07-18 second run — why Feature 6.** Same walk as every recent session:
 Features 1–2 blocked on hard externals/device QA; Feature 3's open items are
@@ -362,7 +379,7 @@ was **never wired into any screen** — this session wired it up.
 |---|---|---|---|---|
 | 1 | Pricing, offers, cheapest store | ~95% | Implemented (blocked on hard externals) | Re-audited 2026-07-16, code-verified against every brief bullet: all required + autonomy capabilities implemented. Only remaining gaps are a genuine external constraint (no public non-offer shelf-price API) and an out-of-scope-by-design item (cross-product substitution, diet/allergy safety) |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
-| 3 | Widgets & quick actions | ~89% | In progress (needs device QA) | Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
+| 3 | Widgets & quick actions | ~93% | In progress (needs device QA) | **2026-07-19: fixed a real, likely-severe regression** — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26 no matter how correct the entitlements/App-Intents fixes were; corrected to `17.0`, the code's real minimum (unguarded `Button(intent:)` interactive widgets). Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
 | 4 | AI assistant app control | ~90% | Implemented (needs QA) | None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~90% | In progress (needs device QA) | Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
@@ -1709,6 +1726,111 @@ before committing. **Not run (no macOS/Xcode in this container):** an actual
 Xcode build — though this change is pure Dart-side deletion with no Swift
 edits, so the existing device-QA backlog for Feature 3 is unchanged in
 scope, not added to.
+
+**Ninth session, 2026-07-19 (scheduled routine — this feature's dedicated
+session).** Per the selection note at the top of this file: rather than
+picking from the Ideas list (nothing left there is unconditionally
+buildable-here), re-read Feature 3's own "Explicitly NOT done" history
+across all eight prior sessions line by line and picked the one item every
+session from the fourth onward had flagged as "worth double-checking" but
+none had actually investigated: the widget extension's unusually high
+`IPHONEOS_DEPLOYMENT_TARGET`.
+
+**What investigating it found — a real, high-severity regression, same shape
+as the entitlements bug the very first Feature-3 session fixed:**
+`ios/Runner.xcodeproj/project.pbxproj`'s `ShoppingListWidgetExtension` target
+(the one that builds both `ShoppingListWidget` and `QuickAddWidget`, via the
+shared `ShoppingListWidgetBundle`) had `IPHONEOS_DEPLOYMENT_TARGET = 26.0` in
+all three build configs (Debug/Release/Profile), while `Runner` itself is
+`15.6` and the project-level default is `13.0`. `IPHONEOS_DEPLOYMENT_TARGET`
+is a hard *minimum OS* requirement enforced by the App Store and iOS itself —
+not a "nice to have latest SDK" setting — so as configured, the widget
+extension could never be installed, never appear in the widget gallery, and
+never run on **any device below iOS 26**, independent of and stacking on top
+of every previous session's entitlements/App-Intents/token-refresh fixes.
+Given iOS 26 is very recent, this alone is a fully sufficient explanation for
+"widgets have not worked before" that survives even after the App Group
+entitlement was restored (first session) — nobody except a fresh-iOS-26
+device could ever have seen the widget work at all.
+
+Traced why `17.0` (not `13.0`/`15.6`, matching the rest of the project) is
+the correct, real minimum rather than guessing: `ItemRowView` in
+`ShoppingListWidget.swift` (line 372) and `QuickAddRow` in
+`QuickAddWidget.swift` (line 230) both call `Button(intent:)` — WidgetKit's
+interactive-button API, introduced in iOS 17.0 — **unconditionally, with no
+`#available` guard**. Both files already have a properly-guarded
+`if #available(iOS 17.0, *) { .containerBackground(...) } else { ... }`
+fallback for a *different* iOS-17-only API (the widget's background
+modifier), proving the code was written iOS-17-aware for that API but the
+project's deployment target was never set to actually match it — with
+`CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE` already set in the same
+build config, an unguarded `Button(intent:)` call is exactly the kind of
+thing that would only silently compile if the deployment target already sat
+at ≥ 17 (as it did, just wrongly at 26 instead of 17).
+
+**What I fixed:** changed all three
+`IPHONEOS_DEPLOYMENT_TARGET = 26.0;` occurrences (`project.pbxproj` lines
+957, 1005, 1050 — Debug/Release/Profile of `ShoppingListWidgetExtension`) to
+`17.0`. A minimal, mechanical 3-line diff — same "smallest correct change to
+the exact value that broke it" spirit as the first session's entitlements
+fix.
+
+**Verification performed (no macOS/Xcode in this container, same
+constraint every Feature-3 session has had):**
+- Installed the `pbxproj` Python library in a fresh venv (same tool the
+  fifth session used to safely add `AppIntents.swift` to the `Runner`
+  target) and parsed the edited file: all three Xcode targets
+  (`RunnerTests`, `Runner`, `ShoppingListWidgetExtension`) load without
+  error, confirming the OpenStep-plist grammar is still intact (a real
+  syntax error from a bad edit would fail to parse, not just render
+  differently).
+- Walked the parsed object graph per-target, per-config, to confirm the
+  actual `IPHONEOS_DEPLOYMENT_TARGET` values landed exactly where intended:
+  `Runner` Debug/Release/Profile all read `15.6` (untouched), `RunnerTests`
+  reads `None`/inherits the project default, `ShoppingListWidgetExtension`
+  Debug/Release/Profile all read `17.0` (fixed) — confirming the edit
+  touched only the intended target and didn't accidentally also change
+  `Runner`'s or the project-level default via a stray match.
+- Traced every interactive-widget API call site (`Button(intent:)` in both
+  widget Swift files) against Apple's documented iOS-17 introduction to
+  justify `17.0` specifically rather than picking an arbitrary lower number;
+  confirmed no iOS 18+-only APIs are used anywhere in
+  `ios/ShoppingListWidget/` (grepped for `@available(iOS` — the widget
+  files have none; the two `#available(iOS 17.0, *)` runtime checks already
+  in the code are the only version-gating present, and they're now
+  consistent with the corrected deployment target instead of permanently
+  dead code).
+- Confirmed via `git diff` the change touches exactly the 3 lines intended,
+  nothing else in the 1000+ line project file.
+- **Not run (no macOS/Xcode in this container, unchanged constraint):** an
+  actual Xcode build, or confirming on a real sub-iOS-26 device that the
+  widget now actually appears in the gallery. This is the single most
+  important thing to verify next — arguably more important than any prior
+  Feature-3 device-QA item, since if this diagnosis is correct, no widget
+  functionality fixed by any earlier session could have been observed
+  working on a real device until now.
+- No Dart files were touched this session, so `flutter analyze`/`flutter
+  test` (which prior sessions ran because they touched `lib/`) don't apply
+  here; no Flutter toolchain was downloaded for a change scoped entirely to
+  one Xcode project-file value.
+
+**Explicitly NOT done / still open:**
+- Everything else already flagged by prior sessions is unchanged: the
+  `VoiceAssistantPlugin.swift` deletion still waits on real-device
+  confirmation of the `AppIntents.swift` deep-link fix; the "today's list"
+  widget kind remains needs-decision; the widget-side "token stale" UX idea
+  remains needs-decision.
+- Did not lower the deployment target further than `17.0` (e.g., to match
+  Runner's `15.6`) — that would require either removing the interactive
+  `Button(intent:)` widgets entirely (a real feature regression, worse than
+  the status quo) or wrapping every interactive element in an
+  `#available(iOS 17.0, *)` branch with a non-interactive fallback view for
+  iOS 13–16 (a real, larger feature addition — a "read-only widget for
+  older iOS" tier — not something to improvise without device verification).
+  Flagged as an idea below for an explicit decision rather than guessed at.
+
+**Files changed (ninth session):** `ios/Runner.xcodeproj/project.pbxproj`
+(3-line `IPHONEOS_DEPLOYMENT_TARGET` fix), `FEATURE_IMPLEMENTATION_STATUS.md`.
 
 ---
 
@@ -3716,3 +3838,30 @@ committing. No iOS build/device test possible here (no macOS/Xcode) — see
     cut too aggressively after users are already used to it being free.
   - Recommendation: needs decision — please confirm which feature(s) should
     get a real free-tier limit before a follow-up session wires any gating.
+
+- [ ] IDEA: Build a non-interactive fallback view for the ShoppingListWidget/
+  QuickAddWidget on iOS 13.0–16.x, now that Feature 3's ninth session traced
+  the real reason the widget extension needs iOS 17+ (unconditional
+  `Button(intent:)` interactive elements, no `#available` guard).
+  - Why it helps: right now, a user on iOS 15.6–16.x (below the corrected
+    `17.0` widget deployment target, but still within Runner's own `15.6`
+    minimum) can install and use the app fully but literally cannot add the
+    widget at all — it won't appear in the widget gallery. A read-only
+    fallback (tap the whole widget to open the app; no per-item checkbox/
+    quick-add buttons) would restore *some* widget value to that range
+    instead of none.
+  - Expected user value: low-medium — only matters for the slice of users on
+    iOS 15.6–16.x specifically; shrinks over time as the user base ages onto
+    newer iOS regardless.
+  - Expected business/premium value: low.
+  - Complexity: Medium — needs `#available(iOS 17.0, *)` branches around
+    every `Button(intent:)` call site with a genuinely different (tappable-
+    row-only, `widgetURL` deep-link) view for the `else` branch, plus
+    deciding whether `QuickAddWidget` (which is *entirely* tap-to-add
+    buttons, no non-interactive purpose) should just not offer itself as a
+    configuration option below iOS 17 at all.
+  - Risk: Low-medium — more surface area to get subtly wrong without a
+    device to test either OS-version branch.
+  - Recommendation: needs decision — worth doing only if you want widget
+    coverage on iOS 15.6–16.x specifically; if your real user base is
+    already mostly on 17+, this is low-value effort better spent elsewhere.
