@@ -1,6 +1,34 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-20 (scheduled routine — Feature 5 focus: closed two
+_Last updated: 2026-07-20, second run (scheduled routine — Feature 8 focus:
+built the brief's one remaining unbuilt headline example, "This recipe is
+cheaper this week because these ingredients are on offer," as a
+recipe-detail offers card + a cross-feature price hand-off: ingredients
+added to a shopping list from a recipe now carry their current offer
+price/retailer into Feature 1's list price total. See Feature 8's
+fifth-session notes.)_
+
+**2026-07-20 second run — why Feature 8.** Same walk as every recent
+session: Features 1–2 blocked on hard externals/device QA (unchanged);
+Feature 3's open items device-confirmation- or decision-gated; Feature 4
+device-QA-only since its CRUD gap closed 2026-07-19; Feature 5 had its
+session this morning (past-meal/list-aware recipe nudges) and its one open
+item (offers/budget-aware *ranking*) is explicitly needs-decision; Features
+6–7's open items are all blocked (`mobile_scanner` build risk), device-QA,
+or needs-decision — re-checked each section's open-item lists, not just the
+table. Feature 8 (~55%, lowest completion, no feature-level gate) still had
+one explicit brief example with no implementation anywhere: "This recipe is
+cheaper this week because these ingredients are on offer." Important
+scoping note: this is *distinct* from the still-open needs-decision idea
+about offers/budget-aware recipe *ranking* — that idea is about scoring
+~40 nudge candidates per home-screen load (a real API-cost design problem).
+This session's surface is user-initiated (one recipe, opened deliberately),
+bounded (≤10 ingredient searches through the existing 250ms serialized
+throttle + 30-min search cache), and 6h-cached per recipe+zip+ingredients
+snapshot — so it makes no claim on that pending decision.
+
+_(Previous session note, same day:)_
+_(Feature 5 focus: closed two
 of the brief's own "recipe suggestions based on past meals, offers, budget,
 calories, and pantry/list data" bullet points that `CalorieRecipeNudgeService`
 (built 2026-07-09 as Feature 8 work) never actually implemented — it only
@@ -428,7 +456,7 @@ was **never wired into any screen** — this session wired it up.
 | 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~90% | In progress (needs device QA) | Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~55% | In progress | Proactive "split this trip?" nudge (snackbar action + home-screen card) shipped 2026-07-18, closing the brief's own headline cross-feature example; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first (the weekly nutrition summary was built 2026-07-18 as Feature 6 work — see that section) |
+| 8 | Cross-feature UX / growth / premium | ~65% | In progress | Recipe-detail "on offer this week" card + offer-price hand-off into list totals shipped 2026-07-20 (second run), closing the last unbuilt brief example ("this recipe is cheaper this week"); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
 
 ---
 
@@ -3645,6 +3673,128 @@ passed, not committed, deleted before finishing). `pubspec.lock` churn from
 committing. No iOS build/device test possible here (no macOS/Xcode) — see
 "Not verified" above.
 
+**Fifth session, 2026-07-20 second run (scheduled routine — this feature's
+dedicated session).** Built the last explicit brief example with no
+implementation anywhere: **"This recipe is cheaper this week because these
+ingredients are on offer."** Scoping note: this is deliberately *not* the
+still-open needs-decision idea about offers/budget-aware recipe *ranking* —
+that one is about scoring ~40 nudge candidates per home-screen load (an
+API-cost design problem awaiting an owner decision). This surface is
+user-initiated (one recipe the user actually opened), bounded, and cached,
+so it doesn't preempt that decision.
+
+**Before this session:** a recipe's detail page showed ingredients,
+substitutions, and (since Feature 6) nutrition — but had zero connection to
+Feature 1's live-offers pipeline. The only ways to see offer prices were
+the list add-bar suggestions, the in-list basket comparison, the home price
+card, and Avo's `search_offers` tool; no surface ever told a user that the
+recipe they're looking at is cheap to cook *this week*.
+
+**What I implemented:**
+- **`RecipeOfferService`** (new, `lib/data/services/recipe_offer_service.dart`)
+  — matches a recipe's ingredients against current marktguru offers.
+  Cost discipline: staples (salt/pepper/water) are skipped, ingredient
+  searches are capped at 10 per recipe, every search goes through
+  `OfferPriceService`'s existing 250ms serialized throttle + 30-minute
+  in-memory search cache, and results are additionally cached persistently
+  for 6h per exact recipe+zip+ingredients signature (same pattern as
+  `HomePriceComparisonCacheService`, stored as one pruned-to-12-recipes
+  SharedPreferences map). Runs **only** when a user opens a recipe detail
+  screen — never as a background fan-out over many recipes.
+- **Match-quality rules** (unit-tested): per ingredient, the cheapest offer
+  whose product name contains the full ingredient term wins (multi-word
+  ingredients also match on their German head noun — "passierte Tomaten" →
+  "Tomaten", mirroring `OfferPriceService`'s own generic-term rule); offers
+  from the service's stem-broadened fallback are used only when no exact
+  match exists and stay flagged as "similar product" in the UI; offers
+  matching neither way are dropped entirely — no match beats a wrong
+  product on a proactive surface.
+- **`RecipeIngredientOffer`/`RecipeOffersResult`** (new,
+  `lib/data/models/recipe_offer_highlight.dart`) — slim JSON-serializable
+  snapshots (offer id for the CDN image, product, retailer, price, regular
+  price, unit labels, validity, broad-match flag) so cached results don't
+  persist full API payloads. Cached matches whose offer validity window has
+  ended are filtered out at read time (weekly Angebote can expire inside
+  the 6h cache TTL). `knownSavings` sums regular-price deltas over exact
+  (non-broad) matches only — "save €X" is never claimed off a merely
+  similar product, same confidence rule `OfferSuggestionsBar` already uses.
+- **`recipeOffersProvider`** (new,
+  `lib/presentation/providers/recipe_offers_provider.dart`) — requires a
+  **real** zip (GPS or manual), same rule as the home price highlight and
+  offer nudges: no proactive "cheaper this week" claim off the nationwide
+  fallback zip.
+- **`RecipeOffersCard`** (new,
+  `lib/presentation/screens/recipes/widgets/recipe_offers_card.dart`) —
+  inserted between the ingredients and instructions sections, matching the
+  detail screen's existing card style. Header ("Diese Woche im Angebot"),
+  honest "N von M Zutaten" subtitle, a savings line only when known
+  savings ≥ €0.50, and per-ingredient rows (product image, ingredient →
+  product/store/pack size, price, "statt X €", Grundpreis, -X% badge,
+  "similar product" hint for broad matches) — the same row language as the
+  add-bar's offer suggestions, so offers look the same everywhere. Renders
+  **nothing** while loading, on error, without a real zip, or when no
+  ingredient is on offer — never an empty or fake section.
+- **Cross-feature price hand-off:** `SelectListBottomSheet` (the recipe →
+  shopping-list flow) now accepts the recipe's current offer matches;
+  ingredients with a live offer are added with `price`/`priceCurrency`/
+  `priceRetailer`/`priceUnit` attached (same fields the add-bar's offer
+  suggestions already write), so recipe-sourced items count into Feature
+  1's list price total and flow through to Feature 2's completed-trip
+  costs. The sheet's confirmation summary shows a green "N im Angebot"
+  chip next to the existing "N adapted" one.
+- 4 new EN/DE translation key pairs (`recipe_offers_title`/`_subtitle`/
+  `_save`, `on_offer_count`); the row reuses the existing
+  `instead_of_price`/`similar_product_match` keys.
+
+**Explicitly NOT done:**
+- No "cheaper this week" badge on recipe *list* cards (browse screens) —
+  that would be a fan-out of up to 10 searches per visible card and lands
+  exactly in the open ranking-idea's cost-design territory; flagged as part
+  of that existing needs-decision idea rather than half-built.
+- No estimated total recipe cost ("cook this for ~€7") — regular shelf
+  prices aren't publicly available (Feature 1's standing external
+  constraint), so a total would be mostly-guessed; the card only claims
+  what's actually known (offer prices for matched ingredients).
+- Substituted ingredients: offers are matched against the recipe's original
+  ingredient names; an ingredient swapped by the diet-substitution toggle
+  simply gets no offer attached (correct, since the offer was for the
+  original product).
+
+**Not verified (no macOS/Xcode/device in this container):** card rendering
+on a real screen (image loading, row wrapping, dark mode); the
+end-to-end add-with-price flow against a live list; real-world match
+quality across a broad range of German ingredient names (the matching
+rules are unit-tested and the API was verified live from this container —
+one real search returned 23 Hackfleisch offers across 7 retailers with the
+bundled keys — but subjective "is this the right product" quality needs
+eyeballing in the app).
+
+**Files changed (fifth session):**
+`lib/data/services/recipe_offer_service.dart` (new),
+`lib/data/models/recipe_offer_highlight.dart` (new),
+`lib/presentation/providers/recipe_offers_provider.dart` (new),
+`lib/presentation/screens/recipes/widgets/recipe_offers_card.dart` (new),
+`lib/presentation/screens/recipes/recipe_detail_screen.dart` (card sliver,
+shared offers-request getter, offers passed to the add-to-list sheet),
+`lib/presentation/screens/recipes/widgets/select_list_bottom_sheet.dart`
+(optional offer map, price attach on add, "N im Angebot" chip),
+`lib/core/localization/app_translations.dart` (4 new EN/DE key pairs),
+`test/recipe_offer_logic_test.dart` (new — 14 tests).
+
+**Checks performed (fifth session):** downloaded Flutter 3.35.6 stable
+fresh into `/tmp/flutter`; `flutter analyze` — **0 errors, 59 warnings**,
+matching the documented baseline exactly, with every new/touched file
+individually confirmed to contribute zero issues (the
+`_adjustedIngredients` unused-element warning in `recipe_detail_screen.dart`
+is pre-existing). `flutter test` — all 25 tests pass (11 pre-existing +
+14 new covering staple filtering/dedup/cap, relevance matching, best-offer
+selection incl. the broad-match fallback, JSON round-trip, expiry
+filtering, savings confidence rule, discount threshold). Verified the
+marktguru search endpoint live from this container with the bundled
+fallback keys (real offer data returned). `pubspec.lock` churn from the
+fresh SDK's `pub get` reverted before committing. No iOS build/device test
+possible here (no macOS/Xcode).
+
 ---
 
 ## Ideas / Needs My Approval
@@ -3676,6 +3826,13 @@ committing. No iOS build/device test possible here (no macOS/Xcode) — see
   - Recommendation: needs decision — please confirm whether the narrower
     (re-rank only the top-3) or fuller (cached per-recipe cost) version is
     worth building before a follow-up session picks it up.
+  - _2026-07-20 second run note:_ the **recipe-detail** "on offer this
+    week" card now exists (Feature 8's fifth session) — user-initiated,
+    one recipe at a time, so it didn't need this decision. This idea now
+    covers only the fan-out variants: offer-aware *ranking* of nudge
+    candidates and/or "cheaper this week" badges on recipe *browse* cards,
+    both of which multiply API calls per screen view and still need the
+    cost-design decision above.
 
 - [ ] IDEA: Assistant-owned memory across chat sessions — persist a small
   set of durable facts Avo learns in conversation ("household of 3",

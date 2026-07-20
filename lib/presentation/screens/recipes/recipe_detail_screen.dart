@@ -10,6 +10,7 @@ import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/constants/app_text_styles.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/dietary_preference.dart';
+import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/ingredient_substitution_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
@@ -21,6 +22,8 @@ import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/presentation/screens/calories/widgets/log_recipe_sheet.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/widgets/recipes/nutrition_info_widget.dart';
+import 'package:shoply/presentation/providers/recipe_offers_provider.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_offers_card.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -181,6 +184,14 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
       diets: diets,
     );
   }
+
+  /// Offers lookup key for the loaded recipe — shared by the offers card
+  /// and the add-to-list flow so both read the same provider instance.
+  RecipeOffersRequest get _offersRequest => RecipeOffersRequest(
+        recipeId: widget.recipeId,
+        ingredientNames:
+            _recipe?.ingredients.map((i) => i.name).toList() ?? const [],
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -745,6 +756,12 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
 
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
+          // Current supermarket offers for the recipe's ingredients
+          // (renders nothing when no ingredient is on offer / no real zip).
+          SliverToBoxAdapter(
+            child: RecipeOffersCard(request: _offersRequest),
+          ),
+
           // Instructions Section
           SliverToBoxAdapter(
             child: Container(
@@ -1009,7 +1026,17 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   void _addToShoppingList() {
     // Get ingredients with substitution info for the current servings
     final ingredientsWithInfo = _ingredientsWithInfo;
-    
+
+    // Current offers already fetched for this recipe (if any) — added
+    // ingredients carry their offer price into the list's total (Feature 1).
+    final offersResult =
+        ref.read(recipeOffersProvider(_offersRequest)).valueOrNull;
+    final ingredientOffers = <String, RecipeIngredientOffer>{
+      for (final match in offersResult?.matches ?? const <RecipeIngredientOffer>[])
+        if (match.isStillValid)
+          match.ingredientName.trim().toLowerCase(): match,
+    };
+
     // Show dialog centered on screen
     showDialog(
       context: context,
@@ -1033,6 +1060,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
               defaultServings: _servings,
               recipeDefaultServings: _recipe!.defaultServings,
               useAdaptedIngredients: _showAdaptedIngredients,
+              ingredientOffers: ingredientOffers,
             ),
           ),
         ),

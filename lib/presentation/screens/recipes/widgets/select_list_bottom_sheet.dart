@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/services/ingredient_substitution_service.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -17,12 +18,18 @@ class SelectListBottomSheet extends ConsumerStatefulWidget {
   final int recipeDefaultServings;
   final bool useAdaptedIngredients;
 
+  /// Current offers for the recipe's ingredients, keyed by lowercased
+  /// ingredient name — matched ingredients are added with their offer
+  /// price/retailer attached so they count into the list's price total.
+  final Map<String, RecipeIngredientOffer> ingredientOffers;
+
   const SelectListBottomSheet({
     super.key,
     required this.ingredientsWithInfo,
     this.defaultServings = 2,
     this.recipeDefaultServings = 2,
     this.useAdaptedIngredients = true,
+    this.ingredientOffers = const {},
   });
 
   @override
@@ -382,6 +389,10 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
             info.bestSubstitute != null &&
             _useAdapted)
         .length;
+    final onOfferCount = ingredients
+        .where((ing) =>
+            widget.ingredientOffers.containsKey(ing.name.trim().toLowerCase()))
+        .length;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -404,8 +415,28 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
                 style: const TextStyle(
                     fontWeight: FontWeight.w500, fontSize: 15),
               ),
-              if (substitutedCount > 0) ...[
-                const Spacer(),
+              if (substitutedCount > 0 || onOfferCount > 0) const Spacer(),
+              if (onOfferCount > 0)
+                Container(
+                  margin: EdgeInsets.only(right: substitutedCount > 0 ? 6 : 0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        CupertinoColors.systemGreen.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    context.tr('on_offer_count',
+                        params: {'count': '$onOfferCount'}),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: CupertinoColors.systemGreen,
+                    ),
+                  ),
+                ),
+              if (substitutedCount > 0)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -423,7 +454,6 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
                     ),
                   ),
                 ),
-              ],
             ],
           ),
         ),
@@ -539,6 +569,8 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
 
       for (int i = 0; i < adjustedIngredients.length; i++) {
         final ingredient = adjustedIngredients[i];
+        final offer =
+            widget.ingredientOffers[ingredient.name.trim().toLowerCase()];
         try {
           await itemRepository.addItem(
             listId: listId,
@@ -546,6 +578,10 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
             quantity: ingredient.amount,
             unit: ingredient.unit,
             category: null,
+            price: offer?.price,
+            priceCurrency: offer != null ? 'EUR' : null,
+            priceRetailer: offer?.retailerName,
+            priceUnit: offer?.unitSizeLabel,
           );
           addedCount++;
           if (i < adjustedIngredients.length - 1) {
