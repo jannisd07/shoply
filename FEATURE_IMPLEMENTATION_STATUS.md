@@ -1,10 +1,38 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-19, second run (scheduled routine — Feature 4 focus:
-closed the item/list CRUD gap in Avo's tool registry — the brief requires
-"AI can add, **edit**, remove, and **organize** items" and "AI can **change
-shopping lists**", but no tool existed to edit an item, move items between
-lists, create a list, or rename a list; all four added)_
+_Last updated: 2026-07-20 (scheduled routine — Feature 5 focus: closed two
+of the brief's own "recipe suggestions based on past meals, offers, budget,
+calories, and pantry/list data" bullet points that `CalorieRecipeNudgeService`
+(built 2026-07-09 as Feature 8 work) never actually implemented — it only
+ever used calories + diet/allergy prefs. Added "past meals" (skip a recipe
+recently logged as a meal, with a soft fallback so a small recipe library
+never goes silent) and "pantry/list data" (rank recipes higher when their
+ingredients are already unchecked on one of the user's shopping lists,
+surfaced as an "Uses X, Y from your list" line). "Offers/budget"-aware
+recipe ranking remains open — flagged as a new idea below, it needs either
+a per-recipe cost model or expensive live price lookups per candidate
+recipe, neither of which exists today.)_
+
+**2026-07-20 — why Feature 5.** Same walk as every recent session: Features
+1–2 are ~95% and blocked on hard externals/device QA (re-checked the
+overview table, unchanged); Feature 3's open items (`VoiceAssistantPlugin.swift`
+deletion, a new widget kind) are explicitly device-confirmation- or
+decision-gated per its own ninth-session notes; Feature 4's item/list CRUD
+gap was the last unconditional buildable-here item and was closed
+2026-07-19 (second run) — its remaining gap is a live-device Gemini QA pass,
+not code. Feature 5 is next in the brief's priority order and was still
+"In progress" (~85%) with real, buildable-here work: re-reading its own
+"Autonomy improvements" bullets against the actual code (not just the
+"Explicitly NOT done" summary, per the precedent several prior sessions set
+of doing fresh discovery on the selected feature rather than trusting the
+log) surfaced that `CalorieRecipeNudgeService.filterAndSort` — the
+concrete implementation behind "Avo can suggest recipes based on past
+meals, offers, budget, calories, and pantry/list data" — only ever read
+`remainingCalories`, `dietPreferences`, and `allergies`. Two of the five
+named signals (past meals, pantry/list data) had zero code touching them at
+all, despite the data already existing elsewhere in the app
+(`food_log_entries.source_recipe_id`, `shopping_items.is_checked`). See
+Feature 5's eighth-session notes below.
 
 **2026-07-19 second run — why Feature 4.** Same walk as every recent
 session: Features 1–2 re-confirmed blocked on hard externals/device QA;
@@ -397,7 +425,7 @@ was **never wired into any screen** — this session wired it up.
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~93% | In progress (needs device QA) | **2026-07-19: fixed a real, likely-severe regression** — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26 no matter how correct the entitlements/App-Intents fixes were; corrected to `17.0`, the code's real minimum (unguarded `Button(intent:)` interactive widgets). Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
 | 4 | AI assistant app control | ~93% | Implemented (needs QA) | Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list` — Avo can now edit and organize items and create/rename lists, not just add/delete. None functional; needs a real device run + live Gemini QA |
-| 5 | Avo mascot & smart notifications | ~85% | In progress | Proactive recipe-suggestion nudges shipped 2026-07-09 (`CalorieRecipeNudgeService`, cross-linked from Feature 8's first session) — the table blocker naming this as still-open was stale and is now corrected; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
+| 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~90% | In progress (needs device QA) | Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
 | 8 | Cross-feature UX / growth / premium | ~55% | In progress | Proactive "split this trip?" nudge (snackbar action + home-screen card) shipped 2026-07-18, closing the brief's own headline cross-feature example; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first (the weekly nutrition summary was built 2026-07-18 as Feature 6 work — see that section) |
@@ -2365,6 +2393,104 @@ committed). **Not run (no device):** actual rendering of the offer rows,
 the snackbar milestone moment, or the offer-enriched scheduled
 notification firing.
 
+**Eighth session, 2026-07-20 (scheduled routine).** Picked Feature 5 per
+the walk described at the top of this file. Audited
+`CalorieRecipeNudgeService` (the code behind the brief's "Avo can suggest
+recipes based on past meals, offers, budget, calories, and pantry/list
+data" bullet, built 2026-07-09 during a Feature 8 session) against that
+exact sentence rather than trusting its "In progress" status, and found it
+only ever used two of the five named signals — `remainingCalories` and
+diet/allergy prefs. "Past meals" and "pantry/list data" had no code at all,
+despite both being cheap to compute from data the app already stores.
+
+*What I implemented:*
+- `FoodLogService.getRecentSourceRecipeIds({days = 5})` (new) — reads
+  `source_recipe_id` from `food_log_entries` where `source == 'recipe'` in
+  the last 5 days. `source_recipe_id` was already populated whenever a meal
+  is logged from a recipe (`FoodLogSource.recipe`) but nothing downstream
+  ever read it back.
+- `CalorieRecipeNudgeService._getOpenListItemNamesLower()` (new) — unchecked
+  item names across every shopping list the user can see, via the exact
+  same RLS-scoped `shopping_items` query pattern
+  `AvoNudgeService._getOpenItemNames` already uses elsewhere in the
+  codebase (no `user_id` filter needed; row-level security already scopes
+  it to lists the user is a member of). Fails open to an empty set on error
+  — this is a ranking bonus, not a filter, so a lookup failure must never
+  block the calorie-fit suggestions that already worked from showing.
+- `RecipeSuggestion` (new, wraps `Recipe` + `matchedListItems`) and
+  `CalorieRecipeNudgeService.getRankedSuggestions()` (new) — the real
+  entry point now: pools candidates the same way as before, then calls the
+  renamed/extended `rankSuggestions()` (was `filterAndSort`, kept
+  `@visibleForTesting` and pure/unit-testable):
+  - Recipes logged as a meal in the last 5 days are dropped from the
+    calorie/diet/allergy-filtered candidate set **unless that would leave
+    it empty** — a user with a small saved-recipe library shouldn't see
+    the card go silent just because they cooked recently; the soft
+    exclusion only kicks in when there's a genuine alternative.
+  - Survivors are sorted primarily by how many ingredients match the
+    user's open list items (most first, via a length-≥4-characters,
+    case-insensitive substring match in either direction —
+    `_ingredientOnList`, tolerant of "rote Zwiebel" on the list matching
+    a "Zwiebel" ingredient without being so loose that "Ei" spuriously
+    matches "Kekse"), then by closeness to the remaining calorie budget
+    (unchanged from before), then by rating (unchanged tie-break).
+  - `getSuggestions()` (the pre-existing method) is now a thin wrapper
+    around `getRankedSuggestions()` that just discards the "why" — kept so
+    `MascotNotificationService`'s evening-reminder call site (the only
+    other caller) didn't need to change at all.
+- Home-screen card (`CalorieRecipeNudgeCard`) now shows a small accent-
+  colored "Uses Tomaten, Zwiebel from your list" line under any suggestion
+  that matched (new `calorie_nudge_uses_list` EN/DE key), so the new
+  ranking signal is actually visible, not just an invisible sort order
+  change.
+- `calorieRecipeSuggestionsProvider` now watches `getRankedSuggestions()`
+  and exposes `List<RecipeSuggestion>` instead of `List<Recipe>` — the only
+  consumer is the card above.
+
+*Explicitly NOT done (honest gap, new idea below):* "offers/budget" — the
+third named signal — is still unaddressed. Recipes have no stored cost
+field, and scoring ~40 pooled candidate recipes' ingredients against live
+marktguru offers would mean tens of API calls per home-screen load, which
+conflicts with the existing 250ms-serialized-throttle design built for
+one basket comparison at a time (Feature 1's third session). Doing this
+properly needs either a cached per-recipe ingredient-cost estimate
+(computed occasionally, not per page load) or a deliberately narrower
+scope (e.g. only re-rank the 3 suggestions already chosen by calorie fit,
+not the full candidate pool) — a product/complexity tradeoff, not a quick
+addition, so it's flagged as an idea rather than rushed.
+
+**Files changed (eighth session):**
+`lib/data/services/food_log_service.dart` (`getRecentSourceRecipeIds`),
+`lib/data/services/calorie_recipe_nudge_service.dart` (`RecipeSuggestion`,
+`getRankedSuggestions`, `_getOpenListItemNamesLower`, `_ingredientOnList`,
+`rankSuggestions` replacing `filterAndSort`),
+`lib/presentation/state/calorie_recipe_nudge_provider.dart` (provider now
+returns `List<RecipeSuggestion>`),
+`lib/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart`
+(list-match line), `lib/core/localization/app_translations.dart`
+(`calorie_nudge_uses_list`, EN/DE).
+
+**Checks performed (eighth session):** Downloaded Flutter 3.35.6 stable
+fresh into `/tmp/flutter` (no toolchain pre-installed this session) and
+verified with full-project `flutter analyze`: baseline (via `git stash`,
+this branch before this session's changes) and after-change counts are
+**byte-identical: 601 issues, 0 errors** — also confirmed by scoping
+`flutter analyze` to just the 5 touched files (0 issues). `flutter test`
+passes ("All tests passed"). The new `rankSuggestions` logic (over-budget
+exclusion, list-match-beats-closer-calorie-fit ordering, recent-meal soft
+exclusion and its empty-result fallback, diet/allergy filtering unchanged,
+the length-4 false-positive guard on short ingredient names, limit
+respected) was verified with a throwaway `flutter test` file (8 cases, all
+passed, not committed — plain `dart run` doesn't work in this Flutter
+project, since Flutter's own framework code doesn't compile under the bare
+`dart` compiler; `flutter test` was required, matching how several other
+sessions in this file already verified pure logic). `pubspec.lock` churn
+from `flutter pub get` was reverted before committing. **Not verified (no
+macOS/Xcode in this container):** the new "Uses X from your list" line's
+actual rendering/wrapping at real device widths, and whether the ranking
+change is noticeable/correct against real user data (only exercised against
+hand-built fixtures).
+
 ---
 
 ## Feature 6 — Complete calorie tracking
@@ -3522,6 +3648,34 @@ committing. No iOS build/device test possible here (no macOS/Xcode) — see
 ---
 
 ## Ideas / Needs My Approval
+
+- [ ] IDEA: Offers/budget-aware recipe ranking — the last of the five named
+  signals in "Avo can suggest recipes based on past meals, offers, budget,
+  calories, and pantry/list data" (past meals and pantry/list data were
+  closed in Feature 5's eighth session, 2026-07-20).
+  - Why it helps: closes the one remaining explicit brief bullet for
+    calorie-aware recipe suggestions; ties Feature 1's pricing infra into
+    Feature 6/8's recipe nudges, a genuinely novel cross-feature moment
+    ("this dinner idea is extra cheap this week — 3 ingredients are on
+    offer").
+  - Expected user value: medium — a nice-to-have on top of a feature that
+    already works well without it.
+  - Expected business/premium value: low-medium.
+  - Complexity: Medium-high — recipes have no stored cost field, and
+    scoring the ~40 pooled candidates' ingredients against live marktguru
+    offers per home-screen load would mean far more API calls than the
+    existing 250ms-serialized-throttle design was built for (that throttle
+    assumes one basket comparison in flight, not dozens of recipes' worth
+    of ingredient lookups). Two honest paths: (a) only re-rank the 3
+    suggestions already chosen by the current calorie/list logic — cheap,
+    but a narrower signal than "budget" implies, or (b) a background/cached
+    per-recipe cost estimate computed occasionally, not per page load —
+    more work, more honestly matches "budget-aware."
+  - Risk: Low-medium — mostly a cost/latency and API-quota risk against the
+    same unofficial marktguru endpoint several other features already share.
+  - Recommendation: needs decision — please confirm whether the narrower
+    (re-rank only the top-3) or fuller (cached per-recipe cost) version is
+    worth building before a follow-up session picks it up.
 
 - [ ] IDEA: Assistant-owned memory across chat sessions — persist a small
   set of durable facts Avo learns in conversation ("household of 3",

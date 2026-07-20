@@ -70,6 +70,29 @@ class FoodLogService {
     }
   }
 
+  /// Recipe ids logged as meals (source == 'recipe') in the last [days]
+  /// days — used to avoid re-suggesting a dinner the user just cooked.
+  Future<Set<String>> getRecentSourceRecipeIds({int days = 5}) async {
+    final userId = _userId;
+    if (userId == null) return {};
+    final since = DateTime.now().subtract(Duration(days: days));
+    try {
+      final response = await _supabase
+          .from('food_log_entries')
+          .select('source_recipe_id')
+          .eq('user_id', userId)
+          .eq('source', 'recipe')
+          .gte('logged_date', _dateKey(since));
+      return (response as List)
+          .map((row) => (row as Map)['source_recipe_id'] as String?)
+          .whereType<String>()
+          .toSet();
+    } catch (e) {
+      debugPrint('⚠️ [FoodLog] Failed to load recent recipe ids: $e');
+      return {};
+    }
+  }
+
   /// Last 7 days of daily totals, oldest first — for a weekly summary.
   Future<Map<DateTime, DailyNutritionTotals>> getWeeklyTotals() async {
     final userId = _userId;

@@ -7,7 +7,6 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/mascot/avo_mascot.dart';
-import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/calorie_recipe_nudge_service.dart';
 import 'package:shoply/presentation/state/calorie_recipe_nudge_provider.dart';
 
@@ -84,15 +83,15 @@ class CalorieRecipeNudgeCard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 2),
-            for (final recipe in suggestions)
+            for (final suggestion in suggestions)
               _RecipeSuggestionRow(
-                recipe: recipe,
+                suggestion: suggestion,
                 textPrimary: textPrimary,
                 textSecondary: textSecondary,
                 accent: accent,
                 onTap: () {
                   HapticFeedback.lightImpact();
-                  context.push('/recipes/${recipe.id}');
+                  context.push('/recipes/${suggestion.recipe.id}');
                 },
               ),
           ],
@@ -103,14 +102,14 @@ class CalorieRecipeNudgeCard extends ConsumerWidget {
 }
 
 class _RecipeSuggestionRow extends StatelessWidget {
-  final Recipe recipe;
+  final RecipeSuggestion suggestion;
   final Color textPrimary;
   final Color textSecondary;
   final Color accent;
   final VoidCallback onTap;
 
   const _RecipeSuggestionRow({
-    required this.recipe,
+    required this.suggestion,
     required this.textPrimary,
     required this.textSecondary,
     required this.accent,
@@ -119,6 +118,7 @@ class _RecipeSuggestionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final recipe = suggestion.recipe;
     final calories = recipe.nutrition?.calories;
 
     return InkWell(
@@ -172,6 +172,19 @@ class _RecipeSuggestionRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 11.5, color: textSecondary),
+                    ),
+                  if (suggestion.usesListItems)
+                    Text(
+                      context.tr('calorie_nudge_uses_list', params: {
+                        'items': suggestion.matchedListItems.take(2).join(', '),
+                      }),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: accent,
+                      ),
                     ),
                 ],
               ),

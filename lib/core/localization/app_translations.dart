@@ -263,6 +263,7 @@ class AppTranslations {
     'offer_nudge_line_simple': '{product} · {price} € · {store}',
     'calorie_nudge_title': '{kcal} kcal left · dinner ideas',
     'calorie_nudge_line': '{kcal} kcal · {time} min',
+    'calorie_nudge_uses_list': 'Uses {items} from your list',
     'calorie_nudge_notification_title': '🥑 Dinner idea?',
     'calorie_nudge_notification_body_one':
         'You have about {kcal} kcal left today — Avo found a recipe that fits: {recipe}.',
@@ -1172,6 +1173,7 @@ class AppTranslations {
     'offer_nudge_line_simple': '{product} · {price} € · {store}',
     'calorie_nudge_title': 'Noch {kcal} kcal · Ideen fürs Abendessen',
     'calorie_nudge_line': '{kcal} kcal · {time} Min.',
+    'calorie_nudge_uses_list': 'Nutzt {items} von deiner Liste',
     'calorie_nudge_notification_title': '🥑 Idee fürs Abendessen?',
     'calorie_nudge_notification_body_one':
         'Du hast heute noch etwa {kcal} kcal übrig – Avo hat ein passendes Rezept gefunden: {recipe}.',

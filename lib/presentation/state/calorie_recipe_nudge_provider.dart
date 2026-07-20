@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/calorie_recipe_nudge_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 
@@ -13,14 +12,16 @@ final remainingCaloriesTodayProvider = FutureProvider.autoDispose<int?>((ref) as
 });
 
 /// Up to 3 recipes that fit today's remaining calorie budget, for the home
-/// screen's "dinner ideas" card. Empty when tracking is off, nothing is
-/// configured, or no stored-nutrition recipe fits.
+/// screen's "dinner ideas" card — ranked to favor recipes that reuse what's
+/// already on the user's shopping lists and to avoid repeating a recently
+/// cooked meal. Empty when tracking is off, nothing is configured, or no
+/// stored-nutrition recipe fits.
 final calorieRecipeSuggestionsProvider =
-    FutureProvider.autoDispose<List<Recipe>>((ref) async {
+    FutureProvider.autoDispose<List<RecipeSuggestion>>((ref) async {
   final remaining = await ref.watch(remainingCaloriesTodayProvider.future);
   if (remaining == null) return const [];
   final user = await ref.watch(currentUserProvider.future);
-  return CalorieRecipeNudgeService.instance.getSuggestions(
+  return CalorieRecipeNudgeService.instance.getRankedSuggestions(
     remainingCalories: remaining,
     dietPreferences: user?.dietPreferences ?? const [],
     allergies: user?.allergies ?? const [],
