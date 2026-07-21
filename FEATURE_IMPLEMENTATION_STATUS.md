@@ -1,11 +1,36 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-20, second run (scheduled routine — Feature 8 focus:
-built the brief's one remaining unbuilt headline example, "This recipe is
-cheaper this week because these ingredients are on offer," as a
-recipe-detail offers card + a cross-feature price hand-off: ingredients
-added to a shopping list from a recipe now carry their current offer
-price/retailer into Feature 1's list price total. See Feature 8's
+_Last updated: 2026-07-21 (scheduled routine — Feature 3 focus: built the
+`SavedRecipesWidget` WidgetKit widget that native/App-Group plumbing has
+silently supported since the widget extension was first added but that
+nothing had ever actually implemented — see Feature 3's tenth-session notes.)_
+
+**2026-07-21 — why Feature 3, again.** Same walk as every recent session:
+Features 1–2 re-confirmed at ~95%, blocked on hard externals/device QA
+(re-checked the summary table, unchanged). Feature 3 is the first feature in
+the priority order genuinely marked "In progress," so per the precedent
+several prior sessions set ("do fresh discovery on the selected feature
+itself, don't just trust the log"), this session re-read Feature 3's own
+"Explicitly NOT done" history end-to-end rather than jumping straight to the
+Ideas list. One line, present since Feature 3's earliest sessions and
+repeated unchanged through the ninth: *"`AppDelegate`/`WidgetService` have
+full plumbing for a `SavedRecipesWidget`
+(`reloadTimelines(ofKind: "SavedRecipesWidget")`) but
+no such WidgetKit widget exists in `ios/ShoppingListWidget/` — unfinished,
+not a regression."* Unlike the still-open "today's list" widget idea (needs a
+product decision about what "today's list" even means), this one has zero
+ambiguity: the data shape (`WidgetRecipe`: id/name/imageUrl/cookTime/rating),
+the App Group key (`widget_saved_recipes`), and the native reload call
+(`ofKind: "SavedRecipesWidget"`) were all already decided and already
+written — genuinely buildable-here work with no owner decision needed. See
+Feature 3's tenth-session notes below.
+
+_(Previous top note:)_ _Last updated: 2026-07-20, second run (scheduled
+routine — Feature 8 focus: built the brief's one remaining unbuilt headline
+example, "This recipe is cheaper this week because these ingredients are on
+offer," as a recipe-detail offers card + a cross-feature price hand-off:
+ingredients added to a shopping list from a recipe now carry their current
+offer price/retailer into Feature 1's list price total. See Feature 8's
 fifth-session notes.)_
 
 **2026-07-20 second run — why Feature 8.** Same walk as every recent
@@ -451,7 +476,7 @@ was **never wired into any screen** — this session wired it up.
 |---|---|---|---|---|
 | 1 | Pricing, offers, cheapest store | ~95% | Implemented (blocked on hard externals) | Re-audited 2026-07-16, code-verified against every brief bullet: all required + autonomy capabilities implemented. Only remaining gaps are a genuine external constraint (no public non-offer shelf-price API) and an out-of-scope-by-design item (cross-product substitution, diet/allergy safety) |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
-| 3 | Widgets & quick actions | ~93% | In progress (needs device QA) | **2026-07-19: fixed a real, likely-severe regression** — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26 no matter how correct the entitlements/App-Intents fixes were; corrected to `17.0`, the code's real minimum (unguarded `Button(intent:)` interactive widgets). Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
+| 3 | Widgets & quick actions | ~95% | In progress (needs device QA) | **2026-07-21: built `SavedRecipesWidget`** — a third WidgetKit widget (saved recipes, tap-to-open) that closes plumbing (App Group key + native reload call) that had existed since the widget extension was first added but was never actually consumed by a real widget. 2026-07-19: fixed a real, likely-severe regression — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26; corrected to `17.0`. Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
 | 4 | AI assistant app control | ~93% | Implemented (needs QA) | Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list` — Avo can now edit and organize items and create/rename lists, not just add/delete. None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~90% | In progress (needs device QA) | Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
@@ -1903,6 +1928,145 @@ constraint every Feature-3 session has had):**
 
 **Files changed (ninth session):** `ios/Runner.xcodeproj/project.pbxproj`
 (3-line `IPHONEOS_DEPLOYMENT_TARGET` fix), `FEATURE_IMPLEMENTATION_STATUS.md`.
+
+**Tenth session, 2026-07-21 (scheduled routine — this feature's dedicated
+session).** See the top-of-file note for why Feature 3 again. Built the
+`SavedRecipesWidget` — the third WidgetKit widget, closing plumbing that
+existed since the widget extension was first added (2026-03-28) but was
+never actually wired to a real widget.
+
+**Before this session:**
+- `WidgetService.updateSavedRecipesWidget()` (Dart) and
+  `AppDelegate.swift`'s matching `updateSavedRecipesWidget` native handler
+  both already existed — the handler correctly wrote to the App Group
+  (`widget_saved_recipes` key) and called
+  `WidgetCenter.shared.reloadTimelines(ofKind: "SavedRecipesWidget")`.
+- But **nothing in the app ever called `WidgetService.updateSavedRecipesWidget()`**
+  (confirmed via grep — zero call sites outside its own definition), and
+  **no WidgetKit widget of kind `"SavedRecipesWidget"` existed anywhere** in
+  `ios/ShoppingListWidget/`. Both ends of the pipe were real, working code;
+  the pipe itself carried nothing, because nothing produced data and nothing
+  consumed it. This is the same class of bug as the `AppIntents.swift`/Siri
+  chain the fifth session found (real code, wired to nothing) — just smaller
+  and, per the fourth/ninth-session notes, already correctly flagged as
+  "unfinished, not a regression" rather than mis-attributed as broken.
+- One pre-existing wrinkle left as-is: `WidgetService.updateSavedRecipesWidget()`
+  also writes the same payload to `SharedPreferences` (standard
+  `UserDefaults`, not the App Group) under the same key name — a dead,
+  never-read write (confirmed via grep: no Dart call site reads
+  `widget_saved_recipes` back), harmless but slightly misleading. Left alone
+  since it's pre-existing, not part of the actual gap this session closed,
+  and touching it wasn't necessary to make the feature real.
+
+**What I implemented:**
+- **`ios/ShoppingListWidget/SavedRecipesWidget.swift`** (new) — a WidgetKit
+  widget with kind `"SavedRecipesWidget"` (matching the native reload call
+  exactly, so no `AppDelegate.swift` change was needed), `.systemSmall`/
+  `.systemMedium`/`.systemLarge`. Plain `TimelineProvider` (not
+  `AppIntentTimelineProvider` — there's no per-widget configuration to make,
+  unlike the list/quick-add widgets which need a "which list?" picker), 30
+  min refresh policy matching `ShoppingListWidget`'s. Reads the exact JSON
+  shape the native handler already writes (`{"recipes": [...], "recipeCount":
+  N, "updatedAt": ...}`) from the `widget_saved_recipes` App Group key — the
+  same `kAppGroupId` constant `ShoppingListWidget.swift` already declares.
+  Shows up to 3/4/8 recipes (small/medium/large) as name + cook-time rows;
+  each row is a `Link(destination:)` to `shoply://recipe/<id>` — a separate
+  per-row deep link rather than one whole-widget `widgetURL()`, since a
+  saved-recipes widget's whole point is picking *which* recipe to open.
+  `Link`-based per-element deep linking is a plain SwiftUI/WidgetKit
+  mechanism (unlike the checkbox/quick-add widgets' `Button(intent:)`, which
+  needs iOS 17+) — no new minimum-OS concern beyond the widget extension's
+  existing `17.0` target. Deliberately **no remote image loading** — every
+  other widget in this extension is text/SF-Symbol only with zero live
+  network calls from the widget process, and `AsyncImage` inside a WidgetKit
+  timeline snapshot is a known reliability trap (the entry can render before
+  the image loads); kept this widget in the same safe, verified-working
+  style rather than introducing a new failure mode. Empty state ("Noch keine
+  gespeicherten Rezepte") for a user with nothing saved yet, same visual
+  language as the other two widgets' empty states.
+- **Registered in the bundle**: `ShoppingListWidgetBundle.body` now includes
+  `SavedRecipesWidget()` alongside the existing two. Confirmed via direct
+  `project.pbxproj` inspection (same check the sixth session already
+  documented) that `ios/ShoppingListWidget` is a
+  `PBXFileSystemSynchronizedRootGroup` with only `Info.plist` excluded from
+  the build-membership exception list — the new file needed **zero**
+  project-file edits to compile into the `ShoppingListWidgetExtension`
+  target.
+- **Wired the actually-missing producer side**: `SavedRecipesNotifier.loadSavedRecipes()`
+  (`lib/presentation/state/saved_recipes_provider.dart`) now calls
+  `WidgetService.updateSavedRecipesWidget()` after every successful load —
+  fires on provider init and after every save/unsave (`loadSavedRecipes()` is
+  already called at the end of `toggleSave()`), mapping the app's `Recipe`
+  model to the existing `WidgetRecipe` shape (`id`, `name`, `imageUrl`,
+  `cookTime: totalTimeMinutes`, `rating: averageRating`). `unawaited` +
+  wrapped in its own try/catch, same "best-effort, never block the real
+  state update" pattern `ListsNotifier._updateWidgetRecentItems()` already
+  established — a failed widget push is never worth surfacing to the user or
+  delaying the saved-recipes screen.
+- **Sign-out privacy**: no new code needed — `AppDelegate.swift`'s
+  `clearWidgetData()` already sweeps every App Group key by `"widget_"`
+  prefix (fixed in the seventh session, 2026-07-16), so `widget_saved_recipes`
+  is already covered.
+- **Deep link correctness verified by tracing, not guessed**: confirmed
+  `DeepLinkService._parseCustomSchemePath` already resolves
+  `shoply://recipe/<id>` (host `recipe`, one path segment) to `/recipe/<id>` —
+  the exact route `recipe_detail_screen.dart` serves — so the new widget's
+  `Link` targets a route that already exists and was already reachable via
+  the same scheme the shopping-list widget uses for `shoply://list/<id>`.
+
+**Explicitly NOT done / still open:**
+- **Not verified on a real device/simulator** — no macOS/Xcode in this
+  container, the same standing limitation every Feature 3 session has
+  flagged. This is the single most important thing to check before
+  considering this done: does the widget appear in the gallery as a third
+  option, does it render saved recipes correctly at all three sizes, does
+  tapping a row actually open that recipe.
+- **No image loading**, by design (see above) — the widget is text/icon
+  only, like its two siblings. If you want thumbnails, that needs its own
+  scoped session (pre-fetching + caching image data inside the timeline
+  provider, not a blind `AsyncImage` drop-in) — flagged as an idea below
+  rather than risked here.
+- **The dead `SharedPreferences` write in `WidgetService.updateSavedRecipesWidget()`**
+  (writes to the wrong storage domain, never read back) was left as-is — a
+  pre-existing, harmless nit, not part of this session's actual gap.
+- Unchanged from the ninth session: `VoiceAssistantPlugin.swift` deletion
+  still waits on real-device confirmation; the "today's list" widget kind
+  and the widget-side "token stale" UX idea remain needs-decision.
+
+**Files changed (tenth session):**
+`ios/ShoppingListWidget/SavedRecipesWidget.swift` (new),
+`ios/ShoppingListWidget/ShoppingListWidget.swift` (register the widget in
+the bundle), `lib/presentation/state/saved_recipes_provider.dart` (push to
+the widget on every load), `FEATURE_IMPLEMENTATION_STATUS.md`.
+
+**Checks performed (tenth session):** Flutter 3.35.6 downloaded fresh into
+`/tmp/flutter`; `env.example.dart`/`firebase_options.example.dart` copied to
+their gitignored real paths so `dart analyze` reflects a properly configured
+checkout instead of pre-existing missing-file errors unrelated to this
+change (not committed — both stay gitignored). Full-project `dart analyze`
+before/after via `git stash`: baseline 601 issues (0 errors, 59 warnings,
+542 info) → after 602 (0 errors, 59 warnings, 543 info) — the one new info
+lint is `avoid_print` on the new catch-block's `print()` call in
+`saved_recipes_provider.dart`, consistent with that file's existing style
+(it already uses `print()`, not `debugPrint`, in every other branch — no new
+lint *category* introduced, and zero new errors/warnings. `flutter test`
+passes (25/25, "All tests passed"). `pubspec.lock` churn from `flutter pub
+get` (this container's SDK is older than the committed lock was resolved
+with) reverted before committing. The new Swift file was verified with a
+Python string/comment-aware brace-balance parser (no Swift toolchain in this
+container — same limitation every prior Feature 3 Swift change has
+documented) and by symbol-grepping every new type/function name
+(`SavedRecipe`, `SavedRecipesEntry`, `SavedRecipesProvider`,
+`SavedRecipesWidgetEntryView`, `SavedRecipesWidget`, `loadSavedRecipes`,
+`kSavedRecipesKey`, `SavedRecipeRow`) across the whole widget-extension
+folder to confirm zero collisions with `ShoppingListWidget.swift`/
+`QuickAddWidget.swift`. Confirmed via direct `project.pbxproj` read that no
+project-file edit was needed (synchronized group, only `Info.plist`
+excluded). Traced the JSON shape end-to-end: Dart `WidgetRecipe.toJson()` →
+native `updateSavedRecipesWidget` handler (verbatim passthrough into the App
+Group) → Swift `loadSavedRecipes()` parser — field names match at every
+hop. **Not run (no macOS/Xcode in this container):** an actual Xcode build,
+the widget appearing in the gallery, or a live on-device tap-to-open test.
 
 ---
 
@@ -4039,6 +4203,28 @@ possible here (no macOS/Xcode).
   - Recommendation: needs decision — do after the current widget +
     Siri/Shortcuts fixes are confirmed working on a real device, so any new
     build issue is easy to isolate to the new code.
+
+- [ ] IDEA: Add recipe thumbnail images to the new `SavedRecipesWidget`
+  (built 2026-07-21, currently text/SF-Symbol only, no images).
+  - Why it helps: a recipe widget with real thumbnails is a noticeably nicer
+    home-screen surface than a plain text list — recipes are a visual medium.
+  - Expected user value: medium.
+  - Expected business/premium value: low.
+  - Complexity: Medium-high — WidgetKit timelines are static snapshots, so
+    this needs the timeline provider itself to download and decode image
+    data *before* building the entry (not a live `AsyncImage`, which is a
+    known reliability trap in widgets — the entry can render before the
+    image loads). That means URLSession calls inside `getTimeline`, image
+    resizing/caching to stay under WidgetKit's per-widget memory budget, and
+    a same graceful-failure story as the rest of the extension (missing
+    image = fall back to the icon, never a broken widget).
+  - Risk: Medium — the one widget-process network call in this extension
+    that isn't a Supabase REST call with cached credentials; needs care
+    around timeouts and the widget's tight memory/CPU budget, and can't be
+    verified at all without a real device.
+  - Recommendation: needs decision — worth doing only with a real
+    Xcode/device session available to verify the timeline-image-fetch
+    approach actually renders reliably before shipping it.
 
 - [x] IDEA (approved, DONE this session — with a correction): Delete the dead
   OCR/flyer-deal pipeline now that the marktguru pipeline is the real,

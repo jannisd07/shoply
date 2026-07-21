@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/app_review_service.dart';
+import 'package:shoply/data/services/widget_service.dart';
 
 /// State for saved recipes
 class SavedRecipesState {
@@ -56,10 +59,31 @@ class SavedRecipesNotifier extends StateNotifier<SavedRecipesState> {
         isLoading: false,
       );
       print('✅ [SAVED_RECIPES_PROVIDER] State updated - savedIds: ${state.savedIds.length}, savedRecipes: ${state.savedRecipes.length}');
+      unawaited(_updateSavedRecipesWidget(recipes));
     } catch (e, stackTrace) {
       print('❌ [SAVED_RECIPES_PROVIDER] Error loading saved recipes: $e');
       print('❌ [SAVED_RECIPES_PROVIDER] Stack: $stackTrace');
       state = state.copyWith(isLoading: false);
+    }
+  }
+
+  /// Pushes the saved-recipes list to the App Group so the
+  /// SavedRecipesWidget can render it without opening the app. Best-effort:
+  /// a failed widget push is never worth surfacing to the user.
+  Future<void> _updateSavedRecipesWidget(List<Recipe> recipes) async {
+    try {
+      final widgetRecipes = recipes
+          .map((r) => WidgetRecipe(
+                id: r.id,
+                name: r.name,
+                imageUrl: r.imageUrl,
+                cookTime: r.totalTimeMinutes,
+                rating: r.averageRating,
+              ))
+          .toList();
+      await WidgetService.updateSavedRecipesWidget(recipes: widgetRecipes);
+    } catch (e) {
+      print('⚠️ [SAVED_RECIPES_PROVIDER] Failed to refresh saved-recipes widget: $e');
     }
   }
 
