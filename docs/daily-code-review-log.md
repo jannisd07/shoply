@@ -516,3 +516,55 @@ analyze` aren't available in this remote environment (no Flutter SDK per
 CLAUDE.md), so this run's verification was static only — recommend a
 `dart analyze` + `flutter build ios --simulator --debug` pass once a
 toolchain is available.
+
+## 2026-07-21 — `lib/presentation/screens/ai/ai_dashboard_screen.dart`
+
+Picked at random, then traced its references: `lib/presentation/screens/ai/ai_screen.dart`
+(the only file that imports `AIDashboardScreen`), `lib/routes/app_router.dart`
+(the routing table), `lib/presentation/screens/main_scaffold.dart` (the 4-tab
+bottom nav + Avo orb), and `lib/data/services/analytics_service.dart`'s "AI
+FEATURES EVENTS" section.
+
+Findings:
+- **Dead code (whole screen, two files)**: `AIScreen`/`AIDashboardScreen` have
+  zero callers anywhere in the repo. `app_router.dart` only imports
+  `avo_chat_screen.dart` from the `screens/ai/` directory — never `ai_screen.dart`
+  or `ai_dashboard_screen.dart` (`grep`-confirmed, no route, no deep link, no
+  test reference). `main_scaffold.dart`'s bottom nav has exactly 4 branches
+  (Home, Recipes, calories/flame, Profile) plus the detached Avo orb — no AI
+  tab exists to reach this screen from. Same "built, never wired in" pattern
+  as the `oauth_webview_dialog.dart` (2026-07-07) and
+  `premium_feature_gate.dart` (2026-07-16) findings.
+- **Fake/hardcoded data inside the dead code**: `_buildNutritionScoreCard` is
+  called with a literal `score: 78` (line 29) — there's no nutrition-scoring
+  service backing it; if this screen were ever wired up it would show every
+  user the same fabricated "78 / Excellent-ish" score.
+- **Non-functional control inside the dead code**: the "Enable AI
+  Recommendations" `SwitchListTile` (lines 94–110) has `value: true` hardcoded
+  and an `onChanged` that's just a comment (`// Placeholder`) — since the
+  widget is `StatelessWidget`, flipping the switch wouldn't even update local
+  UI state, let alone persist anything.
+- **Unlocalized strings**: every user-facing string in the file ('AI
+  Assistant', 'AI Meal Planning', 'Coming soon!', etc.) is a hardcoded English
+  literal, not routed through `AppLocalizations`/`context.tr(...)` — violates
+  the bilingual DE/EN convention documented in CLAUDE.md. Moot while
+  unreachable, but would need fixing before ever shipping this screen.
+- **More dead code, one layer out**: `AnalyticsService.logAIDashboardViewed()`,
+  `logNutritionScoreViewed()`, and `logMealPlanningUsed()`
+  (`analytics_service.dart:266-284`) are never called from anywhere in the
+  repo either — they exist solely to instrument this unreachable screen.
+  (`logMLRecommendationsViewed`/`logMLRecommendationClicked` in the same
+  section are also uncalled, but that pairs with the pre-existing
+  `ml_recommendations_provider.dart` dead-provider finding from 2026-07-19,
+  not this file.)
+- No security issues: the screen renders static widget-tree UI only, no user
+  input, no network/Supabase calls, nothing to exploit even if it were wired
+  up.
+
+No changes were made this run (review-only, consistent with how prior
+built-never-wired-in findings were handled). Recommendation for a future
+run/human: either delete `ai_screen.dart` + `ai_dashboard_screen.dart` outright
+(there's no live meal-planning/nutrition-scoring backend to make the "coming
+soon" cards real) plus the three orphaned `AnalyticsService` methods, or wire
+`AIScreen` into the router/nav and build the real score/settings-persistence
+logic behind it if the feature is still wanted.
