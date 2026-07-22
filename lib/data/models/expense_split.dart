@@ -123,11 +123,6 @@ class TripSplitSummary extends Equatable {
     required this.splits,
   });
 
-  int get unpaidCount => splits.where((s) => !s.isPaid).length;
-  double get unpaidTotal =>
-      splits.where((s) => !s.isPaid).fold(0.0, (sum, s) => sum + s.amount);
-  bool get isFullySettled => splits.isNotEmpty && unpaidCount == 0;
-
   @override
   List<Object?> get props => [
         historyId,

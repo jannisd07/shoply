@@ -568,3 +568,83 @@ run/human: either delete `ai_screen.dart` + `ai_dashboard_screen.dart` outright
 soon" cards real) plus the three orphaned `AnalyticsService` methods, or wire
 `AIScreen` into the router/nav and build the real score/settings-persistence
 logic behind it if the feature is still wanted.
+
+## 2026-07-22 — `lib/data/services/expense_split_service.dart`
+
+Randomly selected file. Reviewed it plus its references: the model
+(`lib/data/models/expense_split.dart`), the provider layer
+(`lib/presentation/state/expense_split_provider.dart`), every real caller
+(`split_cost_sheet.dart`, `split_trip_nudge_card.dart`,
+`pending_splits_banner.dart`, `shopping_history_screen.dart`,
+`avo_assistant_service.dart`'s `split_trip_cost` tool), and
+`SplitNudgeCacheService`. Unlike most prior finds, this feature ("split this
+trip?" nudge from 2026-07-20's commit) is fully wired in — no dead screens
+here. Also queried the live **ShoplyAI** Supabase project's RLS policies on
+`expense_splits`/`shopping_history`/`list_members` via the Supabase MCP tool,
+since the service reads/writes across three tables per call.
+
+Findings:
+- **Efficiency bug (real, in the live path)**:
+  `getUnsplitTripNudgeCandidate()` — called by `unsplitTripNudgeProvider`,
+  watched on every home-screen build — looped over up to `scanLimit` (5)
+  recent trips and issued **two separate queries per row** (an
+  `expense_splits` existence check, a `list_members` count check), i.e. up
+  to 11 round-trips total for one nudge card. Both checks are now batched
+  with a single `.inFilter('history_id', historyIds)` /
+  `.inFilter('list_id', listIds)` query each, capping this at 3 queries
+  regardless of `scanLimit`. Verified via the Supabase MCP that
+  `list_members`'s `SELECT` RLS policy (`user_id = auth.uid() OR
+  is_list_member(list_id, auth.uid())`) still allows the batched query to see
+  full membership rows for every list the query touches, since all touched
+  lists come from the current user's own `shopping_history` rows (so
+  `is_list_member` is true for each) — same access the original per-row
+  query relied on, no behavior change.
+- **Dead code**: `ExpenseSplitService.deleteSplitsForHistory()` had zero
+  callers anywhere (`grep`-confirmed) — no "undo split" UI exists.
+  `pendingSplitsCountProvider` (`expense_split_provider.dart`) was similarly
+  unread — its own doc comment claimed it fed "the home-screen status banner
+  badge," but `PendingSplitsBanner` renders full unpaid-split rows directly
+  and never reads a count. On the model side, `TripSplitSummary.unpaidCount`,
+  `.isFullySettled`, and `.unpaidTotal` (`expense_split.dart`) were also
+  zero-caller getters.
+- **Edge-case bug (minor, not fixed)**: `createSplits()`'s
+  `isPayersOwnShare()` marks a name-only participant's share as
+  pre-paid by matching `s.participantName == paidByName` (there's no id to
+  compare a person without an app account against). If two name-only
+  participants in the same split share an identical name as the payer
+  (e.g. two people both added as "Alex", one of whom is marked as payer),
+  every share with that name gets marked paid, not just the payer's own.
+  Requires duplicate manually-typed names to trigger; the UI doesn't
+  prevent duplicates but doesn't encourage them either. Left as a
+  recommendation rather than fixed, since a real fix needs a stable
+  per-participant identifier (e.g. an index/local id threaded from the sheet
+  into `SplitShare`) rather than a one-line change.
+- **No DB transaction across the three writes** in `createSplits()` (delete
+  splits → insert new splits → update `shopping_history`'s cost/payer
+  fields) — a crash or dropped connection between the delete and the update
+  could leave a trip's splits wiped without new ones recorded, while the old
+  `total_cost`/`paid_by_*` values linger. Same class of eventual-consistency
+  gap as other multi-table service methods in this codebase; would need a
+  Postgres RPC to fix properly, not an app-code change, so left as a
+  recommendation.
+- No security issues beyond the above: RLS on `expense_splits`
+  (insert/update/delete/select all require being the trip's `user_id` owner
+  or a member of the trip's list) and on `shopping_history` (update requires
+  owner or list member) already confine `createSplits()`/`setPaid()` to
+  people who legitimately belong to the trip — no `admin_repository.dart`-style
+  escalation path here. Push-notification recipients in
+  `_notifySplitStatusChanged` are derived from the split/trip data itself
+  (never from caller-supplied input), so there's no way to spam arbitrary
+  users through this path either.
+
+Action taken this run: batched `getUnsplitTripNudgeCandidate()`'s two
+per-row queries into two `inFilter` queries total; deleted the five
+confirmed-dead members (`deleteSplitsForHistory`, `pendingSplitsCountProvider`,
+`unpaidCount`, `isFullySettled`, `unpaidTotal`) after `grep`-confirming zero
+references anywhere in the repo post-deletion. `flutter build`/`dart analyze` aren't available in this
+remote environment (no Flutter SDK per CLAUDE.md), so verification was static:
+full read of the changed methods, import-by-import check, and a repo-wide
+grep for every removed symbol name. Recommend a `dart analyze` +
+`flutter build ios --simulator --debug` pass once a toolchain is available,
+and a human decision on whether the name-collision edge case in
+`isPayersOwnShare()` is worth a proper per-participant-id fix.

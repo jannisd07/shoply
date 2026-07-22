@@ -60,12 +60,3 @@ final unsplitTripNudgeProvider =
       await SplitNudgeCacheService.instance.isDismissed(candidate.historyId);
   return dismissed ? null : candidate;
 });
-
-/// Combined count of unpaid-split trips relevant to the current user, for
-/// the home-screen status banner badge.
-final pendingSplitsCountProvider = Provider.autoDispose<int>((ref) {
-  final owedToMe =
-      ref.watch(tripsAwaitingPaymentToMeProvider).valueOrNull ?? const [];
-  final iOwe = ref.watch(tripsIOweProvider).valueOrNull ?? const [];
-  return owedToMe.length + iOwe.length;
-});
