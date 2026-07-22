@@ -1,9 +1,32 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-21 (scheduled routine — Feature 3 focus: built the
-`SavedRecipesWidget` WidgetKit widget that native/App-Group plumbing has
-silently supported since the widget extension was first added but that
-nothing had ever actually implemented — see Feature 3's tenth-session notes.)_
+_Last updated: 2026-07-22 (scheduled routine — Feature 6 focus: built the
+dedicated in-app "What can I still eat today?" screen — see Feature 6's
+fourth-session notes.)_
+
+**2026-07-22 — why Feature 6, again, and a correction to the 2026-07-18
+note below.** Same walk as every recent session: Features 1–3's remaining
+gaps are external/device-QA/decision-gated (re-checked the summary table
+and each section's own "Explicitly NOT done" list, unchanged); Feature 4's
+open items (assistant memory, rich chat cards) are needs-decision; Feature
+5's one open item (offers/budget-aware recipe ranking) is explicitly
+needs-decision. Feature 6 (~90%) still carried one idea flagged
+needs-decision: a dedicated in-app "What can I still eat today?" screen.
+Re-reading that flag against the brief's own text (the same "trust the
+brief, not a prior session's paraphrase" check that corrected the
+weekly-summary idea on 2026-07-18) found the flag was wrong twice over:
+**"'What can I still eat today?' assistant flow"** is a literal, explicitly
+quoted autonomy bullet under Feature 6 in the brief — not an invented idea
+this project's sessions came up with. The 2026-07-18 note above said this
+"is NOT covered by an explicit brief bullet," which doesn't hold up against
+the brief text itself. The actual open question (does a dedicated in-app
+screen compete with the existing home-screen nudge card?) is real but
+doesn't require an owner's product decision to resolve responsibly — the two
+surfaces serve different moments (a proactive 3-item nudge you didn't ask
+for vs. an on-demand, full-list lookup you tapped into), the same
+distinction the recipe-detail offers card already drew against the
+open-ended "offer-aware ranking" idea on 2026-07-20. Built it as an
+unconditional Feature 6 session. See Feature 6's fourth-session notes below.
 
 **2026-07-21 — why Feature 3, again.** Same walk as every recent session:
 Features 1–2 re-confirmed at ~95%, blocked on hard externals/device QA
@@ -479,7 +502,7 @@ was **never wired into any screen** — this session wired it up.
 | 3 | Widgets & quick actions | ~95% | In progress (needs device QA) | **2026-07-21: built `SavedRecipesWidget`** — a third WidgetKit widget (saved recipes, tap-to-open) that closes plumbing (App Group key + native reload call) that had existed since the widget extension was first added but was never actually consumed by a real widget. 2026-07-19: fixed a real, likely-severe regression — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26; corrected to `17.0`. Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
 | 4 | AI assistant app control | ~93% | Implemented (needs QA) | Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list` — Avo can now edit and organize items and create/rename lists, not just add/delete. None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
-| 6 | Calorie tracking | ~90% | In progress (needs device QA) | Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
+| 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
 | 8 | Cross-feature UX / growth / premium | ~65% | In progress | Recipe-detail "on offer this week" card + offer-price hand-off into list totals shipped 2026-07-20 (second run), closing the last unbuilt brief example ("this recipe is cheaper this week"); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
 
@@ -3077,6 +3100,100 @@ suite runs fine here and the logic is pure Dart. `pubspec.lock` churn from
 actual rendering (bar-label fit at 7 columns on narrow screens, card layout,
 dark mode appearance) — needs a device pass like everything else here.
 
+**Fourth session, 2026-07-22 (scheduled routine — this feature's dedicated
+session).** Built the dedicated in-app "What can I still eat today?" screen
+— a literal Feature 6 autonomy bullet (`"'What can I still eat today?'
+assistant flow"`) that the 2026-07-18 session mistakenly flagged as "not
+covered by an explicit brief bullet, needs decision." Re-reading the brief's
+own text (not a prior session's paraphrase of it) found the quote sitting
+right there in Feature 6's autonomy list — see the top-of-file note for the
+full correction.
+
+**Before this session:** the only "what fits today" surface was the
+home-screen `CalorieRecipeNudgeCard` (max 3 recipes, dismissible for the
+day) and Avo chat's `get_nutrition_status` → `search_recipes` chaining
+(Feature 4). Nothing let a user who doesn't use chat and wants more than 3
+options actually browse everything that currently fits their day.
+
+**What I implemented:**
+- **`whatCanIEatSuggestionsProvider`** (new,
+  `lib/presentation/state/calorie_recipe_nudge_provider.dart`) — thin
+  sibling of the existing `calorieRecipeSuggestionsProvider`, same inputs
+  (today's remaining calories, the user's diet preferences/allergies), just
+  `limit: 15` instead of 3. No changes to `CalorieRecipeNudgeService` itself
+  were needed — `getRankedSuggestions` already accepted a `limit` parameter,
+  it just had nothing calling it with a larger one. Same ranking as the home
+  card: recipes that reuse items already unchecked on a shopping list rank
+  first, then closeness to the remaining budget, then rating; recently
+  cooked recipes (last 5 days) are softly excluded, same as the card.
+- **`WhatCanIEatScreen`** (new,
+  `lib/presentation/screens/calories/what_can_i_eat_screen.dart`) — a full
+  scrollable list (not capped at 3, no dismiss state — this is an on-demand
+  lookup, not a proactive nudge, so it doesn't compete with the home card's
+  daily dismiss). Three honest empty states, each mapped to a real cause
+  rather than one generic "nothing here": no goal configured yet (shouldn't
+  normally be reachable, since the entry point only shows once a goal
+  exists, but handled defensively for the edge case of tracking being
+  disabled mid-session); too little calorie budget left today (`< 150 kcal`,
+  the same floor `CalorieRecipeNudgeService.minRemainingCalories` already
+  enforces — shown with the exact remaining number, plus a "try a light
+  snack instead" suggestion); and a real query with zero matches (a "browse
+  recipes" button that switches to the Recipes tab via `context.go('/recipes')`,
+  the same pattern `recipe_detail_screen.dart` already uses to leave a
+  now-deleted recipe). Each recipe row shows the same info as the home
+  card's row (thumbnail, calories/time, "uses X, Y from your list" when it
+  matched) at a slightly larger, full-width size appropriate for a
+  dedicated list rather than a compact home-screen card.
+- **Entry point:** a new `AppOutlineButton` ("What can I still eat today?")
+  on the calorie dashboard, placed directly under the `CalorieRing` (the
+  widget that already shows the exact number this button answers a
+  follow-up question about) and above the macro card — matches the existing
+  `log_weight_cta` button's style exactly.
+- 10 new EN/DE translation key pairs.
+
+**Explicitly NOT done:**
+- No meal-type filtering (breakfast/lunch/dinner/snack tabs) — recipes
+  aren't tagged by meal type anywhere in the schema today, and inventing
+  that classification wasn't necessary for the brief's actual ask.
+- No Avo awareness that this screen exists (e.g. Avo can't deep-link into
+  it) — the chat flow already answers the same question independently via
+  `get_nutrition_status`/`search_recipes`, so this isn't a functional gap,
+  just an unlinked parallel surface.
+- Same known limits as the home nudge card it reuses: only recipes with a
+  stored `nutrition.calories` are ever candidates (never estimated on the
+  spot), and the candidate pool is saved + 20 popular + 20 recent recipes,
+  not the full catalog.
+
+**Not verified (no macOS/Xcode/device in this container):** actual
+rendering (list-row layout at real widths, empty-state icon/button styling,
+dark mode); whether a real account's saved/popular/recent recipes contain
+enough stored-nutrition rows for the list to feel substantial in practice —
+same caveat every `CalorieRecipeNudgeService`-consuming surface in this file
+already carries.
+
+**Files changed:**
+`lib/presentation/state/calorie_recipe_nudge_provider.dart`
+(`whatCanIEatSuggestionsProvider`),
+`lib/presentation/screens/calories/what_can_i_eat_screen.dart` (new),
+`lib/presentation/screens/calories/calories_screen.dart` (entry button),
+`lib/core/localization/app_translations.dart` (10 new EN/DE key pairs).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh into `/tmp/flutter`;
+`env.example.dart`/`firebase_options.example.dart` copied to their
+gitignored real paths (not committed) so `flutter analyze` reflects a
+properly configured checkout. Full-project `flutter analyze` before
+(`git stash`, including the new untracked file) **602 issues (0 errors, 59
+warnings)** vs. after **602 issues — byte-identical** (an intermediate run
+caught one real new issue, an unused import in the new screen file, fixed
+before this final count). `flutter test` passes (25/25, "All tests
+passed") — no new tests added since this session reuses
+`CalorieRecipeNudgeService.rankSuggestions`, which the eighth Feature 5
+session already unit-tested; the only new logic is UI wiring and a `limit`
+parameter change, not new business logic. `pubspec.lock` churn from
+`flutter pub get` (this container's SDK resolves a slightly different lock
+than the committed one) reverted before committing. **Not run:** an actual
+Xcode/simulator build or a live account exercising the full flow.
+
 ---
 
 ## Feature 7 — Personalized onboarding and navbar
@@ -4100,22 +4217,28 @@ possible here (no macOS/Xcode).
   - The "premium: monthly trends" upsell angle was NOT built (still part of
     the open premium-gating decision below).
 
-- [ ] IDEA: A first-class in-app "what can I still eat today?" surface — the
-  chat version already works via Avo (`get_nutrition_status` →
-  `search_recipes`), but there's no dedicated UI for a user who doesn't want
-  to open chat for it.
-  - Why it helps: turns remaining-calories into an actionable "here are 3
-    dinner ideas that fit" moment right on the dashboard.
-  - Expected user value: medium.
-  - Expected business/premium value: low-medium.
-  - Complexity: Medium — would reuse the recipe-filtering logic Feature 4's
-    Avo tool and Feature 8's `CalorieRecipeNudgeService` already have; the
-    real question is placement/overlap with the existing home-screen
-    calorie-recipe nudge card, which is a product call.
-  - Risk: Low.
-  - Recommendation: needs decision — split out from the (now done) weekly
-    summary idea above; unlike that one, this has no explicit brief bullet
-    and overlaps an existing surface.
+- [x] IDEA (DONE 2026-07-22, Feature 6's fourth session — with a
+  correction): A first-class in-app "what can I still eat today?" surface —
+  the chat version already works via Avo (`get_nutrition_status` →
+  `search_recipes`), but there was no dedicated UI for a user who doesn't
+  want to open chat for it.
+  - **Correction:** this idea's own "Recommendation: needs decision" line
+    (and the 2026-07-18 top-of-file note that repeated it) claimed the
+    surface "has no explicit brief bullet." That's wrong — the brief lists
+    `"'What can I still eat today?' assistant flow"` verbatim as a Feature 6
+    autonomy bullet. Re-checked against the actual brief text before
+    building, not against the prior paraphrase.
+  - **Outcome:** `WhatCanIEatScreen` (new), reached via a button on the
+    calorie dashboard right under the calorie ring. Reuses
+    `CalorieRecipeNudgeService.getRankedSuggestions` (same ranking as the
+    home card) through a new `whatCanIEatSuggestionsProvider` with
+    `limit: 15` instead of 3, plus three honest empty states (no goal, too
+    little budget left, zero matches → browse recipes). Doesn't overlap the
+    home card functionally: the card is a proactive, dismissible, max-3
+    nudge; this screen is an on-demand, full, non-dismissed lookup for
+    anyone who wants more than 3 options or opens the app well after the
+    card was already dismissed for the day. Details in Feature 6's
+    fourth-session notes.
 
 - [x] IDEA (DONE 2026-07-16, Feature 3's seventh session): Proactively
   re-push the widget's cached Supabase access token on every token refresh,

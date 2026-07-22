@@ -12,6 +12,7 @@ import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/presentation/screens/calories/goal_setup_screen.dart';
 import 'package:shoply/presentation/screens/calories/weekly_summary_screen.dart';
 import 'package:shoply/presentation/screens/calories/weight_tracking_screen.dart';
+import 'package:shoply/presentation/screens/calories/what_can_i_eat_screen.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_ring.dart';
 import 'package:shoply/presentation/screens/calories/widgets/challenges_entry_card.dart';
 import 'package:shoply/presentation/screens/calories/widgets/food_entry_sheet.dart';
@@ -213,6 +214,13 @@ class _Dashboard extends ConsumerWidget {
               leftLabel: context.tr('calories_left'),
               overLabel: context.tr('calories_over'),
             ),
+          ),
+          const SizedBox(height: 16),
+          AppOutlineButton(
+            text: context.tr('what_can_i_eat_cta'),
+            icon: Icons.restaurant_menu_outlined,
+            onPressed: () => Navigator.of(context)
+                .push(CupertinoPageRoute(builder: (_) => const WhatCanIEatScreen())),
           ),
           const SizedBox(height: 24),
           AppCard(

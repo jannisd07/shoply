@@ -32,3 +32,19 @@ final calorieRecipeSuggestionsProvider =
 final calorieNudgeDismissedProvider = FutureProvider.autoDispose<bool>((ref) async {
   return CalorieRecipeNudgeService.instance.isDismissedToday();
 });
+
+/// The full "What can I still eat today?" list (up to 15, vs. the home
+/// card's 3) — same ranking, just a longer list for the dedicated screen
+/// reached from the calorie dashboard.
+final whatCanIEatSuggestionsProvider =
+    FutureProvider.autoDispose<List<RecipeSuggestion>>((ref) async {
+  final remaining = await ref.watch(remainingCaloriesTodayProvider.future);
+  if (remaining == null) return const [];
+  final user = await ref.watch(currentUserProvider.future);
+  return CalorieRecipeNudgeService.instance.getRankedSuggestions(
+    remainingCalories: remaining,
+    dietPreferences: user?.dietPreferences ?? const [],
+    allergies: user?.allergies ?? const [],
+    limit: 15,
+  );
+});

@@ -803,6 +803,19 @@ class AppTranslations {
     'meal_snack': 'Snack',
     'meal_empty': 'Nothing logged yet',
     'log_weight_cta': 'Log weight',
+    'what_can_i_eat_cta': 'What can I still eat today?',
+    'what_can_i_eat_title': 'What can I eat?',
+    'what_can_i_eat_subtitle': '{kcal} kcal left today · {n} recipes fit',
+    'what_can_i_eat_empty_no_goal_title': 'Set up your goals first',
+    'what_can_i_eat_empty_no_goal_sub':
+        'Configure your calorie target so Avo knows what still fits today.',
+    'what_can_i_eat_empty_budget_title': 'Not much room left today',
+    'what_can_i_eat_empty_budget_sub':
+        'Only {kcal} kcal left — try a light snack instead of a full meal idea.',
+    'what_can_i_eat_empty_no_match_title': 'No recipes fit right now',
+    'what_can_i_eat_empty_no_match_sub':
+        'None of your saved or popular recipes fit today\'s calories and preferences yet.',
+    'what_can_i_eat_browse_cta': 'Browse recipes',
     'goal_setup_prompt_title': 'Set up your goals',
     'goal_setup_prompt_sub':
         'Answer a few quick questions and we\'ll calculate your daily calorie and macro targets.',
@@ -1717,6 +1730,19 @@ class AppTranslations {
     'meal_snack': 'Snack',
     'meal_empty': 'Noch nichts eingetragen',
     'log_weight_cta': 'Gewicht eintragen',
+    'what_can_i_eat_cta': 'Was kann ich heute noch essen?',
+    'what_can_i_eat_title': 'Was kann ich essen?',
+    'what_can_i_eat_subtitle': 'Noch {kcal} kcal übrig · {n} passende Rezepte',
+    'what_can_i_eat_empty_no_goal_title': 'Richte zuerst deine Ziele ein',
+    'what_can_i_eat_empty_no_goal_sub':
+        'Lege dein Kalorienziel fest, damit Avo weiß, was heute noch passt.',
+    'what_can_i_eat_empty_budget_title': 'Heute nicht mehr viel Spielraum',
+    'what_can_i_eat_empty_budget_sub':
+        'Nur noch {kcal} kcal übrig — vielleicht eher ein leichter Snack als eine ganze Mahlzeit.',
+    'what_can_i_eat_empty_no_match_title': 'Gerade passt kein Rezept',
+    'what_can_i_eat_empty_no_match_sub':
+        'Keins deiner gespeicherten oder beliebten Rezepte passt aktuell zu Kalorien und Vorlieben.',
+    'what_can_i_eat_browse_cta': 'Rezepte durchstöbern',
     'goal_setup_prompt_title': 'Richte deine Ziele ein',
     'goal_setup_prompt_sub':
         'Beantworte ein paar kurze Fragen, damit wir deine täglichen Kalorien- und Makroziele berechnen können.',
