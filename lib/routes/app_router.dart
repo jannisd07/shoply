@@ -19,6 +19,7 @@ import 'package:shoply/presentation/screens/recipes/all_recipes_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_drafts_screen.dart';
 import 'package:shoply/presentation/screens/profile/profile_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/diet_preferences_screen.dart';
+import 'package:shoply/presentation/screens/profile/settings/app_priorities_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_detail_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_activities_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_background_selection_screen.dart';
@@ -313,6 +314,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/diet-preferences',
         name: 'diet-preferences',
         builder: (context, state) => const DietPreferencesScreen(),
+      ),
+      GoRoute(
+        path: '/app-priorities',
+        name: 'app-priorities',
+        builder: (context, state) => const AppPrioritiesScreen(),
       ),
       GoRoute(
         path: '/privacy-policy',

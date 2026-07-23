@@ -12,6 +12,7 @@ import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/presentation/screens/profile/settings/display_name_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/personal_info_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/diet_preferences_screen.dart';
+import 'package:shoply/presentation/screens/profile/settings/app_priorities_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/theme_customization_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/help_support_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/notifications_screen.dart';
@@ -135,6 +136,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   onTap: () => Navigator.push(
                     context,
                     CupertinoPageRoute(builder: (context) => const LanguageScreen()),
+                  ),
+                ),
+                _SettingsItemData(
+                  icon: Icons.tune_rounded,
+                  title: context.tr('app_priorities'),
+                  onTap: () => Navigator.push(
+                    context,
+                    CupertinoPageRoute(builder: (context) => const AppPrioritiesScreen()),
                   ),
                 ),
                 _SettingsItemData(

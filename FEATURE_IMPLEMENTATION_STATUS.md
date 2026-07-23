@@ -1,8 +1,25 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-22 (scheduled routine — Feature 6 focus: built the
-dedicated in-app "What can I still eat today?" screen — see Feature 6's
-fourth-session notes.)_
+_Last updated: 2026-07-23 (scheduled routine — Feature 7 focus: built the
+"what brings you to Shoply?" onboarding persona/priorities question — a
+literal required brief bullet that had zero implementation anywhere — and
+gave it a real effect (home nudge-card reordering), not just storage. See
+Feature 7's sixth-session notes.)_
+
+**2026-07-23 — why Feature 7.** Same walk as every recent session: Features
+1–6 re-confirmed external/device-QA/decision-gated (re-checked each
+section's own "Explicitly NOT done" list, not just the summary table).
+Rather than default to Feature 8 on that same reasoning, re-read Feature
+7's own required-capability line directly against the brief text (the same
+discipline the 2026-07-22 Feature 6 session's correction demonstrated is
+worth doing before trusting a prior session's paraphrase) and found the
+fifth session's "'what kind of user are you' is scoped to diet preferences
++ calorie goals" note under-read the brief: "ask what kind of user they
+are / what they want from the app" is a persona/motivation question,
+distinct from the dietary-need question the diet page already asks —
+nothing in the app asked it. Built it as a genuine, buildable-here,
+required-capability gap, with a real (not fake) effect on the app. See
+Feature 7's sixth-session notes below.
 
 **2026-07-22 — why Feature 6, again, and a correction to the 2026-07-18
 note below.** Same walk as every recent session: Features 1–3's remaining
@@ -503,7 +520,7 @@ was **never wired into any screen** — this session wired it up.
 | 4 | AI assistant app control | ~93% | Implemented (needs QA) | Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list` — Avo can now edit and organize items and create/rename lists, not just add/delete. None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
-| 7 | Personalized onboarding & navbar | ~75% | In progress (needs device QA) | Diet-preference + goal-questionnaire onboarding pages and account-level sync are new and unverified on a real device/signup flow |
+| 7 | Personalized onboarding & navbar | ~88% | In progress (needs device QA) | **2026-07-23: built the "what brings you to Shoply?" persona/priorities question** (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
 | 8 | Cross-feature UX / growth / premium | ~65% | In progress | Recipe-detail "on offer this week" card + offer-price hand-off into list totals shipped 2026-07-20 (second run), closing the last unbuilt brief example ("this recipe is cheaper this week"); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
 
 ---
@@ -3431,6 +3448,162 @@ tab list data-driven (currently 5 hardcoded icons in `MainScaffold`) so a
 calorie tab can be conditionally shown/hidden per user preference rather
 than hardcoded.
 
+**Sixth session, 2026-07-23 (scheduled routine — this feature's dedicated
+session).** Same walk as every recent session: Features 1–3 re-confirmed
+external/device-QA/decision-gated; Feature 4's remaining gap (assistant
+memory) is explicitly "a real design decision, not just an engineering
+task"; Feature 5's remaining gap (offers/budget-aware ranking) is
+explicitly needs-decision; Feature 6's open items are all device-QA or
+needs-decision (re-checked each section's own "Explicitly NOT done" list,
+not just the summary table). Rather than jump to Feature 8 on the same
+"nothing left unconditional" reasoning several prior sessions used, this
+session re-read Feature 7's own required-capability line from the **actual
+brief text** against the actual code, the same discipline the 2026-07-22
+correction (Feature 6) demonstrated is worth doing before trusting a prior
+session's paraphrase.
+
+**What that found:** the brief lists two *required* Feature 7 capabilities:
+"Ask what kind of user they are / what they want from the app" and "Ask
+which features they want." The fifth session's write-up folded the first
+of these into the diet-preference + calorie-goal questions ("'What kind of
+user are you' is scoped to diet preferences + calorie goals"). Re-reading
+the brief text directly, that's a narrower read than what it actually
+asks: diet preferences are a *dietary need* question, not a *persona/
+motivation* question — nothing anywhere asks a user *why* they're using
+Shoply (save money vs. cook more vs. share lists vs. eat healthier vs. stay
+organized). Confirmed by grep: zero references to any persona/motivation
+concept in `lib/` before this session. This is a genuine, literal,
+required-capability gap, not an autonomy nice-to-have — so, unlike the
+still-open "ask which features they want" bullet (correctly left undone
+per the fifth session's reasoning: nothing in the app is actually gateable
+by feature area, so toggles with no code behind them would be exactly the
+"fake working integration" the brief warns against), this one is real,
+buildable-here, and needed no owner decision to build responsibly, as long
+as it does something *real* rather than being collected and never used
+(the brief's own "no fake working integrations" rule).
+
+**What I implemented:**
+- **`users.app_priorities`** (new, migration
+  `database/migrations/add_app_priorities_to_users.sql`, applied via the
+  Supabase MCP tools and verified with `information_schema.columns` +
+  `pg_policies`) — a `jsonb` array, default `'[]'`, covered by the existing
+  "Users can update own data" RLS policy (same as `diet_preferences`, no
+  new policy needed).
+- **`OnboardingPrioritiesPage`** (new,
+  `lib/presentation/screens/onboarding/widgets/onboarding_priorities_page.dart`)
+  — "What brings you to Shoply?", five icon rows (`kAppPriorities` in the
+  new `lib/core/constants/app_priorities.dart`): save money, share lists,
+  eat healthier, discover recipes, stay organized. Multi-select, same
+  "nothing selected is a valid answer" semantics as the diet page. Inserted
+  right after the three marketing pages and before the diet-preference page
+  — the framing "why are you here" question comes before the more specific
+  dietary one.
+  Wired into `onboarding_screen.dart` (`_priorities` state) and
+  `OnboardingAnswersService` (`savePendingAnswers`/
+  `applyPendingAnswersToAccount` now carry `appPriorities` through to
+  `users.app_priorities` exactly like `dietPreferences` already does,
+  including the same "nothing pending → no-op, never overwrites a later
+  Profile change" idempotency).
+- **Real effect, not just storage:** `HomeNudgeCardKind`/
+  `orderedHomeNudgeCards()` (new, pure function,
+  `lib/presentation/screens/home/home_nudge_card_order.dart`) reorders the
+  home screen's four existing proactive nudge cards (split-trip, Avo
+  restock, calorie/recipe, price-comparison) so the ones matching a user's
+  stated priorities show first — `share_lists`→split,
+  `stay_organized`→Avo restock, `eat_healthier`→calorie/recipe,
+  `save_money`→price comparison (`discover_recipes` has no home card to
+  map to today, so it's stored for future use without affecting order).
+  Every one of those four cards already renders nothing when it has no
+  relevant data, so reordering them is risk-free — nothing is ever hidden
+  or gated, only reprioritized. A user with no priorities set (skipped the
+  page, or onboarded before this existed) sees the exact original fixed
+  order, byte-for-byte — verified both by the pure function's own logic
+  (empty-set early return) and by a dedicated unit test.
+- **`UserModel.appPriorities`** — added alongside `dietPreferences`/
+  `allergies` (fromJson/toJson/copyWith/props), reading the new column
+  through the existing `.select()` (all-columns) query `currentUserProvider`
+  already runs, so no query changes were needed anywhere.
+- **Editable later** (the brief's own "let users change these preferences
+  later" autonomy bullet): new `AppPrioritiesScreen`
+  (`lib/presentation/screens/profile/settings/app_priorities_screen.dart`),
+  same load/save/`ref.invalidate(currentUserProvider)` pattern as
+  `DietPreferencesScreen`, reachable from Profile → Preferences → "What
+  matters to you" (`/app-priorities` route).
+- 12 new EN/DE translation key pairs.
+
+**Design decisions:**
+- Deliberately did **not** touch "ask which features they want" — re-read
+  against the actual app, still nothing is gateable by feature area
+  (shopping/recipes are always on per the brief's own text), so a toggle
+  with no enforcement behind it would be fake, exactly as the fifth
+  session's reasoning already established. Left as-is.
+- Deliberately kept this to a **reordering** signal, not a gating or
+  filtering one — matches the brief's explicit warning against inventing
+  toggles with no real effect, while still giving the new question a
+  genuine, observable outcome instead of being write-only.
+- `discover_recipes` has no home-card mapping today (there's no recipe nudge
+  card on the home screen) — stored, not wired to anything, honestly
+  documented rather than forced into an unrelated card.
+
+**Explicitly NOT done / still open:**
+- No Avo awareness of priorities (e.g. Avo tailoring its tone/suggestions
+  to what a user said matters to them) — a real follow-up idea, flagged
+  below, that's Feature 4/5 territory, not this session's onboarding scope.
+- The "ask which features they want" bullet remains genuinely undone, by
+  design (see above) — nothing in the app is feature-gateable today.
+- No priorities-aware ordering anywhere *except* the home nudge cards (e.g.
+  recipe browse ordering, Avo chat suggestions) — scoped to the one place
+  with existing, already-safe-to-reorder candidates; a wider rollout is a
+  separate idea, not silently expanded here.
+
+**Not verified (no macOS/Xcode/device in this container):** the actual
+onboarding page rendering (icon-row layout, chip selection states, dark
+mode), the Profile → "What matters to you" screen's rendering, and whether
+the reordered home-screen card sequence reads as intentional rather than
+jarring on a real device — same standing caveat every UI-facing session in
+this file carries.
+
+**Files changed:**
+`database/migrations/add_app_priorities_to_users.sql` (new, applied),
+`lib/core/constants/app_priorities.dart` (new),
+`lib/presentation/screens/onboarding/widgets/onboarding_priorities_page.dart`
+(new), `lib/presentation/screens/home/home_nudge_card_order.dart` (new),
+`lib/presentation/screens/profile/settings/app_priorities_screen.dart`
+(new), `test/home_nudge_card_order_test.dart` (new, 6 cases),
+`lib/data/models/user_model.dart` (`appPriorities` field),
+`lib/data/services/onboarding_answers_service.dart` (`appPriorities`
+threaded through save/apply), `lib/presentation/screens/onboarding/onboarding_screen.dart`
+(page wired in, `_priorities` state), `lib/presentation/screens/home/home_screen.dart`
+(dynamic card order via `orderedHomeNudgeCards`),
+`lib/presentation/screens/profile/profile_screen.dart` (settings entry),
+`lib/routes/app_router.dart` (`/app-priorities` route),
+`lib/core/localization/app_translations.dart` (12 new EN/DE key pairs).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh into `/tmp/flutter`;
+`env.example.dart`/`firebase_options.example.dart` copied to their
+gitignored real paths (not committed) so `flutter analyze` reflects a
+properly configured checkout. Full-project `flutter analyze` before
+(`git stash`) **602 issues (0 errors, 59 warnings, 543 info)** vs. after
+**602 issues — byte-identical**; also scoped `flutter analyze` to just the
+12 new/touched files (6 issues, all four pre-existing — an `activeColor`
+deprecation and 3 `app_router.dart` lints at lines this session's own
+diff didn't introduce, re-verified present at their original lines before
+this session too). `flutter test` — **31/31 passed** (25 pre-existing + 6
+new for `orderedHomeNudgeCards`: empty-priorities identity, an
+unmapped-priority no-op, single-match float-to-front, multi-match relative-
+order preservation, all-priorities-selected reduces to default, and an
+unknown/future priority id being ignored rather than throwing).
+`pubspec.lock` churn from `flutter pub get` (this container's SDK resolves
+a slightly different lock than the committed one) reverted before
+committing; the gitignored `env.dart`/`firebase_options.dart` stubs were
+deleted again afterward, not committed. The new `app_priorities` column was
+verified live against the real `ShoplyAI` Supabase project via the
+Supabase MCP tools (`information_schema.columns` confirms the `jsonb`
+type/default; `pg_policies` confirms `users`' existing "Users can update
+own data" policy has no per-column restriction, so no new RLS policy was
+needed). **Not run:** an actual Xcode/simulator build or a live account
+walking the full onboarding → home-screen-reorder flow.
+
 ---
 
 ## Feature 8 — Cross-feature UX, growth, premium, retention
@@ -4138,6 +4311,26 @@ possible here (no macOS/Xcode).
     delete, not a silent store.
   - Recommendation: needs decision — worth doing, but only with the
     view/delete UI included from day one.
+
+- [ ] IDEA: Make Avo aware of the new `users.app_priorities` (Feature 7's
+  sixth session, 2026-07-23) — e.g. lean its proactive tone/suggestions
+  toward whatever a user said matters to them ("since you're here to save
+  money, here's this week's cheapest list").
+  - Why it helps: today `app_priorities` only reorders home nudge cards;
+    this would give the signal a second, more visible use and tie Feature
+    7's new question into Feature 4/5's assistant more directly.
+  - Expected user value: medium — a genuinely personal touch if done with
+    a light hand; the brief explicitly warns against being "annoying," so
+    tone matters as much as the mechanism.
+  - Expected business/premium value: low-medium (retention/delight).
+  - Complexity: Low-medium — `app_priorities` is already on `UserModel`,
+    reachable wherever Avo's system context is built; the real work is
+    picking 1–2 tasteful surfaces (not every message) rather than the
+    plumbing.
+  - Risk: Low technically; the only real risk is overusing it and making
+    Avo feel like it's reciting a user's own answers back at them.
+  - Recommendation: needs decision — a Feature 4 or 5 session, not this
+    one; flagging rather than guessing at which surface(s) are worth it.
 
 - [ ] IDEA: Re-enable `mobile_scanner` for real camera barcode scanning in
   the Feature 6 food-log barcode tab (currently manual numeric entry +

@@ -21,6 +21,7 @@ import 'package:shoply/presentation/state/last_list_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
+import 'package:shoply/presentation/screens/home/home_nudge_card_order.dart';
 import 'package:shoply/presentation/screens/home/widgets/avo_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/pending_splits_banner.dart';
@@ -356,22 +357,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
             const SliverToBoxAdapter(child: PendingSplitsBanner()),
 
-            // "Split [list]'s trip with your group?" — proactively offers
-            // Feature 2's cost-split flow for the most recent unsplit
-            // shared-list trip; renders nothing without one.
-            const SliverToBoxAdapter(child: SplitTripNudgeCard()),
-
-            // Avo restock nudges ("you buy milk about every 5 days")
-            const SliverToBoxAdapter(child: AvoNudgeCard()),
-
-            // "N kcal left today — dinner ideas from your list" (calorie
-            // tracking users only; renders nothing otherwise)
-            const SliverToBoxAdapter(child: CalorieRecipeNudgeCard()),
-
-            // "This list is €X cheaper at [store] than [store]" — proactive
-            // surface for Feature 1's price comparison; renders nothing
-            // without a real zip or a meaningful comparison.
-            const SliverToBoxAdapter(child: PriceComparisonNudgeCard()),
+            // Proactive nudge cards: "Split [list]'s trip?", Avo's restock
+            // reminder, "N kcal left — dinner ideas", and "this list is €X
+            // cheaper at [store]". Each renders nothing when it has no
+            // relevant data, so reordering them by what the user said
+            // matters to them during onboarding (Feature 7's "what kind of
+            // user are they" priorities) is always safe — nothing is ever
+            // hidden, only reordered. Users with no priorities set (skipped
+            // onboarding, or onboarded before this existed) see the
+            // original fixed order unchanged.
+            ...orderedHomeNudgeCards(userData?.appPriorities.toSet() ?? {})
+                .map((kind) => SliverToBoxAdapter(child: _homeNudgeCard(kind))),
 
             const SliverToBoxAdapter(
               child: SizedBox(height: AppDimensions.spacingLarge),
@@ -869,6 +865,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return completer.future;
   }
 
+  Widget _homeNudgeCard(HomeNudgeCardKind kind) {
+    switch (kind) {
+      case HomeNudgeCardKind.split:
+        return const SplitTripNudgeCard();
+      case HomeNudgeCardKind.avoRestock:
+        return const AvoNudgeCard();
+      case HomeNudgeCardKind.calorieRecipe:
+        return const CalorieRecipeNudgeCard();
+      case HomeNudgeCardKind.priceComparison:
+        return const PriceComparisonNudgeCard();
+    }
+  }
 }
 
 /// Latest shopping activity as a single paper line.

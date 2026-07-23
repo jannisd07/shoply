@@ -9,6 +9,7 @@ import 'package:shoply/core/widgets/paper/paper_widgets.dart';
 import 'package:shoply/data/services/onboarding_answers_service.dart';
 import 'package:shoply/presentation/screens/onboarding/widgets/onboarding_diet_page.dart';
 import 'package:shoply/presentation/screens/onboarding/widgets/onboarding_goal_page.dart';
+import 'package:shoply/presentation/screens/onboarding/widgets/onboarding_priorities_page.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 
 /// Key used to track onboarding completion in SharedPreferences
@@ -39,6 +40,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   int _currentPage = 0;
   bool _caloriesOptIn = false;
   Set<String> _dietPreferences = {};
+  Set<String> _priorities = {};
   OnboardingGoalDraft? _goalDraft;
 
   @override
@@ -59,6 +61,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // OnboardingAnswersService / currentUserProvider).
     await OnboardingAnswersService.instance.savePendingAnswers(
       dietPreferences: _dietPreferences.toList(),
+      appPriorities: _priorities.toList(),
       caloriesOptedIn: _caloriesOptIn,
       goalDraft: _caloriesOptIn ? _goalDraft : null,
     );
@@ -85,6 +88,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           title: context.tr('onb_recipes_title'),
           subtitle: context.tr('onb_recipes_sub'),
           illustration: const _RecipesIllustration(),
+        ),
+        OnboardingPrioritiesPage(
+          selected: _priorities,
+          onChanged: (s) => setState(() => _priorities = s),
         ),
         OnboardingDietPage(
           selected: _dietPreferences,

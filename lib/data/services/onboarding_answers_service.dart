@@ -69,17 +69,20 @@ class OnboardingAnswersService {
 
   static const _syncedKey = 'onb_answers_synced_v1';
   static const _dietKey = 'onb_pending_diet_preferences';
+  static const _prioritiesKey = 'onb_pending_app_priorities';
   static const _caloriesOptInKey = 'onb_pending_calories_opt_in';
   static const _goalDraftKey = 'onb_pending_goal_draft';
 
   /// Called once, at the end of onboarding, before the user has signed up.
   Future<void> savePendingAnswers({
     required List<String> dietPreferences,
+    required List<String> appPriorities,
     required bool caloriesOptedIn,
     OnboardingGoalDraft? goalDraft,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_dietKey, dietPreferences);
+    await prefs.setStringList(_prioritiesKey, appPriorities);
     await prefs.setBool(_caloriesOptInKey, caloriesOptedIn);
     if (goalDraft != null) {
       await prefs.setString(_goalDraftKey, jsonEncode(goalDraft.toJson()));
@@ -101,9 +104,10 @@ class OnboardingAnswersService {
     if (prefs.getBool(_syncedKey) ?? false) return false;
 
     final dietPreferences = prefs.getStringList(_dietKey);
+    final appPriorities = prefs.getStringList(_prioritiesKey);
     final caloriesOptedIn = prefs.getBool(_caloriesOptInKey);
 
-    if (dietPreferences == null && caloriesOptedIn == null) {
+    if (dietPreferences == null && appPriorities == null && caloriesOptedIn == null) {
       // Nothing was ever collected on this device — mark synced so we
       // don't keep checking on every auth refresh.
       await prefs.setBool(_syncedKey, true);
@@ -113,6 +117,7 @@ class OnboardingAnswersService {
     try {
       await SupabaseService.instance.from('users').update({
         'diet_preferences': dietPreferences ?? const [],
+        'app_priorities': appPriorities ?? const [],
         'onboarding_completed': true,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', userId);
@@ -169,6 +174,7 @@ class OnboardingAnswersService {
 
       await prefs.setBool(_syncedKey, true);
       await prefs.remove(_dietKey);
+      await prefs.remove(_prioritiesKey);
       await prefs.remove(_caloriesOptInKey);
       await prefs.remove(_goalDraftKey);
       return true;

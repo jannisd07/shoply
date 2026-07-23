@@ -12,6 +12,7 @@ class UserModel extends Equatable {
   final String? gender; // 'male', 'female', 'other', 'prefer_not_to_say'
   final List<String> dietPreferences; // z.B. ['vegan', 'vegetarian', 'keto']
   final List<String> allergies; // z.B. ['gluten', 'lactose', 'nuts']
+  final List<String> appPriorities; // z.B. ['save_money', 'share_lists']
   final bool notificationEnabled;
   final String language;
   final String theme;
@@ -33,6 +34,7 @@ class UserModel extends Equatable {
     this.gender,
     this.dietPreferences = const [],
     this.allergies = const [],
+    this.appPriorities = const [],
     this.notificationEnabled = true,
     this.language = 'de',
     this.theme = 'light',
@@ -62,6 +64,9 @@ class UserModel extends Equatable {
       allergies: json['allergies'] != null
           ? List<String>.from(json['allergies'] as List)
           : [],
+      appPriorities: json['app_priorities'] != null
+          ? List<String>.from(json['app_priorities'] as List)
+          : [],
       notificationEnabled: json['notification_enabled'] as bool? ?? true,
       language: json['language'] as String? ?? 'de',
       theme: json['theme'] as String? ?? 'light',
@@ -88,6 +93,7 @@ class UserModel extends Equatable {
       'gender': gender,
       'diet_preferences': dietPreferences,
       'allergies': allergies,
+      'app_priorities': appPriorities,
       'notification_enabled': notificationEnabled,
       'language': language,
       'theme': theme,
@@ -111,6 +117,7 @@ class UserModel extends Equatable {
     String? gender,
     List<String>? dietPreferences,
     List<String>? allergies,
+    List<String>? appPriorities,
     bool? notificationEnabled,
     String? language,
     String? theme,
@@ -132,6 +139,7 @@ class UserModel extends Equatable {
       gender: gender ?? this.gender,
       dietPreferences: dietPreferences ?? this.dietPreferences,
       allergies: allergies ?? this.allergies,
+      appPriorities: appPriorities ?? this.appPriorities,
       notificationEnabled: notificationEnabled ?? this.notificationEnabled,
       language: language ?? this.language,
       theme: theme ?? this.theme,
@@ -156,6 +164,7 @@ class UserModel extends Equatable {
         gender,
         dietPreferences,
         allergies,
+        appPriorities,
         notificationEnabled,
         language,
         theme,

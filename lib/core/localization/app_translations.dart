@@ -197,6 +197,20 @@ class AppTranslations {
     'onb_recipes_title': 'Recipes adapt\nto you.',
     'onb_recipes_sub':
         'Vegetarian, vegan, gluten-free — Avo swaps ingredients and fills your list.',
+    'onb_priorities_kicker': 'About you',
+    'onb_priorities_title': 'What brings\nyou here?',
+    'onb_priorities_sub':
+        'Pick whatever fits — Shoply highlights the parts of the app that match first. Change this anytime in settings.',
+    'onb_priorities_hint':
+        'Nothing selected? We will just show you everything, in the usual order.',
+    'priority_save_money': 'Save money',
+    'priority_share_lists': 'Share lists with others',
+    'priority_eat_healthier': 'Eat healthier',
+    'priority_discover_recipes': 'Discover recipes',
+    'priority_stay_organized': 'Stay organized',
+    'app_priorities': 'What matters to you',
+    'app_priorities_hint':
+        'Shoply uses this to decide what to show you first on the home screen. It never hides anything.',
     'onb_diet_kicker': 'Personalize',
     'onb_diet_title': 'Eating\nanything special?',
     'onb_diet_sub':
@@ -1124,6 +1138,20 @@ class AppTranslations {
     'onb_recipes_title': 'Rezepte passen\nsich dir an.',
     'onb_recipes_sub':
         'Vegetarisch, vegan, glutenfrei — Avo tauscht Zutaten und füllt deine Liste.',
+    'onb_priorities_kicker': 'Über dich',
+    'onb_priorities_title': 'Was bringt\ndich zu uns?',
+    'onb_priorities_sub':
+        'Wähle, was passt — Shoply hebt die passenden Bereiche zuerst hervor. Änderbar jederzeit in den Einstellungen.',
+    'onb_priorities_hint':
+        'Nichts ausgewählt? Dann zeigen wir dir einfach alles, in der üblichen Reihenfolge.',
+    'priority_save_money': 'Geld sparen',
+    'priority_share_lists': 'Listen mit anderen teilen',
+    'priority_eat_healthier': 'Gesünder essen',
+    'priority_discover_recipes': 'Rezepte entdecken',
+    'priority_stay_organized': 'Organisiert bleiben',
+    'app_priorities': 'Was dir wichtig ist',
+    'app_priorities_hint':
+        'Shoply nutzt das, um zu entscheiden, was auf der Startseite zuerst angezeigt wird. Nichts wird dadurch versteckt.',
     'onb_diet_kicker': 'Personalisieren',
     'onb_diet_title': 'Isst du\nbesonders?',
     'onb_diet_sub':
