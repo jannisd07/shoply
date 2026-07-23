@@ -232,8 +232,10 @@ class ItemRepository {
       // Update list timestamp
       await _touchList(listId);
 
-      // 🔔 Notifications are sent via realtime subscription in items_provider.dart
-      // to avoid duplicate notifications
+      // 🔔 Notification for this add is sent explicitly by the caller
+      // (ItemsNotifier.addItem in items_provider.dart calls
+      // sendItemAddedNotification after this returns) — not from here, to
+      // avoid duplicate notifications when other addItem() callers exist.
 
       return item;
     } catch (e, stackTrace) {
@@ -514,8 +516,7 @@ class ItemRepository {
           
           if (fcmToken != null && fcmToken.isNotEmpty) {
             print('📢 [ITEM_REPO] Sending FCM notification to $memberName...');
-            print('📢 [ITEM_REPO] Token (first 40 chars): ${fcmToken.substring(0, fcmToken.length > 40 ? 40 : fcmToken.length)}...');
-            
+
             final response = await _supabase.client.functions.invoke(
               'send-push-notification',
               body: {
