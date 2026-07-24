@@ -648,3 +648,59 @@ grep for every removed symbol name. Recommend a `dart analyze` +
 `flutter build ios --simulator --debug` pass once a toolchain is available,
 and a human decision on whether the name-collision edge case in
 `isPayersOwnShare()` is worth a proper per-participant-id fix.
+
+## 2026-07-24 — `lib/data/models/weekly_nutrition_summary.dart`
+
+Random pick landed on `lib/data/services/recommendation_service.dart` first,
+but that file (and `product_matching_service.dart`, both flagged in the
+2026-07-08 entry above) turned out to already be deleted as verified-dead
+code by the 2026-07-17 refactor commit — nothing left to review there. Re-rolled
+and picked `weekly_nutrition_summary.dart` (`WeeklyNutritionSummary`,
+new in yesterday's "cooked N high-protein meals" commit) instead, then traced
+it to its sole caller (`weeklyNutritionSummaryProvider` in
+`lib/presentation/state/nutrition_provider.dart`) and that caller's data
+sources (`FoodLogService.getWeeklyTotals()` /
+`.getWeeklyRecipeSourcedEntries()` in `lib/data/services/food_log_service.dart`).
+
+Findings:
+- **Efficiency bug (real, in the live path — fixed)**:
+  `weeklyNutritionSummaryProvider` awaited five independent Riverpod
+  future-providers one at a time — `weeklyNutritionTotalsProvider`,
+  `weeklyWaterTotalsProvider`, `weightHistoryProvider`,
+  `recentLoggedDatesProvider`, `weeklyRecipeSourcedEntriesProvider` — each a
+  separate Supabase round trip with no data dependency between them. Because
+  each `await` blocked before the next provider was even watched (so its
+  underlying future hadn't started yet), this serialized what should be
+  concurrent I/O on the calorie dashboard's weekly summary load. Fixed by
+  capturing all five futures via `ref.watch(...)` first, then awaiting them
+  in sequence — the futures all start together, so wall-clock time drops from
+  ~5 round trips to ~1.
+- **Redundant query (real, not fixed)**: `FoodLogService
+  .getWeeklyRecipeSourcedEntries()` (`food_log_service.dart:99-119`) queries
+  `food_log_entries` for the exact same `user_id` + 7-day `logged_date`
+  window as `getWeeklyTotals()` (`food_log_service.dart:122-147`), just with
+  an extra `.eq('source', 'recipe')` filter — i.e. the weekly summary makes
+  two full fetches of overlapping rows from the same table/window instead of
+  filtering the recipe-sourced subset out of the entries `getWeeklyTotals()`
+  already pulled down. Not fixed this run: `getWeeklyTotals()` currently
+  returns pre-aggregated `Map<DateTime, DailyNutritionTotals>` and discards
+  per-entry fields (including `source`) before returning, so merging the two
+  would mean changing its return shape (or adding a third method that returns
+  raw entries once) — more surface area than a same-day fix. Worth doing
+  together with the concurrency fix above next time this file is touched.
+- **Model logic itself looks correct**: `WeeklyNutritionSummary.compute()`'s
+  window construction (`days = List.generate(7, ...)`) matches
+  `getWeeklyTotals()`/`getWeeklyRecipeSourcedEntries()`'s
+  `weekAgo = today.subtract(6 days)` window exactly; `isHighProteinMeal()`'s
+  20g-and-30%-of-calories bar is guarded against divide-by-zero
+  (`entry.calories <= 0` short-circuits first); the weight-delta/streak logic
+  handles the zero/one-entry edge cases documented in the class doc comment.
+  No bugs found in the model file itself.
+- No security issues (no user input reaches raw SQL; all Supabase calls use
+  `.eq`/`.gte`/`.lte` builder methods, not string interpolation).
+
+One fix applied this run (`nutrition_provider.dart` concurrency). Recommend a
+`dart analyze` + `flutter build ios --simulator --debug` pass once a
+toolchain is available (none in this remote environment per CLAUDE.md, so
+this was reviewed statically only), and a human/future-run decision on
+merging the two `FoodLogService` weekly queries into one.

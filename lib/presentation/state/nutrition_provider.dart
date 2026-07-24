@@ -101,12 +101,22 @@ final weeklyNutritionSummaryProvider =
     FutureProvider.autoDispose<WeeklyNutritionSummary?>((ref) async {
   final goal = await ref.watch(nutritionGoalProvider.future);
   if (goal == null || !goal.isConfigured) return null;
-  final dailyTotals = await ref.watch(weeklyNutritionTotalsProvider.future);
-  final waterTotals = await ref.watch(weeklyWaterTotalsProvider.future);
-  final weightHistory = await ref.watch(weightHistoryProvider.future);
-  final loggedDates = await ref.watch(recentLoggedDatesProvider.future);
-  final recipeSourcedEntries =
-      await ref.watch(weeklyRecipeSourcedEntriesProvider.future);
+
+  // Independent fetches - grab all futures before awaiting so they run
+  // concurrently instead of one Supabase round trip after another.
+  final dailyTotalsFuture = ref.watch(weeklyNutritionTotalsProvider.future);
+  final waterTotalsFuture = ref.watch(weeklyWaterTotalsProvider.future);
+  final weightHistoryFuture = ref.watch(weightHistoryProvider.future);
+  final loggedDatesFuture = ref.watch(recentLoggedDatesProvider.future);
+  final recipeSourcedEntriesFuture =
+      ref.watch(weeklyRecipeSourcedEntriesProvider.future);
+
+  final dailyTotals = await dailyTotalsFuture;
+  final waterTotals = await waterTotalsFuture;
+  final weightHistory = await weightHistoryFuture;
+  final loggedDates = await loggedDatesFuture;
+  final recipeSourcedEntries = await recipeSourcedEntriesFuture;
+
   return WeeklyNutritionSummary.compute(
     dailyTotals: dailyTotals,
     waterTotals: waterTotals,
