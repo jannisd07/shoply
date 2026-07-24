@@ -54,6 +54,37 @@ class AppTranslations {
     'unit': 'Unit',
     'notes': 'Notes',
     'add_item': 'Add Item',
+    // Photo → list import (attachment sheet + AI extraction + review)
+    'attachment_sheet_title': 'Add attachment',
+    'open_settings': 'Open Settings',
+    'camera_permission_denied':
+        'Camera access is off. Turn it on in Settings to snap a shopping list.',
+    'import_sheet_explainer':
+        'Import a product list from paper — Avo reads the items automatically.',
+    'import_source_camera': 'Camera',
+    'import_source_photos': 'Photos',
+    'import_source_files': 'Files',
+    'import_processing': 'Avo is reading your list…',
+    'import_retry': 'Try again',
+    'import_pick_other': 'Choose another',
+    'import_error_no_items':
+        'Avo couldn\'t find any items on that one. Try a clearer photo.',
+    'import_error_unreadable':
+        'That image was hard to read. Try better lighting or a straighter angle.',
+    'import_error_rate_limited':
+        'Too many imports in a row. Give it a minute and try again.',
+    'import_error_timeout': 'That took too long. Check your connection and retry.',
+    'import_error_network': 'Network hiccup. Check your connection and try again.',
+    'import_error_provider':
+        'Something went wrong reading your list. Please try again.',
+    'import_review_title': '{count} items recognized',
+    'import_review_subtitle': 'Edit or remove anything before importing.',
+    'import_review_empty': 'No items left — add some back or cancel.',
+    'import_row_name_hint': 'Item',
+    'import_row_unit_hint': 'unit',
+    'import_action': 'Import {count}',
+    'import_success': '{count} items imported',
+    'import_failed': 'Import failed — nothing was added.',
     'edit_item': 'Edit Item',
     'delete_item': 'Delete Item',
     'complete_shopping': 'Complete Shopping',
@@ -999,6 +1030,39 @@ class AppTranslations {
     'unit': 'Einheit',
     'notes': 'Notizen',
     'add_item': 'Artikel hinzufügen',
+    // Foto → Liste importieren (Anhang-Sheet + KI-Erkennung + Prüfung)
+    'attachment_sheet_title': 'Anhang hinzufügen',
+    'open_settings': 'Einstellungen öffnen',
+    'camera_permission_denied':
+        'Kamerazugriff ist aus. Aktiviere ihn in den Einstellungen, um eine Einkaufsliste abzufotografieren.',
+    'import_sheet_explainer':
+        'Importiere eine Einkaufsliste vom Papier — Avo liest die Artikel automatisch aus.',
+    'import_source_camera': 'Kamera',
+    'import_source_photos': 'Fotos',
+    'import_source_files': 'Dateien',
+    'import_processing': 'Avo liest deine Liste…',
+    'import_retry': 'Erneut versuchen',
+    'import_pick_other': 'Andere wählen',
+    'import_error_no_items':
+        'Avo hat darauf keine Artikel gefunden. Versuch ein deutlicheres Foto.',
+    'import_error_unreadable':
+        'Das Bild war schwer zu lesen. Versuch besseres Licht oder einen geraderen Winkel.',
+    'import_error_rate_limited':
+        'Zu viele Importe hintereinander. Warte kurz und versuch es erneut.',
+    'import_error_timeout':
+        'Das hat zu lange gedauert. Prüf deine Verbindung und versuch es erneut.',
+    'import_error_network':
+        'Netzwerkproblem. Prüf deine Verbindung und versuch es erneut.',
+    'import_error_provider':
+        'Beim Lesen deiner Liste ist etwas schiefgelaufen. Bitte versuch es erneut.',
+    'import_review_title': '{count} Artikel erkannt',
+    'import_review_subtitle': 'Bearbeite oder entferne etwas vor dem Import.',
+    'import_review_empty': 'Keine Artikel übrig — füg welche hinzu oder brich ab.',
+    'import_row_name_hint': 'Artikel',
+    'import_row_unit_hint': 'Einh.',
+    'import_action': '{count} importieren',
+    'import_success': '{count} Artikel importiert',
+    'import_failed': 'Import fehlgeschlagen — nichts hinzugefügt.',
     'edit_item': 'Artikel bearbeiten',
     'delete_item': 'Artikel löschen',
     'complete_shopping': 'Einkauf abschließen',

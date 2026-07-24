@@ -20,9 +20,22 @@ class AppTheme {
   static ThemeData lightTheme = _buildLightTheme(AppColors.lightAccent);
   static ThemeData darkTheme = _buildDarkTheme(AppColors.darkAccent);
 
+  /// Cupertino push transition (right-to-left slide + parallax on the
+  /// outgoing screen + interactive left-edge back-swipe) for every pushed
+  /// route, so navigation feels like Apple Messages app-wide — not only on
+  /// the routes that explicitly use CupertinoPage. iOS already defaults to
+  /// this; declaring it makes the standard explicit and future-proof.
+  static const PageTransitionsTheme _pageTransitions = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+    },
+  );
+
   static ThemeData _buildLightTheme(Color accentColor) {
     return ThemeData(
     useMaterial3: true,
+    pageTransitionsTheme: _pageTransitions,
     brightness: Brightness.light,
     scaffoldBackgroundColor: AppColors.lightPrimaryBackground,
     primaryColor: accentColor,
@@ -208,6 +221,7 @@ class AppTheme {
   static ThemeData _buildDarkTheme(Color accentColor) {
     return ThemeData(
     useMaterial3: true,
+    pageTransitionsTheme: _pageTransitions,
     brightness: Brightness.dark,
     scaffoldBackgroundColor: AppColors.darkPrimaryBackground,
     primaryColor: accentColor,

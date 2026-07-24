@@ -166,6 +166,53 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     }
   }
 
+  /// Batch-import extracted items (photo-import flow) with an optimistic
+  /// insert: the items appear in the list immediately, then reconcile with
+  /// the Supabase writes. On any write failure the optimistic state is
+  /// rolled back and the error rethrown so the caller can offer a retry.
+  Future<void> importItems(
+    List<({String name, double quantity, String? unit})> items,
+  ) async {
+    if (items.isEmpty) return;
+    final previous = state;
+    final now = DateTime.now();
+
+    final current = state.valueOrNull ?? const <ShoppingItemModel>[];
+    final optimistic = [
+      ...current,
+      for (var i = 0; i < items.length; i++)
+        ShoppingItemModel(
+          id: 'pending-import-$i-${now.microsecondsSinceEpoch}',
+          listId: listId,
+          name: items[i].name,
+          quantity: items[i].quantity,
+          unit: items[i].unit,
+          createdAt: now,
+          updatedAt: now,
+        ),
+    ];
+    state = AsyncValue.data(optimistic);
+
+    try {
+      for (final item in items) {
+        // autoParse off — quantity/unit were reviewed explicitly, don't let
+        // the name parser second-guess them.
+        await _repository.addItem(
+          listId: listId,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          autoParse: false,
+        );
+      }
+      await loadItems();
+      await UnreadService().markAsRead(listId);
+    } catch (error) {
+      state = previous;
+      rethrow;
+    }
+  }
+
   Future<void> updateItem(String itemId, Map<String, dynamic> updates) async {
     try {
       await _repository.updateItem(itemId, updates);
