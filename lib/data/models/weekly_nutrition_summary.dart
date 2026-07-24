@@ -16,6 +16,12 @@ import 'package:shoply/data/models/weight_log_entry.dart';
 /// - Water average is per day *with water logged*, for the same reason.
 /// - The weight delta is only reported when two weigh-ins fall inside the
 ///   7-day window — no guessing a trend from a single point.
+/// - "High-protein meal" (feeds the "cooked N high-protein meals this week"
+///   line) = a recipe-logged entry with ≥20g protein AND at least 30% of its
+///   calories from protein — the same "meaningful amount, not just a
+///   protein-heavy garnish" bar nutrition guidance commonly uses. Only
+///   recipe-sourced entries count as "cooked"; manual/barcode/photo log
+///   entries never do, matching the brief's literal wording.
 class WeeklyNutritionSummary extends Equatable {
   /// The 7 days of the window, oldest first (normalized to midnight).
   final List<DateTime> days;
@@ -43,6 +49,12 @@ class WeeklyNutritionSummary extends Equatable {
   /// means nothing was logged that day.
   final Map<DateTime, int> caloriesByDay;
 
+  /// Meals logged from a recipe (`source == 'recipe'`) in the window.
+  final int cookedMealCount;
+
+  /// Of [cookedMealCount], how many meet [isHighProteinMeal].
+  final int cookedHighProteinMealCount;
+
   const WeeklyNutritionSummary({
     required this.days,
     required this.loggedDayCount,
@@ -59,11 +71,28 @@ class WeeklyNutritionSummary extends Equatable {
     required this.latestWeightKg,
     required this.loggingStreak,
     required this.caloriesByDay,
+    this.cookedMealCount = 0,
+    this.cookedHighProteinMealCount = 0,
   });
 
   bool get hasAnyData => loggedDayCount > 0;
 
   static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Minimum absolute protein, in grams, for a logged meal to count as
+  /// "high-protein" — see the class doc for the full definition.
+  static const double highProteinMinGrams = 20;
+
+  /// Minimum share of a meal's calories that must come from protein
+  /// (protein has 4 kcal/g) to count as "high-protein".
+  static const double highProteinCalorieShare = 0.30;
+
+  static bool isHighProteinMeal(FoodLogEntry entry) {
+    final protein = entry.proteinG;
+    if (protein == null || protein < highProteinMinGrams) return false;
+    if (entry.calories <= 0) return false;
+    return (protein * 4) / entry.calories >= highProteinCalorieShare;
+  }
 
   factory WeeklyNutritionSummary.compute({
     required Map<DateTime, DailyNutritionTotals> dailyTotals,
@@ -72,6 +101,7 @@ class WeeklyNutritionSummary extends Equatable {
     required Set<DateTime> loggedDates,
     required NutritionGoal goal,
     required DateTime today,
+    List<FoodLogEntry> recipeSourcedEntries = const [],
   }) {
     final todayKey = _day(today);
     final days =
@@ -157,6 +187,9 @@ class WeeklyNutritionSummary extends Equatable {
       latestWeightKg: latestWeightKg,
       loggingStreak: streak,
       caloriesByDay: caloriesByDay,
+      cookedMealCount: recipeSourcedEntries.length,
+      cookedHighProteinMealCount:
+          recipeSourcedEntries.where(isHighProteinMeal).length,
     );
   }
 
@@ -177,5 +210,7 @@ class WeeklyNutritionSummary extends Equatable {
         latestWeightKg,
         loggingStreak,
         caloriesByDay,
+        cookedMealCount,
+        cookedHighProteinMealCount,
       ];
 }

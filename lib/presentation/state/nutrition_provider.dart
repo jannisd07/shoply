@@ -88,6 +88,14 @@ final recentLoggedDatesProvider = FutureProvider.autoDispose<Set<DateTime>>((ref
   return service.getRecentLoggedDates();
 });
 
+/// Meals logged from a recipe in the last 7 days — feeds the weekly
+/// "cooked N high-protein meals" line.
+final weeklyRecipeSourcedEntriesProvider =
+    FutureProvider.autoDispose<List<FoodLogEntry>>((ref) async {
+  final service = ref.watch(foodLogServiceProvider);
+  return service.getWeeklyRecipeSourcedEntries();
+});
+
 /// The assembled weekly look-back, or null while no goal is configured.
 final weeklyNutritionSummaryProvider =
     FutureProvider.autoDispose<WeeklyNutritionSummary?>((ref) async {
@@ -97,6 +105,8 @@ final weeklyNutritionSummaryProvider =
   final waterTotals = await ref.watch(weeklyWaterTotalsProvider.future);
   final weightHistory = await ref.watch(weightHistoryProvider.future);
   final loggedDates = await ref.watch(recentLoggedDatesProvider.future);
+  final recipeSourcedEntries =
+      await ref.watch(weeklyRecipeSourcedEntriesProvider.future);
   return WeeklyNutritionSummary.compute(
     dailyTotals: dailyTotals,
     waterTotals: waterTotals,
@@ -104,6 +114,7 @@ final weeklyNutritionSummaryProvider =
     loggedDates: loggedDates,
     goal: goal,
     today: DateTime.now(),
+    recipeSourcedEntries: recipeSourcedEntries,
   );
 });
 
@@ -137,4 +148,5 @@ void invalidateNutritionLog(WidgetRef ref) {
   ref.invalidate(weeklyNutritionTotalsProvider);
   ref.invalidate(weeklyWaterTotalsProvider);
   ref.invalidate(recentLoggedDatesProvider);
+  ref.invalidate(weeklyRecipeSourcedEntriesProvider);
 }

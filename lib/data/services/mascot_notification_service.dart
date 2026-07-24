@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/localization/app_translations.dart';
+import 'package:shoply/data/models/weekly_nutrition_summary.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/calorie_recipe_nudge_service.dart';
+import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -297,6 +299,55 @@ class MascotNotificationService {
           params: {'count': '$count'});
     } catch (e) {
       debugPrint('🥑 [AVO] Milestone check failed: $e');
+      return null;
+    }
+  }
+
+  /// Meal counts (of recipe-cooked meals logged in the rolling last-7-days
+  /// window, see [WeeklyNutritionSummary]) worth a one-line celebration.
+  /// Sparse on purpose, same philosophy as [_tripMilestones].
+  static const List<int> _weeklyProteinMealMilestones = [3, 5, 7, 10];
+
+  static const String _weeklyProteinMilestoneCountKey =
+      'avo_weekly_protein_milestone_count';
+  static const String _weeklyProteinMilestoneShownAtKey =
+      'avo_weekly_protein_milestone_shown_at';
+
+  /// Call right after a recipe-sourced meal is logged. Returns a localized
+  /// celebration line when this week's cooked-high-protein-meal count just
+  /// hit a milestone that hasn't already been shown for that exact count in
+  /// the last 7 days — else null. The count itself is a rolling 7-day
+  /// window, so it naturally resets as old entries age out; the 7-day
+  /// re-show gate only guards against repeating the same milestone while the
+  /// count sits on it (e.g. two more meals logged today, still at "3").
+  Future<String?> weeklyHighProteinMealMessage() async {
+    try {
+      final entries = await FoodLogService.instance.getWeeklyRecipeSourcedEntries();
+      final count =
+          entries.where(WeeklyNutritionSummary.isHighProteinMeal).length;
+      if (!_weeklyProteinMealMilestones.contains(count)) return null;
+
+      final prefs = await SharedPreferences.getInstance();
+      final lastCount = prefs.getInt(_weeklyProteinMilestoneCountKey);
+      final lastShownAtRaw = prefs.getString(_weeklyProteinMilestoneShownAtKey);
+      final lastShownAt =
+          lastShownAtRaw != null ? DateTime.tryParse(lastShownAtRaw) : null;
+      final now = DateTime.now();
+      final recentlyShownSameCount = lastCount == count &&
+          lastShownAt != null &&
+          now.difference(lastShownAt).inDays < 7;
+      if (recentlyShownSameCount) return null;
+
+      await prefs.setInt(_weeklyProteinMilestoneCountKey, count);
+      await prefs.setString(
+          _weeklyProteinMilestoneShownAtKey, now.toIso8601String());
+
+      final lang = await _getLanguage();
+      debugPrint('🥑 [AVO] Weekly high-protein meal milestone reached: $count');
+      return AppTranslations.get('weekly_high_protein_milestone_message', lang,
+          params: {'count': '$count'});
+    } catch (e) {
+      debugPrint('🥑 [AVO] Weekly protein milestone check failed: $e');
       return null;
     }
   }

@@ -180,6 +180,91 @@ void main() {
     expect(s.days.first, DateTime(2026, 2, 24));
   });
 
+  FoodLogEntry recipeEntry({
+    required int calories,
+    double? protein,
+    DateTime? loggedDate,
+  }) =>
+      FoodLogEntry(
+        id: 'e',
+        userId: 'u',
+        loggedDate: loggedDate ?? today,
+        mealType: MealType.dinner,
+        source: FoodLogSource.recipe,
+        sourceRecipeId: 'r1',
+        foodName: 'Test meal',
+        calories: calories,
+        proteinG: protein,
+        createdAt: today,
+      );
+
+  group('isHighProteinMeal', () {
+    test('needs both >=20g protein and >=30% of calories from protein', () {
+      expect(
+          WeeklyNutritionSummary.isHighProteinMeal(
+              recipeEntry(calories: 300, protein: 25)), // 100 kcal from protein = 33%
+          true);
+      expect(
+          WeeklyNutritionSummary.isHighProteinMeal(
+              recipeEntry(calories: 300, protein: 19)), // under the 20g floor
+          false);
+      expect(
+          WeeklyNutritionSummary.isHighProteinMeal(
+              recipeEntry(calories: 1000, protein: 25)), // 10% of calories
+          false);
+      expect(
+          WeeklyNutritionSummary.isHighProteinMeal(
+              recipeEntry(calories: 0, protein: 25)), // no calories: undefined
+          false);
+      expect(
+          WeeklyNutritionSummary.isHighProteinMeal(
+              recipeEntry(calories: 300, protein: null)),
+          false);
+    });
+
+    test('boundary: exactly 20g and exactly 30% both count', () {
+      expect(
+          WeeklyNutritionSummary.isHighProteinMeal(
+              recipeEntry(calories: 267, protein: 20)), // 80/267 = 29.96%..
+          false); // just under 30% due to rounding — not a boundary case
+      expect(
+          WeeklyNutritionSummary.isHighProteinMeal(
+              recipeEntry(calories: 266, protein: 20)), // 80/266 = 30.08%
+          true);
+    });
+  });
+
+  test('cookedMealCount/cookedHighProteinMealCount from recipeSourcedEntries', () {
+    final s = WeeklyNutritionSummary.compute(
+      dailyTotals: {},
+      waterTotals: {},
+      weightHistory: [],
+      loggedDates: {},
+      goal: goal(),
+      today: today,
+      recipeSourcedEntries: [
+        recipeEntry(calories: 300, protein: 25), // high-protein
+        recipeEntry(calories: 600, protein: 45), // 30% exactly-ish, high-protein
+        recipeEntry(calories: 500, protein: 10), // not high-protein
+      ],
+    );
+    expect(s.cookedMealCount, 3);
+    expect(s.cookedHighProteinMealCount, 2);
+  });
+
+  test('no recipe-sourced entries: both counts default to zero', () {
+    final s = WeeklyNutritionSummary.compute(
+      dailyTotals: {},
+      waterTotals: {},
+      weightHistory: [],
+      loggedDates: {},
+      goal: goal(),
+      today: today,
+    );
+    expect(s.cookedMealCount, 0);
+    expect(s.cookedHighProteinMealCount, 0);
+  });
+
   test('non-midnight timestamps in inputs are normalized', () {
     final s = WeeklyNutritionSummary.compute(
       dailyTotals: {},

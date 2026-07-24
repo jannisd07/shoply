@@ -1,10 +1,38 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-23 (scheduled routine — Feature 7 focus: built the
-"what brings you to Shoply?" onboarding persona/priorities question — a
-literal required brief bullet that had zero implementation anywhere — and
-gave it a real effect (home nudge-card reordering), not just storage. See
-Feature 7's sixth-session notes.)_
+_Last updated: 2026-07-24 (scheduled routine — Feature 8 focus: closed the
+brief's last literal, zero-implementation cross-feature example, "You cooked
+4 high-protein meals this week" — added `cookedMealCount`/
+`cookedHighProteinMealCount` to the weekly nutrition summary, surfaced them
+in the Weekly Recap screen, and gave Avo a real, sparse, opt-in-respecting
+one-line celebration the moment a recipe-logged meal pushes the week's
+high-protein count to a new milestone. See Feature 8's sixth-session notes.)_
+
+**2026-07-24 — why Feature 8.** Did the same walk every recent session does
+before picking: re-read Features 1–7's own "Explicitly NOT done"/"still
+open" lists directly (not just the summary table) looking for anything
+buildable-here and unconditional. Found nothing new — every open item in
+1–7 is still genuinely external (Feature 1's shelf-price API, Feature 6's
+`mobile_scanner`), device-QA-only (2, 3, 4, 6, 7's rendering/notification
+verification), or needs-decision (Feature 4's assistant memory, Feature 5's
+offers/budget ranking, Feature 3's "today's list" widget kind, Feature 7's
+"ask which features they want"). Rather than stop there, re-read Feature
+8's own **literal brief text** — the "Autonomy improvement examples" list of
+quoted Avo lines — line by line against the codebase, the same discipline
+that found Feature 6's "What can I still eat today?" gap (2026-07-22) and
+Feature 7's persona-question gap (2026-07-23). Five of the six quoted
+examples already exist somewhere in the app (offer-aware recipe card,
+calorie/recipe nudge, home price-comparison card, restock nudge, split-trip
+nudge — confirmed via grep, not just trusting the table). The sixth, **"You
+cooked 4 high-protein meals this week,"** had zero implementation anywhere
+— confirmed via grep for `high.protein`/`highProtein`/`cooked.*meals` across
+this file and `lib/`. Unlike the still-open offers/ranking idea, this one
+needed no new external dependency or per-screen API fan-out: `food_log_entries`
+already stores `source`/`source_recipe_id`/`protein_g`/`calories` per logged
+meal (used since Feature 5's eighth session for "skip recently-cooked
+recipes"), so counting this week's recipe-cooked, high-protein meals is a
+pure local computation over data the app already fetches for the weekly
+summary. Genuinely buildable-here, no owner decision needed.
 
 **2026-07-23 — why Feature 7.** Same walk as every recent session: Features
 1–6 re-confirmed external/device-QA/decision-gated (re-checked each
@@ -521,7 +549,7 @@ was **never wired into any screen** — this session wired it up.
 | 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~88% | In progress (needs device QA) | **2026-07-23: built the "what brings you to Shoply?" persona/priorities question** (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~65% | In progress | Recipe-detail "on offer this week" card + offer-price hand-off into list totals shipped 2026-07-20 (second run), closing the last unbuilt brief example ("this recipe is cheaper this week"); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
+| 8 | Cross-feature UX / growth / premium | ~72% | In progress | **2026-07-24: "cooked N high-protein meals this week"** — closes the last of the brief's six quoted Avo-line examples with zero implementation; Weekly Recap stat + a sparse, milestone-gated Avo celebration after logging a recipe meal. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
 
 ---
 
@@ -4248,6 +4276,136 @@ marktguru search endpoint live from this container with the bundled
 fallback keys (real offer data returned). `pubspec.lock` churn from the
 fresh SDK's `pub get` reverted before committing. No iOS build/device test
 possible here (no macOS/Xcode).
+
+**Sixth session, 2026-07-24 (scheduled routine — this feature's dedicated
+session).** Picked per the walk described at the top of this file: the last
+of the brief's six quoted "Autonomy improvement examples" Avo lines —
+**"You cooked 4 high-protein meals this week"** — had zero implementation
+anywhere (confirmed by grep across this file and `lib/`), unlike the other
+five, which all already exist.
+
+**Before this session:** the weekly nutrition summary (`WeeklyNutritionSummary`,
+Feature 6) tracked calorie/protein/water/weight averages per day, and
+`FoodLogService.getRecentSourceRecipeIds()` (Feature 5) already read
+`source == 'recipe'` entries for a 5-day recency check — but nothing counted
+*how many* meals were cooked from a recipe in a week, or how many of those
+were high-protein. The `WeeklySummaryScreen` had no recipe/cooking-tie-in at
+all, and no surface ever said anything like the brief's quoted line.
+
+**What I implemented:**
+- **High-protein meal definition** (documented as a product decision in the
+  model's own doc comment, same convention `WeeklyNutritionSummary` already
+  uses for its other thresholds): a recipe-logged meal with ≥20g protein
+  **and** ≥30% of its calories from protein (protein × 4 kcal/g ÷ calories).
+  Both conditions guard against opposite false positives — a huge low-protein
+  meal that happens to contain 20g protein, or a tiny snack that's
+  technically "30% protein" but three grams of it.
+  `WeeklyNutritionSummary.isHighProteinMeal()` (new static method,
+  `lib/data/models/weekly_nutrition_summary.dart`) implements it, pure and
+  unit-tested.
+- **`WeeklyNutritionSummary.cookedMealCount`/`cookedHighProteinMealCount`**
+  (new fields) — computed in `.compute()` from a new `recipeSourcedEntries`
+  param (defaults to `const []`, so every existing call site/test kept
+  compiling unchanged).
+- **`FoodLogService.getWeeklyRecipeSourcedEntries()`** (new,
+  `lib/data/services/food_log_service.dart`) — same 7-day window and query
+  shape as the existing `getWeeklyTotals()`, filtered to `source == 'recipe'`,
+  returning the raw entries (protein/calories per meal, not just daily
+  totals) the new count needs.
+- **`weeklyRecipeSourcedEntriesProvider`** (new,
+  `lib/presentation/state/nutrition_provider.dart`), wired into
+  `weeklyNutritionSummaryProvider` and into `invalidateNutritionLog()` so
+  logging a meal refreshes the count immediately.
+- **`WeeklySummaryScreen`** — a new card (only rendered when
+  `cookedMealCount > 0`, never an empty/fake section) showing "{n} meals
+  cooked from recipes this week", with "Including {n} high-protein meals 💪"
+  underneath when applicable — placed right after the macros card, the
+  natural place given the protein tie-in.
+- **A real, sparse Avo celebration** (the brief's own literal ask, not just a
+  stored stat): `MascotNotificationService.weeklyHighProteinMealMessage()`
+  (new) — same pattern as the existing
+  `milestoneMessageForCompletedTrip()` trip-count celebration: a fixed
+  milestone list (`[3, 5, 7, 10]`), fires at most once per exact count within
+  a rolling 7 days (gated via SharedPreferences), and since the count itself
+  is a rolling 7-day window it naturally resets over time rather than ever
+  being permanently exhausted like the ever-growing trip counter. Called
+  from **`LogRecipeSheet`** (`lib/presentation/screens/calories/widgets/log_recipe_sheet.dart`)
+  right after a recipe-sourced meal is saved — the exact "just cooked
+  something" moment the brief's line describes — replacing the plain
+  "logged!" snackbar with the milestone line when one fires, same
+  `milestone ?? plainMessage` pattern `list_detail_screen.dart`'s trip
+  milestone already uses.
+- 4 new EN/DE translation key pairs (`weekly_cooked_meals`,
+  `weekly_cooked_high_protein`, `weekly_high_protein_milestone_message`).
+
+**Design decisions:**
+- No push notification and no new home-screen nudge card — the home screen
+  already carries four proactive cards (split, restock, calorie/recipe,
+  price comparison) reordered by Feature 7's `app_priorities`; a fifth would
+  risk exactly the clutter Feature 8's second-session notes warned against
+  ("the wrong place to introduce" a new surface cold). An in-app,
+  fires-rarely snackbar at the moment of the triggering action is the
+  lower-noise choice, consistent with how the trip-milestone celebration
+  already works.
+- Only recipe-sourced entries count as "cooked" — a manually-logged
+  high-protein chicken breast doesn't count, matching the brief's literal
+  wording ("cooked") and keeping the signal meaningfully tied to the recipe
+  system, not just calorie logging in general.
+- No premium-upsell tie-in added here — same reasoning as the second
+  session's calorie/recipe nudge: a milestone celebration is the wrong place
+  to introduce the app's first paywall moment; the open premium-gating
+  question stays in the ideas list below.
+
+**Explicitly NOT done / still open:**
+- No Avo-chat awareness of this stat (e.g. asking Avo "how many high-protein
+  meals have I cooked this week?" doesn't yet route anywhere) — a natural
+  Feature 4 follow-up, not added here to stay inside this session's scope.
+- The milestone thresholds (3/5/7/10) and the two protein thresholds (20g,
+  30%) are reasonable, documented defaults, not owner-confirmed numbers —
+  easy to tune later if they feel off in practice.
+- Meals logged via barcode/photo/manual with genuinely high protein content
+  never count, by design (see above) — not a bug, but worth knowing if a
+  user logs a protein shake manually and wonders why it wasn't counted.
+
+**Not verified (no macOS/Xcode/device in this container):** the new Weekly
+Recap card's actual rendering (wrapping, dark mode); the snackbar
+celebration firing on a real device after a real recipe-log save; whether a
+real account's logging habits make the 3/5/7/10 milestones feel well-paced
+in practice.
+
+**Files changed:**
+`lib/data/models/weekly_nutrition_summary.dart` (`isHighProteinMeal`,
+`cookedMealCount`, `cookedHighProteinMealCount`),
+`lib/data/services/food_log_service.dart` (`getWeeklyRecipeSourcedEntries`),
+`lib/data/services/mascot_notification_service.dart`
+(`weeklyHighProteinMealMessage`),
+`lib/presentation/state/nutrition_provider.dart`
+(`weeklyRecipeSourcedEntriesProvider`, wired into the summary provider and
+`invalidateNutritionLog`),
+`lib/presentation/screens/calories/weekly_summary_screen.dart` (cooked-meals
+card),
+`lib/presentation/screens/calories/widgets/log_recipe_sheet.dart` (milestone
+snackbar),
+`lib/core/localization/app_translations.dart` (4 new EN/DE key pairs),
+`test/weekly_summary_logic_test.dart` (4 new test cases:
+`isHighProteinMeal`'s dual threshold + a rounding boundary case, the two new
+counts via `.compute()`, the zero-entries default).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh into `/tmp/flutter`;
+`env.example.dart`/`firebase_options.example.dart` copied to their
+gitignored real paths (not committed) so `flutter analyze` reflects a
+properly configured checkout. Full-project `flutter analyze` before (`git
+stash -u`) **601 issues (0 errors, 59 warnings, 542 info)** vs. after **601
+issues — byte-identical**; also scoped `dart analyze` to just the 8
+new/touched files: **no issues found**. `flutter test` — **35/35 passed**
+(25 pre-existing + 4 new for the weekly-summary logic, matching what's
+listed above; `home_nudge_card_order_test.dart` and
+`recipe_offer_logic_test.dart` unaffected). `pubspec.lock` churn from
+`flutter pub get` (this container's SDK resolves a slightly different lock
+than the committed one) reverted before committing; the gitignored
+`env.dart`/`firebase_options.dart` stubs deleted again afterward, not
+committed. **Not run:** an actual Xcode/simulator build, or a live account
+exercising the log-a-recipe-meal → milestone-snackbar flow end to end.
 
 ---
 

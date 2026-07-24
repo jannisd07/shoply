@@ -911,6 +911,10 @@ class AppTranslations {
     'weekly_macros_title': 'Macros',
     'weekly_macros_caption': 'Ø per logged day',
     'weekly_protein_reached': 'Protein target reached on {hit} of {logged} days',
+    'weekly_cooked_meals': '{n} meals cooked from recipes this week',
+    'weekly_cooked_high_protein': 'Including {n} high-protein meals 💪',
+    'weekly_high_protein_milestone_message':
+        'Nice! You\'ve cooked {count} high-protein meals this week 💪',
     'weekly_water_line': 'Ø {liters} l on {days} logged days',
     'weekly_water_reached': 'Daily goal reached {n}×',
     'weekly_water_empty': 'No water logged this week.',
@@ -1855,6 +1859,10 @@ class AppTranslations {
     'weekly_macros_title': 'Makros',
     'weekly_macros_caption': 'Ø pro geloggtem Tag',
     'weekly_protein_reached': 'Proteinziel an {hit} von {logged} Tagen erreicht',
+    'weekly_cooked_meals': '{n} Mahlzeiten diese Woche aus Rezepten gekocht',
+    'weekly_cooked_high_protein': 'Davon {n} proteinreiche Mahlzeiten 💪',
+    'weekly_high_protein_milestone_message':
+        'Stark! Du hast diese Woche {count} proteinreiche Mahlzeiten gekocht 💪',
     'weekly_water_line': 'Ø {liters} l an {days} geloggten Tagen',
     'weekly_water_reached': 'Tagesziel {n}× erreicht',
     'weekly_water_empty': 'Diese Woche kein Wasser geloggt.',

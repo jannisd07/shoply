@@ -174,6 +174,43 @@ class _SummaryBody extends ConsumerWidget {
             ],
           ),
         ),
+        if (summary.cookedMealCount > 0) ...[
+          const SizedBox(height: 16),
+          AppCard(
+            margin: EdgeInsets.zero,
+            child: Row(
+              children: [
+                Icon(Icons.restaurant_menu, size: 20, color: accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.tr('weekly_cooked_meals', params: {
+                          'n': summary.cookedMealCount.toString(),
+                        }),
+                        style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: textPrimary),
+                      ),
+                      if (summary.cookedHighProteinMealCount > 0) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          context.tr('weekly_cooked_high_protein', params: {
+                            'n': summary.cookedHighProteinMealCount.toString(),
+                          }),
+                          style: TextStyle(fontSize: 12.5, color: textSecondary),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         AppCard(
           margin: EdgeInsets.zero,

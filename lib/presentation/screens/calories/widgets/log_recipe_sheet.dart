@@ -6,6 +6,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/nutrition_info.dart';
+import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 
@@ -135,10 +136,22 @@ class _LogRecipeSheetState extends ConsumerState<_LogRecipeSheet> {
                     createdAt: DateTime.now(),
                   ));
               invalidateNutritionLog(ref);
+
+              String? milestone;
+              try {
+                milestone = await MascotNotificationService.instance
+                    .weeklyHighProteinMealMessage();
+              } catch (_) {}
+
               if (context.mounted) {
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.tr('log_recipe_success', params: {'name': widget.recipeName}))),
+                  SnackBar(
+                    content: Text(
+                      milestone ??
+                          context.tr('log_recipe_success', params: {'name': widget.recipeName}),
+                    ),
+                  ),
                 );
               }
             },

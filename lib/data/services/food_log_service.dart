@@ -93,6 +93,31 @@ class FoodLogService {
     }
   }
 
+  /// Meals logged from a recipe (`source == 'recipe'`) in the last 7 days —
+  /// same window as [getWeeklyTotals], used to count how many of the week's
+  /// cooked meals were high-protein.
+  Future<List<FoodLogEntry>> getWeeklyRecipeSourcedEntries() async {
+    final userId = _userId;
+    if (userId == null) return [];
+    final today = DateTime.now();
+    final weekAgo = today.subtract(const Duration(days: 6));
+    try {
+      final response = await _supabase
+          .from('food_log_entries')
+          .select()
+          .eq('user_id', userId)
+          .eq('source', 'recipe')
+          .gte('logged_date', _dateKey(weekAgo))
+          .lte('logged_date', _dateKey(today));
+      return (response as List)
+          .map((row) => FoodLogEntry.fromJson(row as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('⚠️ [FoodLog] Failed to load weekly recipe-sourced entries: $e');
+      return [];
+    }
+  }
+
   /// Last 7 days of daily totals, oldest first — for a weekly summary.
   Future<Map<DateTime, DailyNutritionTotals>> getWeeklyTotals() async {
     final userId = _userId;
