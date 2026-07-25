@@ -46,7 +46,10 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
       // locally — this is the first point a real user id exists to apply
       // them to. Runs at most once per device.
       final applied = await OnboardingAnswersService.instance
-          .applyPendingAnswersToAccount(authUser.id);
+          .applyPendingAnswersToAccount(
+        authUser.id,
+        accountCreatedAt: DateTime.tryParse(created['created_at'] as String? ?? ''),
+      );
       if (applied) {
         created = await SupabaseService.instance
             .from('users')
@@ -65,7 +68,10 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
     }
 
     final applied = await OnboardingAnswersService.instance
-        .applyPendingAnswersToAccount(authUser.id);
+        .applyPendingAnswersToAccount(
+      authUser.id,
+      accountCreatedAt: DateTime.tryParse(response['created_at'] as String? ?? ''),
+    );
     final freshRow = applied
         ? await SupabaseService.instance
             .from('users')

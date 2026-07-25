@@ -99,9 +99,30 @@ class OnboardingAnswersService {
   /// existing users who onboarded before this feature shipped). Returns
   /// true only when it actually wrote something, so callers know whether
   /// their cached user model is now stale.
-  Future<bool> applyPendingAnswersToAccount(String userId) async {
+  ///
+  /// [accountCreatedAt] is the `users` row's `created_at`. Onboarding
+  /// answers are collected before any account exists, so they can only
+  /// legitimately belong to an account created in *this* session (a fresh
+  /// signup). If the account we're about to write into already existed —
+  /// e.g. the device's local "synced" flag was wiped by a reinstall, the
+  /// user went through onboarding again, then tapped "Log In" to an
+  /// existing account instead of signing up — applying stale local answers
+  /// would silently overwrite that account's real diet/goal/profile data.
+  /// When omitted, the check is skipped (caller already knows the row is
+  /// new, e.g. it was just inserted).
+  Future<bool> applyPendingAnswersToAccount(
+    String userId, {
+    DateTime? accountCreatedAt,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_syncedKey) ?? false) return false;
+
+    if (accountCreatedAt != null &&
+        DateTime.now().difference(accountCreatedAt) > const Duration(minutes: 5)) {
+      // Not a fresh signup — this device has nothing legitimate to apply.
+      await prefs.setBool(_syncedKey, true);
+      return false;
+    }
 
     final dietPreferences = prefs.getStringList(_dietKey);
     final appPriorities = prefs.getStringList(_prioritiesKey);
