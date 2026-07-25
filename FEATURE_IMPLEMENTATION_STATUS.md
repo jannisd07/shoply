@@ -1,12 +1,34 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-24 (scheduled routine — Feature 8 focus: closed the
-brief's last literal, zero-implementation cross-feature example, "You cooked
-4 high-protein meals this week" — added `cookedMealCount`/
-`cookedHighProteinMealCount` to the weekly nutrition summary, surfaced them
-in the Weekly Recap screen, and gave Avo a real, sparse, opt-in-respecting
-one-line celebration the moment a recipe-logged meal pushes the week's
-high-protein count to a new milestone. See Feature 8's sixth-session notes.)_
+_Last updated: 2026-07-25 (scheduled routine — Feature 4 focus: closed two
+real, literal capability gaps in Avo's tool registry — `add_recipe_to_list`
+("add ingredients for carbonara to Friday's list", a direct brief quote that
+was previously impossible since no tool exposed a recipe's ingredients) and
+`compare_list_prices` (whole-list "which store is cheapest" — Avo could only
+`search_offers` for one product at a time, not the "AI can use pricing data"
+capability the brief itself names). See Feature 4's eighth-session notes.)_
+
+**2026-07-25 — why Feature 4.** Same walk as every recent session: re-read
+Features 1–8's own "Explicitly NOT done"/"still open" lists first, not just
+the summary table. Feature 8 (the previous session's pick) turned out to
+have closed every literal "Autonomy improvement example" quote already —
+re-verified this by grep, not by trusting the 2026-07-24 note — leaving only
+the explicitly decision-gated premium-gating question. Rather than default
+to a needs-decision idea, re-read Feature 4's own required-capability list
+line by line against the actual tool registry
+(`lib/data/services/avo_assistant_service.dart`), the same discipline that
+found Feature 6/7/8's gaps in recent sessions. Two gaps surfaced, both
+genuinely buildable-here (no owner decision, no external dependency):
+"AI can use pricing data" was only half-true — `search_offers` covers a
+single product, but nothing let Avo answer "which store is cheapest for my
+whole list," despite `BasketComparison`/`basketComparisonProvider` (Feature
+1) already computing exactly that for the in-app price-comparison sheet and
+the home screen's `PriceComparisonNudgeCard`. And the brief's own literal
+quoted shortcut, **"Add ingredients for carbonara to Friday's list,"**
+could not work at all: `search_recipes`'s tool response to Gemini never
+included a recipe's ingredient list (only id/name/time/rating/labels/
+calories), so Avo had no way to know what to add. Confirmed via direct code
+read of every recipe-related tool response, not assumed.
 
 **2026-07-24 — why Feature 8.** Did the same walk every recent session does
 before picking: re-read Features 1–7's own "Explicitly NOT done"/"still
@@ -545,11 +567,11 @@ was **never wired into any screen** — this session wired it up.
 | 1 | Pricing, offers, cheapest store | ~95% | Implemented (blocked on hard externals) | Re-audited 2026-07-16, code-verified against every brief bullet: all required + autonomy capabilities implemented. Only remaining gaps are a genuine external constraint (no public non-offer shelf-price API) and an out-of-scope-by-design item (cross-product substitution, diet/allergy safety) |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~95% | In progress (needs device QA) | **2026-07-21: built `SavedRecipesWidget`** — a third WidgetKit widget (saved recipes, tap-to-open) that closes plumbing (App Group key + native reload call) that had existed since the widget extension was first added but was never actually consumed by a real widget. 2026-07-19: fixed a real, likely-severe regression — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26; corrected to `17.0`. Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
-| 4 | AI assistant app control | ~93% | Implemented (needs QA) | Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list` — Avo can now edit and organize items and create/rename lists, not just add/delete. None functional; needs a real device run + live Gemini QA |
+| 4 | AI assistant app control | ~95% | Implemented (needs QA) | **2026-07-25: closed two real capability gaps** — `add_recipe_to_list` (the brief's own literal "add ingredients for carbonara to Friday's list" shortcut, previously impossible since no tool exposed a recipe's ingredients) and `compare_list_prices` (whole-list "which store is cheapest," completing the brief's "AI can use pricing data" capability — `search_offers` only ever covered one product). Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list`. None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~88% | In progress (needs device QA) | **2026-07-23: built the "what brings you to Shoply?" persona/priorities question** (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~72% | In progress | **2026-07-24: "cooked N high-protein meals this week"** — closes the last of the brief's six quoted Avo-line examples with zero implementation; Weekly Recap stat + a sparse, milestone-gated Avo celebration after logging a recipe meal. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
+| 8 | Cross-feature UX / growth / premium | ~72% | In progress | 2026-07-24: "cooked N high-protein meals this week" — closes the last of the brief's six quoted Avo-line examples with zero implementation; Weekly Recap stat + a sparse, milestone-gated Avo celebration after logging a recipe meal. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
 
 ---
 
@@ -2415,6 +2437,127 @@ exactly. Brace/paren balance check. **Not run:** a live Gemini conversation
 test (needs `dart run`/simulator + a real Gemini API key in `env.dart`,
 neither available here). (Seventh session: full `flutter analyze` +
 `flutter test` — see that session's notes above.)
+
+**Tenth session, 2026-07-25 (scheduled routine — this feature's dedicated
+session).** Closed two real, literal gaps in the tool registry found by
+reading Feature 4's own required capabilities and the brief's quoted
+natural-language shortcuts directly against `avo_assistant_service.dart`,
+not against the ~93%/"Implemented" label in the summary table (which turned
+out to be checking "does a tool exist for this area" rather than "is the
+literal brief line actually possible").
+
+**Before this session:**
+- The brief's own quoted shortcut, **"Add ingredients for carbonara to
+  Friday's list,"** could not work. `search_recipes`'s response to Gemini
+  returned only `id`/`name`/`time_minutes`/`rating`/`labels`/
+  `calories_per_serving` — never a recipe's ingredients — so there was no
+  way for Avo to know what to add even by chaining tool calls. The only
+  path to a recipe's ingredients was `get_recipe_nutrition`, which reads
+  them internally but never returns them in its response either.
+- The required capability **"AI can use pricing data"** was only half true.
+  `search_offers` finds live offers for a single named product ("which
+  store is cheapest for milk"), but nothing let Avo answer the more useful,
+  and more literally "pricing data"-shaped question: "which store is
+  cheapest for my whole list" / "how much would I save at Aldi vs. Rewe."
+  Feature 1 already computes exactly this (`BasketComparison` via
+  `basketComparisonProvider`, live in the in-list price-comparison sheet
+  and the home screen's `PriceComparisonNudgeCard`) — it just had no Avo
+  tool wired to it.
+
+**What I implemented:**
+- **`add_recipe_to_list`** (new tool) — resolves a recipe via a new shared
+  `_resolveRecipe(id, name)` helper (extracted from `_toolRecipeNutrition`'s
+  previously-duplicated id/name lookup, now used by both), then adds every
+  ingredient to the target list through `ItemsNotifier.addItem` — the exact
+  same write path `add_item_to_list`/`add_history_items_to_list` already
+  use, so new items get the same Gemini auto-categorization as any
+  manually-added item (no bespoke insert path to keep in sync). Accepts an
+  optional `servings` argument that scales ingredient amounts via the
+  pre-existing `Ingredient.adjustForServings()` (already used by the
+  in-app recipe→list bottom sheet) when it differs from the recipe's own
+  default — so "add carbonara for 4 people to Friday's list" scales
+  correctly instead of always adding the 2-serving default. Per-ingredient
+  failures are collected rather than aborting the whole batch (partial
+  success is reported honestly, not silently swallowed or fatal).
+- **`compare_list_prices`** (new tool) — whole-list version of
+  `search_offers`, deliberately named and described differently in its
+  `FunctionDeclaration` so Gemini doesn't confuse the two ("Different from
+  search_offers, which only looks up ONE product"). Resolves the target
+  list the same way `get_list_contents` does (explicit `list_id`, or the
+  first list from `AvoContext`), requires a real zip code (same "ask for
+  PLZ, don't guess from the nationwide fallback" rule every other pricing
+  surface in the app already follows), then reads
+  `basketComparisonProvider(listId)` — zero new price-fetching or
+  store-ranking logic, all of it reused from Feature 1.
+- **`AvoAssistantService.summarizeBasketComparison()`** (new,
+  `@visibleForTesting static`) — the actual result-shaping logic
+  (top-3 stores that have ≥1 matched item, cheapest first; savings of the
+  cheapest vs. the next-cheapest, only reported above a 1-cent noise floor;
+  a confidence note when some matches are only broad/generic-term ones)
+  extracted into a pure function so it's unit-testable without a live
+  Supabase/Riverpod/Gemini stack — the same pattern
+  `CalorieRecipeNudgeService.filterAndSort`/`WeeklyNutritionSummary.isHighProteinMeal`
+  already establish in this codebase for tool logic worth testing in
+  isolation.
+- Two new `FunctionDeclaration`s + system-prompt routing rules describing
+  when to call each (recipe→list: resolve the recipe and, if the target
+  list is ambiguous, `get_lists` first; price comparison: distinct from
+  the existing per-product `search_offers` line).
+
+**Design decisions:**
+- `add_recipe_to_list` requires `list_id` (not optional with an
+  `ask_pick_list`-style picker) — unlike a single-item add, silently
+  guessing the wrong list for a whole recipe's worth of ingredients is a
+  bigger mistake to walk back, so the system prompt instructs Avo to
+  resolve the list explicitly (via `get_lists`, matching a name the user
+  said) rather than risk a wrong guess.
+- `compare_list_prices` never fabricates a "regular shelf price" total —
+  it inherits Feature 1's own honest constraint (comparable totals only
+  cover items currently matched to a live promotional offer) and says so
+  in both the tool description and its own response note when coverage is
+  partial, instead of implying a full-basket total that isn't real data.
+- No new rich chat-card payload for either tool (Avo answers in text, same
+  scope cut every earlier Feature 4 session already made for
+  offers/splits/nutrition) — avoids touching the 1000+ line
+  `avo_chat_screen.dart` UI without device verification.
+
+**Explicitly NOT done / still open:**
+- Assistant memory, offers/budget-aware recipe ranking, and the rest of
+  the ideas list below are unchanged — still needs-decision, not touched.
+- `add_recipe_to_list` doesn't attach current offer prices to the added
+  items the way the in-app recipe→list bottom sheet does (Feature 8's
+  fifth session) — that would mean Avo also calling the recipe-offers
+  lookup and threading matched prices through, a reasonable follow-up but
+  a second, separable piece of scope.
+- No live Gemini conversation test confirming the model actually routes
+  "add ingredients for carbonara to Friday's list" / "which store is
+  cheapest for my list" to these new tools correctly — same standing
+  limitation every Feature 4 session has flagged (no Gemini API key/device
+  in this container).
+
+**Files changed:** `lib/data/services/avo_assistant_service.dart`
+(`add_recipe_to_list` + `compare_list_prices`: declarations, dispatch
+cases, implementations, `_resolveRecipe` extraction, `summarizeBasketComparison`,
+system-prompt routing rules), `test/avo_price_compare_logic_test.dart` (new
+— 5 tests for `summarizeBasketComparison`).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh into `/tmp/flutter`;
+`env.example.dart`/`firebase_options.example.dart` copied to their
+gitignored real paths (not committed) so `flutter analyze` reflects a
+properly configured checkout. Full-project `flutter analyze` before (`git
+stash -u`) **601 issues (0 errors, 59 warnings, 542 info)** vs. after —
+**601 issues, byte-identical**; also scoped `flutter analyze` to the one
+touched file: **no issues found**, and to the new test file: **no issues
+found**. `flutter test` — **40/40 passed** (35 pre-existing + 5 new).
+Traced every new tool's read/write path against the existing provider
+signatures it reuses (`itemsNotifierProvider(listId).notifier.addItem`,
+`basketComparisonProvider(listId).future`) rather than assuming they'd
+compile — confirmed by the clean analyze run. `pubspec.lock` churn from
+`flutter pub get` reverted before committing; the gitignored
+`env.dart`/`firebase_options.dart` stubs left in place (already gitignored,
+not committed, same as every prior session that needed them for analyze).
+**Not run:** an actual Xcode/simulator build, or a live Gemini conversation
+exercising either new tool end-to-end.
 
 ---
 
@@ -4410,6 +4553,29 @@ exercising the log-a-recipe-meal → milestone-snackbar flow end to end.
 ---
 
 ## Ideas / Needs My Approval
+
+- [ ] IDEA: Attach live offer prices to items `add_recipe_to_list` (Feature
+  4's tenth session, 2026-07-25) adds, the same way the in-app recipe→list
+  bottom sheet already does (Feature 8's fifth session) — so a recipe added
+  via chat counts into the list's price total identically to one added by
+  tapping through the UI.
+  - Why it helps: consistency — today "add carbonara to my list" via Avo and
+    tapping "Add to list" on the recipe screen produce different-quality
+    results (one has offer prices attached, the other doesn't), which is a
+    confusing asymmetry once a user compares the two paths.
+  - Expected user value: low-medium — most users won't notice unless they
+    compare the two paths directly, but it's a real quality gap once found.
+  - Expected business/premium value: low.
+  - Complexity: Low-medium — `RecipeOfferService` (Feature 8's fifth
+    session) already does exactly this matching; `_toolAddRecipeToList`
+    would need to call it and pass matched prices into `notifier.addItem`,
+    the same `price`/`priceCurrency`/`priceRetailer`/`priceUnit` fields the
+    bottom sheet already sets.
+  - Risk: Low — reuses existing, unit-tested matching logic; the only new
+    cost is one more live offer search per recipe-add-via-chat, gated by
+    the same zip-code/throttle rules the rest of the app already respects.
+  - Recommendation: yes, low-risk follow-up — flagged here rather than
+    bundled into the same session as the tool's first working version.
 
 - [ ] IDEA: Offers/budget-aware recipe ranking — the last of the five named
   signals in "Avo can suggest recipes based on past meals, offers, budget,

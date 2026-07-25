@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shoply/core/config/env.dart';
@@ -9,6 +10,7 @@ import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/avo_app_knowledge.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
@@ -23,6 +25,7 @@ import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/data/services/water_log_service.dart';
 import 'package:shoply/data/services/weight_log_service.dart';
+import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -76,6 +79,11 @@ When the user asks to:
 • know calories/nutrition → call get_recipe_nutrition
 • see their shopping history → call get_shopping_history
 • add past items to a list → call add_history_items_to_list
+• add all of a recipe's ingredients to a list ("add ingredients for
+  carbonara to Friday's list") → call add_recipe_to_list. Resolve the
+  recipe first (search_recipes/get_saved_recipes if you don't already
+  have its id) and the target list_id (get_lists if it's unclear which
+  list they mean).
 • see a list's contents → call get_list_contents
 • check / mark items → call check_items
 • finish shopping for a list → call complete_list
@@ -93,7 +101,10 @@ When the user asks to:
 • change ANY setting (theme, language, name, diet, allergies,
   calorie tracking on/off, etc.) → call update_setting
 • find prices, deals, offers, or "which store is cheapest" for a
-  product → call search_offers
+  single product → call search_offers
+• compare a WHOLE list's total cost across stores, or ask "which store
+  is cheapest for my list" / "how much would I save at X vs Y" → call
+  compare_list_prices (not search_offers, which is per-product only)
 • know what they might need to buy / what's running low / restock
   ideas → call get_restock_suggestions (based on their real purchase
   rhythm), then offer to add the items via add_item_to_list
@@ -211,6 +222,23 @@ After a tool returns, write a short natural-language confirmation
             }),
           ),
           FunctionDeclaration(
+            'add_recipe_to_list',
+            'Add every ingredient of a recipe to a shopping list in one go — e.g. '
+                '"add ingredients for carbonara to Friday\'s list". Resolve the recipe '
+                'via recipe_id (from search_recipes/get_saved_recipes) or recipe_name, '
+                'and list_id via get_lists (match by the list name the user mentioned, '
+                'or ask which list if it is unclear). Optionally scale the recipe to a '
+                'different serving count than its default.',
+            Schema.object(properties: {
+              'recipe_id': Schema.string(description: 'Recipe ID from search_recipes/get_saved_recipes'),
+              'recipe_name': Schema.string(description: 'Recipe name to look up by name'),
+              'list_id': Schema.string(description: 'Target list ID, from get_lists'),
+              'servings': Schema.integer(
+                  description: 'Scale ingredient amounts to this many servings — '
+                      'omit to use the recipe\'s own default servings'),
+            }, requiredProperties: ['list_id']),
+          ),
+          FunctionDeclaration(
             'get_shopping_history',
             'Display recent shopping history cards. Each card has "Add all" and per-item add buttons.',
             Schema.object(properties: {
@@ -314,6 +342,20 @@ After a tool returns, write a short natural-language confirmation
             Schema.object(properties: {
               'query': Schema.string(description: 'Product to search for, e.g. "milk"'),
             }, requiredProperties: ['query']),
+          ),
+          FunctionDeclaration(
+            'compare_list_prices',
+            'Compare the TOTAL cost of everything on a shopping list across nearby '
+                'supermarkets and say which store is cheapest overall — e.g. "which '
+                'store is cheapest for my list?" or "how much would I save at Aldi '
+                'vs Rewe?". Different from search_offers, which only looks up ONE '
+                'product. Only covers list items currently matched to a live '
+                'promotional offer, not full regular-shelf pricing — say so if '
+                'coverage is partial. Requires the user\'s zip code (PLZ).',
+            Schema.object(properties: {
+              'list_id': Schema.string(
+                  description: 'List to compare — omit to use the first/most recent list'),
+            }),
           ),
           FunctionDeclaration(
             'split_trip_cost',
@@ -590,6 +632,8 @@ After a tool returns, write a short natural-language confirmation
           return await _toolSavedRecipes(payloads);
         case 'get_recipe_nutrition':
           return await _toolRecipeNutrition(args, payloads);
+        case 'add_recipe_to_list':
+          return await _toolAddRecipeToList(args, ref);
         case 'get_shopping_history':
           return await _toolShoppingHistory(args, payloads);
         case 'get_lists':
@@ -614,6 +658,8 @@ After a tool returns, write a short natural-language confirmation
           return await _toolSearchOffers(args);
         case 'get_restock_suggestions':
           return await _toolRestockSuggestions(args);
+        case 'compare_list_prices':
+          return await _toolCompareListPrices(args, ref, context);
         case 'split_trip_cost':
           return await _toolSplitTripCost(args);
         case 'delete_item':
@@ -713,26 +759,31 @@ After a tool returns, write a short natural-language confirmation
     };
   }
 
+  /// Resolves a recipe by id (exact match against the full library) or,
+  /// failing that, by a free-text name (first search result) — the shared
+  /// lookup every recipe-scoped tool (nutrition, add-to-list) needs.
+  Future<Recipe?> _resolveRecipe(String? id, String? name) async {
+    if (id != null && id.isNotEmpty) {
+      final all = await RecipeService.instance.getRecipes();
+      for (final r in all) {
+        if (r.id == id) return r;
+      }
+    }
+    if (name != null && name.isNotEmpty) {
+      final results = await RecipeService.instance.searchRecipes(name);
+      if (results.isNotEmpty) return results.first;
+    }
+    return null;
+  }
+
   Future<Map<String, Object?>> _toolRecipeNutrition(
     Map<String, Object?> args,
     List<AvoWidgetPayload> payloads,
   ) async {
-    final id = args['recipe_id'] as String?;
-    final name = args['recipe_name'] as String?;
-
-    Recipe? recipe;
-    if (id != null && id.isNotEmpty) {
-      final all = await RecipeService.instance.getRecipes();
-      for (final r in all) {
-        if (r.id == id) {
-          recipe = r;
-          break;
-        }
-      }
-    } else if (name != null && name.isNotEmpty) {
-      final results = await RecipeService.instance.searchRecipes(name);
-      if (results.isNotEmpty) recipe = results.first;
-    }
+    final recipe = await _resolveRecipe(
+      args['recipe_id'] as String?,
+      args['recipe_name'] as String?,
+    );
 
     if (recipe == null) {
       return {'error': 'Recipe not found'};
@@ -812,6 +863,65 @@ After a tool returns, write a short natural-language confirmation
     } catch (e) {
       return {'error': e.toString()};
     }
+  }
+
+  /// Adds every ingredient of a recipe to a list — "add ingredients for
+  /// carbonara to Friday's list." Reuses [ItemsNotifier.addItem] (same write
+  /// path as add_item_to_list/add_history_items_to_list), so items get the
+  /// same auto-categorization as any manually-added item.
+  Future<Map<String, Object?>> _toolAddRecipeToList(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final listId = args['list_id'] as String?;
+    if (listId == null || listId.isEmpty) {
+      return {'error': 'list_id is required — call get_lists first to resolve it'};
+    }
+    final recipe = await _resolveRecipe(
+      args['recipe_id'] as String?,
+      args['recipe_name'] as String?,
+    );
+    if (recipe == null) return {'error': 'Recipe not found'};
+    if (recipe.ingredients.isEmpty) {
+      return {'error': '"${recipe.name}" has no stored ingredients to add'};
+    }
+
+    final requestedServings = (args['servings'] as num?)?.toInt();
+    final scale = requestedServings != null &&
+        requestedServings > 0 &&
+        requestedServings != recipe.defaultServings;
+    final ingredients = scale
+        ? recipe.ingredients
+            .map((i) => i.adjustForServings(recipe.defaultServings, requestedServings))
+            .toList()
+        : recipe.ingredients;
+
+    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
+    var added = 0;
+    final failed = <String>[];
+    for (final ingredient in ingredients) {
+      try {
+        await notifier.addItem(
+          name: ingredient.name,
+          quantity: ingredient.amount,
+          unit: ingredient.unit.isEmpty ? null : ingredient.unit,
+        );
+        added++;
+      } catch (e) {
+        failed.add(ingredient.name);
+      }
+    }
+    ref.invalidate(itemsNotifierProvider(listId));
+    ref.invalidate(listsNotifierProvider);
+
+    return {
+      'recipe': recipe.name,
+      'servings': requestedServings ?? recipe.defaultServings,
+      'list_id': listId,
+      'added': added,
+      'total_ingredients': ingredients.length,
+      if (failed.isNotEmpty) 'failed_items': failed,
+    };
   }
 
   Future<Map<String, Object?>> _toolShoppingHistory(
@@ -1067,6 +1177,94 @@ After a tool returns, write a short natural-language confirmation
                 'store': o.retailerName,
               })
           .toList(),
+    };
+  }
+
+  /// Whole-list version of [_toolSearchOffers] — reuses [basketComparisonProvider]
+  /// (the same infra `list_detail_screen.dart`'s price-comparison sheet and the
+  /// home screen's `PriceComparisonNudgeCard` already use) instead of duplicating
+  /// the store-ranking logic.
+  Future<Map<String, Object?>> _toolCompareListPrices(
+    Map<String, Object?> args,
+    WidgetRef ref,
+    AvoContext? context,
+  ) async {
+    var listId = args['list_id'] as String?;
+    var listName = 'your list';
+    if (listId == null || listId.isEmpty) {
+      final firstList = context?.lists?.isNotEmpty == true ? context!.lists!.first : null;
+      if (firstList == null) return {'error': 'No lists available'};
+      listId = firstList.id;
+      listName = firstList.name;
+    } else if (context?.lists != null) {
+      for (final l in context!.lists!) {
+        if (l.id == listId) {
+          listName = l.name;
+          break;
+        }
+      }
+    }
+
+    final zip = await UserLocationService.instance.getZipCode();
+    if (zip == null || zip.isEmpty) {
+      return {
+        'found': false,
+        'note': 'No location available — ask the user for their zip code '
+            '(PLZ), set it via update_setting key "zip_code", then compare '
+            'again.',
+      };
+    }
+
+    final comparison = await ref.read(basketComparisonProvider(listId).future);
+    if (comparison == null || comparison.comparableItemCount == 0) {
+      return {
+        'found': false,
+        'list_name': listName,
+        'note': 'No current offers match any item on "$listName" near $zip. '
+            'This only compares items that are on a live promotional offer '
+            'right now, not full regular-shelf prices.',
+      };
+    }
+
+    return summarizeBasketComparison(comparison, listName);
+  }
+
+  /// Shapes a [BasketComparison] into the JSON summary handed back to
+  /// Gemini: top 3 stores that actually have a matched item (cheapest
+  /// first), the savings of the cheapest vs. the next-cheapest, and a
+  /// confidence note when some matches are only broad/generic-term ones.
+  /// Pure and unit-tested independently of the network/Riverpod plumbing
+  /// that builds the [BasketComparison] in the first place.
+  @visibleForTesting
+  static Map<String, Object?> summarizeBasketComparison(
+    BasketComparison comparison,
+    String listName,
+  ) {
+    final ranked = comparison.ranked.where((s) => s.matchedCount > 0).take(3).toList();
+    final best = comparison.bestStore;
+    final secondCheapest = ranked.length > 1 ? ranked[1] : null;
+    final savings = (best != null && secondCheapest != null)
+        ? secondCheapest.comparableTotal - best.comparableTotal
+        : null;
+
+    return {
+      'found': true,
+      'list_name': listName,
+      'comparable_item_count': comparison.comparableItemCount,
+      'best_store': best?.retailerName,
+      'stores': ranked
+          .map((s) => {
+                'store': s.retailerName,
+                'total': double.parse(s.comparableTotal.toStringAsFixed(2)),
+                'matched_items': s.matchedCount,
+              })
+          .toList(),
+      if (savings != null && savings > 0.01)
+        'savings_vs_next_cheapest': double.parse(savings.toStringAsFixed(2)),
+      if (comparison.broadMatchOnlyCount > 0)
+        'note': '${comparison.broadMatchOnlyCount} matched item(s) are only a '
+            'similar-product match, not an exact one — mention this is an '
+            'estimate, not an exact total.',
     };
   }
 
