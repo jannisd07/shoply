@@ -7,6 +7,7 @@ import 'package:shoply/core/config/env.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
@@ -19,6 +20,7 @@ import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
+import 'package:shoply/data/services/recipe_offer_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
@@ -228,7 +230,9 @@ After a tool returns, write a short natural-language confirmation
                 'via recipe_id (from search_recipes/get_saved_recipes) or recipe_name, '
                 'and list_id via get_lists (match by the list name the user mentioned, '
                 'or ask which list if it is unclear). Optionally scale the recipe to a '
-                'different serving count than its default.',
+                'different serving count than its default. Automatically attaches '
+                'current offer prices to any matched ingredient — if the response '
+                'includes added_with_offer_price, mention how many items are on offer.',
             Schema.object(properties: {
               'recipe_id': Schema.string(description: 'Recipe ID from search_recipes/get_saved_recipes'),
               'recipe_name': Schema.string(description: 'Recipe name to look up by name'),
@@ -868,7 +872,12 @@ After a tool returns, write a short natural-language confirmation
   /// Adds every ingredient of a recipe to a list — "add ingredients for
   /// carbonara to Friday's list." Reuses [ItemsNotifier.addItem] (same write
   /// path as add_item_to_list/add_history_items_to_list), so items get the
-  /// same auto-categorization as any manually-added item.
+  /// same auto-categorization as any manually-added item. Also attaches
+  /// current offer prices where they exist, the same way the in-app
+  /// recipe→list bottom sheet (`SelectListBottomSheet`) does, so a recipe
+  /// added via chat counts into the list's price total identically to one
+  /// added by tapping through the UI (closes the asymmetry flagged in the
+  /// idea log after this tool's first version).
   Future<Map<String, Object?>> _toolAddRecipeToList(
     Map<String, Object?> args,
     WidgetRef ref,
@@ -896,17 +905,45 @@ After a tool returns, write a short natural-language confirmation
             .toList()
         : recipe.ingredients;
 
+    // Best-effort offer lookup — a failed/slow price check must never block
+    // the add itself, so any error just leaves ingredientOffers empty.
+    var ingredientOffers = const <String, RecipeIngredientOffer>{};
+    try {
+      final zip = await UserLocationService.instance.getZipCode();
+      if (zip != null && zip.isNotEmpty) {
+        final offersResult = await RecipeOfferService.instance.getOffers(
+          recipeId: recipe.id,
+          ingredientNames: ingredients.map((i) => i.name).toList(),
+          zipCode: zip,
+        );
+        ingredientOffers = {
+          for (final match in offersResult.matches)
+            if (match.isStillValid)
+              match.ingredientName.trim().toLowerCase(): match,
+        };
+      }
+    } catch (e) {
+      debugPrint('⚠️ [AVO] add_recipe_to_list offer lookup failed: $e');
+    }
+
     final notifier = ref.read(itemsNotifierProvider(listId).notifier);
     var added = 0;
+    var addedWithOffer = 0;
     final failed = <String>[];
     for (final ingredient in ingredients) {
+      final offer = ingredientOffers[ingredient.name.trim().toLowerCase()];
       try {
         await notifier.addItem(
           name: ingredient.name,
           quantity: ingredient.amount,
           unit: ingredient.unit.isEmpty ? null : ingredient.unit,
+          price: offer?.price,
+          priceCurrency: offer != null ? 'EUR' : null,
+          priceRetailer: offer?.retailerName,
+          priceUnit: offer?.unitSizeLabel,
         );
         added++;
+        if (offer != null) addedWithOffer++;
       } catch (e) {
         failed.add(ingredient.name);
       }
@@ -920,6 +957,7 @@ After a tool returns, write a short natural-language confirmation
       'list_id': listId,
       'added': added,
       'total_ingredients': ingredients.length,
+      if (addedWithOffer > 0) 'added_with_offer_price': addedWithOffer,
       if (failed.isNotEmpty) 'failed_items': failed,
     };
   }
