@@ -24,6 +24,10 @@ class ShoppingItemModel extends Equatable {
   final String? priceRetailer;
   final String? priceUnit;
   final DateTime? priceUpdatedAt;
+  /// The offer's regular (pre-discount) price at the moment [price] was
+  /// applied from a live offer — null for manually-priced/unpriced items.
+  /// Used to compute "you've saved €X" totals; never a live/current price.
+  final double? priceOldValue;
 
   const ShoppingItemModel({
     required this.id,
@@ -49,10 +53,20 @@ class ShoppingItemModel extends Equatable {
     this.priceRetailer,
     this.priceUnit,
     this.priceUpdatedAt,
+    this.priceOldValue,
   });
 
   /// Whether this item has a known price (from a picked offer or manual entry).
   bool get hasPrice => price != null;
+
+  /// Savings vs. the offer's regular price, per unit — null unless both
+  /// [price] and [priceOldValue] are known and the old price is genuinely
+  /// higher (never negative "savings").
+  double? get savingsPerUnit {
+    if (price == null || priceOldValue == null) return null;
+    final diff = priceOldValue! - price!;
+    return diff > 0 ? diff : null;
+  }
 
   /// How many times a per-product price should be counted for this item.
   /// Piece-like quantities ("3" bottles) multiply; measured quantities
@@ -105,6 +119,7 @@ class ShoppingItemModel extends Equatable {
       priceUpdatedAt: json['price_updated_at'] != null
           ? DateTime.parse(json['price_updated_at'] as String)
           : null,
+      priceOldValue: (json['price_old_value'] as num?)?.toDouble(),
     );
   }
 
@@ -133,6 +148,7 @@ class ShoppingItemModel extends Equatable {
       'price_retailer': priceRetailer,
       'price_unit': priceUnit,
       'price_updated_at': priceUpdatedAt?.toIso8601String(),
+      'price_old_value': priceOldValue,
     };
   }
 
@@ -160,6 +176,7 @@ class ShoppingItemModel extends Equatable {
     String? priceRetailer,
     String? priceUnit,
     DateTime? priceUpdatedAt,
+    double? priceOldValue,
   }) {
     return ShoppingItemModel(
       id: id ?? this.id,
@@ -185,6 +202,7 @@ class ShoppingItemModel extends Equatable {
       priceRetailer: priceRetailer ?? this.priceRetailer,
       priceUnit: priceUnit ?? this.priceUnit,
       priceUpdatedAt: priceUpdatedAt ?? this.priceUpdatedAt,
+      priceOldValue: priceOldValue ?? this.priceOldValue,
     );
   }
 
@@ -212,6 +230,7 @@ class ShoppingItemModel extends Equatable {
         priceRetailer,
         priceUnit,
         priceUpdatedAt,
+        priceOldValue,
         updatedAt,
       ];
 }

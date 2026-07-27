@@ -582,6 +582,7 @@ class _SelectListBottomSheetState extends ConsumerState<SelectListBottomSheet> {
             priceCurrency: offer != null ? 'EUR' : null,
             priceRetailer: offer?.retailerName,
             priceUnit: offer?.unitSizeLabel,
+            priceOldValue: offer?.regularPrice,
           );
           addedCount++;
           if (i < adjustedIngredients.length - 1) {

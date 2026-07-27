@@ -119,6 +119,7 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     String? priceCurrency,
     String? priceRetailer,
     String? priceUnit,
+    double? priceOldValue,
     bool autoParse = true,
   }) async {
     try {
@@ -138,6 +139,7 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
         priceCurrency: priceCurrency,
         priceRetailer: priceRetailer,
         priceUnit: priceUnit,
+        priceOldValue: priceOldValue,
         autoParse: autoParse,
       );
       debugPrint('✅ [ITEMS_PROVIDER] Item added to database');

@@ -1286,6 +1286,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             priceCurrency: 'EUR',
             priceRetailer: offer.retailerName,
             priceUnit: offer.unitSizeLabel ?? offer.unitShortName,
+            priceOldValue: offer.regularPrice,
             // The offer already carries the real product name/unit — skip
             // the Gemini ingredient-parse pass so it isn't rewritten.
             autoParse: false,

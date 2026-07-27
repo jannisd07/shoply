@@ -62,6 +62,7 @@ class ShoppingHistoryService {
         'category': item.category,
         'price': item.price,
         'price_retailer': item.priceRetailer,
+        'price_old_value': item.priceOldValue,
       }).toList();
 
       await _supabase.from('shopping_history_items').insert(historyItems);

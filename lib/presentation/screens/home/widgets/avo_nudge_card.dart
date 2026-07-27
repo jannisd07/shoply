@@ -148,6 +148,7 @@ class AvoNudgeCard extends ConsumerWidget {
             priceCurrency: offer != null ? 'EUR' : null,
             priceRetailer: offer?.retailerName,
             priceUnit: offer?.unitSizeLabel,
+            priceOldValue: offer?.regularPrice,
             // The name comes from the user's own purchase stats — no need
             // for the Gemini free-text parse pass.
             autoParse: false,

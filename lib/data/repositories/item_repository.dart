@@ -72,6 +72,7 @@ class ItemRepository {
     String? priceCurrency,
     String? priceRetailer,
     String? priceUnit,
+    double? priceOldValue,
     bool autoParse = true,
   }) async {
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -143,6 +144,7 @@ class ItemRepository {
           mergeUpdate['price_retailer'] = priceRetailer;
           mergeUpdate['price_unit'] = priceUnit;
           mergeUpdate['price_updated_at'] = DateTime.now().toIso8601String();
+          mergeUpdate['price_old_value'] = priceOldValue;
         }
 
         final updatedResponse = await _supabase
@@ -215,6 +217,7 @@ class ItemRepository {
         insertData['price_retailer'] = priceRetailer;
         insertData['price_unit'] = priceUnit;
         insertData['price_updated_at'] = DateTime.now().toIso8601String();
+        insertData['price_old_value'] = priceOldValue;
       }
 
       final response = await _supabase

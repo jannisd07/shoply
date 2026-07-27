@@ -108,6 +108,10 @@ class ShoppingHistoryItem extends Equatable {
   final String? category;
   final double? price;
   final String? priceRetailer;
+  /// The offer's regular (pre-discount) price when [price] came from a live
+  /// offer — carried over from the item at the moment a trip is completed.
+  /// Used to compute "you've saved €X" totals across shopping history.
+  final double? priceOldValue;
 
   const ShoppingHistoryItem({
     required this.id,
@@ -118,7 +122,16 @@ class ShoppingHistoryItem extends Equatable {
     this.category,
     this.price,
     this.priceRetailer,
+    this.priceOldValue,
   });
+
+  /// Savings vs. the offer's regular price, per unit — null unless both
+  /// [price] and [priceOldValue] are known and genuinely lower.
+  double? get savingsPerUnit {
+    if (price == null || priceOldValue == null) return null;
+    final diff = priceOldValue! - price!;
+    return diff > 0 ? diff : null;
+  }
 
   factory ShoppingHistoryItem.fromJson(Map<String, dynamic> json) {
     return ShoppingHistoryItem(
@@ -130,6 +143,7 @@ class ShoppingHistoryItem extends Equatable {
       category: json['category'] as String?,
       price: (json['price'] as num?)?.toDouble(),
       priceRetailer: json['price_retailer'] as String?,
+      priceOldValue: (json['price_old_value'] as num?)?.toDouble(),
     );
   }
 
@@ -143,10 +157,20 @@ class ShoppingHistoryItem extends Equatable {
       'category': category,
       'price': price,
       'price_retailer': priceRetailer,
+      'price_old_value': priceOldValue,
     };
   }
 
   @override
-  List<Object?> get props =>
-      [id, historyId, name, quantity, unit, category, price, priceRetailer];
+  List<Object?> get props => [
+        id,
+        historyId,
+        name,
+        quantity,
+        unit,
+        category,
+        price,
+        priceRetailer,
+        priceOldValue,
+      ];
 }

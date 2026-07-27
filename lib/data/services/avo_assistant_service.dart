@@ -941,6 +941,7 @@ After a tool returns, write a short natural-language confirmation
           priceCurrency: offer != null ? 'EUR' : null,
           priceRetailer: offer?.retailerName,
           priceUnit: offer?.unitSizeLabel,
+          priceOldValue: offer?.regularPrice,
         );
         added++;
         if (offer != null) addedWithOffer++;

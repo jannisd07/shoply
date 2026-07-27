@@ -145,6 +145,7 @@ class _ItemOfferSheetState extends State<_ItemOfferSheet> {
         'price_retailer': widget.offer.retailerName,
         'price_unit': widget.offer.unitSizeLabel ?? widget.offer.unitShortName,
         'price_updated_at': DateTime.now().toUtc().toIso8601String(),
+        'price_old_value': widget.offer.regularPrice,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {

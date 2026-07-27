@@ -76,6 +76,18 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                 )
               : null;
 
+          // Lifetime savings from live offers applied to purchased items
+          // (Feature 8: ties Feature 1's pricing infra into the history
+          // screen's own stats). Only items with both a real price and the
+          // offer's known regular price count — never a guessed baseline.
+          var totalSavings = 0.0;
+          for (final e in entries) {
+            for (final item in e.items) {
+              final perUnit = item.savingsPerUnit;
+              if (perUnit != null) totalSavings += perUnit * item.quantity;
+            }
+          }
+
           return SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(24, 4, 24, 40),
             child: Column(
@@ -120,6 +132,31 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                     ),
                   ],
                 ),
+
+                if (totalSavings > 0.01) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Icon(Icons.savings_outlined, size: 16, color: accent),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          context.tr(
+                            'history_savings_line',
+                            params: {
+                              'amount': '${totalSavings.toStringAsFixed(2)} €',
+                            },
+                          ),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
 
                 if (maxCount > 0) ...[
                   const SizedBox(height: 26),
