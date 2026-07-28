@@ -1,9 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/home_price_highlight.dart';
 import 'package:shoply/data/models/nearby_store.dart';
+import 'package:shoply/data/models/recipe_offer_highlight.dart';
+import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/home_price_comparison_cache_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
+import 'package:shoply/data/services/personalized_deals_service.dart';
 import 'package:shoply/data/services/store_locator_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -287,3 +290,42 @@ HomePriceHighlight? _deriveHomeHighlight(
     signature: signature,
   );
 }
+
+/// How many of the user's most-recently-updated lists to pool open items
+/// from for the personalized deals screen — bounded so a home-screen visit
+/// never fans out to every list the user has.
+const _dealsMaxListsScanned = 2;
+
+/// Real current offers matching items already on the user's shopping lists —
+/// the data behind the home screen's "Angebote" entry point and the deals
+/// screen's default (no-search) view. Empty (never null) when there are no
+/// lists, no open items, or nothing currently on offer. Uses plain repository
+/// reads to scan candidate lists (not `itemsNotifierProvider`, which would
+/// leak a live realtime subscription per list scanned past — same reasoning
+/// as [homePriceHighlightProvider]).
+final personalizedDealsProvider =
+    FutureProvider.autoDispose<List<RecipeIngredientOffer>>((ref) async {
+  final zipInfo = await ref.watch(effectiveZipProvider.future);
+  final lists = ref.watch(listsNotifierProvider).valueOrNull ?? const [];
+  if (lists.isEmpty) return const [];
+
+  final sorted = [...lists]
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  final itemRepository = ref.watch(itemRepositoryProvider);
+
+  final pooled = <ShoppingItemModel>[];
+  var scannedLists = 0;
+  for (final list in sorted) {
+    if ((list.uncheckedCount ?? 0) < 1) continue;
+    final items = await itemRepository.getListItems(list.id);
+    pooled.addAll(items.where((i) => !i.isChecked));
+    scannedLists++;
+    if (scannedLists == _dealsMaxListsScanned) break;
+  }
+
+  final names = PersonalizedDealsService.selectCandidateNames(pooled);
+  if (names.isEmpty) return const [];
+
+  return PersonalizedDealsService.instance
+      .getMatches(names: names, zipCode: zipInfo.zipCode);
+});

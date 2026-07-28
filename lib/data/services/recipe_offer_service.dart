@@ -104,12 +104,13 @@ class RecipeOfferService {
     return result;
   }
 
-  /// The best current offer for one ingredient: the cheapest offer whose
-  /// product name genuinely relates to the ingredient. Exact-term matches
-  /// win over generic-stem broad matches; offers matching neither way are
-  /// ignored entirely (no match beats a wrong product on a proactive
-  /// surface). Returns null when nothing relevant is on offer.
-  @visibleForTesting
+  /// The best current offer for one product term: the cheapest offer whose
+  /// product name genuinely relates to it. Exact-term matches win over
+  /// generic-stem broad matches; offers matching neither way are ignored
+  /// entirely (no match beats a wrong product on a proactive surface).
+  /// Returns null when nothing relevant is on offer. Generic enough to match
+  /// any product name (recipe ingredient or shopping-list item) against
+  /// offers — also used by [PersonalizedDealsService].
   static StoreOffer? pickBestOffer(
       String ingredientName, List<StoreOffer> offers) {
     StoreOffer? bestExact;
@@ -129,11 +130,10 @@ class RecipeOfferService {
     return bestExact ?? bestBroad;
   }
 
-  /// Whether [offer]'s product name contains the full ingredient term, or —
-  /// for multi-word ingredients — its head noun (German compounds put the
-  /// head last: "passierte Tomaten" → "tomaten", mirroring
-  /// OfferPriceService's generic-term rule).
-  @visibleForTesting
+  /// Whether [offer]'s product name contains the full search term, or — for
+  /// multi-word terms — its head noun (German compounds put the head last:
+  /// "passierte Tomaten" → "tomaten", mirroring OfferPriceService's
+  /// generic-term rule).
   static bool isRelevantMatch(String ingredientName, StoreOffer offer) {
     final product = offer.productName.toLowerCase();
     final term = ingredientName.trim().toLowerCase();

@@ -1,11 +1,39 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-27 (scheduled routine — Feature 8 focus: a new
-lifetime "you've saved €X thanks to offers" stat on the Shopping History
-screen, built on a new `price_old_value` column that persists an offer's
-regular price at the moment it's applied to an item. Ties Feature 1's
-pricing infra into Feature 2's history screen — a genuine cross-feature win
-that needed no owner decision. See Feature 8's tenth-session notes.)_
+_Last updated: 2026-07-28 (scheduled routine — Feature 8 focus: made the home
+screen's "Angebote" strip real. It had been a fully decorative, non-tappable
+block (hardcoded teaser text, an arrow icon that led nowhere) sitting
+directly below the working `PriceComparisonNudgeCard` — a genuine,
+previously-undocumented gap the 2026-07-09 audit had noted in passing
+("a pre-existing dead end") but never turned into a fix. Now it's a real
+entry point into a new `WeeklyDealsScreen` (search any product's current
+offers, or browse deals matching items already on the user's lists), with a
+live "N deals matching your lists" teaser on the home screen itself. Ties
+Feature 1's marktguru offer pipeline into a second home-screen surface, no
+owner decision needed. See Feature 8's eleventh-session notes.)_
+
+**2026-07-28 — why Feature 8, again.** Re-read Features 1–8's own
+"Explicitly NOT done"/"still open" sections directly, the same discipline
+every recent session documents. First candidate traced end-to-end and
+ruled out: Feature 4's quoted shortcut "Find cheap high-protein meals" was
+already confirmed correctly needs-decision by the 2026-07-27 session (offers/
+budget-aware recipe ranking collapses into the same open, needs-decision
+idea). Rather than re-tread that, re-read Feature 8's own first-session audit
+note line by line: "The home screen's 'Angebote' strip is decorative/
+non-tappable — a pre-existing dead end... relevant context: ... any future
+price/offer cross-feature card should follow the pattern of the (functional)
+Avo hint strip above it, not the (non-functional) Angebote strip." That's a
+literal, still-true description of shipped code (confirmed by reading
+`home_screen.dart` directly, not trusting the note) — a real, user-visible,
+misleading UI element (it looks tappable: cream card, arrow-forward icon)
+that does nothing, sitting one card below a fully working real one
+(`PriceComparisonNudgeCard`). Unlike every other currently-open item across
+Features 1–8 (all device-QA-only or needs-decision), this needed no owner
+decision — it's a bug-shaped gap ("looks implemented, isn't"), not a new
+product surface, and Feature 1's full marktguru/offer-matching
+infrastructure (`OfferPriceService`, `RecipeOfferService`'s reusable
+product-matching helpers) already existed to build a real version cheaply.
+Built it.
 
 **2026-07-27 — why Feature 8.** Re-read Features 1–8's own "Explicitly NOT
 done"/"still open" sections directly (not just the summary table), the same
@@ -619,7 +647,7 @@ was **never wired into any screen** — this session wired it up.
 | 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~88% | In progress (needs device QA) | **2026-07-23: built the "what brings you to Shoply?" persona/priorities question** (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~76% | In progress | **2026-07-27: lifetime "you've saved €X thanks to offers" stat** on the Shopping History screen — new `price_old_value` column persists an offer's regular price at apply-time (threaded through every offer-apply call site + trip completion), a genuine, previously-undocumented cross-feature win tying Feature 1 pricing into Feature 2 history. 2026-07-24: "cooked N high-protein meals this week" — closes the last of the brief's six quoted Avo-line examples with zero implementation; Weekly Recap stat + a sparse, milestone-gated Avo celebration after logging a recipe meal. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
+| 8 | Cross-feature UX / growth / premium | ~78% | In progress | **2026-07-28: made the home screen's "Angebote" strip real** — new `WeeklyDealsScreen` (search + personalized "matching your lists" deals) replaces a fully decorative, non-tappable strip that led nowhere; live match-count teaser on the home screen. 2026-07-27: lifetime "you've saved €X thanks to offers" stat on the Shopping History screen — new `price_old_value` column persists an offer's regular price at apply-time. 2026-07-24: "cooked N high-protein meals this week" — closes the last of the brief's six quoted Avo-line examples with zero implementation. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
 
 ---
 
@@ -4860,9 +4888,156 @@ stubs deleted again afterward, not committed. **Not run:** an actual
 Xcode/simulator build, or a live account applying an offer and completing a
 trip to see the stat appear end-to-end.
 
+**Eleventh session, 2026-07-28 (scheduled routine — this feature's dedicated
+session).** See the top-of-file "why Feature 8, again" note for how this was
+found: the home screen's "Angebote" strip — flagged as a "pre-existing dead
+end" in this feature's very first-session audit above but never fixed — was
+still, as of this session, a fully static `Container` with hardcoded
+`deals_kicker`/`deals_teaser` text and an `Icons.arrow_forward` that led
+nowhere. Confirmed by reading `home_screen.dart` directly before touching
+anything.
+
+**Before this session:** Feature 1's full marktguru offer pipeline
+(`OfferPriceService`, `RecipeOfferService`'s product-matching helpers,
+`price_comparison_provider.dart`) was already live elsewhere (add-bar
+suggestions, per-item offer chips, the recipe-detail "on offer this week"
+card, the home screen's `PriceComparisonNudgeCard`) — but nothing let a user
+just go **browse** current offers, and the one home-screen element that
+looked like it should (cream card, kicker "DEALS", arrow icon) was 100%
+decorative.
+
+**What I implemented:**
+- `PersonalizedDealsService` (new,
+  `lib/data/services/personalized_deals_service.dart`) — matches items
+  already on the user's shopping lists against live offers.
+  `selectCandidateNames()` (pure, unit-tested) pools open items from the
+  user's most-recently-updated lists, de-duplicates case-insensitively, and
+  caps at 10 — deliberately **not** reusing `RecipeOfferService`'s
+  staples-skip rule (salt/water are skipped there because "nobody buys salt
+  for one recipe"; that reasoning doesn't apply to an item the user
+  *already, explicitly* put on their list — showing a real offer on it is
+  exactly correct). `getMatches()` reuses
+  `RecipeOfferService.pickBestOffer`/`isRelevantMatch` for the actual
+  product-relevance rule (avoiding a wrong-product match), since that logic
+  isn't recipe-specific — required removing `@visibleForTesting` from those
+  two static methods (a small, minimal shared-dependency change; their
+  behavior is unchanged, only the lint-facing annotation, and
+  `recipe_offer_logic_test.dart`'s existing coverage of them still passes
+  unmodified). `eligibleIngredientNames` itself was **not** reused (recipe
+  and list-item rules genuinely differ, as above) — a fresh, smaller
+  `selectCandidateNames` was written instead.
+- `personalizedDealsProvider` (new, in `price_comparison_provider.dart`) —
+  scans up to 2 most-recently-updated lists with real open items, using
+  plain `itemRepository.getListItems()` reads (not `itemsNotifierProvider`,
+  which would leak a live realtime subscription per list scanned past — same
+  reasoning `homePriceHighlightProvider` already documents). Empty (never
+  null) when there are no lists, no open items, or nothing currently on
+  offer.
+- `WeeklyDealsScreen` (new,
+  `lib/presentation/screens/home/weekly_deals_screen.dart`) — the real
+  destination behind the strip. Default view: "matching your lists" deals
+  from `personalizedDealsProvider`. A search field (≥2 chars) switches to
+  live search results via the existing `offerSearchAllProvider`. Both use
+  the same `_DealCard` row (image, product name, retailer + pack size,
+  discount badge, price/regular-price, expiry-soon warning, "similar
+  product" flag for broad matches) and the same `_AddDealSheet` bottom sheet
+  to pick a list and create a **new** item via `ItemRepository.addItem` with
+  the offer's price/retailer/regular-price attached — unlike
+  `showItemOfferSheet` (which updates an item that already exists on a
+  list), this is always a create. Passes `autoParse: false` (the product
+  name and price data are already clean/structured from the offer, no need
+  for the ingredient-text parser) and deliberately does **not** pass the
+  offer's `unitSizeLabel` (e.g. "500 g") as the item's `unit` field — that
+  field is meant for a short unit like "g"/"kg" paired with `quantity` for
+  display (`"{quantity} {unit}"`); passing a full pack-size string there
+  would have rendered as a garbled "1 500 g Milch". Caught and fixed before
+  committing by re-reading how `item.unit` is actually rendered in
+  `list_detail_screen.dart`, not assumed from the sheet's own field names.
+  Zip-code awareness matches `OfferSuggestionsBar`'s existing pattern
+  (works via the nationwide fallback zip, with a tappable nudge to set a
+  real one).
+- Home screen strip (`home_screen.dart`): now a `GestureDetector` →
+  `Navigator.push` to `WeeklyDealsScreen` (same `MaterialPageRoute` pattern
+  the Aktivitätszeile activity row below it already uses). Teaser text is
+  live: wrapped in its own `Consumer` (not the whole screen's `ref.watch`)
+  so only this small strip rebuilds when `personalizedDealsProvider`
+  resolves — shows "N deals matching your lists" when there's a real count,
+  else falls back to the original generic copy. Always tappable regardless
+  of count (it's a navigation entry point like the activity row, not a
+  dismissible proactive nudge, so it's never hidden).
+- 9 new EN/DE translation key pairs (`weekly_deals_title`,
+  `search_deals_hint`, `deals_matching_your_lists`,
+  `no_personalized_deals_hint`, `no_deals_found`, `deals_load_error`,
+  `matched_for_item`, `deals_teaser_matching`).
+
+**Explicitly NOT done / still open:**
+- **No persistent cache** for `personalizedDealsProvider` — relies on
+  `OfferPriceService`'s existing 30-minute in-memory search cache only
+  (`RecipeOfferService`'s 6h persistent SharedPreferences cache was
+  deliberately not duplicated here: list contents change more often than a
+  recipe's ingredients, so a shorter-lived, simpler cache fits better, and
+  the in-memory one already prevents re-fetching within one app session).
+  A cold app start always re-fetches.
+- **No Avo-chat awareness** — "what deals do I have?" doesn't route
+  anywhere yet; flagged as an idea below.
+- **No premium gating** — consistent with this feature's standing
+  premium-gating audit (still open, needs an owner decision, unchanged from
+  every prior session).
+- Not verified on a real device/simulator — no macOS/Xcode in this
+  container, the same standing limitation every UI-facing session in this
+  file carries. Whether the new screen's search field, list scroll, and
+  add-to-list sheet feel right at real device widths/interactions is
+  unverified; so is whether a live account's shopping lists actually
+  produce personalized matches in practice (depends on real marktguru
+  coverage for whatever's on a real user's list, not verifiable from this
+  container).
+
+**Files changed:** `lib/data/services/personalized_deals_service.dart`
+(new), `lib/presentation/screens/home/weekly_deals_screen.dart` (new),
+`lib/presentation/providers/price_comparison_provider.dart`
+(`personalizedDealsProvider`), `lib/presentation/screens/home/home_screen.dart`
+(tappable strip + live teaser), `lib/data/services/recipe_offer_service.dart`
+(removed `@visibleForTesting` from `pickBestOffer`/`isRelevantMatch` so
+`PersonalizedDealsService` can reuse them), `lib/core/localization/app_translations.dart`
+(9 new EN/DE key pairs), `test/personalized_deals_logic_test.dart` (new, 5
+cases for `selectCandidateNames`).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh into `/tmp/flutter`;
+`env.example.dart`/`firebase_options.example.dart` copied to their gitignored
+real paths (not committed) so `flutter analyze` reflects a properly
+configured checkout. Full-project `flutter analyze` — **601 issues (0
+errors, 59 warnings, 542 info)**, byte-identical to the baseline this file's
+tenth session recorded; also scoped `flutter analyze` to all 7 new/touched
+files individually — zero issues on every one. `flutter test` — **53/53
+passed** (48 pre-existing + 5 new in `test/personalized_deals_logic_test.dart`).
+`pubspec.lock` churn from `flutter pub get` reverted before committing; the
+gitignored `env.dart`/`firebase_options.dart` stubs deleted again afterward,
+not committed. **Not run:** an actual Xcode/simulator build, or a live
+account exercising the screen against real marktguru data end-to-end.
+
 ---
 
 ## Ideas / Needs My Approval
+
+- [ ] IDEA: Give Avo an `open_weekly_deals`-style awareness of the new
+  `WeeklyDealsScreen`/`PersonalizedDealsService` (Feature 8's eleventh
+  session, 2026-07-28) — so "what deals do I have right now?" in chat gets a
+  real answer (e.g. a short list + "open the deals screen to see more")
+  instead of nothing.
+  - Why it helps: the matching logic already exists and is cheap to read
+    (it's the same provider the home screen strip uses); today Avo has no
+    way to answer this specific question even though it can already answer
+    "which store is cheapest for my list" via `compare_list_prices`.
+  - Expected user value: medium — a natural chat shortcut for a screen that
+    otherwise requires a home-screen tap to discover.
+  - Expected business/premium value: low-medium (retention/delight).
+  - Complexity: Low — `PersonalizedDealsService.getMatches()` is already a
+    plain async method; the tool would just call it with the user's zip and
+    format the top few matches as text, the same shape as `search_offers`.
+  - Risk: Low.
+  - Recommendation: needs decision — a Feature 4 session, not this one;
+    flagging per this file's own discipline rather than scope-creeping into
+    `avo_assistant_service.dart` mid-Feature-8-session.
 
 - [ ] IDEA: Surface the new lifetime savings stat (Feature 8's tenth
   session, 2026-07-27) beyond the Shopping History screen — a home-screen

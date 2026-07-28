@@ -27,6 +27,8 @@ import 'package:shoply/presentation/screens/home/widgets/calorie_recipe_nudge_ca
 import 'package:shoply/presentation/screens/home/widgets/pending_splits_banner.dart';
 import 'package:shoply/presentation/screens/home/widgets/price_comparison_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/split_trip_nudge_card.dart';
+import 'package:shoply/presentation/screens/home/weekly_deals_screen.dart';
+import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
 import 'package:shoply/data/services/widget_service.dart';
@@ -558,54 +560,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: SizedBox(height: AppDimensions.spacingLarge),
             ),
 
-            // Angebote strip (paper cream block)
+            // Angebote strip (paper cream block) — real entry point into
+            // WeeklyDealsScreen, teasing a real count of matched deals when
+            // available instead of static, non-tappable copy.
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppDimensions.screenHorizontalPadding,
                 ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: PaperColors.cream,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final dealsCount = ref
+                            .watch(personalizedDealsProvider)
+                            .valueOrNull
+                            ?.length ??
+                        0;
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const WeeklyDealsScreen(),
+                          ),
+                        );
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: PaperColors.cream,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
                           children: [
-                            Text(
-                              context.tr('deals_kicker').toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                letterSpacing: 2,
-                                fontWeight: FontWeight.w600,
-                                color: PaperColors.creamInk,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    context.tr('deals_kicker').toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      letterSpacing: 2,
+                                      fontWeight: FontWeight.w600,
+                                      color: PaperColors.creamInk,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    dealsCount > 0
+                                        ? context.tr(
+                                            'deals_teaser_matching',
+                                            params: {'count': '$dealsCount'},
+                                          )
+                                        : context.tr('deals_teaser'),
+                                    style: PaperTextStyles.serif(
+                                      14,
+                                      color: const Color(0xFF4A4232),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              context.tr('deals_teaser'),
-                              style: PaperTextStyles.serif(
-                                14,
-                                color: const Color(0xFF4A4232),
-                              ),
+                            const Icon(
+                              Icons.arrow_forward,
+                              size: 16,
+                              color: PaperColors.creamInk,
                             ),
                           ],
                         ),
                       ),
-                      const Icon(
-                        Icons.arrow_forward,
-                        size: 16,
-                        color: PaperColors.creamInk,
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
             ),
