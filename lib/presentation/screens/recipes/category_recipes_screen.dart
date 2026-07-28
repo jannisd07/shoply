@@ -21,6 +21,11 @@ final _categoryFiltersProvider =
     StateProvider.family<Set<String>, String>((ref, categoryId) => {});
 
 /// Maps category label IDs (as stored in DB) to translation keys
+///
+/// Includes both the browsable categories in `recipe_categories.dart` and the
+/// dietary-preference IDs that `recipes_screen.dart` can also link here from
+/// search (e.g. `/recipes/category/gluten-free`) — those aren't browsable
+/// categories in their own right, so they have no entry in recipeCategories.
 const Map<String, String> _categoryTrKeys = {
   'italian':       'category_italian',
   'asian':         'category_asian',
@@ -35,6 +40,8 @@ const Map<String, String> _categoryTrKeys = {
   'mediterranean': 'category_mediterranean',
   'seafood':       'category_seafood',
   'soup':          'category_soup',
+  'gluten-free':   'filter_gluten_free',
+  'low-carb':      'diet_low_carb',
 };
 
 /// Filter chip definition

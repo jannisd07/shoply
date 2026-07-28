@@ -737,7 +737,11 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
       (author['author_name'] as String?)?.toLowerCase().contains(queryLower) == true
     ).toList();
     
-    // Preference keywords that users might search for
+    // Preference keywords that users might search for.
+    // Note: 'dairy-free' is deliberately absent — RecipeLabelingService never
+    // generates that label (see its NOTE comment), so linking to
+    // /recipes/category/dairy-free would always land on a permanently empty
+    // results page.
     final preferenceKeywords = {
       'vegan': ['vegan', 'plant-based', 'pflanzlich'],
       'vegetarian': ['vegetarian', 'vegetarisch', 'veggie'],
@@ -745,7 +749,6 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
       'healthy': ['healthy', 'gesund', 'light', 'leicht'],
       'gluten-free': ['gluten-free', 'glutenfrei', 'gluten free'],
       'low-carb': ['low-carb', 'keto', 'low carb'],
-      'dairy-free': ['dairy-free', 'laktosefrei', 'dairy free'],
     };
     
     final matchingPreferences = <String>[];
