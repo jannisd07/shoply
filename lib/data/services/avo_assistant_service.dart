@@ -107,6 +107,11 @@ When the user asks to:
 • compare a WHOLE list's total cost across stores, or ask "which store
   is cheapest for my list" / "how much would I save at X vs Y" → call
   compare_list_prices (not search_offers, which is per-product only)
+• ask "what deals do I have?" / "anything on offer for my list?" /
+  "what's cheap right now" → call get_personalized_deals. Different
+  from search_offers (one product) and compare_list_prices (whole-list
+  cost total) — this surfaces live offers on items already sitting on
+  the user's shopping lists.
 • know what they might need to buy / what's running low / restock
   ideas → call get_restock_suggestions (based on their real purchase
   rhythm), then offer to add the items via add_item_to_list
@@ -359,6 +364,17 @@ After a tool returns, write a short natural-language confirmation
             Schema.object(properties: {
               'list_id': Schema.string(
                   description: 'List to compare — omit to use the first/most recent list'),
+            }),
+          ),
+          FunctionDeclaration(
+            'get_personalized_deals',
+            'Show LIVE current supermarket offers (Angebote) that match items already '
+                'sitting on the user\'s shopping lists — e.g. "what deals do I have?" or '
+                '"anything on offer for my list?". Different from search_offers (looks up '
+                'ONE named product) and compare_list_prices (whole-list total cost). '
+                'Requires the user\'s zip code (PLZ).',
+            Schema.object(properties: {
+              'limit': Schema.integer(description: 'Max deals to return (default 5)'),
             }),
           ),
           FunctionDeclaration(
@@ -664,6 +680,8 @@ After a tool returns, write a short natural-language confirmation
           return await _toolRestockSuggestions(args);
         case 'compare_list_prices':
           return await _toolCompareListPrices(args, ref, context);
+        case 'get_personalized_deals':
+          return await _toolGetPersonalizedDeals(args, ref);
         case 'split_trip_cost':
           return await _toolSplitTripCost(args);
         case 'delete_item':
@@ -1304,6 +1322,62 @@ After a tool returns, write a short natural-language confirmation
         'note': '${comparison.broadMatchOnlyCount} matched item(s) are only a '
             'similar-product match, not an exact one — mention this is an '
             'estimate, not an exact total.',
+    };
+  }
+
+  /// Chat-facing version of the home screen's "Angebote" strip
+  /// (`PersonalizedDealsService`/`personalizedDealsProvider`, Feature 8's
+  /// eleventh session) — reuses the exact same provider the home screen
+  /// strip and `WeeklyDealsScreen` already read from, rather than re-pooling
+  /// list items itself, so a chat answer and the home screen never disagree.
+  Future<Map<String, Object?>> _toolGetPersonalizedDeals(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final zip = await UserLocationService.instance.getZipCode();
+    if (zip == null || zip.isEmpty) {
+      return {
+        'found': 0,
+        'note': 'No location available — ask the user for their zip code '
+            '(PLZ), set it via update_setting key "zip_code", then check '
+            'again.',
+      };
+    }
+
+    final limit = ((args['limit'] as num?)?.toInt() ?? 5).clamp(1, 10);
+    final matches = await ref.read(personalizedDealsProvider.future);
+    return summarizePersonalizedDeals(matches, limit: limit);
+  }
+
+  /// Pure, unit-tested shaping of [PersonalizedDealsService.getMatches]'s
+  /// result into the JSON summary handed back to Gemini.
+  @visibleForTesting
+  static Map<String, Object?> summarizePersonalizedDeals(
+    List<RecipeIngredientOffer> matches, {
+    int limit = 5,
+  }) {
+    if (matches.isEmpty) {
+      return {
+        'found': 0,
+        'note': 'No current offers match anything on the user\'s shopping '
+            'lists right now.',
+      };
+    }
+    final top = matches.take(limit).toList();
+    return {
+      'found': top.length,
+      'deals': top
+          .map((m) => {
+                'item': m.ingredientName,
+                'product': m.productName,
+                'price': m.price,
+                if (m.regularPrice != null) 'regular_price': m.regularPrice,
+                if (m.discountPercent != null)
+                  'discount_percent': m.discountPercent,
+                'store': m.retailerName,
+                if (m.isBroadMatch) 'similar_product': true,
+              })
+          .toList(),
     };
   }
 
