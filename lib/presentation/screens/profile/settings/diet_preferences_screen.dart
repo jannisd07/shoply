@@ -19,19 +19,19 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
   Set<String> _selectedPreferences = {};
   bool _isLoading = false;
 
-  final List<DietPreference> _preferences = [
-    DietPreference(id: 'vegetarian', label: 'Vegetarian', description: 'No meat or fish'),
-    DietPreference(id: 'vegan', label: 'Vegan', description: 'No animal products'),
-    DietPreference(id: 'gluten_free', label: 'Gluten-Free', description: 'No gluten-containing foods'),
-    DietPreference(id: 'dairy_free', label: 'Dairy-Free', description: 'No milk or dairy products'),
-    DietPreference(id: 'keto', label: 'Keto', description: 'Low-carb, high-fat diet'),
-    DietPreference(id: 'paleo', label: 'Paleo', description: 'Whole foods, no processed items'),
-    DietPreference(id: 'low_carb', label: 'Low-Carb', description: 'Reduced carbohydrate intake'),
-    DietPreference(id: 'halal', label: 'Halal', description: 'Islamic dietary laws'),
-    DietPreference(id: 'kosher', label: 'Kosher', description: 'Jewish dietary laws'),
-    DietPreference(id: 'pescatarian', label: 'Pescatarian', description: 'Vegetarian plus fish'),
-    DietPreference(id: 'nut_free', label: 'Nut-Free', description: 'No nuts or nut products'),
-    DietPreference(id: 'low_sodium', label: 'Low-Sodium', description: 'Reduced salt intake'),
+  static const List<String> _preferenceIds = [
+    'vegetarian',
+    'vegan',
+    'gluten_free',
+    'dairy_free',
+    'keto',
+    'paleo',
+    'low_carb',
+    'halal',
+    'kosher',
+    'pescatarian',
+    'nut_free',
+    'low_sodium',
   ];
 
   @override
@@ -132,16 +132,16 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
 
           // Preferences section
           PaperSectionHeader(context.tr('diet_preferences')),
-          ...List.generate(_preferences.length, (index) {
-            final pref = _preferences[index];
+          ...List.generate(_preferenceIds.length, (index) {
+            final id = _preferenceIds[index];
             return Column(
               children: [
                 _buildPreferenceRow(
-                  pref: pref,
+                  id: id,
                   textPrimary: textPrimary,
                   textSecondary: textSecondary,
                 ),
-                if (index < _preferences.length - 1)
+                if (index < _preferenceIds.length - 1)
                   _buildDivider(separatorColor),
               ],
             );
@@ -158,20 +158,20 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
   }
 
   Widget _buildPreferenceRow({
-    required DietPreference pref,
+    required String id,
     required Color textPrimary,
     required Color textSecondary,
   }) {
-    final isSelected = _selectedPreferences.contains(pref.id);
+    final isSelected = _selectedPreferences.contains(id);
 
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
         setState(() {
           if (isSelected) {
-            _selectedPreferences.remove(pref.id);
+            _selectedPreferences.remove(id);
           } else {
-            _selectedPreferences.add(pref.id);
+            _selectedPreferences.add(id);
           }
         });
       },
@@ -185,7 +185,7 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    pref.label,
+                    context.tr('diet_$id'),
                     style: TextStyle(
                       color: textPrimary,
                       fontSize: 15,
@@ -194,7 +194,7 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    pref.description,
+                    context.tr('diet_${id}_desc'),
                     style: TextStyle(
                       color: textSecondary,
                       fontSize: 13,
@@ -275,16 +275,4 @@ class _DietPreferencesScreenState extends ConsumerState<DietPreferencesScreen> {
       color: color,
     );
   }
-}
-
-class DietPreference {
-  final String id;
-  final String label;
-  final String description;
-
-  const DietPreference({
-    required this.id,
-    required this.label,
-    required this.description,
-  });
 }
