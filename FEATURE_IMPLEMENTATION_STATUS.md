@@ -1,6 +1,16 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-07-29 (scheduled routine — Feature 4 focus: gave Avo a
+_Last updated: 2026-07-30 (scheduled routine — Feature 5 focus: made Avo
+lean on `users.app_priorities` (Feature 7's "what brings you to Shoply?"
+question) in two tasteful, low-risk surfaces — the chat's empty-state
+suggestion chips now include one prompt matched to the user's top priority,
+and the chat system prompt got a restrained instruction to let priorities
+quietly tilt tone/tool choice without ever reciting them back. This closes
+the "Make Avo aware of app_priorities" idea flagged (needs-decision on
+*which* surface, not *whether*) by Feature 7's sixth session and repeated
+in the Ideas list — see Feature 5's ninth-session notes below.)_
+
+_Previously — 2026-07-29 (scheduled routine — Feature 4 focus: gave Avo a
 `get_personalized_deals` tool so "what deals do I have right now?" gets a
 real chat answer instead of nothing, reusing the exact `personalizedDealsProvider`
 the home screen's "Angebote" strip and `WeeklyDealsScreen` (Feature 8's
@@ -8,6 +18,31 @@ the home screen's "Angebote" strip and `WeeklyDealsScreen` (Feature 8's
 the prior Feature 8 session explicitly logged this as "a Feature 4 session,
 not this one" in its own Ideas list, low-complexity/low-risk with no owner
 decision attached. See Feature 4's twelfth-session notes.)_
+
+**2026-07-30 — why Feature 5.** Re-read Features 1–8's own "Explicitly NOT
+done"/"still open" sections and the Ideas list directly, the same discipline
+every recent session in this file documents. Features 1–4 confirmed
+unchanged on a fresh pass: Feature 1 blocked on a genuine external
+constraint (no public shelf-price API) plus an intentionally out-of-scope
+item; Features 2–4's only remaining gaps are all "needs a real device/Xcode
+run," which this container still cannot do. Went looking specifically for
+something with a clear, low-risk, *not* device-gated implementation, the
+same bar the 2026-07-29 session used. Found it in Feature 7's own
+sixth-session notes ("no Avo awareness of priorities... flagged below, a
+Feature 4/5 territory") and the matching Ideas-list entry — re-read literally
+rather than from paraphrase: its "needs decision" was about *which 1–2
+surfaces* are tasteful, explicitly *not* about whether to build it at all
+("worth doing, but only with..." / "the real work is picking 1–2 tasteful
+surfaces... not the plumbing"). That's the same "needs-decision-about-which-
+session-not-whether" shape the 2026-07-29 Feature 4 session used to justify
+picking up a self-flagged carryover without a fresh owner sign-off. Feature 5
+("Avo as real assistant and mascot") is the more natural owner of Avo's tone
+than Feature 7 (onboarding), and its last dedicated session was 2026-07-20 —
+the longest of any feature without a session since Feature 8's two most
+recent runs (07-27, 07-28) and Feature 4's 07-29 run. Confirmed via direct
+code read of `avo_chat_screen.dart`'s existing (English-only, non-priority-
+aware) suggestion-chip pool and `avo_assistant_service.dart`'s system prompt/
+context builder before writing anything, not trusting the idea's paraphrase.
 
 **2026-07-29 — why Feature 4.** Re-read Features 1–8's own "Explicitly NOT
 done"/"still open" sections directly, the discipline every recent session in
@@ -661,7 +696,7 @@ was **never wired into any screen** — this session wired it up.
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~95% | In progress (needs device QA) | **2026-07-21: built `SavedRecipesWidget`** — a third WidgetKit widget (saved recipes, tap-to-open) that closes plumbing (App Group key + native reload call) that had existed since the widget extension was first added but was never actually consumed by a real widget. 2026-07-19: fixed a real, likely-severe regression — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26; corrected to `17.0`. Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
 | 4 | AI assistant app control | ~97% | Implemented (needs QA) | **2026-07-29: new `get_personalized_deals` tool** — Avo can now answer "what deals do I have?" by reusing Feature 8's `personalizedDealsProvider` (a self-flagged Feature 8 carryover, Low complexity/Low risk). 2026-07-26: `add_recipe_to_list` now attaches live offer prices to matched ingredients. 2026-07-25: closed two real capability gaps — `add_recipe_to_list` (the brief's own literal "add ingredients for carbonara to Friday's list" shortcut) and `compare_list_prices` (whole-list "which store is cheapest"). Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list`. None functional; needs a real device run + live Gemini QA |
-| 5 | Avo mascot & smart notifications | ~90% | In progress (needs device QA) | 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
+| 5 | Avo mascot & smart notifications | ~91% | In progress (needs device QA) | **2026-07-30: Avo's chat is now `app_priorities`-aware** — empty-state suggestion chips lean toward the user's top stated priority, and the system prompt lets it quietly tilt tone/tool choice without ever reciting it back (closes the Feature 7/Ideas-list carryover). 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~88% | In progress (needs device QA) | **2026-07-23: built the "what brings you to Shoply?" persona/priorities question** (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
 | 8 | Cross-feature UX / growth / premium | ~78% | In progress | **2026-07-28: made the home screen's "Angebote" strip real** — new `WeeklyDealsScreen` (search + personalized "matching your lists" deals) replaces a fully decorative, non-tappable strip that led nowhere; live match-count teaser on the home screen. 2026-07-27: lifetime "you've saved €X thanks to offers" stat on the Shopping History screen — new `price_old_value` column persists an offer's regular price at apply-time. 2026-07-24: "cooked N high-protein meals this week" — closes the last of the brief's six quoted Avo-line examples with zero implementation. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
@@ -3170,6 +3205,141 @@ actual rendering/wrapping at real device widths, and whether the ranking
 change is noticeable/correct against real user data (only exercised against
 hand-built fixtures).
 
+**Ninth session, 2026-07-30 (scheduled routine — this feature's dedicated
+session).** See the top-of-file "why Feature 5" note for how this was
+found: Feature 7's sixth session (`app_priorities`, 2026-07-23) explicitly
+flagged "no Avo awareness of priorities" as a real follow-up, and the
+Ideas-list entry for it was "needs decision — a Feature 4 or 5 session, not
+this one" — read literally, the open question was *which surface(s)*, not
+*whether* to build it, so this session picked 1–2 concrete, low-risk
+surfaces rather than waiting on a broader product call.
+
+**Before this session:** `users.app_priorities` (a user's self-reported
+"what brings you to Shoply?" answer — save money, share lists, eat
+healthier, discover recipes, stay organized) only affected the home
+screen's nudge-card order (`home_nudge_card_order.dart`, Feature 7's sixth
+session). Avo's chat had zero awareness of it — `AvoContext` didn't carry
+it, the system prompt never mentioned it, and the empty-state suggestion
+chips (`avo_chat_screen.dart`) were 10 hardcoded **English-only** strings
+shuffled at random regardless of locale or what the user said mattered to
+them (a real, pre-existing bug found while tracing this — German-locale
+users were seeing English chip text; `chip_analyze_list`/`chip_find_recipe`
+right next to them were already properly localized via `context.tr`,
+making the other 10 look like an oversight rather than a deliberate
+choice).
+
+**What I implemented:**
+- **Localized the chip pool** (fixes the pre-existing English-only bug
+  above): the 10 general suggestion strings moved to translation keys
+  (`chip_show_lists`, `chip_cook_tonight`, `chip_whats_on_list`,
+  `chip_add_eggs`, `chip_healthy_dinner`, `chip_quick_recipes`,
+  `chip_whats_missing`, `chip_shopping_history`, `chip_vegetarian_recipes`,
+  `chip_saved_recipes`) with EN/DE pairs in `app_translations.dart`,
+  resolved via `AppTranslations.get(key, languageCode)` using
+  `ref.read(languageProvider)` (not `context.tr`, since the chips are
+  chosen in `initState` where `context.dependOnInheritedWidgetOfExactType` —
+  what `Localizations.localeOf` needs — isn't legal to call yet; `ref.read`
+  has no such restriction).
+- **Priority-aware chip surface #1 (chat empty state).** `_priorityChipKeys`
+  maps each `AppPriority.id` (`core/constants/app_priorities.dart`) to one
+  suggestion key: `save_money` → a new `chip_cheapest_store` ("Which store
+  is cheapest for my list?", routes to the existing `compare_list_prices`
+  tool), `share_lists` → a new `chip_split_last_trip` ("Split my last
+  shopping trip with friends", routes to `split_trip_cost`),
+  `eat_healthier` → the existing `chip_healthy_dinner`, `discover_recipes` →
+  the existing `chip_quick_recipes`, `stay_organized` → the existing
+  `chip_whats_missing`. When the signed-in user has priorities set, one is
+  picked at random (if they picked several) and always shown as the first
+  of the 2 empty-state chips; the second slot is a random pick from the
+  general pool (never a literal duplicate of the priority chip). Chosen
+  because it's a real, actionable prompt the user can tap — not Avo
+  commenting on their answer — so it can't read as "reciting a setting back
+  to them," the exact annoyance risk this idea's own write-up called out.
+  Pure selection logic extracted to `@visibleForTesting
+  buildSuggestionChipKeys()` so it's unit-testable without mocking
+  `Random` (the caller shuffles/picks randomly, the pure function just
+  assembles the final 2 keys).
+- **Tone-aware surface #2 (chat system prompt + context).** `AvoContext`
+  gained an `appPriorities` field, threaded from `avo_chat_screen.dart`'s
+  `_buildContext()` (`user?.appPriorities`, same pattern as the existing
+  `dietPreferences`/`allergies`). `_buildContextString` turns it into
+  "What this user said matters to them: saving money, eating healthier"
+  (a static `_appPriorityLabels` map, English regardless of UI locale —
+  model-facing context only, never shown to the user) and appends it to
+  every message's context block, same as the diet/allergy lines already
+  did. A new **PERSONALIZATION** paragraph in the system prompt explicitly
+  tells Gemini this may quietly tilt which tool it reaches for or which
+  detail it leads with, but to never quote it back, never say "since you
+  told us X," never force it into a reply where it doesn't fit, and that
+  most replies shouldn't mention it at all — the restraint the idea's
+  "annoying/reciting" risk called for, encoded directly into the prompt
+  rather than left to chance.
+- 12 new EN/DE translation key pairs total (10 localized general chips + 2
+  new priority-specific ones).
+
+**Design decisions:**
+- Deliberately limited to 2 surfaces, per the idea's own scoping — did
+  **not** touch the home-screen greeting header (`greeting_header.dart`,
+  plain time-of-day text, not attributed to Avo — wrong surface for "Avo's
+  tone") or `AvoNudgeCard`/`MascotNotificationService` (their content is
+  purely purchase-rhythm/offer-driven data, not free-text Avo commentary —
+  reordering or re-selecting *which* nudges show based on priorities would
+  be new ranking logic, a bigger, separately-scoped change, not this idea).
+- The priority chip is chosen fresh each time `_shuffleChips()` runs (first
+  load + the "+" new-chat button), not pinned permanently, so it doesn't
+  become stale set-and-forget furniture, and rotates across a user's
+  multiple selected priorities over repeat visits rather than always
+  showing the same one.
+- `discover_recipes` reuses `chip_quick_recipes` rather than getting a new
+  string — `home_nudge_card_order.dart` already documents that this
+  priority has no dedicated card either ("no home-card mapping today"); a
+  near-duplicate chip would have added a key without adding real signal.
+
+**Explicitly NOT done / still open:**
+- Priority awareness still doesn't reach recipe **browse** ordering,
+  Avo's proactive nudge *selection* (as opposed to tone in chat replies),
+  or push-notification copy — this session scoped to the chat surface only,
+  per the idea's own "pick 1–2 surfaces" guidance; a wider rollout is a
+  separate, larger idea if wanted later.
+- No way to measure whether the system-prompt tone instruction actually
+  changes Gemini's real output in practice (that needs live conversations
+  against the real API, not available in this container) — the instruction
+  itself was written narrowly and defensively (explicit "don't recite,"
+  "most replies shouldn't mention it") specifically to bound the downside
+  if it's followed loosely.
+- Not verified on a real device/simulator: the empty-state chip layout with
+  the new (potentially longer, e.g. "Welcher Laden ist für meine Liste am
+  günstigsten?") German strings wrapping correctly in the `Wrap` pill
+  layout — same standing caveat every UI-facing session in this file
+  carries.
+
+**Files changed:** `lib/presentation/screens/ai/avo_chat_screen.dart`
+(`_suggestionKeys`/`_priorityChipKeys`/`buildSuggestionChipKeys`,
+`_shuffleChips` rewritten, `_buildContext` passes `appPriorities`),
+`lib/data/services/avo_assistant_service.dart` (`AvoContext.appPriorities`,
+`_buildContextString` priority line, `_appPriorityLabels`, system-prompt
+PERSONALIZATION paragraph), `lib/core/localization/app_translations.dart`
+(12 new EN/DE key pairs), `test/avo_chat_suggestion_chips_test.dart` (new,
+5 cases for `buildSuggestionChipKeys`).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh into `/tmp/flutter`;
+`env.example.dart`/`firebase_options.example.dart` copied to their
+gitignored real paths (not committed) so `flutter analyze` reflects a
+properly configured checkout. Full-project `flutter analyze` before
+(`git stash`) and after: **601 issues — byte-identical** (0 errors, 59
+warnings, 542 info); also scoped `flutter analyze` to the 3 touched
+production files individually — only the 3 pre-existing
+`unnecessary_null_comparison`/`unnecessary_non_null_assertion` warnings in
+`avo_chat_screen.dart` at shifted (not new) line numbers, confirmed
+identical against the pre-change `git stash` version at their original
+lines. `flutter test` — **62/62 passed** (57 pre-existing + 5 new in
+`avo_chat_suggestion_chips_test.dart`). `pubspec.lock` churn from
+`flutter pub get` reverted before committing; the gitignored
+`env.dart`/`firebase_options.dart` stubs deleted again afterward, not
+committed. **Not run:** an actual Xcode/simulator build or a live account
+exchanging real chat turns with Gemini to observe the tone instruction in
+practice.
+
 ---
 
 ## Feature 6 — Complete calorie tracking
@@ -5208,25 +5378,24 @@ account exercising the screen against real marktguru data end-to-end.
   - Recommendation: needs decision — worth doing, but only with the
     view/delete UI included from day one.
 
-- [ ] IDEA: Make Avo aware of the new `users.app_priorities` (Feature 7's
-  sixth session, 2026-07-23) — e.g. lean its proactive tone/suggestions
-  toward whatever a user said matters to them ("since you're here to save
-  money, here's this week's cheapest list").
-  - Why it helps: today `app_priorities` only reorders home nudge cards;
-    this would give the signal a second, more visible use and tie Feature
-    7's new question into Feature 4/5's assistant more directly.
-  - Expected user value: medium — a genuinely personal touch if done with
-    a light hand; the brief explicitly warns against being "annoying," so
-    tone matters as much as the mechanism.
-  - Expected business/premium value: low-medium (retention/delight).
-  - Complexity: Low-medium — `app_priorities` is already on `UserModel`,
-    reachable wherever Avo's system context is built; the real work is
-    picking 1–2 tasteful surfaces (not every message) rather than the
-    plumbing.
-  - Risk: Low technically; the only real risk is overusing it and making
-    Avo feel like it's reciting a user's own answers back at them.
-  - Recommendation: needs decision — a Feature 4 or 5 session, not this
-    one; flagging rather than guessing at which surface(s) are worth it.
+- [x] IDEA (DONE 2026-07-30, Feature 5's ninth session): Make Avo aware of
+  `users.app_priorities` (Feature 7's sixth session, 2026-07-23) — e.g.
+  lean its proactive tone/suggestions toward whatever a user said matters
+  to them.
+  - **Outcome:** implemented as 2 surfaces, per this idea's own "pick 1–2
+    tasteful surfaces" guidance: (1) the chat empty-state suggestion chips
+    now include one prompt matched to the user's top priority (e.g.
+    `save_money` → "Which store is cheapest for my list?"), always a real
+    actionable prompt rather than commentary on their answer; (2)
+    `AvoContext.appPriorities` + a restrained system-prompt paragraph let
+    Gemini's tone/tool choice quietly tilt toward it, with explicit
+    instructions to never quote it back and to leave most replies
+    unaffected — directly countering this idea's own flagged "reciting a
+    user's own answers back" risk. Also fixed a real pre-existing bug found
+    while tracing this: the chat's general suggestion chips were 10
+    hardcoded English-only strings despite the app being bilingual (now
+    localized EN/DE like the two chips next to them already were). Details
+    in Feature 5's ninth-session notes above.
 
 - [ ] IDEA: Re-enable `mobile_scanner` for real camera barcode scanning in
   the Feature 6 food-log barcode tab (currently manual numeric entry +

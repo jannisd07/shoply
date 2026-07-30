@@ -160,6 +160,15 @@ Available get_app_info topics: ${AvoAppKnowledge.topicsSummary}.
 
 After a tool returns, write a short natural-language confirmation
 (1 sentence) and do not repeat the data the widget already shows.
+
+PERSONALIZATION — the context may include "What this user said matters to
+them" (from an onboarding/profile question, e.g. saving money, eating
+healthier, staying organized). When it's present and genuinely relevant,
+let it quietly tilt which tool you reach for or which detail you lead with
+(e.g. mention a cheaper store to a money-saver, or a lighter option to
+someone eating healthier) — but never quote it back, never say "since you
+told us X", and never force it into a reply where it doesn't fit. Most
+replies should not mention it at all.
 ''';
 
   // ── Lifecycle ────────────────────────────────────────────────────
@@ -2185,8 +2194,29 @@ After a tool returns, write a short natural-language confirmation
     if (context.userName != null && context.userName!.isNotEmpty) {
       parts.add('User name: ${context.userName}');
     }
+    if (context.appPriorities != null && context.appPriorities!.isNotEmpty) {
+      final labels = context.appPriorities!
+          .map((id) => _appPriorityLabels[id])
+          .whereType<String>()
+          .toList();
+      if (labels.isNotEmpty) {
+        parts.add('What this user said matters to them: ${labels.join(', ')} '
+            '(see system instructions for how to use this)');
+      }
+    }
     return parts.join('\n\n');
   }
+
+  /// Human-readable form of each `AppPriority.id`
+  /// (`core/constants/app_priorities.dart`), for the model context only —
+  /// never shown to the user directly.
+  static const _appPriorityLabels = {
+    'save_money': 'saving money',
+    'share_lists': 'sharing lists with others',
+    'eat_healthier': 'eating healthier',
+    'discover_recipes': 'discovering new recipes',
+    'stay_organized': 'staying organized',
+  };
 
   AvoExpressionType _inferExpression(String text, List<AvoWidgetPayload> payloads) {
     final m = text.toLowerCase();
@@ -2390,6 +2420,7 @@ class AvoContext {
   final List<String>? dietPreferences;
   final List<String>? allergies;
   final String? userName;
+  final List<String>? appPriorities;
 
   AvoContext({
     this.lists,
@@ -2401,6 +2432,7 @@ class AvoContext {
     this.dietPreferences,
     this.allergies,
     this.userName,
+    this.appPriorities,
   });
 }
 

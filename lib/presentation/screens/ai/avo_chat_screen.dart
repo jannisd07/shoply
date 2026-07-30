@@ -5,6 +5,7 @@ import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/localization/app_translations.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/mascot/avo_mascot.dart';
 import 'package:shoply/data/models/recipe.dart';
@@ -15,6 +16,7 @@ import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 
@@ -42,18 +44,53 @@ class ChatMessage {
 // SUGGESTIONS
 // ════════════════════════════════════════════════════════
 
-const _suggestions = [
-  'Show my shopping lists',
-  'What should I cook tonight?',
-  "What's on my list?",
-  'Add eggs to my list',
-  'Suggest a healthy dinner',
-  'Find quick recipes',
-  "What's missing from my list?",
-  'Show my shopping history',
-  'Find vegetarian recipes',
-  'Show my saved recipes',
+const _suggestionKeys = [
+  'chip_show_lists',
+  'chip_cook_tonight',
+  'chip_whats_on_list',
+  'chip_add_eggs',
+  'chip_healthy_dinner',
+  'chip_quick_recipes',
+  'chip_whats_missing',
+  'chip_shopping_history',
+  'chip_vegetarian_recipes',
+  'chip_saved_recipes',
 ];
+
+/// One suggestion key per `AppPriority.id` (`core/constants/app_priorities.dart`)
+/// a user can pick during onboarding/Profile → "What matters to you". Lets
+/// the chat's empty-state chips lean toward what a user already said
+/// matters to them (a real, actionable prompt) without literally reciting
+/// their answer back — a light-touch personalization, not a new message.
+/// 'discover_recipes' intentionally reuses the recipe-search chip already
+/// in the general pool above rather than adding a near-duplicate.
+const _priorityChipKeys = {
+  'save_money': 'chip_cheapest_store',
+  'share_lists': 'chip_split_last_trip',
+  'eat_healthier': 'chip_healthy_dinner',
+  'discover_recipes': 'chip_quick_recipes',
+  'stay_organized': 'chip_whats_missing',
+};
+
+/// Picks the 2 translation keys shown as empty-state chips: [priorityKey]
+/// first if the caller resolved one (from the user's app priorities), then
+/// enough of [shuffledGeneralKeys] to reach 2, skipping any that would
+/// duplicate the priority key. Pure/deterministic — the randomness lives in
+/// how the caller shuffles [shuffledGeneralKeys] and picks [priorityKey],
+/// not in here — so this is unit-testable without mocking `Random`.
+@visibleForTesting
+List<String> buildSuggestionChipKeys({
+  required List<String> shuffledGeneralKeys,
+  String? priorityKey,
+}) {
+  final keys = <String>[];
+  if (priorityKey != null) keys.add(priorityKey);
+  for (final key in shuffledGeneralKeys) {
+    if (keys.length >= 2) break;
+    if (!keys.contains(key)) keys.add(key);
+  }
+  return keys;
+}
 
 // ════════════════════════════════════════════════════════
 // SCREEN
@@ -81,8 +118,22 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
   }
 
   void _shuffleChips() {
-    final s = List<String>.from(_suggestions)..shuffle(Random());
-    _chips = s.take(2).toList();
+    final languageCode = ref.read(languageProvider);
+    final priorities =
+        ref.read(currentUserProvider).valueOrNull?.appPriorities ?? const [];
+
+    String? priorityKey;
+    if (priorities.isNotEmpty) {
+      final shuffledPriorities = List<String>.from(priorities)..shuffle(Random());
+      priorityKey = _priorityChipKeys[shuffledPriorities.first];
+    }
+    final generalKeys = List<String>.from(_suggestionKeys)..shuffle(Random());
+    final keys = buildSuggestionChipKeys(
+      shuffledGeneralKeys: generalKeys,
+      priorityKey: priorityKey,
+    );
+
+    _chips = keys.map((k) => AppTranslations.get(k, languageCode)).toList();
   }
 
   Future<void> _initAvo() async {
@@ -174,6 +225,7 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
       dietPreferences: user?.dietPreferences,
       allergies: user?.allergies,
       userName: user?.displayName,
+      appPriorities: user?.appPriorities,
     );
   }
 
