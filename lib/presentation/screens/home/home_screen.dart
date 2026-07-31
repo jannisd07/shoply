@@ -23,6 +23,7 @@ import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
 import 'package:shoply/presentation/screens/home/home_nudge_card_order.dart';
 import 'package:shoply/presentation/screens/home/widgets/avo_nudge_card.dart';
+import 'package:shoply/presentation/screens/home/widgets/personal_flyer_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/pending_splits_banner.dart';
 import 'package:shoply/presentation/screens/home/widgets/price_comparison_nudge_card.dart';
@@ -871,6 +872,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return const SplitTripNudgeCard();
       case HomeNudgeCardKind.avoRestock:
         return const AvoNudgeCard();
+      case HomeNudgeCardKind.personalFlyer:
+        return const PersonalFlyerCard();
       case HomeNudgeCardKind.calorieRecipe:
         return const CalorieRecipeNudgeCard();
       case HomeNudgeCardKind.priceComparison:

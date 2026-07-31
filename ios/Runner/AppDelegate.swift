@@ -17,12 +17,25 @@ import WidgetKit
     // Register plugins first
     GeneratedPluginRegistrant.register(with: self)
     
-    // Register native Liquid Glass platform view
-    let glassFactory = LiquidGlassViewFactory(
-      messenger: (window?.rootViewController as! FlutterViewController).binaryMessenger
-    )
-    registrar(forPlugin: "LiquidGlassView")!
-      .register(glassFactory, withId: "shoply/liquid_glass")
+    // Register native Liquid Glass platform view.
+    // Der Messenger kommt vom Registrar, nicht von window?.rootViewController:
+    // nach der UIScene-Migration sind window/rootViewController in
+    // didFinishLaunchingWithOptions nicht mehr gesetzt.
+    if let glassRegistrar = registrar(forPlugin: "LiquidGlassView") {
+      let messenger = glassRegistrar.messenger()
+      glassRegistrar.register(
+        LiquidGlassViewFactory(messenger: messenger),
+        withId: "shoply/liquid_glass"
+      )
+      // Grouped variant: several glass shapes in one UIGlassContainerEffect
+      // so they merge the way the Messages composer's controls do.
+      glassRegistrar.register(
+        LiquidGlassGroupViewFactory(messenger: messenger),
+        withId: "shoply/liquid_glass_group"
+      )
+    } else {
+      print("❌ [LiquidGlass] Could not obtain plugin registrar")
+    }
     
     // Setup widget method channel
     setupWidgetChannel()
@@ -53,12 +66,13 @@ import WidgetKit
   
   // MARK: - Widget Channel Setup
   private func setupWidgetChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      print("❌ [Widget] Could not get FlutterViewController")
+    // Ebenfalls über den Registrar statt window?.rootViewController (UIScene).
+    guard let widgetRegistrar = registrar(forPlugin: "ShoplyWidgetChannel") else {
+      print("❌ [Widget] Could not obtain plugin registrar")
       return
     }
-    
-    let channel = FlutterMethodChannel(name: widgetChannel, binaryMessenger: controller.binaryMessenger)
+
+    let channel = FlutterMethodChannel(name: widgetChannel, binaryMessenger: widgetRegistrar.messenger())
     
     channel.setMethodCallHandler { [weak self] (call, result) in
       guard let self = self else {

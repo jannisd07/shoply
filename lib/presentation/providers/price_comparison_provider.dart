@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/home_price_highlight.dart';
 import 'package:shoply/data/models/nearby_store.dart';
+import 'package:shoply/data/models/shelf_price.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/home_price_comparison_cache_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
+import 'package:shoply/data/services/open_prices_service.dart';
 import 'package:shoply/data/services/store_locator_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -68,18 +70,19 @@ final offerSuggestionsProvider = FutureProvider.autoDispose
       return a.price.compareTo(b.price);
     });
 
-  // Top 3, preferring distinct retailers so the user sees real alternatives.
+  // Return *all* matches, but lead with one offer per retailer so the rows
+  // the user sees without scrolling are real alternatives rather than three
+  // variants from the same store. Everything else — further sorts from the
+  // same market, other pack sizes — follows underneath, reachable by
+  // scrolling inside the suggestion card.
   final result = <StoreOffer>[];
   final seenRetailers = <String>{};
   for (final offer in sorted) {
-    if (seenRetailers.add(offer.retailerUniqueName)) {
-      result.add(offer);
-      if (result.length == 3) return result;
-    }
+    if (seenRetailers.add(offer.retailerUniqueName)) result.add(offer);
   }
+  final leadIds = result.map((o) => o.id).toSet();
   for (final offer in sorted) {
-    if (result.length == 3) break;
-    if (!result.contains(offer)) result.add(offer);
+    if (!leadIds.contains(offer.id)) result.add(offer);
   }
   return result;
 });
@@ -287,3 +290,70 @@ HomePriceHighlight? _deriveHomeHighlight(
     signature: signature,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Combined pricing: regular shelf price + current offer
+// ---------------------------------------------------------------------------
+
+/// What a product normally costs, from Open Prices. Null when the crowdsourced
+/// database has nothing usable for this name — which is common, so callers
+/// must treat a missing shelf price as normal rather than as an error.
+final shelfPriceProvider = FutureProvider.autoDispose
+    .family<ShelfPrice?, String>((ref, productName) async {
+  if (productName.trim().length < 3) return null;
+  return OpenPricesService.instance.lookupByName(productName);
+});
+
+/// Everything known about what a product costs: the regular price and the
+/// best current offer, side by side.
+///
+/// The two sources answer different questions and neither replaces the other —
+/// marktguru knows this week's Angebote but never the normal price, Open
+/// Prices knows roughly what it usually costs but lags behind promotions.
+class ProductPricing {
+  /// Regular price from Open Prices (ODbL — requires attribution wherever
+  /// it is displayed). Null when unknown.
+  final ShelfPrice? shelfPrice;
+
+  /// Cheapest current offer nearby, or null when nothing is on sale.
+  final StoreOffer? bestOffer;
+
+  const ProductPricing({this.shelfPrice, this.bestOffer});
+
+  bool get hasAny => shelfPrice != null || bestOffer != null;
+
+  /// Savings versus the regular price, in percent, when both are known and
+  /// the offer is actually cheaper. Null otherwise — an "offer" that costs
+  /// more than the shelf price should not be advertised as a saving.
+  int? get savingsPercent {
+    final shelf = shelfPrice?.price;
+    final offer = bestOffer?.price;
+    if (shelf == null || offer == null || offer >= shelf) return null;
+    final percent = ((1 - offer / shelf) * 100).round();
+    return percent >= 5 ? percent : null;
+  }
+}
+
+/// Combined pricing for a single product name.
+final productPricingProvider = FutureProvider.autoDispose
+    .family<ProductPricing, String>((ref, productName) async {
+  final query = productName.trim();
+  if (query.length < 2) return const ProductPricing();
+
+  // Fetch both concurrently; a failure in either must not hide the other.
+  final shelfFuture = ref.watch(shelfPriceProvider(query).future);
+  final offersFuture = ref.watch(offerSearchAllProvider(query).future);
+
+  final results = await Future.wait<Object?>([
+    shelfFuture.catchError((_) => null),
+    offersFuture.catchError((_) => const <StoreOffer>[]),
+  ]);
+
+  final shelf = results[0] as ShelfPrice?;
+  final offers = (results[1] as List<StoreOffer>?) ?? const [];
+
+  return ProductPricing(
+    shelfPrice: shelf,
+    bestOffer: offers.isEmpty ? null : offers.first,
+  );
+});

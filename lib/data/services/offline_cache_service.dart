@@ -25,14 +25,28 @@ class OfflineCacheService {
   // RECIPE CACHING
   // =============================================
 
+  /// In-memory mirror of the recipe cache — see [_memoryItems] for why a
+  /// synchronously readable copy is needed to avoid an empty first frame.
+  List<Recipe>? _memoryRecipes;
+
+  /// Cached recipes without awaiting, or null if not warmed yet.
+  List<Recipe>? getCachedRecipesSync() => _memoryRecipes;
+
+  /// Load the recipe cache into memory so [getCachedRecipesSync] succeeds.
+  Future<void> warmRecipes() async {
+    if (_memoryRecipes != null) return;
+    final recipes = await getCachedRecipes();
+    if (recipes.isNotEmpty) _memoryRecipes = recipes;
+  }
+
   /// Cache a list of recipes
   Future<void> cacheRecipes(List<Recipe> recipes) async {
+    _memoryRecipes = List.unmodifiable(recipes);
     try {
       final prefs = await _preferences;
       final recipesJson = recipes.map((r) => jsonEncode(r.toJson())).toList();
       await prefs.setStringList(_cachedRecipesKey, recipesJson);
       await prefs.setString(_lastSyncKey, DateTime.now().toIso8601String());
-      print('✅ [OFFLINE] Cached ${recipes.length} recipes');
     } catch (e) {
       print('❌ [OFFLINE] Error caching recipes: $e');
     }
@@ -40,10 +54,12 @@ class OfflineCacheService {
 
   /// Get cached recipes
   Future<List<Recipe>> getCachedRecipes() async {
+    final inMemory = _memoryRecipes;
+    if (inMemory != null) return inMemory;
     try {
       final prefs = await _preferences;
       final recipesJson = prefs.getStringList(_cachedRecipesKey);
-      
+
       if (recipesJson == null || recipesJson.isEmpty) {
         return [];
       }
@@ -53,7 +69,7 @@ class OfflineCacheService {
         return Recipe.fromJson(map);
       }).toList();
 
-      print('📦 [OFFLINE] Loaded ${recipes.length} cached recipes');
+      _memoryRecipes = recipes;
       return recipes;
     } catch (e) {
       print('❌ [OFFLINE] Error loading cached recipes: $e');
@@ -158,13 +174,40 @@ class OfflineCacheService {
     }
   }
 
+  /// In-memory mirror of the on-disk item cache.
+  ///
+  /// SharedPreferences is async, so a screen that only reads it can never
+  /// paint data in its *first* frame — there is always at least one empty
+  /// frame while the read completes, and that is exactly the hitch you see
+  /// when opening a list. Holding the decoded items in memory as well lets
+  /// [getCachedListItemsSync] answer during `build`, so the list renders
+  /// populated immediately and the network result just reconciles afterwards.
+  final Map<String, List<ShoppingItemModel>> _memoryItems = {};
+
+  /// Cached items for [listId] without awaiting, or null if this list has
+  /// not been warmed yet. Call [warmListItems] to populate.
+  List<ShoppingItemModel>? getCachedListItemsSync(String listId) =>
+      _memoryItems[listId];
+
+  /// Load the on-disk cache for [listIds] into memory so subsequent
+  /// [getCachedListItemsSync] calls succeed. Cheap and safe to call again.
+  Future<void> warmListItems(Iterable<String> listIds) async {
+    for (final id in listIds) {
+      if (_memoryItems.containsKey(id)) continue;
+      final items = await getCachedListItems(id);
+      if (items != null) _memoryItems[id] = items;
+    }
+  }
+
   /// Cache items for a specific shopping list
   Future<void> cacheListItems(String listId, List<ShoppingItemModel> items) async {
+    // Memory first and synchronously, so a navigation happening in the same
+    // frame as a write already sees the new data.
+    _memoryItems[listId] = List.unmodifiable(items);
     try {
       final prefs = await _preferences;
       final itemsJson = items.map((i) => jsonEncode(i.toJson())).toList();
       await prefs.setStringList('$_cachedListItemsPrefix$listId', itemsJson);
-      print('✅ [OFFLINE] Cached ${items.length} items for list $listId');
     } catch (e) {
       print('❌ [OFFLINE] Error caching list items: $e');
     }
@@ -172,6 +215,8 @@ class OfflineCacheService {
 
   /// Get cached items for a specific shopping list
   Future<List<ShoppingItemModel>?> getCachedListItems(String listId) async {
+    final inMemory = _memoryItems[listId];
+    if (inMemory != null) return inMemory;
     try {
       final prefs = await _preferences;
       final itemsJson = prefs.getStringList('$_cachedListItemsPrefix$listId');
@@ -185,7 +230,7 @@ class OfflineCacheService {
         return ShoppingItemModel.fromJson(map);
       }).toList();
 
-      print('📦 [OFFLINE] Loaded ${items.length} cached items for list $listId');
+      _memoryItems[listId] = items;
       return items;
     } catch (e) {
       print('❌ [OFFLINE] Error loading cached list items: $e');
@@ -272,6 +317,10 @@ class OfflineCacheService {
 
   /// Clear all cached data
   Future<void> clearCache() async {
+    // Drop the in-memory mirrors too — this runs on sign-out, and nothing of
+    // the previous account may survive in RAM either.
+    _memoryItems.clear();
+    _memoryRecipes = null;
     try {
       final prefs = await _preferences;
       final keys = prefs.getKeys().where((k) =>

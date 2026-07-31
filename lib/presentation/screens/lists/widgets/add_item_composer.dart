@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
@@ -6,21 +7,26 @@ import 'package:flutter/services.dart';
 
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
 
 /// Messages-style composer for adding items to a shopping list.
 ///
-/// Layout (left to right), mirroring the Apple Messages composer:
-///  - a circular "+" glass button (34pt visual inside a >=44pt hit target),
+/// Layout (left to right), mirroring the iOS 26 Messages composer:
+///  - a circular "+" glass button,
 ///  - a capsule glass text field that grows to [maxLines] before scrolling
 ///    internally,
 ///  - a send button that scale+fades in inside the capsule's trailing edge
 ///    while the field is non-empty.
 ///
-/// Material notes: the glass is a real `BackdropFilter` sampling whatever
-/// scrolls behind the bar (the same recipe the app's other liquid-glass
-/// widgets use) — not a static translucent color. With Increase Contrast /
-/// Reduce Transparency enabled (`MediaQuery.highContrast`) it falls back to
-/// an opaque surface so the field never becomes unreadable.
+/// Material: on iOS both backgrounds are drawn by a *single* native
+/// `UIGlassContainerEffect` ([LiquidGlassGroup]) rather than two independent
+/// glass views. That is what lets the circle and the capsule bulge toward one
+/// another and fuse the way Apple's controls do — separate effect views never
+/// merge, no matter how close they sit. Flutter then paints the glyph and the
+/// text field on top at matching offsets.
+///
+/// With Increase Contrast / Reduce Transparency (`MediaQuery.highContrast`)
+/// the glass is dropped for opaque surfaces so the field stays readable.
 ///
 /// This widget deliberately does NOT read `MediaQuery.viewInsets`: keyboard
 /// tracking is the parent's job, so that only the smallest possible subtree
@@ -32,7 +38,7 @@ class AddItemComposer extends StatefulWidget {
   final VoidCallback onPlusTap;
 
   /// Key attached to the "+" button so callers can read its global rect as
-  /// the origin of the attachment sheet's morph animation.
+  /// the origin of the attachment menu's morph animation.
   final GlobalKey plusButtonKey;
 
   /// Max visible text lines before the field scrolls internally.
@@ -51,8 +57,21 @@ class AddItemComposer extends StatefulWidget {
   State<AddItemComposer> createState() => _AddItemComposerState();
 }
 
+// Metrics read off the iOS 26 Messages composer.
+const double _kControlSize = 38; // circle diameter == capsule min height
+const double _kHitTarget = 44;
+const double _kGap = 8; // visual gap between circle and capsule
+const double _kTextLeftInset = 16;
+
 class _AddItemComposerState extends State<AddItemComposer> {
+  final GlobalKey _contentKey = GlobalKey();
+
+  /// Height of the bar; grows as the field wraps. Seeded with the
+  /// single-line height so the very first frame is already correct.
+  double _height = _kControlSize;
+
   bool get _hasText => widget.controller.text.trim().isNotEmpty;
+  bool _lastHasText = false;
 
   @override
   void initState() {
@@ -61,21 +80,42 @@ class _AddItemComposerState extends State<AddItemComposer> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Text scale / locale changes resize the field without touching the
+    // controller, so the glass shape has to be re-measured here too —
+    // otherwise XXL Dynamic Type leaves the capsule glass too short.
+    _scheduleHeightSync();
+  }
+
+  @override
   void dispose() {
     widget.controller.removeListener(_onTextChanged);
     super.dispose();
   }
 
-  bool _lastHasText = false;
   void _onTextChanged() {
     // Only rebuild when the empty/non-empty state flips, not per keystroke —
-    // the send button's visibility is the only thing this widget derives
-    // from the text.
+    // the send button's visibility is the only thing derived from the text.
     final has = _hasText;
     if (has != _lastHasText) {
       _lastHasText = has;
       if (mounted) setState(() {});
     }
+    _scheduleHeightSync();
+  }
+
+  /// The glass shapes are absolute rects, so the native side needs the real
+  /// content height. Reading it after layout costs one extra frame, but only
+  /// on the frames where the text actually wraps.
+  void _scheduleHeightSync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box = _contentKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      final h = box.size.height;
+      if ((h - _height).abs() > 0.5) setState(() => _height = h);
+    });
   }
 
   void _submit() {
@@ -94,72 +134,62 @@ class _AddItemComposerState extends State<AddItemComposer> {
   Widget build(BuildContext context) {
     final reduceTransparency = MediaQuery.highContrastOf(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final useNativeGlass = Platform.isIOS && !reduceTransparency;
 
-    // Real glass unless the user asked for contrast — then opaque surface.
-    final capsuleTint = reduceTransparency
-        ? AppColors.surface(context)
-        : (isDark
-              ? Colors.black.withValues(alpha: 0.35)
-              : Colors.white.withValues(alpha: 0.55));
-
-    return Row(
+    final content = Row(
+      key: _contentKey,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         _PlusButton(
           buttonKey: widget.plusButtonKey,
           onTap: widget.onPlusTap,
+          drawOwnBackground: !useNativeGlass,
           reduceTransparency: reduceTransparency,
           isDark: isDark,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: _kGap),
         Expanded(
-          child: _GlassCapsule(
-            tint: capsuleTint,
-            blur: !reduceTransparency,
+          child: _Capsule(
+            drawOwnBackground: !useNativeGlass,
+            reduceTransparency: reduceTransparency,
             isDark: isDark,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 16, top: 2, bottom: 2),
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.bottomCenter,
-                      child: TextField(
-                        controller: widget.controller,
-                        focusNode: widget.focusNode,
-                        autofocus: false,
-                        minLines: 1,
-                        maxLines: AddItemComposer.maxLines,
-                        textInputAction: TextInputAction.send,
-                        textCapitalization: TextCapitalization.sentences,
-                        keyboardAppearance:
-                            isDark ? Brightness.dark : Brightness.light,
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: AppColors.textPrimary(context),
-                        ),
-                        decoration: InputDecoration(
-                          hintText: context.tr('add_item'),
-                          hintStyle: TextStyle(
-                            color: AppColors.textTertiary(context),
-                            fontSize: 15,
-                          ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          isDense: true,
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 9),
-                        ),
-                        onSubmitted: (_) => _submit(),
+                    padding: const EdgeInsets.only(left: _kTextLeftInset),
+                    child: TextField(
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      autofocus: false,
+                      minLines: 1,
+                      maxLines: AddItemComposer.maxLines,
+                      textInputAction: TextInputAction.send,
+                      textCapitalization: TextCapitalization.sentences,
+                      keyboardAppearance:
+                          isDark ? Brightness.dark : Brightness.light,
+                      style: TextStyle(
+                        fontSize: 17,
+                        color: AppColors.textPrimary(context),
                       ),
+                      decoration: InputDecoration(
+                        hintText: context.tr('add_item'),
+                        hintStyle: TextStyle(
+                          color: AppColors.textTertiary(context),
+                          fontSize: 17,
+                        ),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        isDense: true,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 9),
+                      ),
+                      onSubmitted: (_) => _submit(),
                     ),
                   ),
                 ),
-                // Send button, inside the capsule's trailing edge.
                 _SendButton(visible: _hasText, onTap: _submit),
               ],
             ),
@@ -167,30 +197,114 @@ class _AddItemComposerState extends State<AddItemComposer> {
         ),
       ],
     );
+
+    if (!useNativeGlass) return content;
+
+    // One container effect owning both backgrounds, so they merge.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final h = _height;
+        const circleInset = (_kHitTarget - _kControlSize) / 2;
+        final capsuleLeft = _kHitTarget + _kGap;
+
+        return SizedBox(
+          height: h,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: LiquidGlassGroup(
+                  // Slightly under the visual gap, so the shapes reach for
+                  // each other without fusing at rest.
+                  spacing: 14,
+                  shapes: [
+                    LiquidGlassShape(
+                      rect: Rect.fromLTWH(
+                        circleInset,
+                        h - _kControlSize,
+                        _kControlSize,
+                        _kControlSize,
+                      ),
+                      isCapsule: true,
+                    ),
+                    LiquidGlassShape(
+                      rect: Rect.fromLTWH(
+                        capsuleLeft,
+                        0,
+                        (width - capsuleLeft).clamp(0.0, double.infinity),
+                        h,
+                      ),
+                      isCapsule: true,
+                    ),
+                  ],
+                ),
+              ),
+              content,
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
-/// The circular "+" glass button — 34pt visual inside a 44x44 hit target.
+/// The circular "+" button — [_kControlSize] visual inside a [_kHitTarget]
+/// touch area. On iOS the glass behind it comes from the shared group, so
+/// this only draws the glyph.
 class _PlusButton extends StatelessWidget {
   final GlobalKey buttonKey;
   final VoidCallback onTap;
+  final bool drawOwnBackground;
   final bool reduceTransparency;
   final bool isDark;
 
   const _PlusButton({
     required this.buttonKey,
     required this.onTap,
+    required this.drawOwnBackground,
     required this.reduceTransparency,
     required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
-    final tint = reduceTransparency
-        ? AppColors.surface(context)
-        : (isDark
+    final glyph = Icon(
+      CupertinoIcons.plus,
+      size: 20,
+      color: AppColors.textPrimary(context),
+    );
+
+    Widget circle = SizedBox(
+      key: buttonKey,
+      width: _kControlSize,
+      height: _kControlSize,
+      child: Center(child: glyph),
+    );
+
+    if (drawOwnBackground) {
+      final tint = reduceTransparency
+          ? AppColors.surface(context)
+          : (isDark
               ? Colors.white.withValues(alpha: 0.14)
               : Colors.black.withValues(alpha: 0.06));
+      circle = SizedBox(
+        key: buttonKey,
+        width: _kControlSize,
+        height: _kControlSize,
+        child: ClipOval(
+          child: BackdropFilter(
+            filter: reduceTransparency
+                ? ImageFilter.blur(sigmaX: 0, sigmaY: 0)
+                : ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
+              child: Center(child: glyph),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Semantics(
       button: true,
@@ -201,39 +315,58 @@ class _PlusButton extends StatelessWidget {
           HapticFeedback.lightImpact();
           onTap();
         },
-        // 44x44 hit target regardless of the 34pt visual circle.
         child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(
-            child: ClipOval(
-              key: buttonKey,
-              child: BackdropFilter(
-                filter: reduceTransparency
-                    ? ImageFilter.blur(sigmaX: 0, sigmaY: 0)
-                    : ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: tint,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.16)
-                          : Colors.white.withValues(alpha: 0.65),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Icon(
-                    CupertinoIcons.plus,
-                    size: 19,
-                    color: AppColors.textPrimary(context),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          width: _kHitTarget,
+          height: _kHitTarget,
+          child: Center(child: circle),
+        ),
+      ),
+    );
+  }
+}
+
+/// The text capsule. On iOS the glass comes from the shared group; this only
+/// enforces the minimum height (and draws a fallback surface elsewhere).
+class _Capsule extends StatelessWidget {
+  final Widget child;
+  final bool drawOwnBackground;
+  final bool reduceTransparency;
+  final bool isDark;
+
+  const _Capsule({
+    required this.child,
+    required this.drawOwnBackground,
+    required this.reduceTransparency,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // No fixed height, so XXL Dynamic Type grows the capsule instead of
+    // clipping the text.
+    final sized = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: _kControlSize),
+      child: child,
+    );
+
+    if (!drawOwnBackground) return sized;
+
+    final tint = reduceTransparency
+        ? AppColors.surface(context)
+        : (isDark
+            ? Colors.black.withValues(alpha: 0.35)
+            : Colors.white.withValues(alpha: 0.55));
+    final radius = BorderRadius.circular(_kControlSize / 2);
+
+    return ClipRRect(
+      borderRadius: radius,
+      child: BackdropFilter(
+        filter: reduceTransparency
+            ? ImageFilter.blur(sigmaX: 0, sigmaY: 0)
+            : ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: tint, borderRadius: radius),
+          child: sized,
         ),
       ),
     );
@@ -271,21 +404,20 @@ class _SendButton extends StatelessWidget {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onTap,
-              // Full-height 44pt-wide target hugging the trailing edge.
               child: SizedBox(
-                width: 44,
-                height: 40,
+                width: _kControlSize,
+                height: _kControlSize,
                 child: Center(
                   child: Container(
-                    width: 28,
-                    height: 28,
+                    width: 30,
+                    height: 30,
                     decoration: BoxDecoration(
                       color: accent,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       CupertinoIcons.arrow_up,
-                      size: 17,
+                      size: 18,
                       color: Colors.white,
                     ),
                   ),
@@ -294,68 +426,6 @@ class _SendButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Capsule-shaped glass container with the specular top-edge highlight.
-class _GlassCapsule extends StatelessWidget {
-  final Widget child;
-  final Color tint;
-  final bool blur;
-  final bool isDark;
-
-  const _GlassCapsule({
-    required this.child,
-    required this.tint,
-    required this.blur,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Min height 40 (grows with multi-line text / large Dynamic Type — no
-    // fixed height, so XXL text sizes never clip).
-    final capsule = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 40),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: tint,
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: child,
-      ),
-    );
-
-    return Container(
-      // The specular edge: a hairline gradient border, brighter on top —
-      // the same trick UIGlassEffect's rim light produces.
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(23),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: isDark
-              ? [
-                  Colors.white.withValues(alpha: 0.28),
-                  Colors.white.withValues(alpha: 0.08),
-                ]
-              : [
-                  Colors.white.withValues(alpha: 0.9),
-                  Colors.white.withValues(alpha: 0.35),
-                ],
-        ),
-      ),
-      padding: const EdgeInsets.all(0.8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: blur
-            ? BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: capsule,
-              )
-            : capsule,
       ),
     );
   }

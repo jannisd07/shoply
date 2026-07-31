@@ -8,7 +8,18 @@ import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/zip_code_sheet.dart';
 
-/// Top-3 live offers for the text currently typed in the add bar.
+/// Height of one suggestion row. Fixed so the card shows exactly
+/// [_visibleRows] rows and scrolls the remainder internally, and so the
+/// list can stay lazy (a fixed extent avoids measuring every row, which
+/// would eagerly build — and download the image of — every offer).
+///
+/// Sized for the tallest row: a 38px thumbnail, or four text lines
+/// (name 13.5, price 11, Grundpreis 9.5, expiry 10 ≈ 55px) plus 16px of
+/// vertical padding.
+const double _rowHeight = 72;
+const int _visibleRows = 3;
+
+/// Live offers for the text currently typed in the add bar.
 /// Paper card floating above the add bar; tap adds the product to the list.
 /// Also nudges the user to set a zip code when location isn't available yet,
 /// since offer lookups have no way to pick a region without one.
@@ -113,21 +124,34 @@ class OfferSuggestionsBar extends ConsumerWidget {
               ],
             ),
           ),
-          for (var i = 0; i < offers.length; i++) ...[
-            if (i > 0)
-              Container(
-                height: 0.5,
-                margin: const EdgeInsets.symmetric(horizontal: 14),
-                color: AppColors.divider(context),
+          // Every match is in the list, but the card keeps the height of
+          // three rows — the rest is reached by scrolling inside it, so the
+          // composer below never gets pushed off screen no matter how many
+          // stores carry the product.
+          SizedBox(
+            height: offers.length <= _visibleRows
+                ? offers.length * _rowHeight
+                : _visibleRows * _rowHeight,
+            child: Scrollbar(
+              thumbVisibility: offers.length > _visibleRows,
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemExtent: _rowHeight,
+                itemCount: offers.length,
+                physics: offers.length <= _visibleRows
+                    ? const NeverScrollableScrollPhysics()
+                    : const ClampingScrollPhysics(),
+                itemBuilder: (context, i) => _OfferRow(
+                  offer: offers[i],
+                  showTopDivider: i > 0,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    onSelect(offers[i]);
+                  },
+                ),
               ),
-            _OfferRow(
-              offer: offers[i],
-              onTap: () {
-                HapticFeedback.lightImpact();
-                onSelect(offers[i]);
-              },
             ),
-          ],
+          ),
           if (needsZip)
             GestureDetector(
               onTap: () async {
@@ -225,7 +249,15 @@ class _OfferRow extends StatelessWidget {
   final StoreOffer offer;
   final VoidCallback onTap;
 
-  const _OfferRow({required this.offer, required this.onTap});
+  /// Drawn inside the row instead of between rows, so every row occupies
+  /// exactly [_rowHeight] and the 3-row viewport stays exact.
+  final bool showTopDivider;
+
+  const _OfferRow({
+    required this.offer,
+    required this.onTap,
+    this.showTopDivider = false,
+  });
 
   /// "Ends today" / "ends in Xd" when the offer's validity window closes
   /// soon — a lightweight freshness/confidence signal for the user.
@@ -245,8 +277,19 @@ class _OfferRow extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Padding(
+      child: Container(
+        height: _rowHeight,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: showTopDivider
+            ? BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: AppColors.divider(context),
+                    width: 0.5,
+                  ),
+                ),
+              )
+            : null,
         child: Row(
           children: [
             ClipRRect(

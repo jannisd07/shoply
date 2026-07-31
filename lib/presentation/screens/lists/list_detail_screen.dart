@@ -44,6 +44,10 @@ import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/add_item_composer.dart';
+import 'package:shoply/data/services/checkout_store_resolver.dart';
+import 'package:shoply/data/services/store_locator_service.dart';
+import 'package:shoply/data/services/user_location_service.dart';
+import 'package:shoply/presentation/screens/lists/widgets/checkout_store_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/attachment_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/import_review_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/item_offer_sheet.dart';
@@ -2442,6 +2446,34 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     }
   }
 
+  /// Which shop the trip happened in, or null when it stays unknown.
+  ///
+  /// Never blocks the checkout: any failure (no GPS fix, Overpass down,
+  /// user skips) returns null and the trip is recorded without a shop.
+  Future<String?> _resolveCheckoutStore(BuildContext context) async {
+    StoreResolution resolution;
+    try {
+      final coords = await UserLocationService.instance.getCoordinates();
+      if (coords == null) {
+        resolution = const StoreUnknown(locationDenied: true);
+      } else {
+        final stores = await StoreLocatorService.instance.findNearbyStores(
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        );
+        resolution = CheckoutStoreResolver.resolve(stores);
+      }
+    } catch (_) {
+      resolution = const StoreUnknown();
+    }
+
+    // Unambiguous: record it without interrupting the checkout at all.
+    if (resolution is StoreResolved) return resolution.store.displayName;
+
+    if (!context.mounted) return null;
+    return showCheckoutStoreSheet(context, resolution: resolution);
+  }
+
   Future<void> _completeShoppingTrip(
     BuildContext context,
     WidgetRef ref,
@@ -2501,6 +2533,19 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
     if (!confirmed) return;
 
+    // Work out which shop this was, so purchase stats learn *where* you buy
+    // what. Resolves silently from GPS when unambiguous; only asks when it
+    // genuinely cannot tell (shopping centre, or no location access).
+    final storeName = await _resolveCheckoutStore(context);
+    final itemsForHistory = storeName == null
+        ? checkedItems
+        : [
+            for (final item in checkedItems)
+              item.priceRetailer == null || item.priceRetailer!.isEmpty
+                  ? item.copyWith(priceRetailer: storeName)
+                  : item,
+          ];
+
     try {
       // Save only checked items to history. Purchase tracking (for the
       // "you usually buy X every N days" nudges) happens inside this call —
@@ -2510,7 +2555,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       final historyEntry = await historyService.completeShoppingTrip(
         listId: widget.listId,
         listName: widget.listName,
-        items: checkedItems,
+        items: itemsForHistory,
       );
 
       // Delete only checked items from the list

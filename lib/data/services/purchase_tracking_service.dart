@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shoply/data/models/item_purchase_stats.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -20,6 +21,7 @@ class PurchaseTrackingService {
           category: item.category,
           quantity: item.quantity,
           purchaseDate: now,
+          retailer: item.priceRetailer?.trim(),
         );
       }
 
@@ -29,12 +31,49 @@ class PurchaseTrackingService {
   }
 
   /// Track a single item purchase
+  /// Merge one more purchase at [retailer] into an existing tally.
+  ///
+  /// Kept as a pure function so the "where do I usually buy this" logic can
+  /// be tested without a database. A tie is broken alphabetically so the
+  /// answer is stable between runs instead of flipping with row order.
+  @visibleForTesting
+  static ({Map<String, int> counts, String? preferred}) mergeRetailer(
+    Map<String, int> existing,
+    String? retailer,
+  ) {
+    final counts = Map<String, int>.from(existing);
+    final name = retailer?.trim();
+    if (name != null && name.isNotEmpty) {
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return (counts: counts, preferred: null);
+
+    final entries = counts.entries.toList()
+      ..sort((a, b) {
+        final byCount = b.value.compareTo(a.value);
+        return byCount != 0 ? byCount : a.key.compareTo(b.key);
+      });
+    return (counts: counts, preferred: entries.first.key);
+  }
+
+  /// Read a `retailer_counts` payload defensively — the column may not exist
+  /// yet on databases where the migration has not been run.
+  static Map<String, int> _readCounts(Map<String, dynamic> row) {
+    final raw = row['retailer_counts'];
+    if (raw is! Map) return const {};
+    return {
+      for (final entry in raw.entries)
+        if (entry.value is num) '${entry.key}': (entry.value as num).toInt(),
+    };
+  }
+
   Future<void> _trackSingleItem({
     required String userId,
     required String itemName,
     String? category,
     double? quantity,
     required DateTime purchaseDate,
+    String? retailer,
   }) async {
     try {
       // Check if stats exist for this item
@@ -46,6 +85,7 @@ class PurchaseTrackingService {
           .maybeSingle();
 
       if (existing == null) {
+        final merged = mergeRetailer(const {}, retailer);
         // Create new stats
         await _supabase.from('item_purchase_stats').insert({
           'user_id': userId,
@@ -56,6 +96,10 @@ class PurchaseTrackingService {
           'purchase_dates': [purchaseDate.toIso8601String()],
           'preferred_category': category,
           'preferred_quantity': quantity,
+          if (merged.preferred != null) ...{
+            'preferred_retailer': merged.preferred,
+            'retailer_counts': merged.counts,
+          },
         });
       } else {
         // Update existing stats
@@ -74,6 +118,8 @@ class PurchaseTrackingService {
           avgDays = totalDays / (sortedDates.length - 1);
         }
 
+        final merged = mergeRetailer(_readCounts(existing), retailer);
+
         await _supabase.from('item_purchase_stats').update({
           'purchase_count': newCount,
           'last_purchase': purchaseDate.toIso8601String(),
@@ -82,6 +128,12 @@ class PurchaseTrackingService {
           'preferred_category': category ?? stats.preferredCategory,
           'preferred_quantity': quantity ?? stats.preferredQuantity,
           'updated_at': DateTime.now().toIso8601String(),
+          // Only sent when there is something to record, so the write still
+          // succeeds on databases where the migration has not been run yet.
+          if (merged.preferred != null) ...{
+            'preferred_retailer': merged.preferred,
+            'retailer_counts': merged.counts,
+          },
         }).eq('id', stats.id);
       }
     } catch (e) {

@@ -93,7 +93,10 @@ struct AddItemToListIntent: AppIntent {
     @Parameter(title: "Artikelname", requestValueDialog: IntentDialog("Welches Produkt möchtest du hinzufügen?"))
     var itemName: ItemNameEntity
     
-    @Parameter(title: "Liste", requestValueDialog: IntentDialog("Zu welcher Liste soll ich \(\.$itemName) hinzufügen?"))
+    // Kein \(\.$itemName) hier: Key-Path-Interpolation gibt es nur in
+    // ParameterSummary/AppShortcut-Phrasen, wo der Intent den Root-Typ liefert.
+    // In requestValueDialog fehlt der Kontext -> Compilerfehler.
+    @Parameter(title: "Liste", requestValueDialog: IntentDialog("Zu welcher Liste soll ich den Artikel hinzufügen?"))
     var listName: ListNameEntity
     
     @Parameter(title: "Menge", default: 1.0)

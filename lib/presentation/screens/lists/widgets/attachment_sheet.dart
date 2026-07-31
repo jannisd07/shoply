@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:dio/dio.dart';
@@ -13,6 +14,7 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/services/list_import_service.dart';
+import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
 
 /// Opens the "+" attachment sheet: it morphs out of the button whose
 /// [plusButtonKey] is given, offers Kamera / Fotos / Dateien, runs the
@@ -75,8 +77,11 @@ class _MorphSheetRoute<T> extends PopupRoute<T> {
     return _dragController!;
   }
 
+  // Messages does NOT dim behind its attachment menu — the conversation stays
+  // fully lit and is only blurred *through* the glass panel itself. A scrim
+  // here is the single most obvious tell that it isn't Apple's menu.
   @override
-  Color get barrierColor => Colors.black.withValues(alpha: 0.35);
+  Color get barrierColor => Colors.transparent;
 
   @override
   bool get barrierDismissible => true;
@@ -291,68 +296,115 @@ class _AttachmentSheetBodyState extends State<_AttachmentSheetBody> {
         ),
     };
 
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final useNativeGlass = Platform.isIOS && !reduceTransparency;
+
     return Align(
-      alignment: Alignment.bottomCenter,
+      // Anchored bottom-LEFT over the "+" button, not docked full width.
+      alignment: Alignment.bottomLeft,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onVerticalDragUpdate: (details) {
           // Positive delta = finger moving down = scrub the route toward
-          // dismissed, 1:1 with the sheet's own height.
+          // dismissed, 1:1 with the panel's own height.
           final height = context.size?.height ?? 320;
           widget.route.dragBy((details.primaryDelta ?? 0) / height);
         },
         onVerticalDragEnd: (details) =>
             widget.route.endDrag(details.primaryVelocity ?? 0, context),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: reduceTransparency
-                  ? ImageFilter.blur(sigmaX: 0, sigmaY: 0)
-                  : ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-              child: Container(
-                width: double.infinity,
+          padding: EdgeInsets.fromLTRB(10, 0, 10, safeBottom > 0 ? 4 : 10),
+          child: ConstrainedBox(
+            // Messages' menu stops well short of the trailing edge.
+            constraints: BoxConstraints(maxWidth: screenWidth * 0.82),
+            child: _PanelSurface(
+              useNativeGlass: useNativeGlass,
+              tint: tint,
+              isDark: isDark,
+              reduceTransparency: reduceTransparency,
+              child: Padding(
                 padding: EdgeInsets.only(bottom: safeBottom > 0 ? 4 : 12),
-                decoration: BoxDecoration(
-                  color: tint,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : Colors.white.withValues(alpha: 0.7),
-                    width: 0.8,
-                  ),
-                ),
                 child: SafeArea(
                   top: false,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 4),
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.border(context),
-                          borderRadius: BorderRadius.circular(2),
+                  // A PopupRoute puts no Material in the tree, but the menu
+                  // rows use InkWell — without one the sheet throws
+                  // "No Material widget found" the moment it opens.
+                  // Transparency keeps the glass visible and lets the ink
+                  // ripple land on it; sitting inside the ClipRRect above,
+                  // the ripple stays inside the rounded corners.
+                  child: Material(
+                    type: MaterialType.transparency,
+                    // No grabber: Messages' attachment menu has none. The
+                    // whole panel is still drag-dismissable.
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          child: KeyedSubtree(
+                            key: ValueKey(_state),
+                            child: body,
+                          ),
                         ),
-                      ),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        switchInCurve: Curves.easeOut,
-                        switchOutCurve: Curves.easeIn,
-                        child: KeyedSubtree(
-                          key: ValueKey(_state),
-                          child: body,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The panel background: real `UIGlassEffect` on iOS, blurred fallback
+/// elsewhere. Deliberately not wrapped in a `ClipRRect` on the native path —
+/// clipping a glass view removes the very edge treatment that distinguishes
+/// it from a plain blur, so the radius is handed to the native side instead.
+class _PanelSurface extends StatelessWidget {
+  static const double radius = 32;
+
+  final Widget child;
+  final bool useNativeGlass;
+  final Color tint;
+  final bool isDark;
+  final bool reduceTransparency;
+
+  const _PanelSurface({
+    required this.child,
+    required this.useNativeGlass,
+    required this.tint,
+    required this.isDark,
+    required this.reduceTransparency,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (useNativeGlass) {
+      return LiquidGlassContainer(cornerRadius: radius, child: child);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: reduceTransparency
+            ? ImageFilter.blur(sigmaX: 0, sigmaY: 0)
+            : ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: tint,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : Colors.white.withValues(alpha: 0.7),
+              width: 0.8,
+            ),
+          ),
+          child: child,
         ),
       ),
     );
@@ -388,17 +440,20 @@ class _MenuView extends StatelessWidget {
           ),
         ),
         _SheetRow(
-          icon: CupertinoIcons.camera,
+          icon: CupertinoIcons.camera_fill,
+          iconColor: const Color(0xFF8E8E93),
           label: context.tr('import_source_camera'),
           onTap: onCamera,
         ),
         _SheetRow(
-          icon: CupertinoIcons.photo_on_rectangle,
+          icon: CupertinoIcons.photo_fill,
+          iconColor: const Color(0xFF34C759),
           label: context.tr('import_source_photos'),
           onTap: onPhotos,
         ),
         _SheetRow(
-          icon: CupertinoIcons.doc,
+          icon: CupertinoIcons.doc_fill,
+          iconColor: const Color(0xFF0A84FF),
           label: context.tr('import_source_files'),
           onTap: onFiles,
         ),
@@ -408,13 +463,17 @@ class _MenuView extends StatelessWidget {
   }
 }
 
+/// One menu row: a filled circular app-style icon and a large label, at the
+/// row height Messages uses (roughly 60pt, icon 40pt, label at title3).
 class _SheetRow extends StatelessWidget {
   final IconData icon;
+  final Color iconColor;
   final String label;
   final VoidCallback onTap;
 
   const _SheetRow({
     required this.icon,
+    required this.iconColor,
     required this.label,
     required this.onTap,
   });
@@ -427,23 +486,24 @@ class _SheetRow extends StatelessWidget {
         onTap();
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         child: Row(
           children: [
-            SizedBox(
-              width: 32,
-              child: Icon(
-                icon,
-                size: 24,
-                color: AppColors.accentColor(context),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: iconColor,
+                shape: BoxShape.circle,
               ),
+              child: Icon(icon, size: 21, color: Colors.white),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 16.5,
+                  fontSize: 20,
                   color: AppColors.textPrimary(context),
                 ),
               ),

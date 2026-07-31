@@ -35,6 +35,54 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  /// Attribution for the third-party data the app displays.
+  void _showDataSources(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.background(ctx),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.divider(ctx),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              ctx.tr('data_sources'),
+              style: PaperTextStyles.serif(
+                20,
+                color: AppColors.textPrimary(ctx),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              ctx.tr('data_sources_body'),
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: AppColors.textSecondary(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openExternal(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
@@ -208,6 +256,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   title: context.tr('imprint'),
                   external: true,
                   onTap: () => _openExternal('https://joinavo.app/impressum'),
+                ),
+                // ODbL requires crediting Open Prices / Open Food Facts
+                // wherever their price data is used, and OpenStreetMap
+                // likewise for the store locations. Keeping this as a
+                // permanent settings entry satisfies that regardless of
+                // which screen happens to surface a price.
+                _SettingsItemData(
+                  icon: Icons.dataset_outlined,
+                  title: context.tr('data_sources'),
+                  onTap: () => _showDataSources(context),
                 ),
                 _SettingsItemData(
                   icon: Icons.info_outline_rounded,

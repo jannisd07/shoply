@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/data/models/store_offer.dart';
@@ -92,7 +93,7 @@ class OfferPriceService {
             .where((o) =>
                 seen.add(o.id) && o.productName.toLowerCase().contains(generic))
             .map((o) => o.asBroadMatch()),
-      ]..sort((a, b) => a.price.compareTo(b.price));
+      ]..sort(_byValue);
     }
 
     _searchCache[cacheKey] = _CachedOffers(DateTime.now(), results);
@@ -138,7 +139,7 @@ class OfferPriceService {
           .where((o) => o.isFood)
           .where((o) => o.isValidNow)
           .toList()
-        ..sort((a, b) => a.price.compareTo(b.price));
+        ..sort(_byValue);
 
       print('✅ [OFFERS] "$q" @$zipCode → ${results.length} offers');
       return results;
@@ -151,12 +152,17 @@ class OfferPriceService {
   /// Reduce a branded/compound/specific query to a broader stem so the API
   /// returns comparable products across stores.
   ///
-  /// Multi-word: German compounds put the head noun last ("Golden Toast" →
-  /// "toast", "Bio Vollmilch 3,5%" → "vollmilch"). Single long word: use a
-  /// short prefix stem ("Toastbrötchen" → "toast", "Schweinerippe" →
-  /// "schwe") — callers relevance-filter fallback hits by this stem, so an
-  /// over-broad prefix can't introduce noise. Returns null when nothing
-  /// sensible remains.
+  /// German compounds carry their meaning in the **last** element: "Olivenöl"
+  /// is a kind of Öl, not a kind of Olive. Multi-word queries therefore keep
+  /// the last word ("Bio Vollmilch 3,5%" → "vollmilch").
+  ///
+  /// Single words used to be cut to a 5-character *prefix*, which does the
+  /// opposite — it keeps the qualifier and discards the head noun, so
+  /// "Olivenöl" became "olive" and the fallback happily matched a jar of
+  /// olives. Now a single word is split at a known grocery head noun
+  /// ("Olivenöl" → "öl", "Vollkornbrot" → "brot"). When no head noun is
+  /// recognised the full word is returned, which makes the caller skip the
+  /// broadening entirely — no match beats a wrong match.
   String? _genericTerm(String query) {
     final cleaned = query
         .toLowerCase()
@@ -170,9 +176,14 @@ class OfferPriceService {
         .toList();
     if (words.isEmpty) return null;
     if (words.length >= 2) return words.last;
-    // Single word: broaden long words to a 5-char stem, else keep as-is.
-    final word = words.first;
-    return word.length >= 7 ? word.substring(0, 5) : word;
+    // Single word: return it unchanged, which makes the caller skip
+    // broadening altogether. Every way of shortening a German compound
+    // drifts the meaning — a prefix keeps the qualifier and drops the head
+    // ("olivenöl" → "olive", a jar of olives), while splitting at the head
+    // drops the qualifier ("vollmilch" → "milch", any fat content;
+    // "apfelsaft" → "saft", any juice). Both produce a confidently wrong
+    // price. Showing no price is the honest outcome.
+    return words.first;
   }
 
   static const Set<String> _stopWords = {
@@ -180,7 +191,27 @@ class OfferPriceService {
     'aus', 'von', 'fein', 'gut', 'natur', 'classic', 'original',
   };
 
-  /// The cheapest offer per retailer for [query] (used for basket totals).
+  /// Order offers by actual value rather than by sticker price.
+  ///
+  /// Sorting on [StoreOffer.price] alone means the smallest pack always wins —
+  /// a 100 g tub at €1.00 outranks a 500 g tub at €2.00 — which biased every
+  /// basket total downward. Where both offers disclose a Grundpreis in the
+  /// *same* unit, compare that instead; €/kg against €/l would be meaningless,
+  /// so those fall back to the sticker price.
+  static int _byValue(StoreOffer a, StoreOffer b) {
+    final ra = a.referencePrice;
+    final rb = b.referencePrice;
+    if (ra != null &&
+        rb != null &&
+        a.unitShortName != null &&
+        a.unitShortName == b.unitShortName) {
+      final byUnit = ra.compareTo(rb);
+      if (byUnit != 0) return byUnit;
+    }
+    return a.price.compareTo(b.price);
+  }
+
+  /// The best-value offer per retailer for [query] (used for basket totals).
   Future<Map<String, StoreOffer>> cheapestPerRetailer(
     String query, {
     required String zipCode,
@@ -193,6 +224,11 @@ class OfferPriceService {
     }
     return byRetailer;
   }
+
+  /// Exposes the compound-splitting stem for tests — this is where the
+  /// "Olivenöl priced as olives" class of bug lives.
+  @visibleForTesting
+  String? debugGenericTerm(String query) => _genericTerm(query);
 
   bool _isGrocery(String uniqueName) {
     final name = uniqueName.toLowerCase();

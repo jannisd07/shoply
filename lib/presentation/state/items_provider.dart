@@ -33,9 +33,20 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
   /// reorder batch-write does not get overwritten mid-way.
   bool _isReordering = false;
 
-  ItemsNotifier(this._repository, this.listId) : super(const AsyncValue.loading()) {
+  /// Seeds from the warmed in-memory cache when one exists, so the detail
+  /// screen's very first frame is already populated instead of showing a
+  /// spinner until Supabase answers (stale-while-revalidate). [loadItems]
+  /// then reconciles with the server.
+  ItemsNotifier(this._repository, this.listId)
+      : super(_seed(listId)) {
     loadItems();
     _setupRealtimeSubscription();
+  }
+
+  static AsyncValue<List<ShoppingItemModel>> _seed(String listId) {
+    final cached = OfflineCacheService.instance.getCachedListItemsSync(listId);
+    if (cached == null) return const AsyncValue.loading();
+    return AsyncValue.data(cached);
   }
 
   void _setupRealtimeSubscription() {

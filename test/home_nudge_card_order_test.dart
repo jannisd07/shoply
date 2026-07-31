@@ -18,6 +18,8 @@ void main() {
       expect(
         orderedHomeNudgeCards({'save_money'}),
         [
+          // "save money" surfaces both money cards, in default order.
+          HomeNudgeCardKind.personalFlyer,
           HomeNudgeCardKind.priceComparison,
           HomeNudgeCardKind.split,
           HomeNudgeCardKind.avoRestock,
@@ -28,12 +30,13 @@ void main() {
 
     test('multiple matched priorities preserve default relative order '
         'among themselves and among the rest', () {
-      // calorieRecipe and priceComparison are selected; default order has
-      // them after split/avoRestock, so they should surface first, in
-      // their original relative order, followed by the unselected two.
+      // eat_healthier and save_money together select calorieRecipe plus
+      // both money cards; they surface first in their default relative
+      // order, followed by the unselected two.
       expect(
         orderedHomeNudgeCards({'eat_healthier', 'save_money'}),
         [
+          HomeNudgeCardKind.personalFlyer,
           HomeNudgeCardKind.calorieRecipe,
           HomeNudgeCardKind.priceComparison,
           HomeNudgeCardKind.split,

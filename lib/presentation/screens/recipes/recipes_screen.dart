@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
@@ -8,7 +9,10 @@ import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/constants/recipe_categories.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/dietary_preference.dart';
+import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_image_card.dart';
+import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
 import 'package:shoply/data/services/recipe_features_service.dart';
 import 'package:shoply/data/services/ingredient_substitution_service.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -64,6 +68,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchTextChanged);
+    _seedFromCache();
     _loadAllData();
     _maybeShowDietPrompt();
 
@@ -127,8 +132,33 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     }
   }
 
+  /// Paint the tab from the warmed offline cache before any network call.
+  ///
+  /// [_loadAllData] awaits five requests via `Future.wait`, so the screen used
+  /// to stay on a spinner until the *slowest* of them returned. Seeding here
+  /// means the first frame already shows recipes; the network result then
+  /// replaces them. Runs synchronously in initState — no await, no empty frame.
+  void _seedFromCache() {
+    final cached = OfflineCacheService.instance.getCachedRecipesSync();
+    if (cached == null || cached.isEmpty) return;
+    _allRecipes = cached;
+    _popularRecipes = [...cached]
+      ..sort((a, b) => b.averageRating.compareTo(a.averageRating));
+    _popularRecipes = _popularRecipes.take(8).toList();
+    _recentRecipes = ([...cached]
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
+        .take(10)
+        .toList();
+    _totalRecipes = cached.length;
+    _isLoading = false;
+  }
+
   Future<void> _loadAllData() async {
-    setState(() => _isLoading = true);
+    // Only block the UI when there is nothing cached to show yet; otherwise
+    // refresh silently underneath the already-rendered content.
+    if (_allRecipes.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final results = await Future.wait([
         _recipeService.getRecipes(),
@@ -370,25 +400,43 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                   style: PaperTextStyles.serif(27, color: textPrimary),
                 ),
                 const Spacer(),
-                IconButton(
+                // Glass circle, matching the composer's "+" — 34pt visual
+                // inside a 44pt touch target.
+                GestureDetector(
                   key: DynamicTutorialService.instance.addRecipeButtonKey,
-                  icon: Icon(Icons.add_rounded, color: textPrimary),
-                  onPressed: () => context.push('/recipes/add'),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    context.push('/recipes/add');
+                  },
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Center(
+                      child: SizedBox(
+                        width: 34,
+                        height: 34,
+                        child: AdaptiveGlass(
+                          isCircle: true,
+                          child: Center(
+                            child: Icon(Icons.add_rounded,
+                                color: textPrimary, size: 20),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             // Search Bar - ALWAYS the same TextField widget
-            Container(
+            SizedBox(
               height: 42,
-              decoration: BoxDecoration(
-                color: AppColors.surface(context),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.border(context)),
-              ),
-              child: TextField(
+              child: AdaptiveGlass(
+                isCircle: true,
+                opaqueColor: AppColors.surface(context),
+                child: TextField(
                 controller: _searchController,
                 focusNode: _searchFocusNode,
                 decoration: InputDecoration(
@@ -404,8 +452,9 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 ),
-                style: TextStyle(color: textPrimary, fontSize: 14),
-                // onChanged handled by controller listener
+                  style: TextStyle(color: textPrimary, fontSize: 14),
+                  // onChanged handled by controller listener
+                ),
               ),
             ),
           ],
@@ -1438,7 +1487,9 @@ class _CreatorCard extends StatelessWidget {
 }
 
 // Horizontal Recipe Card (for Popular section)
-class _HorizontalRecipeCard extends ConsumerWidget {
+/// Recipe tile for the horizontal carousels — Apple photo-card style:
+/// full-bleed image with the title laid over it. See [RecipeImageCard].
+class _HorizontalRecipeCard extends StatelessWidget {
   final Recipe recipe;
   final VoidCallback onTap;
 
@@ -1448,127 +1499,17 @@ class _HorizontalRecipeCard extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = AppColors.surface(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
-    final isSaved = ref.watch(isRecipeSavedProvider(recipe.id));
-
-    return GestureDetector(
+  Widget build(BuildContext context) {
+    return RecipeImageCard(
+      recipe: recipe,
       onTap: onTap,
-      child: Container(
-        width: 160,
-        height: 200, // Fixed height to prevent overflow
-        margin: const EdgeInsets.only(right: 12),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image with bookmark
-            Stack(
-              children: [
-                CachedNetworkImage(
-                  imageUrl: recipe.imageUrl,
-                  height: 110,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    height: 110,
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                    child: const Center(child: Icon(Icons.restaurant_rounded)),
-                  ),
-                  errorWidget: (_, __, ___) => Container(
-                    height: 110,
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                    child: const Center(child: Icon(Icons.restaurant_rounded)),
-                  ),
-                ),
-                // Bookmark button
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: GestureDetector(
-                    onTap: () {
-                      ref.read(savedRecipesProvider.notifier).toggleSave(recipe.id);
-                    },
-                    child: ClipOval(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: isSaved ? Colors.white : Colors.black.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                          ),
-                          child: Icon(
-                            isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                            size: 16,
-                            color: isSaved ? Colors.black : Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            // Content - Expanded to fill remaining space
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      recipe.name,
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const Spacer(),
-                    Row(
-                      children: [
-                        Icon(Icons.schedule_rounded, size: 12, color: textSecondary),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${recipe.totalTimeMinutes} min',
-                          style: TextStyle(color: textSecondary, fontSize: 11),
-                        ),
-                        if (recipe.averageRating > 0) ...[
-                          const SizedBox(width: 6),
-                          Icon(Icons.star_rounded, size: 12, color: const Color(0xFFFFB300)),
-                          const SizedBox(width: 2),
-                          Text(
-                            recipe.averageRating.toStringAsFixed(1),
-                            style: TextStyle(color: textPrimary, fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      width: 160,
+      height: 196,
+      margin: const EdgeInsets.only(right: 12, bottom: 6),
     );
   }
 }
 
-// Recipe Card Widget (Vertical list card with bookmark)
 class _RecipeCard extends ConsumerWidget {
   final Recipe recipe;
   final VoidCallback onTap;
