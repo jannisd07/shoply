@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shoply/core/config/env.dart';
+import 'package:shoply/data/models/diet_challenge.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
@@ -12,6 +13,7 @@ import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
+import 'package:shoply/data/models/weekly_nutrition_summary.dart';
 import 'package:shoply/data/services/avo_app_knowledge.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
@@ -30,6 +32,7 @@ import 'package:shoply/data/services/weight_log_service.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
+import 'package:shoply/presentation/state/diet_challenge_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
@@ -139,6 +142,16 @@ When the user asks to:
   remaining calories → call get_nutrition_status first, then
   search_recipes, and prefer recipes whose calories_per_serving fits
   the remaining calories — say how many kcal each suggestion has.
+• ask "how was my week?" / "how am I doing?" / want a weekly nutrition
+  recap → call get_weekly_nutrition_summary
+• ask about a diet challenge ("how's my fasting streak?", "am I still
+  on track with no sugar?") → call get_challenge_status. If none is
+  active and they want to start one, tell them to open the Challenges
+  screen from the calorie dashboard — you cannot start one for them.
+• ask "how much have I saved?" / "how much money has Shoply saved me?"
+  → call get_savings_summary. This is a lifetime total, only from
+  items bought at a live offer/deal price — explain that if it's low
+  or zero for an otherwise active user.
 If a nutrition tool reports tracking is disabled, offer to enable it
 (update_setting key "calorie_tracking" value "true") — ask first,
 never enable it without the user agreeing.
@@ -578,6 +591,33 @@ replies should not mention it at all.
               'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
             }, requiredProperties: ['entry_id', 'food_name']),
           ),
+          FunctionDeclaration(
+            'get_weekly_nutrition_summary',
+            'A 7-day nutrition recap: average calories/protein/carbs/fat vs. targets, '
+                'days logged, days within calorie budget, water, logging streak, cooked '
+                'meals (incl. high-protein ones), and weight change if two weigh-ins '
+                'exist this week. Use for "how was my week?" or a nutrition check-in.',
+            Schema.object(properties: {}),
+          ),
+          FunctionDeclaration(
+            'get_challenge_status',
+            'Status of the user\'s active diet challenge(s) (16:8 intermittent fasting, '
+                '30-day no sugar): current streak, whether they checked in today, '
+                'adherence rate, and days remaining for fixed-length challenges. Use for '
+                '"how\'s my fasting streak?" or "am I still on track with no sugar?". '
+                'This tool is read-only — it cannot start, check in to, or end a '
+                'challenge; that only happens in the app\'s Challenges screen.',
+            Schema.object(properties: {}),
+          ),
+          FunctionDeclaration(
+            'get_savings_summary',
+            'The user\'s lifetime total savings (in EUR) from buying items at a live '
+                'offer/deal price instead of the regular shelf price, aggregated across '
+                'their whole shopping history. Use for "how much have I saved?" or '
+                '"has Shoply saved me money?". Only counts items where both the paid '
+                'price and the offer\'s regular price were known at the time.',
+            Schema.object(properties: {}),
+          ),
         ]),
       ];
 
@@ -719,6 +759,12 @@ replies should not mention it at all.
           return await _toolLogWeight(args, ref);
         case 'delete_food_log':
           return await _toolDeleteFoodLog(args, ref);
+        case 'get_weekly_nutrition_summary':
+          return await _toolWeeklyNutritionSummary(ref);
+        case 'get_challenge_status':
+          return await _toolChallengeStatus(ref);
+        case 'get_savings_summary':
+          return await _toolSavingsSummary();
         default:
           return {'error': 'Unknown tool ${call.name}'};
       }
@@ -2077,6 +2123,137 @@ replies should not mention it at all.
     await FoodLogService.instance.deleteEntry(entryId);
     invalidateNutritionLog(ref);
     return {'success': true, 'deleted': foodName};
+  }
+
+  Future<Map<String, Object?>> _toolWeeklyNutritionSummary(WidgetRef ref) async {
+    if (!ref.read(calorieTrackingEnabledProvider)) {
+      return {'tracking_enabled': false, 'note': _trackingDisabledNote};
+    }
+    final goal = await ref.read(nutritionGoalProvider.future);
+    if (goal == null || !goal.isConfigured) {
+      return {
+        'found': false,
+        'note': 'No calorie goal is configured yet, so there is nothing to '
+            'summarize. Offer to set one up via setup_nutrition_goal.',
+      };
+    }
+    final summary = await ref.read(weeklyNutritionSummaryProvider.future);
+    if (summary == null || !summary.hasAnyData) {
+      return {
+        'found': false,
+        'note': 'Nothing was logged in the last 7 days.',
+      };
+    }
+    return summarizeWeeklyNutrition(summary, goal);
+  }
+
+  /// Pure, unit-tested shaping of a [WeeklyNutritionSummary] into the JSON
+  /// handed back to Gemini.
+  @visibleForTesting
+  static Map<String, Object?> summarizeWeeklyNutrition(
+    WeeklyNutritionSummary s,
+    NutritionGoal goal,
+  ) {
+    return {
+      'found': true,
+      'days_logged': s.loggedDayCount,
+      'avg_calories': s.avgCalories,
+      'calorie_target': goal.dailyCalorieTarget,
+      'days_within_calorie_budget': s.daysWithinBudget,
+      'avg_protein_g': _round1(s.avgProteinG),
+      'avg_carbs_g': _round1(s.avgCarbsG),
+      'avg_fat_g': _round1(s.avgFatG),
+      if (goal.proteinTargetG != null) 'protein_target_g': goal.proteinTargetG,
+      'protein_target_reached_days': s.proteinReachedDays,
+      if (s.waterLoggedDayCount > 0) 'avg_water_ml': s.avgWaterMl,
+      'logging_streak_days': s.loggingStreak,
+      'cooked_meals_this_week': s.cookedMealCount,
+      'cooked_high_protein_meals_this_week': s.cookedHighProteinMealCount,
+      if (s.weightDeltaKg != null) 'weight_change_kg': _round1(s.weightDeltaKg!),
+      if (s.latestWeightKg != null) 'latest_weight_kg': s.latestWeightKg,
+    };
+  }
+
+  Future<Map<String, Object?>> _toolChallengeStatus(WidgetRef ref) async {
+    final challenges = await ref.read(activeChallengesProvider.future);
+    return summarizeChallengeStatus(challenges);
+  }
+
+  /// Pure, unit-tested shaping of the user's active [DietChallenge]s into
+  /// the JSON handed back to Gemini.
+  @visibleForTesting
+  static Map<String, Object?> summarizeChallengeStatus(
+    List<DietChallenge> challenges,
+  ) {
+    if (challenges.isEmpty) {
+      return {
+        'found': 0,
+        'note': 'No active diet challenge. Available types: 16:8 '
+            'intermittent fasting, 30-day no sugar — started from the '
+            'Challenges screen off the calorie dashboard (this tool cannot '
+            'start one).',
+      };
+    }
+    return {
+      'found': challenges.length,
+      'challenges': challenges
+          .map((c) => {
+                'type': _challengeTypeLabel(c.type),
+                'checked_in_today': c.isCheckedInToday,
+                'current_streak_days': c.currentStreak,
+                'total_checkins': c.totalCheckins,
+                'kept_count': c.keptCount,
+                'adherence_rate_percent': (c.adherenceRate * 100).round(),
+                if (c.daysRemaining != null) 'days_remaining': c.daysRemaining,
+              })
+          .toList(),
+    };
+  }
+
+  static String _challengeTypeLabel(ChallengeType type) => switch (type) {
+        ChallengeType.fasting16_8 => '16:8 intermittent fasting',
+        ChallengeType.noSugar30 => '30-day no sugar',
+        ChallengeType.custom => 'custom challenge',
+      };
+
+  Future<Map<String, Object?>> _toolSavingsSummary() async {
+    final history = await ShoppingHistoryService().getShoppingHistory();
+    return summarizeLifetimeSavings(history);
+  }
+
+  /// Pure, unit-tested lifetime-savings aggregation — mirrors
+  /// [ShoppingHistoryScreen]'s own "you've saved €X" computation exactly, so
+  /// a chat answer and the Shopping History screen can never disagree.
+  @visibleForTesting
+  static Map<String, Object?> summarizeLifetimeSavings(
+    List<ShoppingHistory> history,
+  ) {
+    var total = 0.0;
+    var tripsWithSavings = 0;
+    for (final trip in history) {
+      var tripSavings = 0.0;
+      for (final item in trip.items) {
+        final perUnit = item.savingsPerUnit;
+        if (perUnit != null) tripSavings += perUnit * item.quantity;
+      }
+      if (tripSavings > 0.01) tripsWithSavings++;
+      total += tripSavings;
+    }
+    if (total <= 0.01) {
+      return {
+        'total_saved_eur': 0,
+        'note': 'No tracked savings yet. This only counts items bought at a '
+            'live offer/deal price and is not retroactive — it grows from '
+            'the first time an offer price is applied to a list item that '
+            'is later bought.',
+      };
+    }
+    return {
+      'total_saved_eur': double.parse(total.toStringAsFixed(2)),
+      'trips_with_savings': tripsWithSavings,
+      'note': 'This is a lifetime total, not scoped to any single month or '
+          'trip.',
+    };
   }
 
   /// One-shot Gemini estimate for a free-text food description ("1 banana",
