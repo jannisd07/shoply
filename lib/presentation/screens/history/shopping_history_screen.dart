@@ -51,11 +51,9 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
           final monthName =
               DateFormat('MMMM', locale).format(DateTime.now());
           final now = DateTime.now();
-          final monthEntries = entries
-              .where((e) =>
-                  e.completedAt.year == now.year &&
-                  e.completedAt.month == now.month)
-              .toList();
+          final monthEntries =
+              tripsInMonth(entries, year: now.year, month: now.month)
+                  .toList();
           final itemsBought = monthEntries.fold<int>(
             0,
             (sum, e) => sum + e.totalItems,
@@ -76,15 +74,37 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                 )
               : null;
 
-          // Lifetime savings from live offers applied to purchased items
-          // (Feature 8: ties Feature 1's pricing infra into the history
-          // screen's own stats). Only items with both a real price and the
-          // offer's known regular price count — never a guessed baseline.
-          var totalSavings = 0.0;
-          for (final e in entries) {
-            for (final item in e.items) {
-              final perUnit = item.savingsPerUnit;
-              if (perUnit != null) totalSavings += perUnit * item.quantity;
+          // Lifetime + this-month savings from live offers applied to
+          // purchased items (Feature 8: ties Feature 1's pricing infra into
+          // the history screen's own stats). Only items with both a real
+          // price and the offer's known regular price count — never a
+          // guessed baseline.
+          final totalSavings = totalSavingsOf(entries);
+          final monthSavings = totalSavingsOf(monthEntries);
+          final prevMonth = DateTime(now.year, now.month - 1);
+          final prevMonthSavings = totalSavingsOf(
+            tripsInMonth(entries, year: prevMonth.year, month: prevMonth.month),
+          );
+
+          // Monthly savings breakdown on top of the lifetime figure above —
+          // "up from last month" is only shown once there's a real last-month
+          // baseline to compare against.
+          String? monthSavingsKey;
+          Map<String, String>? monthSavingsParams;
+          if (monthSavings > 0.01) {
+            final amount = '${monthSavings.toStringAsFixed(2)} €';
+            final diff = monthSavings - prevMonthSavings;
+            if (prevMonthSavings <= 0.01) {
+              monthSavingsKey = 'history_savings_month_line';
+              monthSavingsParams = {'amount': amount};
+            } else {
+              final prevAmount = '${prevMonthSavings.toStringAsFixed(2)} €';
+              monthSavingsKey = diff > 0.01
+                  ? 'history_savings_month_up_line'
+                  : diff < -0.01
+                      ? 'history_savings_month_down_line'
+                      : 'history_savings_month_flat_line';
+              monthSavingsParams = {'amount': amount, 'prevAmount': prevAmount};
             }
           }
 
@@ -156,6 +176,24 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                       ),
                     ],
                   ),
+                  if (monthSavingsKey != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const SizedBox(width: 22),
+                        Flexible(
+                          child: Text(
+                            context.tr(monthSavingsKey, params: monthSavingsParams!),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
 
                 if (maxCount > 0) ...[

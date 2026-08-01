@@ -357,6 +357,13 @@ class AppTranslations {
     'items_bought': 'items bought',
     'shopping_day_line': '{day} is your shopping day.',
     'history_savings_line': "You've saved {amount} thanks to offers.",
+    'history_savings_month_line': "That's {amount} this month.",
+    'history_savings_month_up_line':
+        "That's {amount} this month — up from {prevAmount} last month.",
+    'history_savings_month_down_line':
+        "That's {amount} this month — down from {prevAmount} last month.",
+    'history_savings_month_flat_line':
+        "That's {amount} this month, same as last month.",
     'history_label': 'History',
     'activities_label': 'Activities',
     'split_trip_cost': 'Split cost',
@@ -1337,6 +1344,13 @@ class AppTranslations {
     'items_bought': 'Artikel gekauft',
     'shopping_day_line': '{day} ist dein Einkaufstag.',
     'history_savings_line': 'Du hast {amount} durch Angebote gespart.',
+    'history_savings_month_line': 'Das sind {amount} in diesem Monat.',
+    'history_savings_month_up_line':
+        'Das sind {amount} in diesem Monat — mehr als letzten Monat mit {prevAmount}.',
+    'history_savings_month_down_line':
+        'Das sind {amount} in diesem Monat — weniger als letzten Monat mit {prevAmount}.',
+    'history_savings_month_flat_line':
+        'Das sind {amount} in diesem Monat, genauso viel wie letzten Monat.',
     'history_label': 'Verlauf',
     'activities_label': 'Aktivitäten',
     'split_trip_cost': 'Kosten teilen',

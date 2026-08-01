@@ -174,3 +174,28 @@ class ShoppingHistoryItem extends Equatable {
         priceOldValue,
       ];
 }
+
+/// Sums [ShoppingHistoryItem.savingsPerUnit] × quantity across every item in
+/// every trip in [trips] — the "you've saved €X thanks to offers" figure.
+/// Used for both the lifetime total and any narrower window (e.g. one month).
+double totalSavingsOf(Iterable<ShoppingHistory> trips) {
+  var total = 0.0;
+  for (final trip in trips) {
+    for (final item in trip.items) {
+      final perUnit = item.savingsPerUnit;
+      if (perUnit != null) total += perUnit * item.quantity;
+    }
+  }
+  return total;
+}
+
+/// Trips completed in the given [year]/[month] (1-indexed).
+Iterable<ShoppingHistory> tripsInMonth(
+  Iterable<ShoppingHistory> trips, {
+  required int year,
+  required int month,
+}) {
+  return trips.where(
+    (t) => t.completedAt.year == year && t.completedAt.month == month,
+  );
+}
