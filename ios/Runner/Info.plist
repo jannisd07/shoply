@@ -108,7 +108,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Must be true under the UIScene lifecycle: with false, Flutter falls
+	     back to the app-level UIApplication.statusBarStyle setter, which
+	     scenes made a no-op. That left the clock and Wi-Fi/battery icons
+	     stuck in white on the light backgrounds. With true, the style comes
+	     from FlutterViewController.preferredStatusBarStyle, which is what
+	     AnnotatedRegion<SystemUiOverlayStyle> actually drives. -->
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
+	<true/>
 </dict>
 </plist>

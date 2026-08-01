@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/constants/app_text_styles.dart';
@@ -59,6 +60,16 @@ class AppTheme {
       backgroundColor: AppColors.lightPrimaryBackground,
       foregroundColor: AppColors.lightTextPrimary,
       iconTheme: IconThemeData(color: AppColors.lightTextPrimary),
+      // Stated explicitly rather than inferred. AppBar derives the status bar
+      // style from its background colour, and screens that set
+      // `backgroundColor: Colors.transparent` (the list detail header does)
+      // make it read that as dark — so the clock and Wi-Fi/battery icons came
+      // out white on a light background, effectively invisible.
+      systemOverlayStyle: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarBrightness: Brightness.light, // iOS: light background
+        statusBarIconBrightness: Brightness.dark, // Android: dark icons
+      ),
     ),
     
     // Card Theme - Sanfte Schatten und großzügige Abrundungen
@@ -245,6 +256,11 @@ class AppTheme {
       backgroundColor: AppColors.darkPrimaryBackground,
       foregroundColor: AppColors.darkTextPrimary,
       iconTheme: IconThemeData(color: AppColors.darkTextPrimary),
+      systemOverlayStyle: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarBrightness: Brightness.dark, // iOS: dark background
+        statusBarIconBrightness: Brightness.light, // Android: light icons
+      ),
     ),
     
     // Card Theme - Sanfte Schatten und großzügige Abrundungen

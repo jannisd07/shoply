@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
@@ -196,7 +197,31 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           showUpdateDialogIfNeeded(context);
         });
-        return TutorialOverlay(child: child!);
+        // Nothing in the app ever declared a status bar style, so iOS kept
+        // whatever was set last — which left the clock and the Wi-Fi/battery
+        // icons drawn in white on the light list background, effectively
+        // invisible. Deriving it from the theme here fixes every screen at
+        // once; a screen that needs something else (a dark hero image behind
+        // the bar, say) can still override with its own AnnotatedRegion,
+        // since the innermost one wins.
+        final isDarkUi = themeMode == ThemeMode.dark ||
+            (themeMode == ThemeMode.system &&
+                MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+        final overlayStyle = isDarkUi
+            ? SystemUiOverlayStyle.light // light icons for dark backgrounds
+            : SystemUiOverlayStyle.dark; // dark icons for light backgrounds
+        // Applied imperatively as well as declaratively. The AnnotatedRegion
+        // alone did not reach iOS here — the style is sampled from the layer
+        // tree, and the AppBar on pushed routes annotates its own (derived
+        // from its transparent background, i.e. wrong). Calling SystemChrome
+        // directly is unconditional and wins regardless of sampling.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          SystemChrome.setSystemUIOverlayStyle(overlayStyle);
+        });
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: overlayStyle,
+          child: TutorialOverlay(child: child!),
+        );
       },
     );
   }

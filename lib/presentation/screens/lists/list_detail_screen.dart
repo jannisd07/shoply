@@ -113,6 +113,27 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   // Morph origin for the attachment sheet ("+" button in the composer).
   final GlobalKey _plusButtonKey = GlobalKey();
 
+  /// Measured height of the floating bottom bar (price summary / offer
+  /// suggestions + composer), used as the list's bottom inset so nothing
+  /// hides behind it. Seeded with a sensible value so the first frame is
+  /// already close; [_syncBottomBarHeight] corrects it after layout.
+  final GlobalKey _bottomBarKey = GlobalKey();
+  double _bottomBarHeight = 110;
+
+  void _syncBottomBarHeight() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box =
+          _bottomBarKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      // Bar height plus the gap it floats above the safe area.
+      final h = box.size.height + 14;
+      if ((h - _bottomBarHeight).abs() > 1) {
+        setState(() => _bottomBarHeight = h);
+      }
+    });
+  }
+
   // Review prompt state — ensures we only fire rating prompt once per session
   // when the user completes an entire list (all items checked off).
   bool _listCompletionReviewFired = false;
@@ -411,6 +432,13 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         backgroundColor: Colors.transparent,
+        // Stated here because AppBar otherwise derives it from
+        // backgroundColor — and `transparent` estimates as *dark*, which put
+        // white clock and Wi-Fi/battery icons on this light screen. Setting
+        // it on the widget takes precedence over theme and estimation alike.
+        systemOverlayStyle: Theme.of(context).brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
         title: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -710,10 +738,15 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                     padding: EdgeInsets.only(
                       left: AppDimensions.screenHorizontalPadding,
                       right: AppDimensions.screenHorizontalPadding,
-                      // Safe area / keyboard + floating composer height.
+                      // Safe area / keyboard + the floating bar's *measured*
+                      // height. This used to be a hardcoded 96, which stopped
+                      // being enough once the bar grew to price-summary +
+                      // composer (44pt hit target): the last rows disappeared
+                      // behind it. Measuring keeps it right through Dynamic
+                      // Type, a wrapped composer and future additions.
                       bottom: MediaQuery.viewInsetsOf(context).bottom +
                           MediaQuery.paddingOf(context).bottom +
-                          96,
+                          _bottomBarHeight,
                     ),
                     itemCount:
                         groupedItems.length +
@@ -837,7 +870,11 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   builder: (context, value, _) {
                     final liveQuery = value.text.trim();
                     final isSearching = liveQuery.length >= 2;
+                    // Re-measure whenever the bar's composition changes
+                    // (suggestions appear, composer wraps, …).
+                    _syncBottomBarHeight();
                     return Column(
+                      key: _bottomBarKey,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // While searching, show live offer suggestions
