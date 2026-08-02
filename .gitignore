@@ -91,3 +91,8 @@ ios/Runner/Configuration.storekit
 scripts/*.log
 test_reports/
 flutter_*.log
+
+# Xcode scratch that appears when switching toolchains or opening the project
+ios/Runner.xcodeproj/**/xcschemes/*.backup
+ios/Runner.xcodeproj/xcshareddata/xcodecloud/
+ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
