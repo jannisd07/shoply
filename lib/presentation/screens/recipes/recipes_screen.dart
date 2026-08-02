@@ -1273,13 +1273,14 @@ class _ActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      // Glass instead of a tinted box with a hairline border. 14 matches the
+      // radius the rest of the app's tappable surfaces use; the old 6 was a
+      // leftover and read as square next to everything else.
+      child: AdaptiveGlass(
+        cornerRadius: 14,
+        opaqueColor: AppColors.surface(context),
+        child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-        decoration: BoxDecoration(
-          color: AppColors.surface(context),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.border(context)),
-        ),
         child: Column(
           children: [
             Stack(
@@ -1329,6 +1330,7 @@ class _ActionCard extends StatelessWidget {
             ),
           ],
         ),
+        ),
       ),
     );
   }
@@ -1355,12 +1357,9 @@ class _CategoryCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.border(context)),
-        ),
+      child: AdaptiveGlass(
+        cornerRadius: 14,
+        opaqueColor: surface,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
