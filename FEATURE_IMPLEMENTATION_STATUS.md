@@ -1,6 +1,15 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-08-01 (scheduled routine — Feature 8 focus: built the
+_Last updated: 2026-08-02 (scheduled routine — Feature 4 focus: extended the
+`get_savings_summary` Avo tool to also report this month's savings (and a
+comparison to last month), reusing the `totalSavingsOf`/`tripsInMonth`
+helpers Feature 8's twelfth session (2026-08-01) extracted for exactly this
+purpose — so "how much did I save this month?" now gets a real chat answer,
+not just the lifetime total. Closes the one self-flagged, low-risk,
+non-decision-gated carryover that same session's own "Explicitly NOT done"
+note left open. See Feature 4's fourteenth-session notes below.)_
+
+_Previously — 2026-08-01 (scheduled routine — Feature 8 focus: built the
 monthly/per-trip savings breakdown on top of the existing lifetime "you've
 saved €X" stat on the Shopping History screen — "you saved €12 this month,
 up from €8 last month" (or down/flat), only shown once a real previous-month
@@ -43,6 +52,27 @@ the home screen's "Angebote" strip and `WeeklyDealsScreen` (Feature 8's
 the prior Feature 8 session explicitly logged this as "a Feature 4 session,
 not this one" in its own Ideas list, low-complexity/low-risk with no owner
 decision attached. See Feature 4's twelfth-session notes.)_
+
+**2026-08-02 — why Feature 4.** Re-read Features 1–8's own "Explicitly NOT
+done"/"still open" sections and the full Ideas list directly, the same
+discipline every session in this file documents. Features 1–3 and 5–7
+unchanged on a fresh pass: Feature 1 blocked on a genuine external
+constraint; the rest are needs-decision or need a real device/Xcode run
+this container cannot provide. That left Feature 8's own twelfth-session
+(2026-08-01) "Explicitly NOT done" note, which flagged its own follow-up
+unconditionally: "No home-screen card and no Avo-chat tool for the monthly
+figure... flagged as a natural follow-up idea below only if a future
+session wants to extend `get_savings_summary` to accept a month/lifetime
+window parameter." The home-card half stays gated on the standing "fifth
+card" placement decision, but the Avo-tool half carries no such gate — the
+same self-flagged, technically-scoped, no-owner-decision shape the
+07-29/07-31 Feature 4 sessions used to justify `get_personalized_deals` and
+the three nutrition/challenge tools. Verified by reading
+`get_savings_summary`'s actual current implementation directly before
+writing anything (not trusting the note's paraphrase): confirmed it only
+ever computed the lifetime figure, with its own hand-duplicated summation
+loop instead of the now-available `totalSavingsOf`/`tripsInMonth` helpers.
+Built it.
 
 **2026-08-01 — why Feature 8.** Re-read Features 1–8's own "Explicitly NOT
 done"/"still open" sections and the full Ideas list directly, the same
@@ -775,7 +805,7 @@ was **never wired into any screen** — this session wired it up.
 | 1 | Pricing, offers, cheapest store | ~95% | Implemented (blocked on hard externals) | Re-audited 2026-07-16, code-verified against every brief bullet: all required + autonomy capabilities implemented. Only remaining gaps are a genuine external constraint (no public non-offer shelf-price API) and an out-of-scope-by-design item (cross-product substitution, diet/allergy safety) |
 | 2 | Split shopping trip costs | ~95% | Implemented (needs device QA) | None functional; push + widget rendering need a real device run |
 | 3 | Widgets & quick actions | ~95% | In progress (needs device QA) | **2026-07-21: built `SavedRecipesWidget`** — a third WidgetKit widget (saved recipes, tap-to-open) that closes plumbing (App Group key + native reload call) that had existed since the widget extension was first added but was never actually consumed by a real widget. 2026-07-19: fixed a real, likely-severe regression — the widget extension's `IPHONEOS_DEPLOYMENT_TARGET` was `26.0` (Runner is `15.6`), meaning the widget/quick-add extension could never install on any device below iOS 26; corrected to `17.0`. Token re-push on refresh + sign-out widget-data clearing shipped 2026-07-16; Quick-Add widget shipped 2026-07-13; dead Siri method-channel code deleted 2026-07-17; all of it still needs a real Xcode/device build to confirm. Remaining in-code work: `VoiceAssistantPlugin.swift` deletion (waiting on device confirmation of the deep-link fix) and the needs-decision "today's list" widget kind |
-| 4 | AI assistant app control | ~98% | Implemented (needs QA) | **2026-07-31: three new read-only tools** — `get_weekly_nutrition_summary`, `get_challenge_status`, `get_savings_summary` (closes three self-flagged Feature 6/8 carryovers, all thin wrappers over existing providers/services). 2026-07-29: new `get_personalized_deals` tool — Avo can now answer "what deals do I have?" by reusing Feature 8's `personalizedDealsProvider` (a self-flagged Feature 8 carryover, Low complexity/Low risk). 2026-07-26: `add_recipe_to_list` now attaches live offer prices to matched ingredients. 2026-07-25: closed two real capability gaps — `add_recipe_to_list` (the brief's own literal "add ingredients for carbonara to Friday's list" shortcut) and `compare_list_prices` (whole-list "which store is cheapest"). Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list`. None functional; needs a real device run + live Gemini QA |
+| 4 | AI assistant app control | ~98% | Implemented (needs QA) | **2026-08-02: `get_savings_summary` now also reports this month's savings** (vs. last month), reusing Feature 8's `totalSavingsOf`/`tripsInMonth` helpers so "how much did I save this month?" gets a real answer (closes a self-flagged Feature 8 carryover, Low complexity/Low risk). 2026-07-31: three new read-only tools — `get_weekly_nutrition_summary`, `get_challenge_status`, `get_savings_summary` (closes three self-flagged Feature 6/8 carryovers, all thin wrappers over existing providers/services). 2026-07-29: new `get_personalized_deals` tool — Avo can now answer "what deals do I have?" by reusing Feature 8's `personalizedDealsProvider` (a self-flagged Feature 8 carryover, Low complexity/Low risk). 2026-07-26: `add_recipe_to_list` now attaches live offer prices to matched ingredients. 2026-07-25: closed two real capability gaps — `add_recipe_to_list` (the brief's own literal "add ingredients for carbonara to Friday's list" shortcut) and `compare_list_prices` (whole-list "which store is cheapest"). Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list`. None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~91% | In progress (needs device QA) | **2026-07-30: Avo's chat is now `app_priorities`-aware** — empty-state suggestion chips lean toward the user's top stated priority, and the system prompt lets it quietly tilt tone/tool choice without ever reciting it back (closes the Feature 7/Ideas-list carryover). 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~88% | In progress (needs device QA) | **2026-07-23: built the "what brings you to Shoply?" persona/priorities question** (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
@@ -3065,6 +3095,109 @@ again afterward, not committed. Traced every new provider/service call
 against its actual return type/nullability by direct read, not assumption.
 **Not run:** an actual Xcode/simulator build, or a live Gemini conversation
 exercising any of the three new tools end-to-end.
+
+**Fourteenth session, 2026-08-02 (scheduled routine — this feature's
+dedicated session).** Re-read Features 1–8's own "Explicitly NOT done"/
+"still open" sections and the Ideas list directly before picking, the same
+discipline every recent session in this file documents. Features 1–3, 5–7
+unchanged on a fresh pass: Feature 1 blocked on a genuine external
+constraint; Features 2–3, 5–7's only remaining gaps are all "needs a real
+device/Xcode run" or explicitly needs-decision. Went looking specifically
+for something concretely buildable here, no device and no owner decision
+required, the same bar every recent session uses. Found it in Feature 8's
+own twelfth-session (2026-08-01) "Explicitly NOT done" note, self-addressed
+to a future session: "No home-screen card and no Avo-chat tool for the
+monthly figure... flagged as a natural follow-up idea below only if a
+future session wants to extend `get_savings_summary` to accept a month/
+lifetime window parameter." Read literally, this is a low-complexity,
+self-flagged, non-decision-gated technical carryover — the exact shape the
+07-29/07-31 Feature 4 sessions used to justify picking up
+`get_personalized_deals` and the three nutrition/challenge tools. Confirmed
+via direct code read of `get_savings_summary`'s current implementation
+(`_toolSavingsSummary`/`summarizeLifetimeSavings` in
+`avo_assistant_service.dart`) before writing anything: it genuinely only
+ever computed the lifetime figure, confirming the gap was real.
+
+**Before this session:** `get_savings_summary` (built in this feature's
+thirteenth session) answered "how much have I saved?" with only a lifetime
+total — it had its own hand-duplicated summation loop instead of reusing
+`totalSavingsOf`/`tripsInMonth` (the pure helpers Feature 8's twelfth
+session extracted into `shopping_history.dart` for exactly this "lifetime
+vs. a narrower window" purpose), so "how much did I save this month?" had
+no real answer.
+
+**What I implemented:**
+- `summarizeLifetimeSavings` now takes a `DateTime now` parameter and
+  returns `month_saved_eur` (this calendar month's total, reusing
+  `tripsInMonth`) alongside the existing `total_saved_eur`/
+  `trips_with_savings`, plus `prev_month_saved_eur` when the previous month
+  also has tracked savings — mirroring `ShoppingHistoryScreen`'s own
+  lifetime/month/previous-month computation exactly (same `totalSavingsOf`/
+  `tripsInMonth` calls, same previous-month rollover via
+  `DateTime(now.year, now.month - 1)`), so chat and the History screen can
+  never disagree on either figure. Also removed the method's own duplicate
+  summation loop in favor of calling `totalSavingsOf` directly — one less
+  place the lifetime computation could drift from the screen's.
+- Updated the `get_savings_summary` `FunctionDeclaration` description and
+  the system-prompt routing bullet to mention "how much did I save this
+  month?" as a valid trigger.
+- `_toolSavingsSummary` now passes `DateTime.now()` through.
+
+**Design decisions:**
+- No `prev_month_saved_eur` key at all when the previous month has no
+  tracked savings (rather than `0`) — same "don't claim a comparison that
+  didn't happen" discipline the History screen's own monthly line already
+  follows (its "no prior-month baseline" branch).
+- `month_saved_eur` is always present (as `0` when there's nothing this
+  month) once the lifetime total is non-zero, rather than omitted — Gemini
+  needs an explicit zero to correctly answer "nothing this month, but
+  you've saved €X overall" instead of a total silence on the current month.
+- Did not surface the monthly figure anywhere else (no home-screen card) —
+  unchanged, still the same needs-decision "fifth card" clutter question
+  flagged repeatedly in the Ideas list.
+
+**Explicitly NOT done / still open:**
+- No live Gemini conversation test confirming the model routes "how much
+  did I save this month?" correctly and phrases a reply distinguishing the
+  two figures well — same standing "no Gemini API key/device in this
+  container" limitation every Feature 4 session has flagged.
+- Assistant memory and offers/budget-aware recipe ranking remain
+  untouched/needs-decision, unchanged from every prior session.
+- The Ideas list is now, on a fresh re-read, fully exhausted: every open
+  `[ ]` entry is explicitly needs-decision or device-gated (see the
+  Ideas section for the current list) — a follow-up session may need to
+  either wait on an owner decision or look for a genuinely new gap not yet
+  logged, rather than another self-flagged carryover.
+
+**Files changed (fourteenth session):**
+`lib/data/services/avo_assistant_service.dart` (`get_savings_summary`
+declaration + system-prompt bullet updated; `_toolSavingsSummary` and
+`summarizeLifetimeSavings` extended with month/previous-month figures,
+reusing `totalSavingsOf`/`tripsInMonth` instead of a duplicate loop),
+`test/avo_nutrition_challenges_savings_tools_test.dart` (existing 3
+`summarizeLifetimeSavings` tests updated for the new `now` parameter, 3 new
+cases: month figure omitted-as-zero for old-only savings, previous-month
+figure included once both months have savings, January→December rollover).
+
+**Checks performed (fourteenth session):** Flutter 3.44.8 (stable channel)
+downloaded fresh into `/tmp/flutter` (newer than the 3.35.6 prior sessions
+recorded — still stable channel, no pinned version in this repo);
+`env.example.dart`/`firebase_options.example.dart` copied to their
+gitignored real paths (not committed) so `flutter analyze` reflects a
+properly configured checkout. `flutter analyze` on both touched files — no
+issues found. Full-project `flutter analyze` — **601 issues (0 errors, 59
+warnings, 542 info)**, byte-identical to the baseline every recent session
+in this file has recorded. `flutter test test/avo_nutrition_challenges_savings_tools_test.dart`
+— **10/10 passed** (7 pre-existing/updated + 3 new). Full-project
+`flutter test` — **74 passed, 1 failed to load**
+(`test/widget_test.dart`, a `lucide_icons` package/Flutter-SDK-version
+incompatibility — confirmed pre-existing and unrelated to this session's
+change by re-running it against the unmodified branch via `git stash`,
+same failure). `pubspec.lock` churn from `flutter pub get` reverted before
+committing; the gitignored `env.dart`/`firebase_options.dart` stubs deleted
+again afterward, not committed. **Not run:** an actual Xcode/simulator
+build, or a live Gemini conversation exercising the updated tool
+end-to-end.
 
 ---
 

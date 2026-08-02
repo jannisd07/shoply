@@ -148,9 +148,10 @@ When the user asks to:
   on track with no sugar?") → call get_challenge_status. If none is
   active and they want to start one, tell them to open the Challenges
   screen from the calorie dashboard — you cannot start one for them.
-• ask "how much have I saved?" / "how much money has Shoply saved me?"
-  → call get_savings_summary. This is a lifetime total, only from
-  items bought at a live offer/deal price — explain that if it's low
+• ask "how much have I saved?" / "how much money has Shoply saved me?" /
+  "how much did I save this month?" → call get_savings_summary, which
+  returns both a lifetime figure and this month's (vs. last month's), only
+  from items bought at a live offer/deal price — explain that if it's low
   or zero for an otherwise active user.
 If a nutrition tool reports tracking is disabled, offer to enable it
 (update_setting key "calorie_tracking" value "true") — ask first,
@@ -611,11 +612,14 @@ replies should not mention it at all.
           ),
           FunctionDeclaration(
             'get_savings_summary',
-            'The user\'s lifetime total savings (in EUR) from buying items at a live '
-                'offer/deal price instead of the regular shelf price, aggregated across '
-                'their whole shopping history. Use for "how much have I saved?" or '
-                '"has Shoply saved me money?". Only counts items where both the paid '
-                'price and the offer\'s regular price were known at the time.',
+            'The user\'s total savings (in EUR) from buying items at a live '
+                'offer/deal price instead of the regular shelf price, both lifetime and '
+                'for the current calendar month (with a comparison to last month). Use '
+                'for "how much have I saved?", "has Shoply saved me money?", or "how '
+                'much did I save this month?". Only counts items where both the paid '
+                'price and the offer\'s regular price were known at the time. This '
+                'mirrors the Shopping History screen exactly, so your answer and that '
+                'screen always agree.',
             Schema.object(properties: {}),
           ),
         ]),
@@ -2218,27 +2222,22 @@ replies should not mention it at all.
 
   Future<Map<String, Object?>> _toolSavingsSummary() async {
     final history = await ShoppingHistoryService().getShoppingHistory();
-    return summarizeLifetimeSavings(history);
+    return summarizeLifetimeSavings(history, DateTime.now());
   }
 
-  /// Pure, unit-tested lifetime-savings aggregation — mirrors
-  /// [ShoppingHistoryScreen]'s own "you've saved €X" computation exactly, so
+  /// Pure, unit-tested lifetime + this-month savings aggregation — reuses
+  /// [totalSavingsOf]/[tripsInMonth] (the same helpers
+  /// [ShoppingHistoryScreen] computes its "you've saved €X" lines from), so
   /// a chat answer and the Shopping History screen can never disagree.
   @visibleForTesting
   static Map<String, Object?> summarizeLifetimeSavings(
     List<ShoppingHistory> history,
+    DateTime now,
   ) {
-    var total = 0.0;
-    var tripsWithSavings = 0;
-    for (final trip in history) {
-      var tripSavings = 0.0;
-      for (final item in trip.items) {
-        final perUnit = item.savingsPerUnit;
-        if (perUnit != null) tripSavings += perUnit * item.quantity;
-      }
-      if (tripSavings > 0.01) tripsWithSavings++;
-      total += tripSavings;
-    }
+    final total = totalSavingsOf(history);
+    final tripsWithSavings =
+        history.where((trip) => totalSavingsOf([trip]) > 0.01).length;
+
     if (total <= 0.01) {
       return {
         'total_saved_eur': 0,
@@ -2248,12 +2247,28 @@ replies should not mention it at all.
             'is later bought.',
       };
     }
-    return {
+
+    final monthEntries =
+        tripsInMonth(history, year: now.year, month: now.month);
+    final monthSavings = totalSavingsOf(monthEntries);
+    final prevMonth = DateTime(now.year, now.month - 1);
+    final prevMonthSavings = totalSavingsOf(
+      tripsInMonth(history, year: prevMonth.year, month: prevMonth.month),
+    );
+
+    final result = <String, Object?>{
       'total_saved_eur': double.parse(total.toStringAsFixed(2)),
       'trips_with_savings': tripsWithSavings,
-      'note': 'This is a lifetime total, not scoped to any single month or '
-          'trip.',
+      'month_saved_eur': double.parse(monthSavings.toStringAsFixed(2)),
+      'note': 'total_saved_eur is a lifetime figure across all of shopping '
+          'history; month_saved_eur is scoped to the current calendar month '
+          'only and may be 0 even when the lifetime total is not.',
     };
+    if (prevMonthSavings > 0.01) {
+      result['prev_month_saved_eur'] =
+          double.parse(prevMonthSavings.toStringAsFixed(2));
+    }
+    return result;
   }
 
   /// One-shot Gemini estimate for a free-text food description ("1 banana",

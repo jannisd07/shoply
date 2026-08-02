@@ -74,13 +74,16 @@ ShoppingHistoryItem _historyItem({double? price, double? priceOldValue, double q
   );
 }
 
-ShoppingHistory _trip({required List<ShoppingHistoryItem> items}) {
+ShoppingHistory _trip({
+  required List<ShoppingHistoryItem> items,
+  DateTime? completedAt,
+}) {
   return ShoppingHistory(
     id: 'h',
     userId: 'u',
     listName: 'Wocheneinkauf',
     totalItems: items.length,
-    completedAt: DateTime(2026, 1, 1),
+    completedAt: completedAt ?? DateTime(2026, 1, 1),
     items: items,
   );
 }
@@ -149,35 +152,102 @@ void main() {
     test('reports zero total with a note when nothing was ever saved', () {
       final result = AvoAssistantService.summarizeLifetimeSavings(
         [_trip(items: [_historyItem(price: 1.5, priceOldValue: null)])],
+        DateTime(2026, 1, 1),
       );
 
       expect(result['total_saved_eur'], 0);
       expect(result.containsKey('trips_with_savings'), false);
+      expect(result.containsKey('month_saved_eur'), false);
       expect(result['note'], isA<String>());
     });
 
     test('sums savings across trips and items, scaled by quantity', () {
-      final result = AvoAssistantService.summarizeLifetimeSavings([
-        _trip(items: [
-          _historyItem(price: 0.89, priceOldValue: 1.19, quantity: 2),
-          _historyItem(price: 1.5, priceOldValue: null),
-        ]),
-        _trip(items: [
-          _historyItem(price: 2.0, priceOldValue: 2.5, quantity: 1),
-        ]),
-      ]);
+      final result = AvoAssistantService.summarizeLifetimeSavings(
+        [
+          _trip(items: [
+            _historyItem(price: 0.89, priceOldValue: 1.19, quantity: 2),
+            _historyItem(price: 1.5, priceOldValue: null),
+          ]),
+          _trip(items: [
+            _historyItem(price: 2.0, priceOldValue: 2.5, quantity: 1),
+          ]),
+        ],
+        DateTime(2026, 1, 1),
+      );
 
       // (1.19-0.89)*2 + (2.5-2.0)*1 = 0.60 + 0.50 = 1.10
       expect(result['total_saved_eur'], 1.10);
       expect(result['trips_with_savings'], 2);
+      // Both trips default to a January completedAt, matching "now".
+      expect(result['month_saved_eur'], 1.10);
+      expect(result.containsKey('prev_month_saved_eur'), false);
     });
 
     test('never reports a negative saving even if priceOldValue is lower', () {
       final result = AvoAssistantService.summarizeLifetimeSavings(
         [_trip(items: [_historyItem(price: 2.0, priceOldValue: 1.0)])],
+        DateTime(2026, 1, 1),
       );
 
       expect(result['total_saved_eur'], 0);
+    });
+
+    test(
+        'month_saved_eur and prev_month_saved_eur are both 0 when the only '
+        'savings are 2+ months old', () {
+      final result = AvoAssistantService.summarizeLifetimeSavings(
+        [
+          _trip(
+            items: [_historyItem(price: 0.89, priceOldValue: 1.19)],
+            completedAt: DateTime(2025, 11, 5),
+          ),
+        ],
+        DateTime(2026, 1, 1),
+      );
+
+      expect(result['total_saved_eur'], 0.30);
+      expect(result['month_saved_eur'], 0);
+      expect(result.containsKey('prev_month_saved_eur'), false);
+    });
+
+    test('includes prev_month_saved_eur only once both months have savings',
+        () {
+      final result = AvoAssistantService.summarizeLifetimeSavings(
+        [
+          _trip(
+            items: [_historyItem(price: 0.89, priceOldValue: 1.19)],
+            completedAt: DateTime(2026, 1, 10),
+          ),
+          _trip(
+            items: [_historyItem(price: 1.5, priceOldValue: 2.0)],
+            completedAt: DateTime(2025, 12, 20),
+          ),
+        ],
+        DateTime(2026, 1, 15),
+      );
+
+      expect(result['month_saved_eur'], 0.30);
+      expect(result['prev_month_saved_eur'], 0.50);
+    });
+
+    test('previous-month lookup rolls over January to December correctly',
+        () {
+      final result = AvoAssistantService.summarizeLifetimeSavings(
+        [
+          _trip(
+            items: [_historyItem(price: 0.89, priceOldValue: 1.19)],
+            completedAt: DateTime(2026, 1, 5),
+          ),
+          _trip(
+            items: [_historyItem(price: 1.5, priceOldValue: 2.0)],
+            completedAt: DateTime(2025, 12, 28),
+          ),
+        ],
+        DateTime(2026, 1, 20),
+      );
+
+      expect(result['month_saved_eur'], 0.30);
+      expect(result['prev_month_saved_eur'], 0.50);
     });
   });
 }
