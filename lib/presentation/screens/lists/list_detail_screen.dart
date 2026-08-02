@@ -641,17 +641,22 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           if (PlatformInfo.isIOS26OrHigher())
             Padding(
               padding: const EdgeInsets.only(right: 12),
+              // 36pt visual inside a 44pt hit target, matching the back
+              // button. The box used to be 36 as well, leaving this the one
+              // navigation control below Apple's minimum touch size.
               child: SizedBox(
-                width: 36,
-                height: 36,
-                child: AdaptiveButton.icon(
-                  icon: Icons.ios_share,
-                  style: AdaptiveButtonStyle.glass,
-                  size: AdaptiveButtonSize.small,
-                  minSize: const Size(36, 36),
-                  padding: EdgeInsets.zero,
-                  useSmoothRectangleBorder: false,
-                  onPressed: _showShareDialog,
+                width: 44,
+                height: 44,
+                child: Center(
+                  child: AdaptiveButton.icon(
+                    icon: Icons.ios_share,
+                    style: AdaptiveButtonStyle.glass,
+                    size: AdaptiveButtonSize.small,
+                    minSize: const Size(36, 36),
+                    padding: EdgeInsets.zero,
+                    useSmoothRectangleBorder: false,
+                    onPressed: _showShareDialog,
+                  ),
                 ),
               ),
             )
