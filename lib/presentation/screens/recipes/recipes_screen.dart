@@ -718,7 +718,14 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
           ),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: SliverList(
+            // Two-column photo tiles, matching the reference design.
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.82,
+              ),
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   return _RecipeCard(
@@ -726,7 +733,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                     onTap: () => context.push('/recipes/${_recentRecipes[index].id}'),
                   );
                 },
-                childCount: _recentRecipes.length > 5 ? 5 : _recentRecipes.length,
+                childCount: _recentRecipes.length > 6 ? 6 : _recentRecipes.length,
               ),
             ),
           ),
@@ -990,7 +997,13 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
               top: 8,
               bottom: 100 + MediaQuery.of(context).padding.bottom,
             ),
-            sliver: SliverList(
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.82,
+              ),
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   return _RecipeCard(
@@ -1521,236 +1534,52 @@ class _RecipeCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Check diet compatibility
+    // Diet compatibility must survive the move to a photo tile — a warning
+    // that quietly disappears because the layout got prettier is a
+    // regression, not a redesign. It rides along as a chip on the image.
     final user = ref.watch(currentUserProvider).value;
     RecipeCompatibility? compatibility;
-    
-    if (user != null && (user.allergies.isNotEmpty || user.dietPreferences.isNotEmpty)) {
+    if (user != null &&
+        (user.allergies.isNotEmpty || user.dietPreferences.isNotEmpty)) {
       final allergies = user.allergies
           .map((a) => AllergyType.values.firstWhere(
                 (type) => type.name == a,
                 orElse: () => AllergyType.gluten,
               ))
           .toList();
-      
       final diets = user.dietPreferences
           .map((d) => DietType.values.firstWhere(
                 (type) => type.name == d,
                 orElse: () => DietType.none,
               ))
           .toList();
-      
       compatibility = IngredientSubstitutionService.checkRecipeCompatibility(
         recipe: recipe,
         allergies: allergies,
         diets: diets,
       );
     }
-    
-    final cardColor = AppColors.surface(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final borderColor = AppColors.border(context);
-    final inputFill = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : PaperColors.cream;
-    final isSaved = ref.watch(isRecipeSavedProvider(recipe.id));
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: borderColor, width: 1),
-          ),
-          child: InkWell(
-            onTap: onTap,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Image with badges
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                  child: SizedBox(
-                    height: 160,
-                    width: double.infinity,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (recipe.imageUrl.isNotEmpty)
-                          CachedNetworkImage(
-                            imageUrl: recipe.imageUrl,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(
-                              color: inputFill,
-                              child: Center(
-                                child: Icon(Icons.restaurant_rounded, size: 40, color: textSecondary),
-                              ),
-                            ),
-                            errorWidget: (_, __, ___) => Container(
-                              color: inputFill,
-                              child: Icon(Icons.restaurant_rounded, size: 40, color: textSecondary),
-                            ),
-                          )
-                        else
-                          Container(
-                            color: inputFill,
-                            child: Icon(Icons.restaurant_rounded, size: 40, color: textSecondary),
-                          ),
-                        // Bookmark button
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: GestureDetector(
-                            onTap: () {
-                              ref.read(savedRecipesProvider.notifier).toggleSave(recipe.id);
-                            },
-                            child: ClipOval(
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: isSaved ? Colors.white : Colors.black.withValues(alpha: 0.15),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                                  ),
-                                  child: Icon(
-                                    isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                                    size: 20,
-                                    color: isSaved ? Colors.black : Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Compatibility Badge
-                        if (compatibility != null)
-                          Positioned(
-                            top: 10,
-                            left: 10,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: compatibility.isCompatible
-                                    ? (compatibility.needsModifications
-                                        ? const Color(0xFFFF9500)
-                                        : const Color(0xFF34C759))
-                                    : const Color(0xFFFF3B30),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                compatibility.badgeText,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Content
-                Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        recipe.name,
-                        style: PaperTextStyles.serif(18, color: textPrimary),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        recipe.description,
-                        style: TextStyle(color: textSecondary, fontSize: 14),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 10),
-                      // Author & Stats Row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => context.push(
-                                '/author/${recipe.authorId}',
-                                extra: {'authorName': recipe.authorName},
-                              ),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 12,
-                                    backgroundColor: inputFill,
-                                    backgroundImage: recipe.authorAvatarUrl != null
-                                        ? NetworkImage(recipe.authorAvatarUrl!)
-                                        : null,
-                                    child: recipe.authorAvatarUrl == null
-                                        ? Text(
-                                            recipe.authorName[0].toUpperCase(),
-                                            style: TextStyle(fontSize: 10, color: textSecondary),
-                                          )
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      recipe.authorName,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: textSecondary,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(Icons.schedule_rounded, size: 14, color: textSecondary),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${recipe.totalTimeMinutes} min',
-                            style: TextStyle(color: textSecondary, fontSize: 13),
-                          ),
-                          if (recipe.averageRating > 0) ...[
-                            const SizedBox(width: 10),
-                            Icon(Icons.star_rounded, size: 14, color: const Color(0xFFFFB300)),
-                            const SizedBox(width: 3),
-                            Text(
-                              recipe.averageRating.toStringAsFixed(1),
-                              style: TextStyle(
-                                color: textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    Color? badgeColor;
+    if (compatibility != null) {
+      badgeColor = compatibility.isCompatible
+          ? (compatibility.needsModifications ? Colors.orange : Colors.green)
+          : Colors.red;
+    }
+
+    // Time and author on one line. The description is dropped: it does not
+    // fit a tile, and the detail screen shows it in full anyway.
+    final parts = <String>[
+      if (recipe.totalTimeMinutes > 0) '${recipe.totalTimeMinutes} min',
+      if (recipe.authorName.isNotEmpty) recipe.authorName,
+    ];
+
+    return RecipeImageCard(
+      recipe: recipe,
+      onTap: onTap,
+      badgeText: compatibility?.badgeText,
+      badgeColor: badgeColor,
+      metaLine: parts.join(' · '),
     );
   }
 }

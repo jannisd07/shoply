@@ -36,6 +36,15 @@ class RecipeImageCard extends ConsumerWidget {
   /// Whether to show the save/bookmark control.
   final bool showBookmark;
 
+  /// Short chip drawn on the image, e.g. a diet/allergy compatibility badge.
+  /// Never omit this to save space — a warning that quietly disappears is
+  /// worse than a busier card.
+  final String? badgeText;
+  final Color? badgeColor;
+
+  /// One line under the title, e.g. "45 min · Wikibooks".
+  final String? metaLine;
+
   const RecipeImageCard({
     super.key,
     required this.recipe,
@@ -44,6 +53,9 @@ class RecipeImageCard extends ConsumerWidget {
     this.height,
     this.margin = EdgeInsets.zero,
     this.showBookmark = true,
+    this.badgeText,
+    this.badgeColor,
+    this.metaLine,
   });
 
   static const double _radius = 18;
@@ -101,23 +113,69 @@ class RecipeImageCard extends ConsumerWidget {
                 left: 12,
                 right: 12,
                 bottom: 10,
-                child: Text(
-                  recipe.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                    shadows: [
-                      // Backstop for the rare photo that is bright right
-                      // where the text sits.
-                      Shadow(color: Color(0x66000000), blurRadius: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recipe.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        height: 1.2,
+                        shadows: [
+                          // Backstop for the rare photo that is bright right
+                          // where the text sits.
+                          Shadow(color: Color(0x66000000), blurRadius: 6),
+                        ],
+                      ),
+                    ),
+                    if (metaLine != null && metaLine!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        metaLine!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xE6FFFFFF),
+                          fontSize: 11.5,
+                          height: 1.2,
+                          shadows: [
+                            Shadow(color: Color(0x66000000), blurRadius: 6),
+                          ],
+                        ),
+                      ),
                     ],
-                  ),
+                  ],
                 ),
               ),
+
+              if (badgeText != null && badgeText!.isNotEmpty)
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (badgeColor ?? Colors.black).withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      badgeText!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
 
               if (showBookmark)
                 Positioned(
