@@ -17,6 +17,7 @@ import 'package:shoply/presentation/state/saved_recipes_provider.dart';
 import 'package:shoply/presentation/state/recipes_provider.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/data/services/contextual_prompt_service.dart';
+import 'package:shoply/presentation/screens/recipes/recipe_personalization.dart';
 // QuickFiltersRow removed - now using inline search
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -165,51 +166,29 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
         ).length;
       }
 
-      // Get personalized "For You" recipes based on user diet preferences
+      // Get personalized "For You" recipes based on user diet preferences,
+      // allergies, and Feature 7's "what brings you to Shoply?" priorities.
       // Excludes anything already shown in recipe of week or popular sections
       final candidateRecipes =
           allRecipes.where((r) => !shownIds.contains(r.id)).toList();
       final user = ref.read(currentUserProvider).value;
+      final appPriorities = user?.appPriorities.toSet() ?? const <String>{};
       List<Recipe> forYou = [];
-      if (user != null && (user.dietPreferences.isNotEmpty || user.allergies.isNotEmpty)) {
-        // Score recipes based on preference matches, rating, and engagement
+      if (user != null &&
+          (user.dietPreferences.isNotEmpty ||
+              user.allergies.isNotEmpty ||
+              appPriorities.isNotEmpty)) {
+        // Score recipes based on preference matches, rating, engagement,
+        // and priorities (see recipe_personalization.dart for the pure,
+        // unit-tested scoring function).
         final scoredRecipes = <Recipe, double>{};
         for (final recipe in candidateRecipes) {
-          double score = 0;
-
-          // Add points for matching diet preferences
-          for (final pref in user.dietPreferences) {
-            if (recipe.labels.any((l) => l.toLowerCase().contains(pref.toLowerCase()))) {
-              score += 2.0;
-            }
-          }
-
-          // Subtract points for allergens
-          for (final allergy in user.allergies) {
-            if (recipe.ingredients.any((ing) =>
-                ing.name.toLowerCase().contains(allergy.toLowerCase()))) {
-              score -= 5.0; // Heavy penalty for allergens
-            }
-          }
-
-          // Boost by rating (0-5 stars → 0-2.5 points)
-          score += recipe.averageRating * 0.5;
-
-          // Boost by view count (logarithmic to not over-weight viral recipes)
-          if (recipe.viewCount > 0) {
-            score += (recipe.viewCount.toDouble()).clamp(0, 100) * 0.01;
-          }
-
-          // Boost by rating count (social proof)
-          score += (recipe.ratingCount * 0.2).clamp(0, 2);
-
-          // Freshness boost (recipes from last 7 days get bonus)
-          final age = DateTime.now().difference(recipe.createdAt).inDays;
-          if (age <= 7) {
-            score += 1.0;
-          } else if (age <= 30) {
-            score += 0.5;
-          }
+          final score = scoreForYouRecipe(
+            recipe,
+            dietPreferences: user.dietPreferences,
+            allergies: user.allergies,
+            appPriorities: appPriorities,
+          );
 
           if (score > 0) {
             scoredRecipes[recipe] = score;

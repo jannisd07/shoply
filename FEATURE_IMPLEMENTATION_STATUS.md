@@ -1,6 +1,20 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-08-02 (scheduled routine — Feature 4 focus: extended the
+_Last updated: 2026-08-03 (scheduled routine — Feature 7 focus: extended the
+"For You" recipe personalization on the Recipes screen to also factor in
+`users.app_priorities` (Feature 7's "what brings you to Shoply?" question) —
+`eat_healthier` now boosts recipes carrying the existing `healthy` browse
+label, and `discover_recipes` doubles the freshness bonus so recently added
+recipes surface ahead of already-popular ones. Also widened the section's
+trigger condition so it activates for users who set priorities but have no
+diet preferences/allergies (previously it silently fell back to the generic
+top-rated list for that group). Closes Feature 7's own sixth-session
+"still open" note that a wider priorities-aware rollout beyond the home
+nudge cards — specifically recipe browse ordering — was deliberately left
+unexpanded pending a dedicated session. See Feature 7's seventh-session
+notes below.)_
+
+_Previously — 2026-08-02 (scheduled routine — Feature 4 focus: extended the
 `get_savings_summary` Avo tool to also report this month's savings (and a
 comparison to last month), reusing the `totalSavingsOf`/`tripsInMonth`
 helpers Feature 8's twelfth session (2026-08-01) extracted for exactly this
@@ -52,6 +66,57 @@ the home screen's "Angebote" strip and `WeeklyDealsScreen` (Feature 8's
 the prior Feature 8 session explicitly logged this as "a Feature 4 session,
 not this one" in its own Ideas list, low-complexity/low-risk with no owner
 decision attached. See Feature 4's twelfth-session notes.)_
+
+**2026-08-03 — why Feature 7.** Re-read Features 1–8's own "Explicitly NOT
+done"/"still open" sections and the full Ideas list directly, the same
+discipline every session in this file documents, before picking. Features
+1–3 unchanged: Feature 1 blocked on a genuine external constraint (no public
+non-offer shelf-price API); Features 2–3's remaining work is real
+functionality already shipped, only verifiable with a real device/Xcode
+session this container doesn't have. Feature 4 re-checked against its own
+"Explicitly NOT done" list — assistant memory is explicitly "a real design
+decision, not just an engineering task." Feature 5's one open item (offers/
+budget-aware recipe ranking) is explicitly needs-decision between two
+designs. Feature 6's open items are camera barcode scanning (needs a real
+Xcode build to verify a known-broken package, per CLAUDE.md) and the
+`custom` challenge type (no catalog UI asked for by the brief). Feature 8's
+Ideas list re-read fully, end to end: every `[ ]` entry is either explicitly
+"needs decision" (per-trip savings line, assistant memory, offers/budget
+recipe ranking, premium challenges upsell, server-side restock reminders,
+account-scoped onboarding gate, the first premium gate, iOS 15.6–16.x widget
+fallback) or device-gated (mobile_scanner, VoiceAssistantPlugin.swift
+deletion — itself gated on a *different* device confirmation, "today's
+list" widget, recipe-thumbnail widget images). Nothing new and unconditional
+was left there either.
+
+That left Feature 7's own sixth-session (2026-07-23) "Explicitly NOT done"
+note, re-read directly rather than trusting the table's paraphrase: "No
+priorities-aware ordering anywhere *except* the home nudge cards (e.g.
+recipe browse ordering, Avo chat suggestions) — scoped to the one place
+with existing, already-safe-to-reorder candidates; a wider rollout is a
+separate idea, not silently expanded here." The Avo-chat half of that was
+closed by Feature 5's ninth session (2026-07-30); the recipe-browse-ordering
+half was never picked up and was never even formally logged as its own
+`[ ]` Ideas entry (a gap in the log itself, not a decision anyone made
+against it) — re-confirmed by grepping the Ideas section for "recipe
+browse"/"recipe ordering" and finding nothing. Unlike the still-open
+"offers/budget-aware ranking" idea (genuinely needs-decision because it
+would multiply live marktguru API calls per home-screen load), this one has
+zero external-API or cost concern: the Recipes screen's existing "For You"
+section already computes an in-memory score per candidate recipe from
+already-fetched data (diet preferences, allergies, rating, views,
+freshness) — extending that score function with two more inputs the app
+already stores (`users.app_priorities`) is the same shape of change
+`orderedHomeNudgeCards` already made safe precedent for: honest 1:1
+mappings only where a priority has a real, direct effect on recipe content,
+left unmapped everywhere it doesn't. Verified by reading
+`recipes_screen.dart`'s actual current scoring block directly (not the
+table's paraphrase) before writing anything: confirmed `appPriorities` had
+zero references there, and the personalized branch's own trigger condition
+(`dietPreferences.isNotEmpty || allergies.isNotEmpty`) would have silently
+skipped a user who set priorities but no diet data — a small, real,
+pre-existing gap this session also closed while it was already looking at
+the same `if`. Built it.
 
 **2026-08-02 — why Feature 4.** Re-read Features 1–8's own "Explicitly NOT
 done"/"still open" sections and the full Ideas list directly, the same
@@ -808,7 +873,7 @@ was **never wired into any screen** — this session wired it up.
 | 4 | AI assistant app control | ~98% | Implemented (needs QA) | **2026-08-02: `get_savings_summary` now also reports this month's savings** (vs. last month), reusing Feature 8's `totalSavingsOf`/`tripsInMonth` helpers so "how much did I save this month?" gets a real answer (closes a self-flagged Feature 8 carryover, Low complexity/Low risk). 2026-07-31: three new read-only tools — `get_weekly_nutrition_summary`, `get_challenge_status`, `get_savings_summary` (closes three self-flagged Feature 6/8 carryovers, all thin wrappers over existing providers/services). 2026-07-29: new `get_personalized_deals` tool — Avo can now answer "what deals do I have?" by reusing Feature 8's `personalizedDealsProvider` (a self-flagged Feature 8 carryover, Low complexity/Low risk). 2026-07-26: `add_recipe_to_list` now attaches live offer prices to matched ingredients. 2026-07-25: closed two real capability gaps — `add_recipe_to_list` (the brief's own literal "add ingredients for carbonara to Friday's list" shortcut) and `compare_list_prices` (whole-list "which store is cheapest"). Item/list CRUD gap closed 2026-07-19 (second run): `update_item`, `move_items`, `create_list`, `rename_list`. None functional; needs a real device run + live Gemini QA |
 | 5 | Avo mascot & smart notifications | ~91% | In progress (needs device QA) | **2026-07-30: Avo's chat is now `app_priorities`-aware** — empty-state suggestion chips lean toward the user's top stated priority, and the system prompt lets it quietly tilt tone/tool choice without ever reciting it back (closes the Feature 7/Ideas-list carryover). 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
-| 7 | Personalized onboarding & navbar | ~88% | In progress (needs device QA) | **2026-07-23: built the "what brings you to Shoply?" persona/priorities question** (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
+| 7 | Personalized onboarding & navbar | ~90% | In progress (needs device QA) | **2026-08-03: recipe-browse "For You" ranking is now `app_priorities`-aware** — `eat_healthier` boosts `healthy`-labeled recipes, `discover_recipes` doubles the freshness bonus; also fixed the section silently skipping users who set priorities but no diet preferences. Closes Feature 7's own sixth-session "still open" note that a wider priorities-aware rollout beyond home cards was deliberately left unexpanded. 2026-07-23: built the "what brings you to Shoply?" persona/priorities question (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
 | 8 | Cross-feature UX / growth / premium | ~79% | In progress | **2026-08-01: monthly/per-trip savings breakdown** on the Shopping History screen — "you saved €X this month, up/down from €Y last month" alongside the existing lifetime figure, only shown once a real previous-month baseline exists. 2026-07-28: made the home screen's "Angebote" strip real — new `WeeklyDealsScreen` (search + personalized "matching your lists" deals) replaces a fully decorative, non-tappable strip that led nowhere; live match-count teaser on the home screen. 2026-07-27: lifetime "you've saved €X thanks to offers" stat on the Shopping History screen — new `price_old_value` column persists an offer's regular price at apply-time. 2026-07-24: "cooked N high-protein meals this week" — closes the last of the brief's six quoted Avo-line examples with zero implementation. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
 
 ---
@@ -4549,6 +4614,123 @@ type/default; `pg_policies` confirms `users`' existing "Users can update
 own data" policy has no per-column restriction, so no new RLS policy was
 needed). **Not run:** an actual Xcode/simulator build or a live account
 walking the full onboarding → home-screen-reorder flow.
+
+**Seventh session, 2026-08-03 (scheduled routine — this feature's dedicated
+session).** See the top-of-file "why Feature 7" note for the full audit
+trail. Closes the sixth session's own self-flagged "still open" gap: a
+wider rollout of `users.app_priorities` beyond the home nudge cards
+(recipe browse ordering) was deliberately not expanded in that session and
+never got picked up since — the Avo-chat half of the same note was closed
+by Feature 5's ninth session (2026-07-30), but the recipe-ordering half sat
+untouched and was never even logged as its own Ideas entry.
+
+**Before this session:** the Recipes screen's "For You" section scored
+candidate recipes using diet preferences, allergies, rating, view count,
+rating count, and freshness — all read directly from `UserModel` and
+`Recipe`, computed inline inside `_loadAllData()`. `users.app_priorities`
+(added by this feature's own sixth session) had zero references anywhere
+in `recipes_screen.dart`, confirmed by grep before writing anything. A
+second, smaller pre-existing gap found while reading that same code: the
+personalized-scoring branch only ran when
+`dietPreferences.isNotEmpty || allergies.isNotEmpty` — a user who set
+priorities during onboarding but no diet preferences/allergies (a fully
+valid, likely common combination) got the plain top-rated fallback instead
+of any personalization at all.
+
+**What I implemented:**
+- **`scoreForYouRecipe`** (new, pure function,
+  `lib/presentation/screens/recipes/recipe_personalization.dart`) — the
+  exact pre-existing scoring logic (diet preference match +2.0, allergen
+  match −5.0, rating × 0.5, capped view-count boost, capped rating-count
+  boost, freshness bonus for ≤7/≤30-day-old recipes) extracted verbatim so
+  behavior for existing users is unchanged, plus two new, honest,
+  directly-content-related priority mappings:
+  - `eat_healthier` → +1.5 when the recipe carries the existing `healthy`
+    browse-category label (`recipeCategories` in `recipe_categories.dart`),
+    the same "contains" matching style diet-preference scoring already uses.
+  - `discover_recipes` → doubles the freshness bonus (so a fresh recipe
+    gets +2.0/+1.0 instead of +1.0/+0.5), favoring recently-added recipes
+    over already-popular ones for a user who said they want to discover new
+    things.
+  - `save_money`, `share_lists`, and `stay_organized` are deliberately left
+    unmapped — same precedent `orderedHomeNudgeCards` set: they aren't
+    about recipe *content*, so inventing an effect for them would be
+    exactly the "fake working integration" the product brief warns against.
+    (`save_money` in particular was considered and rejected: recipes have
+    no stored cost field, and scoring ~40 candidates against live
+    marktguru offers per screen load is the same API-cost problem the
+    still-open "offers/budget-aware ranking" idea is explicitly
+    needs-decision on — reusing that budget here without the owner's
+    sign-off would preempt that decision, not honor it.)
+- **`recipes_screen.dart`**: `_loadAllData()` now calls `scoreForYouRecipe`
+  instead of the inline loop (identical behavior for the existing inputs,
+  verified by a dedicated "reproduces the original score" unit test below);
+  the personalization trigger condition now also fires on
+  `appPriorities.isNotEmpty`, closing the pre-existing gap above — a user
+  with priorities but no diet data now gets real personalized ordering
+  instead of the generic top-rated fallback.
+- **`test/recipe_personalization_test.dart`** (new, 7 cases): diet
+  preference match adds the expected 2.0, allergen match penalizes below
+  zero, `eat_healthier` boosts only a `healthy`-labeled recipe (not an
+  unrelated one), `discover_recipes` doubles the freshness bonus for a
+  recent recipe and has zero effect on an old one (age > 30 days), the
+  three unmapped priorities never change the score, and a no-priorities/
+  no-preferences case reproduces the exact original rating/view/freshness
+  arithmetic byte-for-byte.
+
+**Design decisions:**
+- Extracted to a pure, injectable-`now` function specifically so freshness-
+  boundary behavior (7-day/30-day cutoffs, the discovery-multiplier
+  interaction with them) could be unit-tested deterministically, the same
+  `required DateTime today`-style pattern `WeeklyNutritionSummary` already
+  established in this codebase.
+- Kept the extraction behavior-preserving for users with no
+  `app_priorities` set (the large majority today, since this is an opt-in
+  onboarding/Profile question) — the "reproduces the original score" test
+  exists specifically to guard against a silent scoring regression for
+  everyone who hasn't touched the new personalization axis.
+- No UI/translation changes — this is a ranking-order change only, the
+  same "reorder, never hide or gate" rule `orderedHomeNudgeCards` already
+  established, so no new empty/loading/error states were needed.
+
+**Explicitly NOT done / still open:**
+- `save_money` still has no recipe-browse mapping — deliberately, per the
+  design decision above; would need the same owner cost/latency decision
+  the "offers/budget-aware ranking" idea is already waiting on, not a new
+  one invented by this session.
+- No Avo-chat-suggestions extension — that half of the sixth session's note
+  was already closed by Feature 5's ninth session (2026-07-30); not
+  re-touched here.
+- Not verified on a real device/simulator — no macOS/Xcode in this
+  container, the same standing limitation every UI-facing session in this
+  file carries. Whether the reordered "For You" section reads as
+  intentional rather than jarring for a real account with real priorities
+  set is unverified.
+
+**Files changed:**
+`lib/presentation/screens/recipes/recipe_personalization.dart` (new),
+`lib/presentation/screens/recipes/recipes_screen.dart` (scoring delegated
+to the new function; personalization trigger widened to include
+`appPriorities`), `test/recipe_personalization_test.dart` (new, 7 cases).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh into `/tmp/flutter`;
+`env.example.dart`/`firebase_options.example.dart` copied to their
+gitignored real paths (not committed) so `flutter analyze` reflects a
+properly configured checkout. Full-project `flutter analyze` — **601
+issues (0 errors, matching every recent session's recorded baseline)**;
+also scoped `flutter analyze` to the 2 new/touched non-test files plus the
+new test file — zero issues on `recipe_personalization.dart` and
+`recipe_personalization_test.dart`; the 15 issues reported against
+`recipes_screen.dart` were individually cross-checked against line numbers
+outside this session's diff — all pre-existing (`isDark`/`_checkForRefresh`
+unused-variable warnings, `prefer_is_empty`/`withOpacity` info lints
+untouched by this change). `flutter test` — **82/82 passed** (75
+pre-existing + 7 new in `test/recipe_personalization_test.dart`).
+`pubspec.lock` churn from `flutter pub get` reverted before committing;
+the gitignored `env.dart`/`firebase_options.dart` stubs deleted again
+afterward, not committed. **Not run:** an actual Xcode/simulator build, or
+a live account with real `app_priorities` set browsing the actual
+re-ranked Recipes screen end-to-end.
 
 ---
 
