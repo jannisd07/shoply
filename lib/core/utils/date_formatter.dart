@@ -31,7 +31,7 @@ class DateFormatter {
   
   /// Formats time (e.g., "2:30 PM")
   static String formatTime(DateTime date) {
-    return DateFormat('HH:mm').format(date);
+    return DateFormat('h:mm a').format(date);
   }
   
   /// Formats date (e.g., "Jan 15, 2024")
