@@ -1,6 +1,21 @@
 # Shoply Feature Implementation Status
 
-_Last updated: 2026-08-03 (scheduled routine — Feature 7 focus: extended the
+_Last updated: 2026-08-04 (scheduled routine — Feature 8 focus: added a
+per-trip savings line to the Shopping History screen's expandable entry row —
+"you saved €X on this trip" — on top of the existing lifetime and monthly
+savings figures. Closes the "per-trip savings line" Ideas-list entry, the one
+half of the tenth-session (2026-07-27) idea the twelfth session's monthly
+breakdown explicitly left open. Re-read every feature's own "still open"
+notes and the full Ideas list before picking, same discipline every prior
+session in this file documents — Features 1–3 remain blocked on real
+external/device constraints unchanged from 2026-08-03's audit; Features 4–7's
+open items are all explicitly needs-decision or device-gated; Feature 8's own
+Ideas list had exactly one `[ ]` entry with no decision flag and Low
+complexity/Low risk, unlike its siblings (offers/budget recipe ranking,
+assistant memory, premium-gate placement — all needs-decision). See Feature
+8's thirteenth-session notes below.)_
+
+_Previously — 2026-08-03 (scheduled routine — Feature 7 focus: extended the
 "For You" recipe personalization on the Recipes screen to also factor in
 `users.app_priorities` (Feature 7's "what brings you to Shoply?" question) —
 `eat_healthier` now boosts recipes carrying the existing `healthy` browse
@@ -874,7 +889,7 @@ was **never wired into any screen** — this session wired it up.
 | 5 | Avo mascot & smart notifications | ~91% | In progress (needs device QA) | **2026-07-30: Avo's chat is now `app_priorities`-aware** — empty-state suggestion chips lean toward the user's top stated priority, and the system prompt lets it quietly tilt tone/tool choice without ever reciting it back (closes the Feature 7/Ideas-list carryover). 2026-07-20: recipe suggestions now factor in past meals (skip recently-cooked recipes) and pantry/list data (favor recipes using items already on a shopping list) — two of the brief's five named signals that were previously unimplemented. Offers/budget-aware recipe ranking remains open (needs decision — see Ideas). Proactive recipe-suggestion nudges shipped 2026-07-09; needs device QA for scheduled notifications. A real `item_purchase_stats` double-counting bug that was skewing the restock nudge's "every N days" math was fixed 2026-07-18 (Feature 8's fourth session) |
 | 6 | Calorie tracking | ~92% | In progress (needs device QA) | **2026-07-22: built the "What can I still eat today?" dedicated in-app screen** (`WhatCanIEatScreen`) — a literal Feature 6 autonomy bullet, reusing the existing `CalorieRecipeNudgeService` ranking with a longer (15 vs. 3) result list. Weekly summary screen + logging streak shipped 2026-07-18 (second run). Camera barcode scanning still not built (`mobile_scanner` commented out for iOS build issues, per CLAUDE.md); needs device QA |
 | 7 | Personalized onboarding & navbar | ~90% | In progress (needs device QA) | **2026-08-03: recipe-browse "For You" ranking is now `app_priorities`-aware** — `eat_healthier` boosts `healthy`-labeled recipes, `discover_recipes` doubles the freshness bonus; also fixed the section silently skipping users who set priorities but no diet preferences. Closes Feature 7's own sixth-session "still open" note that a wider priorities-aware rollout beyond home cards was deliberately left unexpanded. 2026-07-23: built the "what brings you to Shoply?" persona/priorities question (`users.app_priorities`) — closes a literal required brief bullet ("ask what kind of user they are / what they want from the app") that had no implementation anywhere; reorders the home screen's nudge cards to match, and is editable later from Profile. "Ask which features they want" remains undone by design (nothing is feature-gateable today). Diet-preference + goal-questionnaire onboarding pages and account-level sync (from the fifth session) are still unverified on a real device/signup flow |
-| 8 | Cross-feature UX / growth / premium | ~79% | In progress | **2026-08-01: monthly/per-trip savings breakdown** on the Shopping History screen — "you saved €X this month, up/down from €Y last month" alongside the existing lifetime figure, only shown once a real previous-month baseline exists. 2026-07-28: made the home screen's "Angebote" strip real — new `WeeklyDealsScreen` (search + personalized "matching your lists" deals) replaces a fully decorative, non-tappable strip that led nowhere; live match-count teaser on the home screen. 2026-07-27: lifetime "you've saved €X thanks to offers" stat on the Shopping History screen — new `price_old_value` column persists an offer's regular price at apply-time. 2026-07-24: "cooked N high-protein meals this week" — closes the last of the brief's six quoted Avo-line examples with zero implementation. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
+| 8 | Cross-feature UX / growth / premium | ~80% | In progress | **2026-08-04: per-trip savings line** on the Shopping History screen's expandable entry row — "you saved €X on this trip", the "per-trip" half the 2026-08-01 monthly breakdown left open. 2026-08-01: monthly/per-trip savings breakdown on the Shopping History screen — "you saved €X this month, up/down from €Y last month" alongside the existing lifetime figure, only shown once a real previous-month baseline exists. 2026-07-28: made the home screen's "Angebote" strip real — new `WeeklyDealsScreen` (search + personalized "matching your lists" deals) replaces a fully decorative, non-tappable strip that led nowhere; live match-count teaser on the home screen. 2026-07-27: lifetime "you've saved €X thanks to offers" stat on the Shopping History screen — new `price_old_value` column persists an offer's regular price at apply-time. 2026-07-24: "cooked N high-protein meals this week" — closes the last of the brief's six quoted Avo-line examples with zero implementation. Recipe-detail "on offer this week" card shipped 2026-07-20 (second run); "split this trip?" nudge shipped 2026-07-18; recommendation-engine consolidation done 2026-07-17; premium-gating audit still open and needs an owner product decision first |
 
 ---
 
@@ -5887,6 +5902,102 @@ committed. **Not run:** an actual Xcode/simulator build, or a live account
 completing trips across a real month boundary to see the comparison appear
 end-to-end.
 
+**Thirteenth session, 2026-08-04 (scheduled routine — this feature's
+dedicated session).** See the top-of-file note for the selection reasoning:
+re-read every feature's own "still open" sections and the full Ideas list
+directly before picking. Features 1–3 unchanged from the 2026-08-03 audit
+(external API constraint / device-QA-only respectively). Feature 4 is
+needs-QA only. Features 5–7's single open items are each explicitly
+needs-decision (offers/budget recipe ranking; assistant memory; the "which
+features do you want" onboarding question, which has no feature-gating system
+to hook into yet). Feature 8's own Ideas list has exactly one entry flagged
+with no decision gate and Low complexity/Low risk: "Per-trip savings line...
+on top of the monthly/lifetime figures" — the twelfth session's own notes
+explicitly separated the monthly breakdown (built) from the per-trip breakdown
+(left open, "a natural, still-open follow-up").
+
+**Before this session:** The Shopping History screen showed lifetime and
+monthly "you've saved €X" figures (tenth/twelfth sessions), both computed via
+`totalSavingsOf`. The per-item savings amount was implicitly visible nowhere
+— a user expanding one trip's row saw its item list and split-cost section,
+but no per-trip total, even though `ShoppingHistoryItem.savingsPerUnit` (and
+therefore `totalSavingsOf([thatOneTrip])`) already had everything needed to
+compute it. Confirmed by reading `shopping_history_screen.dart`'s actual
+`_HistoryRow` widget directly before writing anything.
+
+**What I implemented:**
+- `_HistoryRow.build()` now computes `totalSavingsOf([entry])` — reusing the
+  exact same pure function that drives the lifetime and monthly figures, so
+  all three can never disagree about what counts as a "saving" (only items
+  with both a real price and a genuinely higher stored offer regular price).
+  No new computation logic; this is purely the existing lifetime/monthly
+  pattern applied to a list of one trip, which `totalSavingsOf`'s
+  `Iterable<ShoppingHistory>` signature already supported without any change.
+- A new conditional row in the expanded section, directly under the item
+  list and above the split-cost section, shown only when the trip's savings
+  exceed the same `> 0.01` float-noise threshold every other savings figure
+  in this file uses: a small `savings_outlined` icon (13px, one size down
+  from the 16px lifetime-figure icon, since this is the third and most local
+  of three savings figures now on this one screen) + "You saved €X on this
+  trip." in the accent color, styled at 12px/w500 to sit clearly below the
+  bolder 13px/w600 lifetime line while still reading as a real stat, not
+  throwaway metadata.
+- One new EN/DE translation key pair: `history_trip_savings_line`.
+- Two new test cases in `test/savings_tracking_logic_test.dart`
+  (`totalSavingsOf([singleTrip])` group): confirms a single-trip list sums
+  only that trip's items (not bleeding in a second trip passed alongside it)
+  and returns zero for a trip with no offer-priced items — the same two
+  edge cases the lifetime/monthly tests already cover, applied to the
+  single-trip usage this UI now relies on.
+
+**Design decisions:**
+- Placed the new line inside the already-expanded row (not the collapsed
+  summary) — this is a "look closer" detail like the item list and split
+  section it sits next to, not a headline stat like the screen-level
+  lifetime/monthly figures, which stay visible without expanding anything.
+- Did not add this to `get_savings_summary` (Feature 4's Avo tool) or any
+  home-screen surface — out of scope for a per-trip UI detail; the existing
+  tool is lifetime/monthly-scoped by design (per Feature 4's fourteenth-
+  session notes), and a per-trip Avo query ("how much did I save on
+  Tuesday's Lidl trip?") is a distinct, narrower ask than anything currently
+  requested there.
+- Icon size (13px vs. the lifetime line's 16px) and font weight (w500 vs.
+  w600) are a deliberate visual hierarchy choice, not an oversight — three
+  savings figures now live on one screen (lifetime, monthly, per-trip) and
+  only the most prominent one should compete visually with the screen's
+  headline stats row.
+
+**Explicitly NOT done / still open:**
+- Not verified on a real device/simulator — no macOS/Xcode in this
+  container, the same standing limitation every UI-facing session in this
+  file carries. Whether the new line reads well next to the split-cost
+  section at real device widths, and whether three stacked savings figures
+  (lifetime, monthly, per-trip) feels like too much on one screen, are both
+  unverified design judgment calls worth a human look.
+- No Avo-chat or home-screen surface for the per-trip figure — see Design
+  decisions above; this was deliberately scoped to the one screen/row the
+  Ideas-list entry named.
+- Premium-gating audit remains open and unchanged — this session did not
+  touch it, consistent with every prior session's reasoning (needs an
+  explicit owner decision).
+
+**Files changed:** `lib/presentation/screens/history/shopping_history_screen.dart`
+(per-trip savings computation + new conditional UI row in `_HistoryRow`),
+`lib/core/localization/app_translations.dart` (1 new EN/DE key pair),
+`test/savings_tracking_logic_test.dart` (2 new cases).
+
+**Checks performed:** Flutter 3.35.6 downloaded fresh into `/tmp/flutter`;
+`env.example.dart`/`firebase_options.example.dart` copied to their gitignored
+real paths (not committed) so `flutter analyze` reflects a properly
+configured checkout. Full-project `flutter analyze` before/after via `git
+stash`: baseline **601 issues (0 errors, 59 warnings, 542 info)** → after
+**601 issues — byte-identical**. `flutter test` — **all tests passed** (84
+total, including the 2 new cases). `pubspec.lock` churn from `flutter pub
+get` reverted before committing; the gitignored `env.dart`/`firebase_options.dart`
+stubs deleted again afterward, not committed. **Not run:** an actual
+Xcode/simulator build, or a live account with a real offer-priced completed
+trip to see the new line render end-to-end.
+
 ---
 
 ## Ideas / Needs My Approval
@@ -5940,23 +6051,23 @@ end-to-end.
     per-trip savings line is a natural, still-open follow-up (see below).
     Details in Feature 8's twelfth-session notes.
 
-- [ ] IDEA: Per-trip savings line (e.g. in the expandable history entry row)
-  on top of the monthly/lifetime figures shipped 2026-07-27/2026-08-01 —
-  the "per-trip" half of the tenth-session idea that turned out not to be
-  covered by the monthly breakdown above.
-  - Why it helps: "this specific trip saved you €3.40" is a more concrete,
-    immediate payoff than a monthly aggregate, right where a user is already
-    looking (the history entry they just expanded).
-  - Expected user value: low-medium — a nice-to-have layered on top of two
-    already-shipped savings figures.
-  - Expected business/premium value: low.
-  - Complexity: Low — `ShoppingHistoryItem.savingsPerUnit` and
-    `totalSavingsOf` already exist; this is `totalSavingsOf([singleTrip])`
-    plus a small UI addition to the existing expandable row.
-  - Risk: Low.
-  - Recommendation: needs decision — low priority; confirm it's worth a
-    third savings figure on the same screen before a follow-up session adds
-    it.
+- [x] IDEA (DONE 2026-08-04, Feature 8's thirteenth session): Per-trip savings
+  line (e.g. in the expandable history entry row) on top of the
+  monthly/lifetime figures shipped 2026-07-27/2026-08-01 — the "per-trip"
+  half of the tenth-session idea that turned out not to be covered by the
+  monthly breakdown above.
+  - **Outcome:** implemented as a new conditional row inside `_HistoryRow`'s
+    expanded section, directly under the item list — "You saved €X on this
+    trip." Reuses `totalSavingsOf([entry])` (the exact function driving the
+    lifetime/monthly figures, applied to a one-trip list — no new
+    computation), styled one visual step quieter than the screen-level
+    lifetime line (13px icon vs. 16px, w500 vs. w600) since it's now the
+    third savings figure on the same screen. This session made the call on
+    the flagged "is a third savings figure too much" question rather than
+    waiting further: scoped it to the already-expanded detail view rather
+    than the collapsed summary, so it only appears when a user has already
+    chosen to look closer at one trip. Details in Feature 8's
+    thirteenth-session notes above.
 
 - [ ] IDEA: Offers/budget-aware recipe ranking — the last of the five named
   signals in "Avo can suggest recipes based on past meals, offers, budget,

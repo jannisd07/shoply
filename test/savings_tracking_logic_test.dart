@@ -101,6 +101,26 @@ void main() {
     });
   });
 
+  group('totalSavingsOf([singleTrip]) (drives the per-trip savings line)', () {
+    test('sums just that one trip, ignoring others', () {
+      final target = _trip(DateTime(2026, 7, 10), [
+        _historyItem(price: 0.99, priceOldValue: 1.49, quantity: 2), // 1.00
+      ]);
+      final other = _trip(DateTime(2026, 7, 11), [
+        _historyItem(price: 1.00, priceOldValue: 5.00, quantity: 10), // 40.00
+      ]);
+      expect(totalSavingsOf([target]), closeTo(1.00, 0.001));
+      expect(totalSavingsOf([target, other]), closeTo(41.00, 0.001));
+    });
+
+    test('zero for a trip with no offer-priced items', () {
+      final trip = _trip(DateTime(2026, 7, 10), [
+        _historyItem(price: 2.5, priceOldValue: null),
+      ]);
+      expect(totalSavingsOf([trip]), 0.0);
+    });
+  });
+
   group('tripsInMonth (drives the "this month vs. last month" breakdown)', () {
     final trips = [
       _trip(DateTime(2026, 6, 30), [_historyItem(price: 1.0, priceOldValue: 1.5)]), // June: 0.5

@@ -364,6 +364,7 @@ class AppTranslations {
         "That's {amount} this month — down from {prevAmount} last month.",
     'history_savings_month_flat_line':
         "That's {amount} this month, same as last month.",
+    'history_trip_savings_line': 'You saved {amount} on this trip.',
     'history_label': 'History',
     'activities_label': 'Activities',
     'split_trip_cost': 'Split cost',
@@ -1351,6 +1352,7 @@ class AppTranslations {
         'Das sind {amount} in diesem Monat — weniger als letzten Monat mit {prevAmount}.',
     'history_savings_month_flat_line':
         'Das sind {amount} in diesem Monat, genauso viel wie letzten Monat.',
+    'history_trip_savings_line': 'Du hast {amount} bei diesem Einkauf gespart.',
     'history_label': 'Verlauf',
     'activities_label': 'Aktivitäten',
     'split_trip_cost': 'Kosten teilen',

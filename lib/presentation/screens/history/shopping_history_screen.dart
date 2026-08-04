@@ -374,6 +374,8 @@ class _HistoryRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
+    final accent = AppColors.accentColor(context);
+    final tripSavings = totalSavingsOf([entry]);
 
     return GestureDetector(
       onTap: onTap,
@@ -454,6 +456,30 @@ class _HistoryRow extends ConsumerWidget {
                     ],
                   ),
                 ),
+            ],
+            if (expanded && tripSavings > 0.01) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.savings_outlined, size: 13, color: accent),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      context.tr(
+                        'history_trip_savings_line',
+                        params: {
+                          'amount': '${tripSavings.toStringAsFixed(2)} €',
+                        },
+                      ),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
             if (expanded) _SplitSection(entry: entry),
           ],
