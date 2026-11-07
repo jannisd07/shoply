@@ -2,6 +2,38 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Skills: check before every answer (mandatory)
+
+Before **every** answer, check whether a skill from the table fits the task. If one does, load it with the Skill tool
+without asking, in every session, also in plan mode and also when a clarifying question follows. The first line about
+the task is then `Skills: …` with the names, e.g. "Skills: `superpowers:systematic-debugging`". If none fits, leave the
+line out. The owner set this up on 2026-11-07 so that skills never have to be named in the prompt; a skill the owner
+names later goes into the table right away.
+
+The project skills in [`.claude/skills/`](.claude/skills/) are copied from the owner's RoadTo1Billion$ repo. Notes in
+them about Yando, clado, Ornith or RoadTo1Billion paths do not apply here. Shoply's own rules (Paper design, `AppColors`,
+the Design System section below) take precedence over a skill's house style.
+
+| Task | Skill |
+|---|---|
+| New feature, new screen, redesign | `superpowers:brainstorming`, then `superpowers:writing-plans` |
+| Large work with many subtasks | plan first, then `superpowers:subagent-driven-development`; across sessions `planning-with-files` |
+| Bug, crash, unexpected behaviour | `superpowers:systematic-debugging` |
+| Before saying "done" | `superpowers:verification-before-completion` (plus `dart analyze`), for larger changes `superpowers:requesting-code-review` |
+| Build, restyle or review a screen, also "looks generic / like AI" | `apple-design` and `design-taste-frontend` first (its app-screen rules), with `frontend-design` and `ui-ux-pro-max`; Liquid Glass API questions: the `liquid-glass` plugin if installed |
+| Animations, gestures, sheets, springs, glass materials, typography, haptics, reduced motion | `apple-design` (from `emilkowalski/skills`, commit `c8a7962`). It is written for the web; in Flutter use `SpringSimulation`/`SpringDescription.withDampingRatio` for springs, `DragEndDetails.velocity` for the velocity handoff, `BackdropFilter` for materials, `HapticFeedback` for haptics and `MediaQuery.disableAnimationsOf` for reduced motion |
+| Accessibility (contrast, Dynamic Type, VoiceOver, touch targets) | `design:accessibility-review` |
+| Check a flow for being foolproof (onboarding, adding items, sharing, paywall) before a release | `idiotensicher-testen`, on the simulator via `run` / the iOS simulator tools |
+| In-app texts (buttons, errors, empty states, paywall) | `design:ux-copy`, then `humanizer` |
+| App Store text, landing page (`shoply-landingpage`), marketing | `copywriting` (new) or `copy-editing` (revise), then `humanizer` |
+| Landing page SEO, AI visibility, structured data, many similar pages | `seo-audit`, `ai-seo`, `schema`, `programmatic-seo` |
+| Measuring Gemini / Avo answers (categorisation accuracy, prompt injection) | `promptfoo-evals` (new target: `promptfoo-provider-setup`), only made-up test data |
+| Library or API questions (Flutter, Riverpod, Supabase, GoRouter …) | Context7 (`plugin:context7`) |
+| Before a TestFlight/App Store release | `claude-security` (`scan changes`, `low`) |
+
+**Missing?** If `superpowers:*`, `frontend-design:*`, `ui-ux-pro-max:*`, `planning-with-files:*`, `claude-security:*`
+or Context7 is not available in a session, the plugin isn't installed on this machine: say so first.
+
 ## Branch policy for scheduled routines (standing permission from the owner)
 
 Scheduled/routine Claude Code sessions must NOT each work on their own
