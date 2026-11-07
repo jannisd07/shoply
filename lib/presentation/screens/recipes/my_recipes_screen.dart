@@ -6,17 +6,15 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/recipe_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_state_views.dart';
+import 'package:shoply/presentation/state/recipes_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-/// Provider for user's own recipes - auto-dispose to ensure fresh data
+/// Provider for user's own recipes - auto-dispose to ensure fresh data.
+/// Also reloads on refreshRecipeData (e.g. after editing a recipe).
 final myRecipesProvider = FutureProvider.autoDispose<List<Recipe>>((ref) async {
-  print('🔄 [MY_RECIPES_PROVIDER] Fetching my recipes...');
-  final recipes = await RecipeService().getMyRecipes();
-  print('✅ [MY_RECIPES_PROVIDER] Got ${recipes.length} recipes');
-  for (final r in recipes) {
-    print('   - ${r.name} (author_id: ${r.authorId})');
-  }
-  return recipes;
+  ref.watch(recipeRefreshTriggerProvider);
+  return RecipeService.instance.getMyRecipes();
 });
 
 /// Screen displaying recipes created by the current user
@@ -26,27 +24,14 @@ class MyRecipesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recipesAsync = ref.watch(myRecipesProvider);
-    final backgroundColor = AppColors.recipeBg(context);
     final textPrimary = AppColors.textPrimary(context);
-    
+
     return Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          context.tr('my_recipes'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary),
-          onPressed: () => context.pop(),
-        ),
+      backgroundColor: AppColors.recipeBg(context),
+      appBar: recipeListAppBar(
+        context,
+        title: Text(context.tr('my_recipes')),
+        onBack: () => context.pop(),
         actions: [
           IconButton(
             icon: Icon(Icons.add_rounded, color: textPrimary),
@@ -56,20 +41,8 @@ class MyRecipesScreen extends ConsumerWidget {
       ),
       body: recipesAsync.when(
         loading: () => const Center(child: CupertinoActivityIndicator()),
-        error: (error, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text('${context.tr('error_loading_recipes')}: $error'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(myRecipesProvider),
-                child: Text(context.tr('retry')),
-              ),
-            ],
-          ),
+        error: (_, __) => RecipeErrorView(
+          onRetry: () => ref.invalidate(myRecipesProvider),
         ),
         data: (recipes) => recipes.isEmpty
             ? _buildEmptyState(context)
@@ -88,7 +61,7 @@ class MyRecipesScreen extends ConsumerWidget {
                       left: 16,
                       right: 16,
                       top: 16,
-                      bottom: 100 + MediaQuery.of(context).padding.bottom,
+                      bottom: 100 + MediaQuery.paddingOf(context).bottom,
                     ),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
@@ -96,7 +69,7 @@ class MyRecipesScreen extends ConsumerWidget {
                           final recipe = recipes[index];
                           return _MyRecipeCard(
                             recipe: recipe,
-                            onTap: () => context.push('/recipes/${recipe.id}'),
+                            onTap: () => context.push('/recipes/${recipe.id}', extra: recipe),
                             onEdit: () => context.push('/recipes/add', extra: {'recipeId': recipe.id}),
                           );
                         },
@@ -112,53 +85,23 @@ class MyRecipesScreen extends ConsumerWidget {
 
   Widget _buildEmptyState(BuildContext context) {
     final textSecondary = AppColors.textSecondary(context);
-    
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.restaurant_menu_rounded,
-              size: 80,
-              color: textSecondary.withOpacity(0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              context.tr('no_my_recipes'),
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: textSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.tr('create_recipe_hint'),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: textSecondary.withOpacity(0.7),
-              ),
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: () => context.push('/recipes/add'),
-              icon: Icon(Icons.add_rounded, color: AppColors.textPrimary(context), size: 20),
-              label: Text(
-                context.tr('create_recipe'),
-                style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w500),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: textSecondary.withOpacity(0.2)),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
+    return RecipeEmptyView(
+      icon: Icons.restaurant_menu_rounded,
+      title: context.tr('no_my_recipes'),
+      subtitle: context.tr('create_recipe_hint'),
+      action: OutlinedButton.icon(
+        onPressed: () => context.push('/recipes/add'),
+        icon: Icon(Icons.add_rounded, color: AppColors.textPrimary(context), size: 20),
+        label: Text(
+          context.tr('create_recipe'),
+          style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w500),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: textSecondary.withValues(alpha: 0.2)),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
     );
@@ -202,6 +145,7 @@ class _MyRecipeCard extends StatelessWidget {
                 width: 100,
                 height: 100,
                 fit: BoxFit.cover,
+                memCacheWidth: (100 * MediaQuery.devicePixelRatioOf(context)).round(),
                 placeholder: (_, __) => Container(
                   width: 100,
                   height: 100,
@@ -235,7 +179,7 @@ class _MyRecipeCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _formatDate(recipe.createdAt),
+                      _formatDate(context, recipe.createdAt),
                       style: TextStyle(
                         color: textSecondary,
                         fontSize: 13,
@@ -304,15 +248,16 @@ class _MyRecipeCard extends StatelessWidget {
     );
   }
 
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    
-    if (diff.inDays == 0) return 'Today';
-    if (diff.inDays == 1) return 'Yesterday';
-    if (diff.inDays < 7) return '${diff.inDays} days ago';
-    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} weeks ago';
-    if (diff.inDays < 365) return '${(diff.inDays / 30).floor()} months ago';
-    return '${(diff.inDays / 365).floor()} years ago';
+  String _formatDate(BuildContext context, DateTime date) {
+    final days = DateTime.now().difference(date).inDays;
+    String ago(String key, int count) =>
+        context.tr(key, params: {'count': '$count'});
+
+    if (days == 0) return context.tr('today');
+    if (days == 1) return context.tr('yesterday');
+    if (days < 7) return ago('time_days_ago', days);
+    if (days < 30) return ago('time_weeks_ago', days ~/ 7);
+    if (days < 365) return ago('time_months_ago', days ~/ 30);
+    return ago('time_years_ago', days ~/ 365);
   }
 }

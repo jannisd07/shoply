@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_dimensions.dart';
-import 'package:shoply/core/constants/app_text_styles.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/recipe_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/author_avatar.dart';
 import 'package:shoply/presentation/widgets/recipes/star_rating_widget.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -28,10 +27,10 @@ class RecipeAuthorPage extends ConsumerStatefulWidget {
 }
 
 class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
-  final RecipeService _recipeService = RecipeService();
   List<Recipe> _recipes = [];
   bool _isLoading = true;
-  Map<String, dynamic>? _authorInfo;
+  String? _authorName;
+  String? _authorAvatarUrl;
   double _authorAverageRating = 0.0;
 
   @override
@@ -40,78 +39,36 @@ class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
     _loadAuthorData();
   }
 
+  /// Loads only this author's recipes (one query; the service also resolves
+  /// the author's display name and avatar from `users`).
   Future<void> _loadAuthorData() async {
     setState(() => _isLoading = true);
     try {
-      // Get all recipes
-      final allRecipes = await _recipeService.getRecipes();
-      
-      // Filter by author
-      final authorRecipes = allRecipes
-          .where((recipe) => recipe.authorId == widget.authorId)
-          .toList();
-      
-      // Calculate author's average rating and total views
-      final recipesWithRatings = authorRecipes
-          .where((r) => r.ratingCount > 0)
-          .toList();
-      
-      double avgRating = 0.0;
-      if (recipesWithRatings.isNotEmpty) {
-        avgRating = recipesWithRatings
-                .map((r) => r.averageRating)
-                .reduce((a, b) => a + b) /
-            recipesWithRatings.length;
-      }
-      
-      // Calculate total views
-      int totalViews = 0;
-      for (final recipe in authorRecipes) {
-        totalViews += recipe.viewCount;
-      }
+      final authorRecipes =
+          await RecipeService.instance.getRecipesByAuthor(widget.authorId);
+      if (!mounted) return;
 
-      // Get author info from users table (display_name, not email)
-      Map<String, dynamic>? authorInfo;
-      try {
-        final userResponse = await _recipeService.supabase
-            .from('users')
-            .select('display_name, avatar_url')
-            .eq('id', widget.authorId)
-            .maybeSingle();
-        
-        if (userResponse != null) {
-          authorInfo = {
-            'name': userResponse['display_name'] as String? ?? widget.authorName ?? 'Unknown',
-            'avatar_url': userResponse['avatar_url'] as String?,
-            'total_views': totalViews,
-          };
-        }
-      } catch (_) {
-        // Fallback to recipe data if user lookup fails
-      }
-      
-      // Fallback to recipe data if user table lookup didn't work
-      if (authorInfo == null && authorRecipes.isNotEmpty) {
-        authorInfo = {
-          'name': authorRecipes.first.authorName,
-          'avatar_url': authorRecipes.first.authorAvatarUrl,
-          'total_views': totalViews,
-        };
-      }
+      final rated = authorRecipes.where((r) => r.ratingCount > 0).toList();
+      final avgRating = rated.isEmpty
+          ? 0.0
+          : rated.map((r) => r.averageRating).reduce((a, b) => a + b) / rated.length;
 
       setState(() {
         _recipes = authorRecipes;
-        _authorInfo = authorInfo;
+        if (authorRecipes.isNotEmpty) {
+          _authorName = authorRecipes.first.authorName;
+          _authorAvatarUrl = authorRecipes.first.authorAvatarUrl;
+        }
         _authorAverageRating = avgRating;
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('❌ [AUTHOR_PAGE] Failed to load author ${widget.authorId}: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading author data: $e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('author_load_failed'))),
+      );
     }
   }
 
@@ -122,6 +79,11 @@ class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
     final textSecondary = AppColors.textSecondary(context);
     final cardColor = AppColors.recipeSurface(context);
     final borderColor = AppColors.recipeBorderColor(context);
+    final displayName = (_authorName?.isNotEmpty ?? false)
+        ? _authorName!
+        : (widget.authorName?.isNotEmpty ?? false)
+            ? widget.authorName!
+            : null;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -134,7 +96,7 @@ class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          _authorInfo?['name'] ?? widget.authorName ?? 'Author',
+          displayName ?? context.tr('author_label'),
           style: TextStyle(
             color: textPrimary,
             fontSize: 18,
@@ -186,57 +148,23 @@ class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
                           child: Column(
                             children: [
                               // Profile Picture
-                              Container(
-                                width: 100,
-                                height: 100,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                color: AppColors.recipeInput(context),
-                                  border: Border.all(color: borderColor, width: 2),
+                              AuthorAvatar(
+                                name: displayName ?? '',
+                                avatarUrl: _authorAvatarUrl,
+                                size: 100,
+                                backgroundColor: AppColors.recipeInput(context),
+                                border: Border.all(color: borderColor, width: 2),
+                                initialStyle: TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.bold,
+                                  color: textSecondary,
                                 ),
-                                child: _authorInfo?['avatar_url'] != null
-                                    ? ClipOval(
-                                        child: CachedNetworkImage(
-                                          imageUrl: _authorInfo!['avatar_url'],
-                                          fit: BoxFit.cover,
-                                          placeholder: (_, __) => Center(
-                                            child: Text(
-                                              (_authorInfo?['name'] ?? 'U')[0].toUpperCase(),
-                                              style: TextStyle(
-                                                fontSize: 40,
-                                                fontWeight: FontWeight.bold,
-                                                color: textSecondary,
-                                              ),
-                                            ),
-                                          ),
-                                          errorWidget: (_, __, ___) => Center(
-                                            child: Text(
-                                              (_authorInfo?['name'] ?? 'U')[0].toUpperCase(),
-                                              style: TextStyle(
-                                                fontSize: 40,
-                                                fontWeight: FontWeight.bold,
-                                                color: textSecondary,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : Center(
-                                        child: Text(
-                                          (_authorInfo?['name'] ?? 'U')[0].toUpperCase(),
-                                          style: TextStyle(
-                                            fontSize: 40,
-                                            fontWeight: FontWeight.bold,
-                                            color: textSecondary,
-                                          ),
-                                        ),
-                                      ),
                               ),
                               const SizedBox(height: 16),
                               
                               // Author Name
                               Text(
-                                _authorInfo?['name'] ?? 'Unknown Author',
+                                displayName ?? context.tr('unknown_author'),
                                 style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.bold,
@@ -260,10 +188,12 @@ class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
                                   const SizedBox(width: 12),
                                   
                                   // Average rating
-                                  if (_recipes.where((r) => r.ratingCount > 0).isNotEmpty)
+                                  if (_recipes.any((r) => r.ratingCount > 0))
                                     _StatChip(
                                       icon: Icons.star_rounded,
-                                      label: '${_authorAverageRating.toStringAsFixed(1)} avg',
+                                      label: context.tr('author_avg_rating', params: {
+                                        'rating': _authorAverageRating.toStringAsFixed(1),
+                                      }),
                                       isRating: true,
                                     ),
                                 ],
@@ -278,7 +208,7 @@ class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                           child: Text(
-                            '${context.tr('recipes_by')} ${_authorInfo?['name'] ?? context.tr('this_author')}',
+                            '${context.tr('recipes_by')} ${displayName ?? context.tr('this_author')}',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -311,7 +241,7 @@ class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
                       // Bottom padding
                       SliverPadding(
                         padding: EdgeInsets.only(
-                          bottom: 100 + MediaQuery.of(context).padding.bottom,
+                          bottom: 100 + MediaQuery.paddingOf(context).bottom,
                         ),
                       ),
                     ],
@@ -375,12 +305,11 @@ class _RecipeCard extends StatelessWidget {
     final cardColor = AppColors.recipeSurface(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final borderColor = AppColors.recipeBorderColor(context);
 
     return GestureDetector(
       onTap: () {
         // Use /recipe/ route (outside ShellRoute) to avoid navigation conflicts
-        context.push('/recipe/${recipe.id}');
+        context.push('/recipe/${recipe.id}', extra: recipe);
       },
       child: Container(
         clipBehavior: Clip.antiAlias,
@@ -399,6 +328,10 @@ class _RecipeCard extends StatelessWidget {
                   CachedNetworkImage(
                     imageUrl: recipe.imageUrl,
                     fit: BoxFit.cover,
+                    memCacheWidth: (MediaQuery.sizeOf(context).width /
+                            2 *
+                            MediaQuery.devicePixelRatioOf(context))
+                        .round(),
                     placeholder: (context, url) => Container(
                       color: AppColors.recipeInput(context),
                       child: Center(

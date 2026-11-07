@@ -1,22 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/data/services/recipe_service.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/author_avatar.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_state_views.dart';
+import 'package:shoply/presentation/state/recipes_provider.dart';
 
-/// Provider for top authors/creators
-final creatorsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  return RecipeService().getTopAuthors(limit: 50);
+/// All recipe authors, ranked, derived from the app-wide recipe list (no
+/// extra download). The page shows the top 50 and searches all of them.
+final creatorsProvider =
+    FutureProvider.autoDispose<List<RecipeAuthorSummary>>((ref) async {
+  return topAuthorsFrom(await ref.watch(recipesProvider.future));
 });
 
-/// Provider for author search
-final authorSearchProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, query) async {
-  if (query.isEmpty) return [];
-  return RecipeService().searchAuthors(query);
-});
+const _maxListedCreators = 50;
 
 /// Screen for browsing recipe creators/authors
 class CreatorsScreen extends ConsumerStatefulWidget {
@@ -28,13 +30,28 @@ class CreatorsScreen extends ConsumerStatefulWidget {
 
 class _CreatorsScreenState extends ConsumerState<CreatorsScreen> {
   final _searchController = TextEditingController();
+  Timer? _searchDebounce;
   String _searchQuery = '';
   bool _isSearching = false;
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _setQuery(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _searchQuery = value.trim());
+    });
+  }
+
+  void _clearQuery() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    _searchQuery = '';
   }
 
   @override
@@ -43,9 +60,12 @@ class _CreatorsScreenState extends ConsumerState<CreatorsScreen> {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
     
-    final creatorsAsync = _searchQuery.isEmpty
-        ? ref.watch(creatorsProvider)
-        : ref.watch(authorSearchProvider(_searchQuery));
+    final query = _searchQuery.toLowerCase();
+    final creatorsAsync = ref.watch(creatorsProvider).whenData(
+          (all) => query.isEmpty
+              ? all.take(_maxListedCreators).toList()
+              : all.where((a) => a.name.toLowerCase().contains(query)).toList(),
+        );
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -63,9 +83,7 @@ class _CreatorsScreenState extends ConsumerState<CreatorsScreen> {
                   border: InputBorder.none,
                 ),
                 style: TextStyle(color: textPrimary),
-                onChanged: (value) {
-                  setState(() => _searchQuery = value);
-                },
+                onChanged: _setQuery,
               )
             : Text(
                 context.tr('creators'),
@@ -81,8 +99,7 @@ class _CreatorsScreenState extends ConsumerState<CreatorsScreen> {
             if (_isSearching) {
               setState(() {
                 _isSearching = false;
-                _searchQuery = '';
-                _searchController.clear();
+                _clearQuery();
               });
             } else {
               context.pop();
@@ -100,31 +117,14 @@ class _CreatorsScreenState extends ConsumerState<CreatorsScreen> {
           if (_isSearching && _searchQuery.isNotEmpty)
             IconButton(
               icon: Icon(Icons.close_rounded, color: textPrimary),
-              onPressed: () {
-                setState(() {
-                  _searchQuery = '';
-                  _searchController.clear();
-                });
-              },
+              onPressed: () => setState(_clearQuery),
             ),
         ],
       ),
       body: creatorsAsync.when(
         loading: () => const Center(child: CupertinoActivityIndicator()),
-        error: (error, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text('${context.tr('error_loading_recipes')}: $error'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(creatorsProvider),
-                child: Text(context.tr('retry')),
-              ),
-            ],
-          ),
+        error: (_, __) => RecipeErrorView(
+          onRetry: () => ref.invalidate(recipesProvider),
         ),
         data: (creators) => creators.isEmpty
             ? _buildEmptyState(context, _searchQuery.isNotEmpty)
@@ -134,29 +134,27 @@ class _CreatorsScreenState extends ConsumerState<CreatorsScreen> {
                 ),
                 slivers: [
                   CupertinoSliverRefreshControl(
-                    onRefresh: () async {
-                      ref.invalidate(creatorsProvider);
-                    },
+                    onRefresh: () async => ref.invalidate(recipesProvider),
                   ),
                   SliverPadding(
                     padding: EdgeInsets.only(
                       left: 16,
                       right: 16,
                       top: 16,
-                      bottom: 100 + MediaQuery.of(context).padding.bottom,
+                      bottom: 100 + MediaQuery.paddingOf(context).bottom,
                     ),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
                           final creator = creators[index];
                           return _CreatorCard(
-                            name: creator['authorName'] as String,
-                            avatarUrl: creator['authorAvatarUrl'] as String?,
-                            recipeCount: creator['recipeCount'] as int,
-                            averageRating: creator['averageRating'] as double? ?? 0.0,
+                            name: creator.name,
+                            avatarUrl: creator.avatarUrl,
+                            recipeCount: creator.recipeCount,
+                            averageRating: creator.averageRating,
                             onTap: () => context.push(
-                              '/author/${creator['authorId']}',
-                              extra: {'authorName': creator['authorName']},
+                              '/author/${creator.id}',
+                              extra: {'authorName': creator.name},
                             ),
                           );
                         },
@@ -171,42 +169,10 @@ class _CreatorsScreenState extends ConsumerState<CreatorsScreen> {
   }
 
   Widget _buildEmptyState(BuildContext context, bool isSearch) {
-    final textSecondary = AppColors.textSecondary(context);
-    
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isSearch ? Icons.search_off_rounded : Icons.people_outline_rounded,
-              size: 80,
-              color: textSecondary.withOpacity(0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              isSearch ? context.tr('no_creators_found') : context.tr('no_creators_yet'),
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: textSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isSearch
-                  ? context.tr('try_different_search')
-                  : context.tr('be_first_to_share'),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: textSecondary.withOpacity(0.7),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return RecipeEmptyView(
+      icon: isSearch ? Icons.search_off_rounded : Icons.people_outline_rounded,
+      title: context.tr(isSearch ? 'no_creators_found' : 'no_creators_yet'),
+      subtitle: context.tr(isSearch ? 'try_different_search' : 'be_first_to_share'),
     );
   }
 }
@@ -228,10 +194,8 @@ class _CreatorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cardColor = AppColors.recipeSurface(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final borderColor = AppColors.recipeBorderColor(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
 
@@ -276,16 +240,17 @@ class _CreatorCard extends StatelessWidget {
                       color: cardBgColor,
                     ),
                     padding: const EdgeInsets.all(2),
-                    child: avatarUrl != null
-                        ? ClipOval(
-                            child: CachedNetworkImage(
-                              imageUrl: avatarUrl!,
-                              fit: BoxFit.cover,
-                              placeholder: (_, __) => _buildInitial(textSecondary),
-                              errorWidget: (_, __, ___) => _buildInitial(textSecondary),
-                            ),
-                          )
-                        : _buildInitial(textSecondary),
+                    child: AuthorAvatar(
+                      name: name,
+                      avatarUrl: avatarUrl,
+                      size: 52,
+                      backgroundColor: Colors.white,
+                      initialStyle: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.recipeAccent,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -376,25 +341,6 @@ class _CreatorCard extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInitial(Color textColor) {
-    return Container(
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white,
-      ),
-      child: Center(
-        child: Text(
-          name.isNotEmpty ? name[0].toUpperCase() : '?',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: AppColors.recipeAccent,
           ),
         ),
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
 
 /// Interactive 5-star rating widget
 /// Supports:
@@ -148,7 +149,7 @@ class CompactStarRating extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            'No ratings yet',
+            context.tr('no_ratings_yet'),
             style: TextStyle(
               fontSize: starSize * 0.85,
               color: Colors.grey[600],
@@ -248,7 +249,10 @@ class LargeStarRating extends StatelessWidget {
                   showCount: false,
                 ),
                 Text(
-                  '$ratingCount rating${ratingCount == 1 ? '' : 's'}',
+                  ratingCount == 1
+                      ? context.tr('ratings_count_one')
+                      : context.tr('ratings_count',
+                          params: {'count': '$ratingCount'}),
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -261,7 +265,7 @@ class LargeStarRating extends StatelessWidget {
         const SizedBox(height: 16),
         // User rating section - always show rating widget
         Text(
-          userRating == null ? 'Rate this recipe:' : 'Your rating:',
+          context.tr(userRating == null ? 'rate_this_recipe' : 'your_rating'),
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,

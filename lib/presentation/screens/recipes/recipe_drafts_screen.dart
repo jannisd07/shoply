@@ -7,6 +7,7 @@ import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/data/models/recipe_draft.dart';
 import 'package:shoply/data/services/recipe_draft_service.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/screens/recipes/recipe_draft_images.dart';
 
 class RecipeDraftsScreen extends StatefulWidget {
   const RecipeDraftsScreen({super.key});
@@ -28,7 +29,15 @@ class _RecipeDraftsScreenState extends State<RecipeDraftsScreen> {
 
   Future<void> _loadDrafts() async {
     setState(() => _isLoading = true);
-    final drafts = await _draftService.getDrafts();
+    final stored = await _draftService.getDrafts();
+    // Point each draft at where its photo lives now (the app container
+    // path changes across updates).
+    final drafts = await Future.wait(stored.map((draft) async {
+      final image = await RecipeDraftImages.resolve(draft.localImagePath);
+      return image?.path == draft.localImagePath
+          ? draft
+          : draft.copyWith(localImagePath: image?.path);
+    }));
     if (mounted) {
       setState(() {
         _drafts = drafts;
@@ -59,6 +68,7 @@ class _RecipeDraftsScreenState extends State<RecipeDraftsScreen> {
 
     if (confirmed == true) {
       await _draftService.deleteDraft(draft.id);
+      await RecipeDraftImages.delete(draft.localImagePath);
       _loadDrafts();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
