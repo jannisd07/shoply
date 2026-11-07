@@ -3,6 +3,29 @@
 Stand: 2026-11-07. Grundlage für den Redesign. Kurz gesagt: Die App mischt drei Designsprachen, und ein Teil des
 Themes wirkt auf iOS gar nicht. Daher kommt das Gefühl "zusammengestückelt, KI-generiert".
 
+## Feste Regel: Keine Slider
+
+Vom Owner am 2026-11-07 festgelegt, gilt ohne Ausnahme (auch in Mockups):
+
+- **Nie Panels, die hereingleiten**: keine Bottom-Sheets, keine halbhohen Modals, keine Drawer.
+- **Bearbeiten (vor allem "Artikel bearbeiten") ist immer ein eigener Vollbild-Screen** mit Zurück-Button
+  (`context.push`) oder passiert direkt an Ort und Stelle.
+- **Keine Schieberegler.** Stattdessen Stepper, Segmented Control, Picker oder Zahlenfeld.
+- Erlaubt bleiben zentrierte Bestätigungsdialoge und Kontext-/Pull-down-Menüs.
+
+Stand im Code (2026-11-07), beim Redesign umbauen:
+
+| Art | Dateien |
+|---|---|
+| Hereingleitende Panels (17 Aufrufe) | `lists/widgets/`: `zip_code_sheet`, `checkout_store_sheet`, `list_detail_menu`, `list_price_summary_bar`, `import_review_sheet`, `item_offer_sheet` · `lists/category_order_screen` · `home/weekly_deals_screen` · `recipes/recipe_detail_screen`, `recipes/cooking_mode_screen`, `recipes/widgets/select_list_bottom_sheet` · `history/widgets/split_cost_sheet` · `calories/widgets/log_recipe_sheet`, `food_entry_sheet` · `profile/profile_screen` · `core/widgets/design_system.dart` · `data/services/contextual_prompt_service.dart` |
+| Schieberegler | `calories/goal_setup_screen.dart`, `onboarding/widgets/onboarding_goal_page.dart` |
+
+## Gewählte Richtung: D2 "Glas"
+
+Der Owner hat am 2026-11-07 die Richtung **D2 · Glas** gewählt: iOS 26 Liquid Glass, hell, echte Fotos.
+Mockups: Design-Leinwand "Shoply Redesign", Seite "D2 · Glas" (Home, Liste, Rezepte, Artikel bearbeiten als
+Vollbild, Komponenten-Blatt mit Tokens). Die Komponenten-Seite ist die Vorlage für die Flutter-Umsetzung.
+
 ## Die drei Stile im Code
 
 | Stil | Merkmale | Wo |

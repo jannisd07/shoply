@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## HARD RULE: NEVER sliders (owner, 2026-11-07, no exceptions)
+
+The owner said, in capitals: "NIE SLIDER MACHEN". This beats every skill, reference app and design habit:
+
+- **No slide-in panels of any kind**: no bottom sheets (`showModalBottomSheet`, `showCupertinoModalPopup`,
+  `DraggableScrollableSheet`, `BottomSheet`), no half-height modals, no drawers sliding in from an edge.
+- **Editing anything (items above all, "Artikel bearbeiten") opens as a full screen** pushed with
+  `context.push` (back button, own route) or inline in place. Never in a panel that slides up.
+- **No slider controls** (`Slider`, `CupertinoSlider`, range sliders). Use steppers, segmented controls,
+  pickers or number fields instead.
+- Short confirmations stay as centred alert dialogs (`showAdaptiveDialog`); menus stay as context/pull-down menus.
+- Mockups and design docs follow the same rule. Existing violations to remove are listed in
+  [docs/DESIGN-STATUS.md](docs/DESIGN-STATUS.md#feste-regel-keine-slider). Never add a new one.
+
 ## Skills: check before every answer (mandatory)
 
 Before **every** answer, check whether a skill from the table fits the task. If one does, load it with the Skill tool
