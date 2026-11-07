@@ -19,6 +19,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/core/utils/diet_checker.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/data/services/list_import_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -42,6 +43,13 @@ import 'package:shoply/presentation/screens/lists/list_settings_screen.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/screens/lists/widgets/add_item_composer.dart';
+import 'package:shoply/data/services/checkout_store_resolver.dart';
+import 'package:shoply/data/services/store_locator_service.dart';
+import 'package:shoply/data/services/user_location_service.dart';
+import 'package:shoply/presentation/screens/lists/widgets/checkout_store_sheet.dart';
+import 'package:shoply/presentation/screens/lists/widgets/attachment_sheet.dart';
+import 'package:shoply/presentation/screens/lists/widgets/import_review_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/item_offer_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_price_summary_bar.dart';
@@ -94,6 +102,37 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
   // Key counter for forcing popup menu rebuild after navigation
   int _popupMenuKeyCounter = 0;
+
+  // True once the push transition has fully settled. Heavy work (refresh
+  // fetches, the ML recommendations section) waits for this so the
+  // Cupertino push renders its frames without competing rebuilds — the
+  // first frame comes from the ItemsNotifier's cached/streamed state.
+  bool _routeTransitionDone = false;
+  Animation<double>? _routeAnimation;
+
+  // Morph origin for the attachment sheet ("+" button in the composer).
+  final GlobalKey _plusButtonKey = GlobalKey();
+
+  /// Measured height of the floating bottom bar (price summary / offer
+  /// suggestions + composer), used as the list's bottom inset so nothing
+  /// hides behind it. Seeded with a sensible value so the first frame is
+  /// already close; [_syncBottomBarHeight] corrects it after layout.
+  final GlobalKey _bottomBarKey = GlobalKey();
+  double _bottomBarHeight = 110;
+
+  void _syncBottomBarHeight() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box =
+          _bottomBarKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      // Bar height plus the gap it floats above the safe area.
+      final h = box.size.height + 14;
+      if ((h - _bottomBarHeight).abs() > 1) {
+        setState(() => _bottomBarHeight = h);
+      }
+    });
+  }
 
   // Review prompt state — ensures we only fire rating prompt once per session
   // when the user completes an entire list (all items checked off).
@@ -228,24 +267,54 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     super.initState();
     _listName = widget.listName;
     _searchController.addListener(_onSearchChangedForOffers);
-    // Reload items when entering the list
+    // Defer all non-critical work until the push transition has settled:
+    // the ItemsNotifier already loads (and realtime-streams) on first
+    // watch, so the first frame renders from that state and nothing below
+    // competes with the transition for frame time.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(itemsNotifierProvider(widget.listId).notifier).loadItems();
-      // Track this list as last accessed
-      ref
-          .read(lastAccessedListProvider.notifier)
-          .setLastAccessedList(widget.listId);
-      _markAsRead(); // Mark as read & clear badge
-
-      // Notify tutorial that list was opened
-      DynamicTutorialService.instance.onListOpened();
-
-      // Load custom categories
-      _loadCustomCategories();
-
-      // Load list owner info
-      _loadListOwner();
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      final animation = route?.animation;
+      if (animation == null ||
+          animation.status == AnimationStatus.completed) {
+        _onRouteTransitionSettled();
+      } else {
+        _routeAnimation = animation;
+        animation.addStatusListener(_routeAnimationStatusListener);
+      }
     });
+  }
+
+  void _routeAnimationStatusListener(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      _routeAnimation?.removeStatusListener(_routeAnimationStatusListener);
+      _routeAnimation = null;
+      _onRouteTransitionSettled();
+    }
+  }
+
+  /// Runs once the screen is fully on screen (push transition settled).
+  void _onRouteTransitionSettled() {
+    if (!mounted || _routeTransitionDone) return;
+    setState(() => _routeTransitionDone = true);
+
+    // Refresh items (constructor load may already be in flight — loadItems
+    // keeps showing current data while refreshing).
+    ref.read(itemsNotifierProvider(widget.listId).notifier).loadItems();
+    // Track this list as last accessed
+    ref
+        .read(lastAccessedListProvider.notifier)
+        .setLastAccessedList(widget.listId);
+    _markAsRead(); // Mark as read & clear badge
+
+    // Notify tutorial that list was opened
+    DynamicTutorialService.instance.onListOpened();
+
+    // Load custom categories
+    _loadCustomCategories();
+
+    // Load list owner info
+    _loadListOwner();
   }
 
   /// Debounces the add-bar text into [_offerQuery] (300ms) so live offer
@@ -311,6 +380,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
   @override
   void dispose() {
+    _routeAnimation?.removeStatusListener(_routeAnimationStatusListener);
     _autoScrollTimer?.cancel();
     _offerQueryDebounce?.cancel();
     _searchController.removeListener(_onSearchChangedForOffers);
@@ -362,6 +432,13 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         backgroundColor: Colors.transparent,
+        // Stated here because AppBar otherwise derives it from
+        // backgroundColor — and `transparent` estimates as *dark*, which put
+        // white clock and Wi-Fi/battery icons on this light screen. Setting
+        // it on the widget takes precedence over theme and estimation alike.
+        systemOverlayStyle: Theme.of(context).brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
         title: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,27 +463,32 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
               ),
           ],
         ),
+        leadingWidth: 60,
         leading: PlatformInfo.isIOS26OrHigher()
             ? Padding(
                 padding: const EdgeInsets.only(left: 12),
                 child: Center(
+                  // Messages-metric nav button: 40pt glass circle inside a
+                  // >=44pt hit target.
                   child: SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: AdaptiveButton.icon(
-                      icon: Icons.chevron_left,
-                      style: AdaptiveButtonStyle.glass,
-                      size: AdaptiveButtonSize.small,
-                      minSize: const Size(36, 36),
-                      padding: EdgeInsets.zero,
-                      useSmoothRectangleBorder: false,
-                      onPressed: () {
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        } else {
-                          context.go('/home');
-                        }
-                      },
+                    width: 44,
+                    height: 44,
+                    child: Center(
+                      child: AdaptiveButton.icon(
+                        icon: Icons.chevron_left,
+                        style: AdaptiveButtonStyle.glass,
+                        size: AdaptiveButtonSize.small,
+                        minSize: const Size(40, 40),
+                        padding: EdgeInsets.zero,
+                        useSmoothRectangleBorder: false,
+                        onPressed: () {
+                          if (Navigator.of(context).canPop()) {
+                            Navigator.of(context).pop();
+                          } else {
+                            context.go('/home');
+                          }
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -429,7 +511,8 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
               child: AdaptivePopupMenuButton.icon<int>(
                 key: ValueKey('settings_popup_$_popupMenuKeyCounter'),
                 icon: 'ellipsis.circle',
-                size: 36,
+                // Messages-metric: 40pt glass circle (was 36 — too small).
+                size: 40,
                 buttonStyle: PopupButtonStyle.glass,
                 items: [
                   AdaptivePopupMenuItem<int>(
@@ -558,17 +641,22 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           if (PlatformInfo.isIOS26OrHigher())
             Padding(
               padding: const EdgeInsets.only(right: 12),
+              // 36pt visual inside a 44pt hit target, matching the back
+              // button. The box used to be 36 as well, leaving this the one
+              // navigation control below Apple's minimum touch size.
               child: SizedBox(
-                width: 36,
-                height: 36,
-                child: AdaptiveButton.icon(
-                  icon: Icons.ios_share,
-                  style: AdaptiveButtonStyle.glass,
-                  size: AdaptiveButtonSize.small,
-                  minSize: const Size(36, 36),
-                  padding: EdgeInsets.zero,
-                  useSmoothRectangleBorder: false,
-                  onPressed: _showShareDialog,
+                width: 44,
+                height: 44,
+                child: Center(
+                  child: AdaptiveButton.icon(
+                    icon: Icons.ios_share,
+                    style: AdaptiveButtonStyle.glass,
+                    size: AdaptiveButtonSize.small,
+                    minSize: const Size(36, 36),
+                    padding: EdgeInsets.zero,
+                    useSmoothRectangleBorder: false,
+                    onPressed: _showShareDialog,
+                  ),
                 ),
               ),
             )
@@ -640,30 +728,42 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                 // Group items by category
                 final groupedItems = _groupItemsByCategory(items);
 
-                return NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    // Keyboard schließen beim Scrollen
-                    if (notification is ScrollStartNotification) {
-                      FocusScope.of(context).unfocus();
-                    }
-                    return false;
-                  },
-                  child: ListView.builder(
+                // Only the padding depends on the keyboard inset — scoped
+                // via a Builder so keyboard frames re-layout the list's
+                // visible rows (content stays reachable above the composer)
+                // without rebuilding the whole screen. Dismissal itself is
+                // handled by keyboardDismissBehavior.onDrag alone; the old
+                // unfocus-on-scroll-start listener fought it and forced a
+                // full keyboard animation on every scroll.
+                return Builder(
+                  builder: (context) => ListView.builder(
                     controller: _scrollController,
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: EdgeInsets.only(
                       left: AppDimensions.screenHorizontalPadding,
                       right: AppDimensions.screenHorizontalPadding,
-                      // Safe area + floating add bar height
-                      bottom: MediaQuery.of(context).padding.bottom + 96,
+                      // Safe area / keyboard + the floating bar's *measured*
+                      // height. This used to be a hardcoded 96, which stopped
+                      // being enough once the bar grew to price-summary +
+                      // composer (44pt hit target): the last rows disappeared
+                      // behind it. Measuring keeps it right through Dynamic
+                      // Type, a wrapped composer and future additions.
+                      bottom: MediaQuery.viewInsetsOf(context).bottom +
+                          MediaQuery.paddingOf(context).bottom +
+                          _bottomBarHeight,
                     ),
                     itemCount:
                         groupedItems.length +
                         2, // +1 for recommendations, +1 for Complete Button
                     itemBuilder: (context, index) {
-                      // ML-powered AI Recommendations Section at the top
+                      // ML-powered AI Recommendations Section at the top —
+                      // deferred until the push transition settled so its
+                      // provider work never competes with transition frames.
                       if (index == 0) {
+                        if (!_routeTransitionDone) {
+                          return const SizedBox.shrink();
+                        }
                         return MLRecommendationsSection(
                           listId: widget.listId,
                           onAddItem: (itemName, category, quantity) {
@@ -750,158 +850,150 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             ],
           ),
 
-          // Floating paper add bar hugging the bottom edge (no navbar).
-          Positioned(
-            left: 10,
-            right: 10,
-            bottom: MediaQuery.of(context).viewInsets.bottom > 0
-                ? 8
-                : (MediaQuery.of(context).padding.bottom > 20
-                      ? MediaQuery.of(context).padding.bottom - 8
-                      : 12),
-            child: ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _searchController,
-              builder: (context, value, _) {
-                final liveQuery = value.text.trim();
-                final isSearching = liveQuery.length >= 2;
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // While searching, show live offer suggestions (debounced
-                    // query so fast typing doesn't fire an API call per
-                    // keystroke); otherwise the basket price-comparison
-                    // summary. Never both stacked.
-                    if (isSearching)
-                      ValueListenableBuilder<String>(
-                        valueListenable: _offerQuery,
-                        builder: (context, query, _) {
-                          if (query.length < 2) {
-                            return const SizedBox.shrink();
-                          }
-                          return OfferSuggestionsBar(
-                            query: query,
-                            onSelect: _addItemFromOffer,
-                          );
-                        },
-                      )
-                    else if (MediaQuery.of(context).viewInsets.bottom == 0)
-                      Consumer(
-                        builder: (context, ref, _) {
-                          final items = ref
-                                  .watch(itemsNotifierProvider(widget.listId))
-                                  .valueOrNull ??
-                              const <ShoppingItemModel>[];
-                          return ListPriceSummaryBar(
-                            listId: widget.listId,
-                            items: items,
-                          );
-                        },
-                      ),
-                    _buildPaperAddBar(context),
-                  ],
-                );
-              },
-            ),
+          // Messages-style composer riding the keyboard. Wrapped in its own
+          // Builder so ONLY this subtree depends on the per-frame keyboard
+          // inset — the engine animates viewInsets in lockstep with the iOS
+          // keyboard, so positioning the bar at viewInsets.bottom directly
+          // (no second animation) moves it on the exact same curve/frames.
+          // The max() keeps the crossover between "resting above the home
+          // indicator" and "riding the keyboard" continuous — no jump when
+          // the inset passes zero, and a hardware keyboard (inset stays 0)
+          // leaves the bar docked at the bottom with no gap.
+          Builder(
+            builder: (barContext) {
+              final keyboardInset =
+                  MediaQuery.viewInsetsOf(barContext).bottom;
+              final safeBottom = MediaQuery.paddingOf(barContext).bottom;
+              final restingBottom = safeBottom > 20 ? safeBottom - 8 : 12.0;
+              final riding = keyboardInset + 8;
+              return Positioned(
+                left: 10,
+                right: 10,
+                bottom: riding > restingBottom ? riding : restingBottom,
+                child: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchController,
+                  builder: (context, value, _) {
+                    final liveQuery = value.text.trim();
+                    final isSearching = liveQuery.length >= 2;
+                    // Re-measure whenever the bar's composition changes
+                    // (suggestions appear, composer wraps, …).
+                    _syncBottomBarHeight();
+                    return Column(
+                      key: _bottomBarKey,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // While searching, show live offer suggestions
+                        // (debounced query so fast typing doesn't fire an
+                        // API call per keystroke); otherwise the basket
+                        // price-comparison summary. Never both stacked.
+                        if (isSearching)
+                          ValueListenableBuilder<String>(
+                            valueListenable: _offerQuery,
+                            builder: (context, query, _) {
+                              if (query.length < 2) {
+                                return const SizedBox.shrink();
+                              }
+                              return OfferSuggestionsBar(
+                                query: query,
+                                onSelect: _addItemFromOffer,
+                              );
+                            },
+                          )
+                        else if (keyboardInset == 0)
+                          Consumer(
+                            builder: (context, ref, _) {
+                              final items = ref
+                                      .watch(itemsNotifierProvider(
+                                          widget.listId))
+                                      .valueOrNull ??
+                                  const <ShoppingItemModel>[];
+                              return ListPriceSummaryBar(
+                                listId: widget.listId,
+                                items: items,
+                              );
+                            },
+                          ),
+                        const SizedBox(height: 6),
+                        KeyedSubtree(
+                          key: DynamicTutorialService
+                              .instance.addItemInputKey,
+                          child: AddItemComposer(
+                            controller: _searchController,
+                            focusNode: _focusNode,
+                            plusButtonKey: _plusButtonKey,
+                            onSubmit: _quickAddItem,
+                            onPlusTap: _openAttachmentSheet,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  /// Paper-style floating add bar: plus, text field, AI-sort hint, action.
-  Widget _buildPaperAddBar(BuildContext context) {
-    return Container(
-      key: DynamicTutorialService.instance.addItemInputKey,
-      height: 54,
-      padding: const EdgeInsets.only(left: 18, right: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(27),
-        border: Border.all(color: AppColors.border(context)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.add, size: 18, color: AppColors.textSecondary(context)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              focusNode: _focusNode,
-              autofocus: false,
-              textInputAction: TextInputAction.done,
-              textCapitalization: TextCapitalization.sentences,
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textPrimary(context),
-              ),
-              decoration: InputDecoration(
-                hintText: AppLocalizations.of(context).addItem,
-                hintStyle: TextStyle(
-                  color: AppColors.textTertiary(context),
-                  fontSize: 14,
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
-                  final itemName = value.trim();
-                  _searchController
-                      .clear(); // Clear FIRST to prevent re-triggering
-                  _quickAddItem(itemName);
-                  // Keep focus in text field after adding
-                  _focusNode.requestFocus();
-                }
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.auto_awesome,
-                  size: 12,
-                  color: AppColors.accentColor(context),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  context.tr('ai_sorts_label'),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.accentColor(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              final prefill = _searchController.text.trim();
-              _searchController.clear();
-              _focusNode.unfocus();
-              _showAddItemDialog(context, prefill: prefill);
-            },
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-              child: Icon(
-                Icons.mic_none,
-                size: 18,
-                color: AppColors.textSecondary(context),
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
+  /// "+" button → attachment sheet → AI extraction → review → import.
+  /// Sheets are presented strictly sequentially (each awaited to full
+  /// dismissal before the next appears) so nothing ever stacks or flickers.
+  Future<void> _openAttachmentSheet() async {
+    _focusNode.unfocus();
+    final result = await showAttachmentSheet(
+      context,
+      plusButtonKey: _plusButtonKey,
     );
+    if (result == null || !mounted) return;
+
+    final reviewed = await showImportReviewSheet(context, result: result);
+    if (reviewed == null || reviewed.isEmpty || !mounted) return;
+
+    await _importReviewedItems(reviewed);
   }
+
+  Future<void> _importReviewedItems(List<ExtractedListItem> reviewed) async {
+    final toImport = [
+      for (final item in reviewed)
+        (
+          name: item.name,
+          quantity: item.quantity ?? 1.0,
+          unit: item.unit,
+        ),
+    ];
+    try {
+      await ref
+          .read(itemsNotifierProvider(widget.listId).notifier)
+          .importItems(toImport);
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr(
+              'import_success',
+              params: {'count': '${toImport.length}'},
+            ),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      // Optimistic insert already rolled back — offer a retry.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('import_failed')),
+          action: SnackBarAction(
+            label: context.tr('import_retry'),
+            onPressed: () => _importReviewedItems(reviewed),
+          ),
+        ),
+      );
+    }
+  }
+
 
   /// Build a category section with drag target for receiving items
   Widget _buildCategorySection({
@@ -2397,6 +2489,34 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     }
   }
 
+  /// Which shop the trip happened in, or null when it stays unknown.
+  ///
+  /// Never blocks the checkout: any failure (no GPS fix, Overpass down,
+  /// user skips) returns null and the trip is recorded without a shop.
+  Future<String?> _resolveCheckoutStore(BuildContext context) async {
+    StoreResolution resolution;
+    try {
+      final coords = await UserLocationService.instance.getCoordinates();
+      if (coords == null) {
+        resolution = const StoreUnknown(locationDenied: true);
+      } else {
+        final stores = await StoreLocatorService.instance.findNearbyStores(
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        );
+        resolution = CheckoutStoreResolver.resolve(stores);
+      }
+    } catch (_) {
+      resolution = const StoreUnknown();
+    }
+
+    // Unambiguous: record it without interrupting the checkout at all.
+    if (resolution is StoreResolved) return resolution.store.displayName;
+
+    if (!context.mounted) return null;
+    return showCheckoutStoreSheet(context, resolution: resolution);
+  }
+
   Future<void> _completeShoppingTrip(
     BuildContext context,
     WidgetRef ref,
@@ -2456,6 +2576,19 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
 
     if (!confirmed) return;
 
+    // Work out which shop this was, so purchase stats learn *where* you buy
+    // what. Resolves silently from GPS when unambiguous; only asks when it
+    // genuinely cannot tell (shopping centre, or no location access).
+    final storeName = await _resolveCheckoutStore(context);
+    final itemsForHistory = storeName == null
+        ? checkedItems
+        : [
+            for (final item in checkedItems)
+              item.priceRetailer == null || item.priceRetailer!.isEmpty
+                  ? item.copyWith(priceRetailer: storeName)
+                  : item,
+          ];
+
     try {
       // Save only checked items to history. Purchase tracking (for the
       // "you usually buy X every N days" nudges) happens inside this call —
@@ -2465,7 +2598,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
       final historyEntry = await historyService.completeShoppingTrip(
         listId: widget.listId,
         listName: widget.listName,
-        items: checkedItems,
+        items: itemsForHistory,
       );
 
       // Delete only checked items from the list

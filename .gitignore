@@ -91,3 +91,12 @@ ios/Runner/Configuration.storekit
 scripts/*.log
 test_reports/
 flutter_*.log
+
+# Xcode scratch that appears when switching toolchains or opening the project
+ios/Runner.xcodeproj/**/xcschemes/*.backup
+ios/Runner.xcodeproj/xcshareddata/xcodecloud/
+ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# `build` may be a symlink to a non-synced location on machines where the
+# project sits in iCloud Drive; the trailing-slash pattern misses that.
+build

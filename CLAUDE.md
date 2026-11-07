@@ -51,7 +51,7 @@ user pushes are blocked, and do not retry.
 
 - **Bundle ID**: `com.dominik.shoply`
 - **Current version**: see `version:` in `pubspec.yaml` (do not trust hardcoded versions in docs)
-- **Firebase project**: `shoplyai-1554e`
+- **Firebase project**: `shoply-92f28` (matches the `GoogleService-Info.plist` in use; sender id `901497821159`, the same number as the OAuth client ids in `env.dart`)
 
 ## Build & Run Commands
 

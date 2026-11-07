@@ -15,7 +15,10 @@ dependencies:
 
   # UI & Icons
   cupertino_icons: ^1.0.8
-  lucide_icons: ^0.257.0
+  # lucide_icons (0.257.0) is unmaintained and no longer compiles: it extends
+  # IconData, which Flutter made a final class. lucide_icons_flutter is the
+  # maintained fork with the same LucideIcons.<name> API.
+  lucide_icons_flutter: ^3.1.15
   flutter_svg: ^2.0.9
   adaptive_platform_ui: ^0.1.99  # iOS 26 Liquid Glass styling
   # liquid_glass_renderer removed; AdaptiveAlertDialog handles native iOS26 styling

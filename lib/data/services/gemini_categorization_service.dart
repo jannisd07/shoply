@@ -436,7 +436,7 @@ Return ONLY the JSON object, no other text:''';
         await _saveCache();
         
         return {
-          'name': result['name'] ?? input,
+          'name': sanitizeParsedName(input, result['name'] as String?),
           'amount': (result['amount'] as num?)?.toDouble() ?? 1.0,
           'unit': result['unit'] ?? 'pcs',
         };
@@ -448,6 +448,37 @@ Return ONLY the JSON object, no other text:''';
     return _fallbackParseIngredient(input);
   }
   
+  /// Guard against the model *inventing* words while parsing.
+  ///
+  /// Parsing an item is an extraction task: strip the quantity and unit,
+  /// keep the product. The model is not asked to expand or rephrase, but it
+  /// sometimes does — a real list here ended up with "Tiefkühlerbsen erbsen"
+  /// stored in the database, and that name then travels into price lookups
+  /// and purchase statistics.
+  ///
+  /// The invariant is therefore that the result must be a *shortening* of
+  /// what the user typed: with punctuation, spaces and case removed, it has
+  /// to appear inside the input. Word-level checks are not enough — "erbsen"
+  /// is a substring of "Tiefkühlerbsen", so the duplicate slipped through a
+  /// per-word test. Comparing the whole squashed string catches it.
+  ///
+  /// Anything else falls back to the typed name: an unparsed but honest name
+  /// is always better than a confident wrong one.
+  @visibleForTesting
+  static String sanitizeParsedName(String input, String? parsed) {
+    final candidate = parsed?.trim() ?? '';
+    if (candidate.isEmpty) return input;
+
+    String squash(String v) =>
+        v.toLowerCase().replaceAll(RegExp(r'[^a-z0-9äöüß]'), '');
+
+    final squashedInput = squash(input);
+    final squashedCandidate = squash(candidate);
+    if (squashedCandidate.isEmpty) return input;
+
+    return squashedInput.contains(squashedCandidate) ? candidate : input;
+  }
+
   /// Fallback ingredient parsing using regex patterns
   Map<String, dynamic> _fallbackParseIngredient(String input) {
     final patterns = [

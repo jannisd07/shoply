@@ -13,6 +13,7 @@ import 'package:shoply/data/services/product_classifier_service.dart';
 import 'package:shoply/data/services/gemini_categorization_service.dart';
 import 'package:shoply/data/services/analytics_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
+import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/data/services/fcm_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/notification_preferences_service.dart';
@@ -91,6 +92,11 @@ Future<void> _initializeServicesInBackground() async {
         debugPrint('⚠️ Firebase not configured: $e');
       }
     }
+
+    // Pull the offline recipe cache into memory early, so the recipes tab can
+    // paint from it in its first frame instead of waiting on its five network
+    // calls. Cheap (one SharedPreferences read) and independent of the rest.
+    unawaited(OfflineCacheService.instance.warmRecipes());
 
     // Native OAuth
     await NativeOAuthService.initialize();

@@ -11,6 +11,12 @@ class ItemPurchaseStats extends Equatable {
   final double? averageDaysBetween;
   final String? preferredCategory;
   final double? preferredQuantity;
+
+  /// Shop this item is bought at most often, once the `preferred_retailer`
+  /// column exists and has data. Null means "not known yet" — never treat a
+  /// missing value as "no preference", it usually just means the trips that
+  /// recorded it predate store detection.
+  final String? preferredRetailer;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -25,6 +31,7 @@ class ItemPurchaseStats extends Equatable {
     this.averageDaysBetween,
     this.preferredCategory,
     this.preferredQuantity,
+    this.preferredRetailer,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -50,6 +57,8 @@ class ItemPurchaseStats extends Equatable {
       averageDaysBetween: (json['average_days_between'] as num?)?.toDouble(),
       preferredCategory: json['preferred_category'] as String?,
       preferredQuantity: (json['preferred_quantity'] as num?)?.toDouble(),
+      // Read defensively: databases without the migration have no such key.
+      preferredRetailer: json['preferred_retailer'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -140,6 +149,7 @@ class ItemPurchaseStats extends Equatable {
         averageDaysBetween,
         preferredCategory,
         preferredQuantity,
+        preferredRetailer,
         createdAt,
         updatedAt,
       ];

@@ -15,6 +15,7 @@ import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/ingredient_substitution_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/saved_recipes_provider.dart';
+import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
 import 'package:shoply/presentation/state/recipes_provider.dart';
 import 'package:shoply/presentation/widgets/recipes/star_rating_widget.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/select_list_bottom_sheet.dart';
@@ -229,26 +230,21 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
             automaticallyImplyLeading: false,
             leading: Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: ClipOval(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-                      onPressed: () {
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        } else {
-                          context.go('/home');
-                        }
-                      },
-                    ),
-                  ),
+              // Real UIGlassEffect over the hero image, instead of a
+              // hand-rolled blur circle.
+              child: AdaptiveGlass(
+                isCircle: true,
+                opaqueColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white, size: 20),
+                  onPressed: () {
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    } else {
+                      context.go('/home');
+                    }
+                  },
                 ),
               ),
             ),
@@ -406,16 +402,18 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                   final isSaved = ref.watch(isRecipeSavedProvider(widget.recipeId));
                   return Container(
                     margin: const EdgeInsets.only(right: 4),
-                    child: ClipOval(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isSaved ? Colors.white : Colors.black.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                          ),
-                          child: IconButton(
+                    // Glass while unsaved; once saved it becomes a solid
+                    // white pill so the active state is unmistakable —
+                    // translucency reads as "off" at a glance.
+                    child: AdaptiveGlass(
+                      isCircle: true,
+                      opaqueColor: isSaved ? Colors.white : Colors.black54,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: isSaved ? Colors.white : Colors.transparent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
                             icon: Icon(
                               isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
                               color: isSaved ? Colors.black : Colors.white,
@@ -433,26 +431,17 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                           ),
                         ),
                       ),
-                    ),
                   );
                 },
               ),
               Container(
                 margin: const EdgeInsets.only(right: 8),
-                child: ClipOval(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.ios_share, color: Colors.white, size: 22),
-                        onPressed: _shareRecipe,
-                      ),
-                    ),
+                child: AdaptiveGlass(
+                  isCircle: true,
+                  opaqueColor: Colors.black54,
+                  child: IconButton(
+                    icon: const Icon(Icons.ios_share, color: Colors.white, size: 22),
+                    onPressed: _shareRecipe,
                   ),
                 ),
               ),

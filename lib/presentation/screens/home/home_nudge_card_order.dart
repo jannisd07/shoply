@@ -5,6 +5,7 @@
 enum HomeNudgeCardKind {
   split,
   avoRestock,
+  personalFlyer,
   calorieRecipe,
   priceComparison,
 }
@@ -12,6 +13,7 @@ enum HomeNudgeCardKind {
 const List<HomeNudgeCardKind> kDefaultHomeNudgeCardOrder = [
   HomeNudgeCardKind.split,
   HomeNudgeCardKind.avoRestock,
+  HomeNudgeCardKind.personalFlyer,
   HomeNudgeCardKind.calorieRecipe,
   HomeNudgeCardKind.priceComparison,
 ];
@@ -21,11 +23,17 @@ const List<HomeNudgeCardKind> kDefaultHomeNudgeCardOrder = [
 /// `discover_recipes` has no mapping — there's no recipe nudge card on the
 /// home screen today, so it's stored for future use without affecting
 /// order.
-const Map<String, HomeNudgeCardKind> kPriorityToHomeNudgeCard = {
-  'share_lists': HomeNudgeCardKind.split,
-  'stay_organized': HomeNudgeCardKind.avoRestock,
-  'eat_healthier': HomeNudgeCardKind.calorieRecipe,
-  'save_money': HomeNudgeCardKind.priceComparison,
+/// A priority can map to several cards: "save money" is served both by the
+/// basket comparison and by the personal flyer, and picking that priority
+/// should surface both rather than arbitrarily one.
+const Map<String, List<HomeNudgeCardKind>> kPriorityToHomeNudgeCard = {
+  'share_lists': [HomeNudgeCardKind.split],
+  'stay_organized': [HomeNudgeCardKind.avoRestock],
+  'eat_healthier': [HomeNudgeCardKind.calorieRecipe],
+  'save_money': [
+    HomeNudgeCardKind.personalFlyer,
+    HomeNudgeCardKind.priceComparison,
+  ],
 };
 
 /// Returns the home nudge cards in display order, given the user's
@@ -39,8 +47,7 @@ List<HomeNudgeCardKind> orderedHomeNudgeCards(Set<String> priorities) {
 
   final matchedCards = <HomeNudgeCardKind>{
     for (final priority in priorities)
-      if (kPriorityToHomeNudgeCard[priority] != null)
-        kPriorityToHomeNudgeCard[priority]!,
+      ...?kPriorityToHomeNudgeCard[priority],
   };
   if (matchedCards.isEmpty) return kDefaultHomeNudgeCardOrder;
 

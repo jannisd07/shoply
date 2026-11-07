@@ -33,9 +33,20 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
   /// reorder batch-write does not get overwritten mid-way.
   bool _isReordering = false;
 
-  ItemsNotifier(this._repository, this.listId) : super(const AsyncValue.loading()) {
+  /// Seeds from the warmed in-memory cache when one exists, so the detail
+  /// screen's very first frame is already populated instead of showing a
+  /// spinner until Supabase answers (stale-while-revalidate). [loadItems]
+  /// then reconciles with the server.
+  ItemsNotifier(this._repository, this.listId)
+      : super(_seed(listId)) {
     loadItems();
     _setupRealtimeSubscription();
+  }
+
+  static AsyncValue<List<ShoppingItemModel>> _seed(String listId) {
+    final cached = OfflineCacheService.instance.getCachedListItemsSync(listId);
+    if (cached == null) return const AsyncValue.loading();
+    return AsyncValue.data(cached);
   }
 
   void _setupRealtimeSubscription() {
@@ -164,6 +175,53 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
       await UnreadService().markAsRead(listId);
     } catch (error) {
       debugPrint('❌ [ITEMS_PROVIDER] Error in addItem: $error');
+      rethrow;
+    }
+  }
+
+  /// Batch-import extracted items (photo-import flow) with an optimistic
+  /// insert: the items appear in the list immediately, then reconcile with
+  /// the Supabase writes. On any write failure the optimistic state is
+  /// rolled back and the error rethrown so the caller can offer a retry.
+  Future<void> importItems(
+    List<({String name, double quantity, String? unit})> items,
+  ) async {
+    if (items.isEmpty) return;
+    final previous = state;
+    final now = DateTime.now();
+
+    final current = state.valueOrNull ?? const <ShoppingItemModel>[];
+    final optimistic = [
+      ...current,
+      for (var i = 0; i < items.length; i++)
+        ShoppingItemModel(
+          id: 'pending-import-$i-${now.microsecondsSinceEpoch}',
+          listId: listId,
+          name: items[i].name,
+          quantity: items[i].quantity,
+          unit: items[i].unit,
+          createdAt: now,
+          updatedAt: now,
+        ),
+    ];
+    state = AsyncValue.data(optimistic);
+
+    try {
+      for (final item in items) {
+        // autoParse off — quantity/unit were reviewed explicitly, don't let
+        // the name parser second-guess them.
+        await _repository.addItem(
+          listId: listId,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          autoParse: false,
+        );
+      }
+      await loadItems();
+      await UnreadService().markAsRead(listId);
+    } catch (error) {
+      state = previous;
       rethrow;
     }
   }

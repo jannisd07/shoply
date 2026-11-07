@@ -52,6 +52,12 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
       state = AsyncValue.data(lists);
       // Cache for offline use
       OfflineCacheService.instance.cacheLists(lists);
+      // Pull each list's cached items into memory while the user is still
+      // looking at the overview, so tapping a list can paint its contents in
+      // the first frame instead of waiting on SharedPreferences or Supabase.
+      unawaited(
+        OfflineCacheService.instance.warmListItems([for (final l in lists) l.id]),
+      );
       // Update widget with available lists for configuration
       _updateWidgetAvailableLists(lists);
       // Refresh the Quick-Add widget's frequently-bought-item suggestions

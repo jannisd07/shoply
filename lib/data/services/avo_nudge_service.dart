@@ -144,8 +144,13 @@ class AvoNudgeService {
   static const String _offerSnoozeKey = 'avo_offer_nudge_snoozed_until';
   static const String _offerCacheKey = 'avo_offer_nudges_cache_v1';
 
-  /// Minimum purchases before a rhythm is trusted.
-  static const int _minPurchases = 3;
+  /// Minimum purchases before an item can be suggested at all.
+  ///
+  /// Two is the mathematical floor: with a single purchase there is no
+  /// interval, so no rhythm can exist. Everything above that floor is a
+  /// matter of *ranking*, not exclusion — see [habitStrength]. Occasional
+  /// buys should still surface, just behind the staples.
+  static const int _minPurchases = 2;
 
   /// Rhythms outside this window are ignored (daily-ish to ~2 months).
   static const double _minAvgDays = 2;
@@ -198,7 +203,58 @@ class AvoNudgeService {
     return bestDay;
   }
 
-  /// Top [limit] restock suggestions, most overdue first.
+  /// How much this item looks like a habit rather than a one-off, 0..1.
+  ///
+  /// Two signals, because they mean different things:
+  ///
+  ///  * **How often it has been bought.** Two purchases give exactly one
+  ///    interval, which could be coincidence; twenty give a rhythm you can
+  ///    rely on. The curve saturates, so the difference between 2 and 6
+  ///    purchases matters far more than between 20 and 30.
+  ///  * **How tight the cadence is.** Something bought weekly is more part of
+  ///    the routine than something bought every seven weeks, even at equal
+  ///    counts.
+  ///
+  /// Never returns 0: a rarely-bought item stays eligible, it just ranks
+  /// below the staples. That is the whole point — excluding it would mean
+  /// never reminding anyone of the things they buy now and then.
+  @visibleForTesting
+  static double habitStrength({
+    required int purchaseCount,
+    required double averageDaysBetween,
+  }) {
+    // (n-1)/(n-1+k): 2 buys → 0.25, 3 → 0.40, 5 → 0.57, 10 → 0.75, 20 → 0.86.
+    final intervals = (purchaseCount - 1).clamp(0, 1000).toDouble();
+    final countConfidence = intervals / (intervals + 3);
+
+    // Weekly → ~0.88, monthly → 0.5, two-monthly → 0.
+    final cadence = (1 - (averageDaysBetween / _maxAvgDays)).clamp(0.0, 1.0);
+
+    return (0.35 + 0.45 * countConfidence + 0.20 * cadence).clamp(0.0, 1.0);
+  }
+
+  /// Ranking score for a restock suggestion: how due it is, tempered by how
+  /// much of a habit it is.
+  ///
+  /// Sorting on overdue ratio alone let a twice-bought oddity outrank a
+  /// weekly staple simply because its shaky average made it look overdue.
+  @visibleForTesting
+  static double suggestionPriority({
+    required int purchaseCount,
+    required double averageDaysBetween,
+    required double overdueRatio,
+  }) {
+    // Saturating: being 5x overdue is not five times as urgent as 1x, and
+    // without the cap a stale outlier would dominate the list forever.
+    final dueness = (overdueRatio / 2).clamp(0.0, 1.0);
+    return dueness *
+        habitStrength(
+          purchaseCount: purchaseCount,
+          averageDaysBetween: averageDaysBetween,
+        );
+  }
+
+  /// Top [limit] restock suggestions, most relevant first.
   ///
   /// An item qualifies when it is overdue by its own rhythm, or — when its
   /// purchase history shows a clear weekday pattern — when today is that
@@ -237,9 +293,20 @@ class AvoNudgeService {
       if (candidates.isEmpty) return [];
 
       candidates.sort((a, b) {
-        final ra = a.daysSinceLastPurchase / a.averageDaysBetween!;
-        final rb = b.daysSinceLastPurchase / b.averageDaysBetween!;
-        return rb.compareTo(ra);
+        final pa = suggestionPriority(
+          purchaseCount: a.purchaseCount,
+          averageDaysBetween: a.averageDaysBetween!,
+          overdueRatio: a.daysSinceLastPurchase / a.averageDaysBetween!,
+        );
+        final pb = suggestionPriority(
+          purchaseCount: b.purchaseCount,
+          averageDaysBetween: b.averageDaysBetween!,
+          overdueRatio: b.daysSinceLastPurchase / b.averageDaysBetween!,
+        );
+        final byPriority = pb.compareTo(pa);
+        if (byPriority != 0) return byPriority;
+        // Stable tie-break so the card does not reshuffle between rebuilds.
+        return a.itemName.compareTo(b.itemName);
       });
 
       return candidates.take(limit).map((s) {
@@ -300,9 +367,20 @@ class AvoNudgeService {
       if (candidates.isEmpty) return [];
 
       candidates.sort((a, b) {
-        final ra = a.daysSinceLastPurchase / a.averageDaysBetween!;
-        final rb = b.daysSinceLastPurchase / b.averageDaysBetween!;
-        return rb.compareTo(ra);
+        final pa = suggestionPriority(
+          purchaseCount: a.purchaseCount,
+          averageDaysBetween: a.averageDaysBetween!,
+          overdueRatio: a.daysSinceLastPurchase / a.averageDaysBetween!,
+        );
+        final pb = suggestionPriority(
+          purchaseCount: b.purchaseCount,
+          averageDaysBetween: b.averageDaysBetween!,
+          overdueRatio: b.daysSinceLastPurchase / b.averageDaysBetween!,
+        );
+        final byPriority = pb.compareTo(pa);
+        if (byPriority != 0) return byPriority;
+        // Stable tie-break so the card does not reshuffle between rebuilds.
+        return a.itemName.compareTo(b.itemName);
       });
       final lookups = candidates.take(_maxOfferLookups).toList();
 
@@ -320,7 +398,11 @@ class AvoNudgeService {
       // Sequential on purpose: the offers service throttles anyway, and this
       // runs in the background of the home screen — no user is waiting on it.
       for (final s in lookups) {
-        final offer = await _bestOfferFor(s.itemName, zipInfo.zipCode);
+        final offer = await _bestOfferFor(
+          s.itemName,
+          zipInfo.zipCode,
+          preferredRetailer: s.preferredRetailer,
+        );
         if (offer == null) continue;
         nudges.add(OfferNudge(
           itemName: s.itemName,
@@ -402,21 +484,64 @@ class AvoNudgeService {
   /// discount of at least [_minOfferDiscountPercent]% — or, since most
   /// flyer offers disclose no regular price at all, the cheapest relevant
   /// offer.
-  Future<StoreOffer?> _bestOfferFor(String itemName, String zipCode) async {
+  Future<StoreOffer?> _bestOfferFor(
+    String itemName,
+    String zipCode, {
+    String? preferredRetailer,
+  }) async {
     final offers =
         await OfferPriceService.instance.searchOffers(itemName, zipCode: zipCode);
-    StoreOffer? cheapestRelevant;
-    for (final offer in offers) {
-      // Offers are price-sorted, so the first relevant one is the cheapest.
-      if (!offerMatchesItem(itemName, offer.productName)) continue;
-      cheapestRelevant ??= offer;
-      final discount = offer.discountPercent;
-      if (discount != null && discount >= _minOfferDiscountPercent) {
-        return offer;
-      }
-    }
-    return cheapestRelevant;
+    final relevant = [
+      for (final offer in offers)
+        if (offerMatchesItem(itemName, offer.productName)) offer,
+    ];
+    return pickOffer(relevant, preferredRetailer: preferredRetailer);
   }
+
+  /// Choose which offer to surface, given the already relevance-filtered
+  /// [offers] (price-sorted, cheapest first).
+  ///
+  /// Where the user habitually shops beats a few cents elsewhere: telling
+  /// someone their bananas are cheap at a Netto across town is noise if they
+  /// always shop at REWE. So an offer from [preferredRetailer] wins unless
+  /// another shop is meaningfully cheaper — [_rivalMustBeatBy] guards against
+  /// hiding a genuinely worthwhile saving.
+  @visibleForTesting
+  static StoreOffer? pickOffer(
+    List<StoreOffer> offers, {
+    String? preferredRetailer,
+  }) {
+    if (offers.isEmpty) return null;
+
+    StoreOffer? best(Iterable<StoreOffer> candidates) {
+      StoreOffer? cheapest;
+      for (final offer in candidates) {
+        cheapest ??= offer;
+        final discount = offer.discountPercent;
+        if (discount != null && discount >= _minOfferDiscountPercent) {
+          return offer;
+        }
+      }
+      return cheapest;
+    }
+
+    final overall = best(offers);
+    final preferred = preferredRetailer?.trim().toLowerCase();
+    if (preferred == null || preferred.isEmpty) return overall;
+
+    final atPreferred = best(offers.where((o) =>
+        o.retailerName.toLowerCase() == preferred ||
+        o.retailerUniqueName.toLowerCase() == preferred));
+    if (atPreferred == null) return overall;
+    if (overall == null) return atPreferred;
+
+    final saving = atPreferred.price - overall.price;
+    return saving > _rivalMustBeatBy ? overall : atPreferred;
+  }
+
+  /// How much cheaper another shop must be before it displaces the user's
+  /// usual one in an offer nudge.
+  static const double _rivalMustBeatBy = 0.50;
 
   /// Snooze an offer nudge until its offer expires (or a week, when the
   /// offer has no end date) — it stops being relevant on its own.
