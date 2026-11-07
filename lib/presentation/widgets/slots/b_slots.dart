@@ -37,6 +37,30 @@ export 'package:shoply/presentation/screens/calories/log_recipe.dart'
 export 'package:shoply/presentation/screens/recipes/widgets/recipe_offers_card.dart'
     show RecipeOffersCard;
 
+// Home "Für dich" sections (Stufe 2).
+export 'package:shoply/presentation/widgets/home_sections/home_sections.dart'
+    show
+        HomeCaloriesToday,
+        HomeCookToday,
+        HomeMonthCard,
+        HomeOffersTile,
+        HomeRecentTrips,
+        HomeRestockTile,
+        HomeSavingsGoal,
+        HomeSavingsHint,
+        HomeSpendingComparison,
+        HomeWaterTile,
+        homeCaloriesHasContentProvider,
+        homeCookTodayHasContentProvider,
+        homeMonthHasContentProvider,
+        homeOffersTileHasContentProvider,
+        homeRecentTripsHasContentProvider,
+        homeRestockHasContentProvider,
+        homeSavingsGoalHasContentProvider,
+        homeSavingsHintHasContentProvider,
+        homeSpendingHasContentProvider,
+        homeWaterHasContentProvider;
+
 // Onboarding, settings, modules.
 export 'package:shoply/presentation/providers/app_flags_provider.dart'
     show offersAvailableProvider, offersRemoteEnabledProvider;

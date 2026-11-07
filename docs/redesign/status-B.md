@@ -4,11 +4,11 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 
 ## Stand
 
-2026-11-07, 23:50: Zwei Workflows laufen (P0/P1 mit 14 Paketen; parallel nativer Unterbau, Kalorien- und
-Wochenplan-Logik, Evals, Avo-Tool-Abdeckung, Screen-Specs). Plan steht in [`docs/superpowers/plans/2026-11-07-teil-b.md`](../superpowers/plans/2026-11-07-teil-b.md).
-Jetzt läuft P0 (die Anfragen 2–4 von A: Slot-Stubs, Kalorien-Alias, Kill-Switch-Provider), parallel P1: Edge Function
-`ai` mit Quoten, Claude-Client, Kategorisierung lokal zuerst, Angebots-Logik (Region ohne 10115, Ersparnis-Funktion,
-Markt pro Liste), App-Start. Sichtbare Screens erst ab S2.
+2026-11-08: **Vorrang-Aufgaben aus `prompt-b-vorrang.md`:** Stufe 1 (Slot-Hüllen) und Stufe 2 (Home-Abschnitte) sind
+gepusht, Stufe 3 (Avo im Tab) folgt direkt. **A importiert nur `lib/presentation/widgets/slots/b_slots.dart`.**
+Danach geht es mit P0/P1 weiter (Edge Function `ai`, Claude-Client, Kategorisierung, Angebots-Logik, App-Start), parallel
+nativer Unterbau, Kalorien- und Wochenplan-Logik, Evals und Screen-Specs. Plan:
+[`docs/superpowers/plans/2026-11-07-teil-b.md`](../superpowers/plans/2026-11-07-teil-b.md).
 
 ## Meilensteine
 
@@ -16,7 +16,7 @@ Markt pro Liste), App-Start. Sichtbare Screens erst ab S2.
 |---|---|---|---|
 | S0 Aufräumen gemergt (A) | erledigt (laut status-A) | 07.11.2026 | `950921d` |
 | S1 Struktur (A) | erledigt (laut status-A) | 07.11.2026 | `ab83f21`…`6112576` |
-| S2 Fundament (A) | wartet | | |
+| S2 Fundament (A) | S2a erreicht (laut status-A) | 08.11.2026 | `f16e071` |
 | S3 Claude live (B) | in Arbeit | | |
 | S4 Angebote abgesichert (B) | in Arbeit: Ersatz-Keys raus und Hänger in der Angebotssuche behoben | 07.11.2026 | `8de8a40` |
 | S5 Bereiche fertig (B) | offen | | |
@@ -43,8 +43,7 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
    wird.
 10. **Prio 3 – Deep-Link-Übersetzung mit Fehlerseite (S2)** für Widgets und Siri: `shopping?list=`,
     `lists/<id>?focus=add`, `avo/voice`, `plan?day=`, `calories/water?ml=`.
-11. **Prio 4 – `ShoppingItemModel.barcode` (optional, nullable)**, damit `ArticleImage` ein Open-Food-Facts-Foto nur bei
-    echtem Barcode zeigt.
+11. ~~Prio 4 – `ShoppingItemModel.barcode`~~ gibt es schon (laut A), erledigt.
 12. **Vorwarnung:** `ListPriceSummaryBar` und die Ein-Argument-Form von `OfferSuggestionsBar(query:, onSelect:)` bleiben
     als Übergang. Bitte beim Listen-Umbau `ListOfferSummary(listId:)` und `OfferSuggestionsBar(listId:, query:)` nutzen,
     dann lösche ich die Übergänge.
@@ -56,15 +55,22 @@ nutzen beide direkt.
 
 ## Erledigte Anfragen von Teil A
 
-1. **`claude/daily` pausieren:** In Jannis' Account gibt es diese Routine nicht. Geprüft am 07.11.: 4 Cloud-Routinen
-   (Jarvis Welt, Jarvis Morgen, zwei deaktivierte), 2 lokale geplante Aufgaben (Website-Update, Postfach), keine mit
-   Shoply-Bezug. `origin/claude/daily` steht auf `5bd4abf` (main von heute) ohne eigene Commits. Es gibt nichts zu
-   pausieren; falls sie woanders läuft (GitHub-Actions-Schedule gibt es nicht), bitte Bescheid geben.
-2. Slot-Stubs (Anfrage 2): in Arbeit (P0.3).
-3. Kalorien-Alias (Anfrage 3): in Arbeit (P0.2).
-4. Kill-Switch-Provider (Anfrage 4): in Arbeit (P0.1), Name `offersRemoteEnabledProvider` wie gewünscht, dazu
-   `offersAvailableProvider` (Modul an **und** Kill-Switch an).
-5. Home-Hinweise (Anfrage 5): verstanden, ich baue keine neue Home-Karte fest ein und warte auf den A4-Vorschlag.
+- **Vorrang Stufe 1 – Slot-Hüllen** (`d449d9c`): alles aus der Tabelle in `prompt-b-vorrang.md` mit der dortigen
+  Signatur, exportiert aus `b_slots.dart`. Übergänge, bis A umgebaut hat: `OfferSuggestionsBar` nimmt zusätzlich
+  noch `onSelect:` und `listId` ist so lange nullable; `RecipeOffersCard` nimmt zusätzlich noch `request:`.
+  `ArticleImage` ist bis B4 eine neutrale Fläche in `context.colors.fill`. `storeForListProvider` liefert nur einen
+  **bestätigten** Markt (ausdrücklich gewählt), eine bloße Vermutung bleibt `null`; die Vermutung mit Quelle gibt es
+  als `storeGuessForListProvider` (async). `openCheckoutFlow` öffnet vorerst den heutigen Abschluss im Vollbild.
+  Entfernt: die marktübergreifende „Spare bis zu“-Zeile im Vorschlags-Panel (Marktvergleich).
+- **Vorrang Stufe 2 – Home-Abschnitte** (Commit mit dieser Zeile): `HomeSavingsHint`, `HomeMonthCard`,
+  `HomeSpendingComparison`, `HomeSavingsGoal`, `HomeCaloriesToday`, `HomeRestockTile`, `HomeOffersTile`,
+  `HomeWaterTile`, `HomeRecentTrips`, `HomeCookToday` mit je `home…HasContentProvider` (synchron, heute `false`),
+  Datei `lib/presentation/widgets/home_sections/home_sections.dart`, über `b_slots.dart` exportiert, Test mit
+  `layoutMatrix`. Die alten Home-Karten überführe bzw. lösche ich, sobald Home (A4) sie nicht mehr zeigt.
+- `claude/daily`: in Jannis' Account nicht vorhanden (siehe 07.11.), nichts zu pausieren.
+- Kalorien-Alias: `calorieTrackingEnabledProvider` folgt `AppModule.calories`; `.notifier.setEnabled` bleibt für die
+  A-Aufrufer gültig und schreibt ins Modulsystem.
+- Kill-Switch: `offersRemoteEnabledProvider` und `offersAvailableProvider` (Modul an **und** Kill-Switch an).
 
 ## Fragen an den Owner
 
