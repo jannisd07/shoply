@@ -182,14 +182,6 @@ class Categories {
     }
   }
 
-  static Color getColor(String categoryId) {
-    return getById(categoryId).color;
-  }
-
-  static IconData getIcon(String categoryId) {
-    return getById(categoryId).icon;
-  }
-
   // Diet-incompatible foods, keyed by the stored diet ids (see
   // DietPreferencesScreen / onboarding). Terms are lowercase single words;
   // DietChecker matches them per word (exact, or as a prefix for 4+ letters).

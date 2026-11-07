@@ -81,39 +81,3 @@ class WeeklyChallenge extends Equatable {
   @override
   List<Object?> get props => [id, title, startDate, endDate, isActive];
 }
-
-/// An entry submitted to a weekly challenge
-class ChallengeEntry extends Equatable {
-  final String id;
-  final String challengeId;
-  final String oderId;
-  final String recipeId;
-  final String? photoUrl;
-  final String? notes;
-  final DateTime createdAt;
-
-  const ChallengeEntry({
-    required this.id,
-    required this.challengeId,
-    required this.oderId,
-    required this.recipeId,
-    this.photoUrl,
-    this.notes,
-    required this.createdAt,
-  });
-
-  factory ChallengeEntry.fromJson(Map<String, dynamic> json) {
-    return ChallengeEntry(
-      id: json['id'] as String,
-      challengeId: json['challenge_id'] as String,
-      oderId: json['user_id'] as String,
-      recipeId: json['recipe_id'] as String,
-      photoUrl: json['photo_url'] as String?,
-      notes: json['notes'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-    );
-  }
-
-  @override
-  List<Object?> get props => [id, challengeId, oderId, recipeId];
-}

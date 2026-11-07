@@ -6,21 +6,8 @@ import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/constants/app_text_styles.dart';
 
 class AppTheme {
-  // Generate dynamic light theme with custom accent color
-  static ThemeData getLightTheme({Color? accentColor}) {
-    final accent = accentColor ?? AppColors.lightAccent;
-    return _buildLightTheme(accent);
-  }
-
-  // Generate dynamic dark theme with custom accent color
-  static ThemeData getDarkTheme({Color? accentColor}) {
-    final accent = accentColor ?? AppColors.darkAccent;
-    return _buildDarkTheme(accent);
-  }
-
-  // Static themes for backward compatibility
-  static ThemeData lightTheme = _buildLightTheme(AppColors.lightAccent);
-  static ThemeData darkTheme = _buildDarkTheme(AppColors.darkAccent);
+  static final ThemeData lightTheme = _buildLightTheme(AppColors.lightAccent);
+  static final ThemeData darkTheme = _buildDarkTheme(AppColors.darkAccent);
 
   /// Cupertino push transition (right-to-left slide + parallax on the
   /// outgoing screen + interactive left-edge back-swipe) for every pushed

@@ -4,23 +4,12 @@ class QuickFilter {
   final String id;
   final String label;
   final IconData icon;
-  final FilterCategory category;
 
   const QuickFilter({
     required this.id,
     required this.label,
     required this.icon,
-    required this.category,
   });
-}
-
-enum FilterCategory {
-  popular,
-  time,
-  diet,
-  mealType,
-  difficulty,
-  cuisine,
 }
 
 class AdvancedFilterOptions {
@@ -121,7 +110,6 @@ class QuickFilters {
       id: 'top-rated',
       label: 'Top Rated',
       icon: Icons.star_rounded,
-      category: FilterCategory.popular,
     ),
     
     // Time
@@ -129,19 +117,16 @@ class QuickFilters {
       id: 'quick',
       label: 'Quick (<15min)',
       icon: Icons.bolt_rounded,
-      category: FilterCategory.time,
     ),
     QuickFilter(
       id: '30min',
       label: '30 Minutes',
       icon: Icons.schedule_rounded,
-      category: FilterCategory.time,
     ),
     QuickFilter(
       id: 'under-hour',
       label: 'Under 1 Hour',
       icon: Icons.access_time_rounded,
-      category: FilterCategory.time,
     ),
     
     // Diet
@@ -149,37 +134,31 @@ class QuickFilters {
       id: 'my-diet',
       label: 'My Diet',
       icon: Icons.person_rounded,
-      category: FilterCategory.diet,
     ),
     QuickFilter(
       id: 'vegetarian',
       label: 'Vegetarian',
       icon: Icons.eco_rounded,
-      category: FilterCategory.diet,
     ),
     QuickFilter(
       id: 'vegan',
       label: 'Vegan',
       icon: Icons.spa_rounded,
-      category: FilterCategory.diet,
     ),
     QuickFilter(
       id: 'gluten-free',
       label: 'Gluten-Free',
       icon: Icons.grain_rounded,
-      category: FilterCategory.diet,
     ),
     QuickFilter(
       id: 'keto',
       label: 'Keto',
       icon: Icons.fitness_center_rounded,
-      category: FilterCategory.diet,
     ),
     QuickFilter(
       id: 'low-carb',
       label: 'Low-Carb',
       icon: Icons.trending_down_rounded,
-      category: FilterCategory.diet,
     ),
     
     // Meal Type
@@ -187,25 +166,21 @@ class QuickFilters {
       id: 'breakfast',
       label: 'Breakfast',
       icon: Icons.free_breakfast_rounded,
-      category: FilterCategory.mealType,
     ),
     QuickFilter(
       id: 'lunch',
       label: 'Lunch',
       icon: Icons.lunch_dining_rounded,
-      category: FilterCategory.mealType,
     ),
     QuickFilter(
       id: 'dinner',
       label: 'Dinner',
       icon: Icons.dinner_dining_rounded,
-      category: FilterCategory.mealType,
     ),
     QuickFilter(
       id: 'snack',
       label: 'Snack',
       icon: Icons.cookie_rounded,
-      category: FilterCategory.mealType,
     ),
     
     // Difficulty
@@ -213,19 +188,16 @@ class QuickFilters {
       id: 'easy',
       label: 'Easy',
       icon: Icons.sentiment_satisfied_rounded,
-      category: FilterCategory.difficulty,
     ),
     QuickFilter(
       id: 'medium',
       label: 'Medium',
       icon: Icons.sentiment_neutral_rounded,
-      category: FilterCategory.difficulty,
     ),
     QuickFilter(
       id: 'advanced',
       label: 'Advanced',
       icon: Icons.psychology_rounded,
-      category: FilterCategory.difficulty,
     ),
     
     // Cuisine
@@ -233,25 +205,21 @@ class QuickFilters {
       id: 'italian',
       label: 'Italian',
       icon: Icons.local_pizza_rounded,
-      category: FilterCategory.cuisine,
     ),
     QuickFilter(
       id: 'asian',
       label: 'Asian',
       icon: Icons.ramen_dining_rounded,
-      category: FilterCategory.cuisine,
     ),
     QuickFilter(
       id: 'mexican',
       label: 'Mexican',
       icon: Icons.lunch_dining_rounded,
-      category: FilterCategory.cuisine,
     ),
     QuickFilter(
       id: 'mediterranean',
       label: 'Mediterranean',
       icon: Icons.set_meal_rounded,
-      category: FilterCategory.cuisine,
     ),
   ];
 }
