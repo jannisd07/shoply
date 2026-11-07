@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/utils/number_parsing.dart';
 import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/data/services/weight_log_service.dart';
+import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 
@@ -36,6 +38,10 @@ class _GoalSetupScreenState extends ConsumerState<GoalSetupScreen> {
   bool _loading = true;
   bool _saving = false;
 
+  /// Most recent logged weight, so saving only logs a weight entry when the
+  /// user actually changed it.
+  double? _latestLoggedWeight;
+
   @override
   void initState() {
     super.initState();
@@ -43,31 +49,39 @@ class _GoalSetupScreenState extends ConsumerState<GoalSetupScreen> {
   }
 
   Future<void> _loadExisting() async {
-    final user = await ref.read(currentUserProvider.future);
-    final goal = await ref.read(nutritionGoalProvider.future);
-    final latestWeight = await WeightLogService.instance.getLatest();
+    try {
+      final (user, goal, latestWeight) = await (
+        ref.read(currentUserProvider.future),
+        ref.read(nutritionGoalProvider.future),
+        WeightLogService.instance.getLatest(),
+      ).wait;
 
-    if (user?.age != null) _ageController.text = user!.age.toString();
-    if (user?.gender != null &&
-        ['male', 'female'].contains(user!.gender)) {
-      _gender = user.gender!;
+      _latestLoggedWeight = latestWeight?.weightKg;
+      if (user?.age != null) _ageController.text = user!.age.toString();
+      if (user?.gender != null &&
+          ['male', 'female', 'other'].contains(user!.gender)) {
+        _gender = user.gender!;
+      }
+      final heightCm = goal?.heightCm ?? user?.height;
+      if (heightCm != null) _heightController.text = heightCm.round().toString();
+      final currentWeight = goal?.currentWeightKg ?? latestWeight?.weightKg;
+      if (currentWeight != null) {
+        _currentWeightController.text = currentWeight.toStringAsFixed(1);
+      }
+      if (goal?.targetWeightKg != null) {
+        _targetWeightController.text = goal!.targetWeightKg!.toStringAsFixed(1);
+      }
+      if (goal != null) {
+        _goalType = goal.goalType;
+        _activityLevel = goal.activityLevel;
+        _timelineWeeks = goal.timelineWeeks ?? 12;
+      }
+    } catch (e) {
+      // Fall through to an empty form; the user can still fill it in.
+      debugPrint('❌ [GOAL_SETUP] Failed to load existing values: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    final heightCm = goal?.heightCm ?? user?.height;
-    if (heightCm != null) _heightController.text = heightCm.round().toString();
-    final currentWeight = goal?.currentWeightKg ?? latestWeight?.weightKg;
-    if (currentWeight != null) {
-      _currentWeightController.text = currentWeight.toStringAsFixed(1);
-    }
-    if (goal?.targetWeightKg != null) {
-      _targetWeightController.text = goal!.targetWeightKg!.toStringAsFixed(1);
-    }
-    if (goal != null) {
-      _goalType = goal.goalType;
-      _activityLevel = goal.activityLevel;
-      _timelineWeeks = goal.timelineWeeks ?? 12;
-    }
-
-    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -82,10 +96,10 @@ class _GoalSetupScreenState extends ConsumerState<GoalSetupScreen> {
   bool get _needsTargetWeight =>
       _goalType == NutritionGoalType.loseWeight || _goalType == NutritionGoalType.gainMuscle;
 
-  double? get _age => double.tryParse(_ageController.text.trim());
-  double? get _height => double.tryParse(_heightController.text.trim());
-  double? get _currentWeight => double.tryParse(_currentWeightController.text.trim());
-  double? get _targetWeight => double.tryParse(_targetWeightController.text.trim());
+  double? get _age => parseLocaleDouble(_ageController.text);
+  double? get _height => parseLocaleDouble(_heightController.text);
+  double? get _currentWeight => parseLocaleDouble(_currentWeightController.text);
+  double? get _targetWeight => parseLocaleDouble(_targetWeightController.text);
 
   bool get _canSave =>
       _age != null &&
@@ -137,7 +151,11 @@ class _GoalSetupScreenState extends ConsumerState<GoalSetupScreen> {
       );
 
       await ref.read(nutritionGoalServiceProvider).saveGoal(goal);
-      await WeightLogService.instance.logWeight(weightKg: _currentWeight!);
+      // logWeight upserts today's entry; only touch it when the weight
+      // actually changed, so a goal edit can't overwrite a newer log.
+      if (_currentWeight != _latestLoggedWeight) {
+        await WeightLogService.instance.logWeight(weightKg: _currentWeight!);
+      }
 
       // Keep the user's profile fields in sync — they're used elsewhere
       // (personal info screen, recipe/diet logic) so this isn't a
@@ -191,9 +209,15 @@ class _GoalSetupScreenState extends ConsumerState<GoalSetupScreen> {
       ),
       body: SafeArea(
         top: false,
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            AppDimensions.screenHorizontalPadding, 8, AppDimensions.screenHorizontalPadding, 32),
+          // Pushed inside the tab shell, so clear the floating navbar.
+          padding: EdgeInsets.fromLTRB(
+            AppDimensions.screenHorizontalPadding,
+            8,
+            AppDimensions.screenHorizontalPadding,
+            MainScaffold.getNavbarClearance(context) + 16,
+          ),
           children: [
             Text(
               context.tr('goal_setup_subtitle'),

@@ -69,8 +69,8 @@ class ChallengesScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               AppSectionHeader(title: context.tr('challenge_catalog_section')),
-              Consumer(
-                builder: (context, ref, _) {
+              Builder(
+                builder: (context) {
                   final activeTypes =
                       activeAsync.valueOrNull?.map((c) => c.type).toSet() ?? <ChallengeType>{};
                   final catalog = [ChallengeType.fasting16_8, ChallengeType.noSugar30]
@@ -226,9 +226,27 @@ class _ActiveChallengeCardState extends ConsumerState<_ActiveChallengeCard> {
     if (_busy) return;
     setState(() => _busy = true);
     HapticFeedback.selectionClick();
-    await ref.read(dietChallengeServiceProvider).checkIn(widget.challenge, kept: kept);
-    invalidateChallenges(ref);
-    if (mounted) setState(() => _busy = false);
+    await _runGuarded(() async {
+      await ref.read(dietChallengeServiceProvider).checkIn(widget.challenge, kept: kept);
+    });
+  }
+
+  /// Runs a challenge mutation, refreshes the challenge lists, shows an error
+  /// on failure and always clears [_busy].
+  Future<void> _runGuarded(Future<void> Function() action) async {
+    try {
+      await action();
+      invalidateChallenges(ref);
+    } catch (e) {
+      debugPrint('❌ [CHALLENGES] Update failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('generic_error'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _endChallenge({required bool asCompleted}) async {
@@ -251,15 +269,16 @@ class _ActiveChallengeCardState extends ConsumerState<_ActiveChallengeCard> {
       );
       if (confirmed != true) return;
     }
+    if (!mounted) return;
     setState(() => _busy = true);
     final service = ref.read(dietChallengeServiceProvider);
-    if (asCompleted) {
-      await service.completeChallenge(widget.challenge);
-    } else {
-      await service.abandonChallenge(widget.challenge);
-    }
-    invalidateChallenges(ref);
-    if (mounted) setState(() => _busy = false);
+    await _runGuarded(() async {
+      if (asCompleted) {
+        await service.completeChallenge(widget.challenge);
+      } else {
+        await service.abandonChallenge(widget.challenge);
+      }
+    });
   }
 
   @override

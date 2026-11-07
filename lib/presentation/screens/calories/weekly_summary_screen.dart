@@ -8,6 +8,7 @@ import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/models/weekly_nutrition_summary.dart';
 import 'package:shoply/presentation/screens/calories/weight_tracking_screen.dart';
 import 'package:shoply/presentation/screens/calories/widgets/macro_bar.dart';
+import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 
 /// Weekly look-back over the last 7 days of logging: average calories vs.
@@ -31,6 +32,7 @@ class WeeklySummaryScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         top: false,
+        bottom: false,
         child: summaryAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (_, __) => Center(child: Text(context.tr('calories_log_error'))),
@@ -67,7 +69,7 @@ class _SummaryBody extends ConsumerWidget {
     final target = goal?.dailyCalorieTarget ?? 0;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+      padding: EdgeInsets.fromLTRB(20, 8, 20, MainScaffold.getNavbarClearance(context) + 16),
       children: [
         Text(
           '${rangeFormat.format(summary.days.first)} – ${rangeFormat.format(summary.days.last)}',

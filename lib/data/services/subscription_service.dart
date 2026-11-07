@@ -191,6 +191,9 @@ class SubscriptionService {
         case PurchaseStatus.canceled:
           debugPrint('💳 [SUBSCRIPTION] Purchase canceled');
           _isLoading = false;
+          // Re-emit the unchanged status so listeners (paywall spinner,
+          // SubscriptionNotifier) learn the purchase flow has ended.
+          _statusController.add(_status);
           break;
       }
 

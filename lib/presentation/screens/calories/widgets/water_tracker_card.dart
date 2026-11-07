@@ -22,8 +22,17 @@ class WaterTrackerCard extends ConsumerWidget {
 
     Future<void> add(int ml) async {
       HapticFeedback.selectionClick();
-      await ref.read(waterLogServiceProvider).addEntry(ml);
-      invalidateNutritionLog(ref);
+      try {
+        await ref.read(waterLogServiceProvider).addEntry(ml);
+        invalidateNutritionLog(ref);
+      } catch (e) {
+        debugPrint('❌ [CALORIES] Failed to log water: $e');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.tr('generic_error'))),
+          );
+        }
+      }
     }
 
     return AppCard(

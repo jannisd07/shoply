@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/legal_links.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/presentation/screens/profile/settings/display_name_screen.dart';
@@ -249,13 +250,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   icon: Icons.shield_outlined,
                   title: context.tr('privacy'),
                   external: true,
-                  onTap: () => _openExternal('https://joinavo.app/privacy'),
+                  onTap: () => _openExternal(LegalLinks.privacy),
                 ),
                 _SettingsItemData(
                   icon: Icons.description_outlined,
                   title: context.tr('imprint'),
                   external: true,
-                  onTap: () => _openExternal('https://joinavo.app/impressum'),
+                  onTap: () => _openExternal(LegalLinks.imprint),
                 ),
                 // ODbL requires crediting Open Prices / Open Food Facts
                 // wherever their price data is used, and OpenStreetMap
@@ -342,12 +343,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         child: userAsync.when(
           data: (user) {
-            final displayName = user?.displayName ?? 'User';
+            final displayName =
+                user?.displayName ?? context.tr('profile_default_name');
             final email = user?.email ?? '';
             final avatarUrl = user?.avatarUrl;
             final initials = displayName.isNotEmpty
                 ? displayName[0].toUpperCase()
                 : '?';
+            final initialsText = Center(
+              child: Text(
+                initials,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: textPrimary,
+                ),
+              ),
+            );
 
             final headerRow = Row(
               children: [
@@ -366,38 +378,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             width: 56,
                             height: 56,
                             fit: BoxFit.cover,
-                            placeholder: (context, url) => Center(
-                              child: Text(
-                                initials,
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
-                                  color: textPrimary,
-                                ),
-                              ),
-                            ),
-                            errorWidget: (context, url, error) => Center(
-                              child: Text(
-                                initials,
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
-                                  color: textPrimary,
-                                ),
-                              ),
-                            ),
+                            placeholder: (context, url) => initialsText,
+                            errorWidget: (context, url, error) => initialsText,
                           ),
                         )
-                      : Center(
-                          child: Text(
-                            initials,
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600,
-                              color: textPrimary,
-                            ),
-                          ),
-                        ),
+                      : initialsText,
                 ),
                 const SizedBox(width: 16),
                 // Name & Email
@@ -412,7 +397,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(height: 3),
                       if (ref.watch(isSubscribedProvider))
                         Text(
-                          'Premium',
+                          context.tr('premium_label'),
                           style: TextStyle(
                             fontSize: 13,
                             color: AppColors.accentColor(context),
@@ -551,7 +536,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               const SizedBox(width: 16),
               Text(
-                'User',
+                context.tr('profile_default_name'),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -615,9 +600,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
 
-    return Container(
-      decoration: const BoxDecoration(),
-      child: Column(
+    return Column(
         children: List.generate(items.length, (index) {
           final item = items[index];
           final isLast = index == items.length - 1;
@@ -679,17 +662,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               if (!isLast)
-                Padding(
-                  padding: EdgeInsets.zero,
-                  child: Container(
-                    height: 1,
-                    color: AppColors.divider(context),
-                  ),
+                Container(
+                  height: 1,
+                  color: AppColors.divider(context),
                 ),
             ],
           );
         }),
-      ),
     );
   }
 

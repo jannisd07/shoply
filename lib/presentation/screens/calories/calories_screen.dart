@@ -39,7 +39,8 @@ class CaloriesScreen extends ConsumerWidget {
         bottom: false,
         child: goalAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => Center(child: Text(context.tr('calories_v0_card_sub'))),
+          error: (_, __) =>
+              Center(child: Text(context.tr('calories_v0_card_sub'))),
           data: (goal) {
             if (goal == null || !goal.isConfigured) {
               return const _SetupPrompt();
@@ -63,33 +64,65 @@ class _SetupPrompt extends ConsumerWidget {
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          AppDimensions.screenHorizontalPadding, 18, AppDimensions.screenHorizontalPadding, 140),
+        AppDimensions.screenHorizontalPadding,
+        18,
+        AppDimensions.screenHorizontalPadding,
+        140,
+      ),
       children: [
         Text(
           context.tr('calories').toUpperCase(),
-          style: TextStyle(fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.w600, color: accent),
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 2,
+            fontWeight: FontWeight.w600,
+            color: accent,
+          ),
         ),
         const SizedBox(height: 4),
-        Text(context.tr('calories_v0_title'),
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: textPrimary)),
+        Text(
+          context.tr('calories_v0_title'),
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            color: textPrimary,
+          ),
+        ),
         const SizedBox(height: 24),
         AppCard(
           margin: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.local_fire_department_outlined, size: 26, color: accent),
+              Icon(
+                Icons.local_fire_department_outlined,
+                size: 26,
+                color: accent,
+              ),
               const SizedBox(height: 12),
-              Text(context.tr('goal_setup_prompt_title'),
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary)),
+              Text(
+                context.tr('goal_setup_prompt_title'),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: textPrimary,
+                ),
+              ),
               const SizedBox(height: 6),
-              Text(context.tr('goal_setup_prompt_sub'),
-                  style: TextStyle(fontSize: 13.5, height: 1.45, color: textSecondary)),
+              Text(
+                context.tr('goal_setup_prompt_sub'),
+                style: TextStyle(
+                  fontSize: 13.5,
+                  height: 1.45,
+                  color: textSecondary,
+                ),
+              ),
               const SizedBox(height: 16),
               AppButton(
                 text: context.tr('goal_setup_prompt_cta'),
-                onPressed: () => Navigator.of(context)
-                    .push(CupertinoPageRoute(builder: (_) => const GoalSetupScreen())),
+                onPressed: () => Navigator.of(context).push(
+                  CupertinoPageRoute(builder: (_) => const GoalSetupScreen()),
+                ),
               ),
             ],
           ),
@@ -99,10 +132,14 @@ class _SetupPrompt extends ConsumerWidget {
           child: TextButton(
             onPressed: () {
               HapticFeedback.selectionClick();
-              ref.read(calorieTrackingEnabledProvider.notifier).setEnabled(false);
+              ref
+                  .read(calorieTrackingEnabledProvider.notifier)
+                  .setEnabled(false);
             },
-            child: Text(context.tr('hide_calories_tab'),
-                style: TextStyle(fontSize: 13, color: textSecondary)),
+            child: Text(
+              context.tr('hide_calories_tab'),
+              style: TextStyle(fontSize: 13, color: textSecondary),
+            ),
           ),
         ),
       ],
@@ -110,15 +147,31 @@ class _SetupPrompt extends ConsumerWidget {
   }
 }
 
-class _Dashboard extends ConsumerWidget {
+class _Dashboard extends ConsumerStatefulWidget {
   final NutritionGoal goal;
 
   const _Dashboard({required this.goal});
 
-  static const _mealOrder = [MealType.breakfast, MealType.lunch, MealType.dinner, MealType.snack];
+  @override
+  ConsumerState<_Dashboard> createState() => _DashboardState();
+}
+
+class _DashboardState extends ConsumerState<_Dashboard> {
+  static const _mealOrder = [
+    MealType.breakfast,
+    MealType.lunch,
+    MealType.dinner,
+    MealType.snack,
+  ];
+
+  /// Entries swiped away (already deleted on the server). Filtered out
+  /// locally so the dismissed row leaves the tree immediately instead of
+  /// waiting for the refetch.
+  final Set<String> _removedIds = {};
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final goal = widget.goal;
     final selectedDate = ref.watch(selectedLogDateProvider);
     final entriesAsync = ref.watch(dailyFoodLogProvider);
     final totals = ref.watch(dailyNutritionTotalsProvider);
@@ -127,14 +180,16 @@ class _Dashboard extends ConsumerWidget {
     final locale = Localizations.localeOf(context).toString();
 
     final today = DateTime.now();
-    final isToday = selectedDate.year == today.year &&
+    final isToday =
+        selectedDate.year == today.year &&
         selectedDate.month == today.month &&
         selectedDate.day == today.day;
 
     void changeDay(int delta) {
       HapticFeedback.selectionClick();
-      ref.read(selectedLogDateProvider.notifier).state =
-          selectedDate.add(Duration(days: delta));
+      ref.read(selectedLogDateProvider.notifier).state = selectedDate.add(
+        Duration(days: delta),
+      );
     }
 
     return RefreshIndicator(
@@ -144,23 +199,37 @@ class _Dashboard extends ConsumerWidget {
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
-            AppDimensions.screenHorizontalPadding, 12, AppDimensions.screenHorizontalPadding, 140),
+          AppDimensions.screenHorizontalPadding,
+          12,
+          AppDimensions.screenHorizontalPadding,
+          140,
+        ),
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconButton(onPressed: () => changeDay(-1), icon: const Icon(Icons.chevron_left)),
+              IconButton(
+                onPressed: () => changeDay(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
               GestureDetector(
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  ref.read(selectedLogDateProvider.notifier).state =
-                      DateTime(today.year, today.month, today.day);
+                  ref.read(selectedLogDateProvider.notifier).state = DateTime(
+                    today.year,
+                    today.month,
+                    today.day,
+                  );
                 },
                 child: Text(
                   isToday
                       ? context.tr('today')
                       : DateFormat('EEEE, d. MMM', locale).format(selectedDate),
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
                 ),
               ),
               IconButton(
@@ -169,42 +238,50 @@ class _Dashboard extends ConsumerWidget {
               ),
               const Spacer(),
               IconButton(
-                onPressed: () => Navigator.of(context)
-                    .push(CupertinoPageRoute(builder: (_) => const GoalSetupScreen())),
+                onPressed: () => Navigator.of(context).push(
+                  CupertinoPageRoute(builder: (_) => const GoalSetupScreen()),
+                ),
                 icon: Icon(Icons.tune, color: textSecondary, size: 20),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              const Spacer(),
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => Navigator.of(context)
-                    .push(CupertinoPageRoute(builder: (_) => const WeeklySummaryScreen())),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Row(
-                    children: [
-                      Text(context.tr('weekly_summary_entry'),
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.accentColor(context))),
-                      Icon(Icons.chevron_right,
-                          size: 16, color: AppColors.accentColor(context)),
-                    ],
-                  ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => Navigator.of(context).push(
+                CupertinoPageRoute(builder: (_) => const WeeklySummaryScreen()),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      context.tr('weekly_summary_entry'),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.accentColor(context),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: AppColors.accentColor(context),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 6),
           WeeklyCaloriesStrip(
             target: goal.dailyCalorieTarget ?? 2000,
-            onTap: () => Navigator.of(context)
-                .push(CupertinoPageRoute(builder: (_) => const WeeklySummaryScreen())),
+            onTap: () => Navigator.of(context).push(
+              CupertinoPageRoute(builder: (_) => const WeeklySummaryScreen()),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -219,8 +296,9 @@ class _Dashboard extends ConsumerWidget {
           AppOutlineButton(
             text: context.tr('what_can_i_eat_cta'),
             icon: Icons.restaurant_menu_outlined,
-            onPressed: () => Navigator.of(context)
-                .push(CupertinoPageRoute(builder: (_) => const WhatCanIEatScreen())),
+            onPressed: () => Navigator.of(context).push(
+              CupertinoPageRoute(builder: (_) => const WhatCanIEatScreen()),
+            ),
           ),
           const SizedBox(height: 24),
           AppCard(
@@ -228,22 +306,25 @@ class _Dashboard extends ConsumerWidget {
             child: Column(
               children: [
                 MacroBar(
-                    label: context.tr('protein'),
-                    valueG: totals.proteinG,
-                    targetG: goal.proteinTargetG,
-                    color: const Color(0xFF5B9BD5)),
+                  label: context.tr('protein'),
+                  valueG: totals.proteinG,
+                  targetG: goal.proteinTargetG,
+                  color: const Color(0xFF5B9BD5),
+                ),
                 const SizedBox(height: 14),
                 MacroBar(
-                    label: context.tr('carbs'),
-                    valueG: totals.carbsG,
-                    targetG: goal.carbsTargetG,
-                    color: const Color(0xFFE0A458)),
+                  label: context.tr('carbs'),
+                  valueG: totals.carbsG,
+                  targetG: goal.carbsTargetG,
+                  color: const Color(0xFFE0A458),
+                ),
                 const SizedBox(height: 14),
                 MacroBar(
-                    label: context.tr('fat'),
-                    valueG: totals.fatG,
-                    targetG: goal.fatTargetG,
-                    color: const Color(0xFFD9694F)),
+                  label: context.tr('fat'),
+                  valueG: totals.fatG,
+                  targetG: goal.fatTargetG,
+                  color: const Color(0xFFD9694F),
+                ),
               ],
             ),
           ),
@@ -255,8 +336,9 @@ class _Dashboard extends ConsumerWidget {
           AppOutlineButton(
             text: context.tr('log_weight_cta'),
             icon: Icons.monitor_weight_outlined,
-            onPressed: () => Navigator.of(context)
-                .push(CupertinoPageRoute(builder: (_) => const WeightTrackingScreen())),
+            onPressed: () => Navigator.of(context).push(
+              CupertinoPageRoute(builder: (_) => const WeightTrackingScreen()),
+            ),
           ),
           const SizedBox(height: 24),
           entriesAsync.when(
@@ -264,11 +346,21 @@ class _Dashboard extends ConsumerWidget {
               padding: EdgeInsets.symmetric(vertical: 32),
               child: Center(child: CircularProgressIndicator()),
             ),
-            error: (_, __) => Text(context.tr('calories_log_error'), style: TextStyle(color: textSecondary)),
+            error: (_, __) => Text(
+              context.tr('calories_log_error'),
+              style: TextStyle(color: textSecondary),
+            ),
             data: (entries) => Column(
               children: _mealOrder.map((meal) {
-                final mealEntries = entries.where((e) => e.mealType == meal).toList();
-                final mealCalories = mealEntries.fold(0, (sum, e) => sum + e.calories);
+                final mealEntries = entries
+                    .where(
+                      (e) => e.mealType == meal && !_removedIds.contains(e.id),
+                    )
+                    .toList();
+                final mealCalories = mealEntries.fold(
+                  0,
+                  (sum, e) => sum + e.calories,
+                );
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 18),
                   child: AppCard(
@@ -278,22 +370,38 @@ class _Dashboard extends ConsumerWidget {
                       children: [
                         Row(
                           children: [
-                            Text(context.tr('meal_${meal.dbValue}'),
-                                style: TextStyle(
-                                    fontSize: 15, fontWeight: FontWeight.w700, color: textPrimary)),
+                            Text(
+                              context.tr('meal_${meal.dbValue}'),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: textPrimary,
+                              ),
+                            ),
                             const Spacer(),
                             if (mealCalories > 0)
-                              Text('$mealCalories kcal',
-                                  style: TextStyle(fontSize: 13, color: textSecondary)),
+                              Text(
+                                '$mealCalories kcal',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: textSecondary,
+                                ),
+                              ),
                             const SizedBox(width: 8),
                             InkWell(
                               borderRadius: BorderRadius.circular(20),
-                              onTap: () => showFoodEntrySheet(context,
-                                  mealType: meal, date: selectedDate),
+                              onTap: () => showFoodEntrySheet(
+                                context,
+                                mealType: meal,
+                                date: selectedDate,
+                              ),
                               child: Padding(
                                 padding: const EdgeInsets.all(4),
-                                child: Icon(Icons.add_circle_outline,
-                                    color: AppColors.accentColor(context), size: 22),
+                                child: Icon(
+                                  Icons.add_circle_outline,
+                                  color: AppColors.accentColor(context),
+                                  size: 22,
+                                ),
                               ),
                             ),
                           ],
@@ -301,17 +409,27 @@ class _Dashboard extends ConsumerWidget {
                         if (mealEntries.isEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
-                            child: Text(context.tr('meal_empty'),
-                                style: TextStyle(fontSize: 12.5, color: textSecondary)),
+                            child: Text(
+                              context.tr('meal_empty'),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: textSecondary,
+                              ),
+                            ),
                           )
                         else
-                          ...mealEntries.map((entry) => FoodLogTile(
-                                entry: entry,
-                                onDelete: () async {
-                                  await ref.read(foodLogServiceProvider).deleteEntry(entry.id);
-                                  invalidateNutritionLog(ref);
-                                },
-                              )),
+                          ...mealEntries.map(
+                            (entry) => FoodLogTile(
+                              entry: entry,
+                              onDelete: () => ref
+                                  .read(foodLogServiceProvider)
+                                  .deleteEntry(entry.id),
+                              onDismissed: () {
+                                setState(() => _removedIds.add(entry.id));
+                                invalidateNutritionLog(ref);
+                              },
+                            ),
+                          ),
                       ],
                     ),
                   ),

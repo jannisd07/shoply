@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/utils/number_parsing.dart';
 import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/food_product.dart';
@@ -40,6 +41,12 @@ class FoodEntrySheet extends ConsumerStatefulWidget {
 
 enum _EntryTab { search, barcode, photo, manual }
 
+void _showGenericError(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(context.tr('generic_error'))),
+  );
+}
+
 class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
   _EntryTab _tab = _EntryTab.search;
   final _searchController = TextEditingController();
@@ -72,15 +79,31 @@ class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
   }
 
   Future<void> _pickAndAnalyzePhoto(ImageSource source) async {
-    final file = await ImagePicker().pickImage(source: source, maxWidth: 1024, imageQuality: 80);
+    final XFile? file;
+    try {
+      file = await ImagePicker().pickImage(source: source, maxWidth: 1024, imageQuality: 80);
+    } catch (e) {
+      // e.g. camera / photo library permission denied
+      debugPrint('❌ [CALORIES] Image picker failed: $e');
+      if (mounted) _showGenericError(context);
+      return;
+    }
     if (file == null) return;
     setState(() {
       _analyzingPhoto = true;
       _photoAnalysisFailed = false;
       _photoEstimate = null;
     });
-    final bytes = await file.readAsBytes();
-    final estimate = await MealPhotoAnalysisService.instance.analyzePhoto(bytes);
+    Uint8List bytes;
+    MealPhotoEstimate? estimate;
+    try {
+      bytes = await file.readAsBytes();
+      estimate = await MealPhotoAnalysisService.instance.analyzePhoto(bytes);
+    } catch (e) {
+      debugPrint('❌ [CALORIES] Meal photo analysis failed: $e');
+      bytes = Uint8List(0);
+      estimate = null;
+    }
     if (!mounted) return;
     setState(() {
       _analyzingPhoto = false;
@@ -103,28 +126,37 @@ class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
     final calories = int.tryParse(_photoCaloriesController.text.trim()) ?? 0;
     if (_photoNameController.text.trim().isEmpty || _savingPhotoEntry) return;
     setState(() => _savingPhotoEntry = true);
-    // Best-effort: the photo is uploaded so the log entry keeps its source
-    // image, but a failed upload never blocks saving the (already-editable,
-    // already-confirmed) nutrition estimate itself.
-    final photoBytes = _photoBytes;
-    final photoUrl =
-        photoBytes != null ? await MealPhotoStorageService.instance.uploadPhoto(photoBytes) : null;
-    if (!mounted) return;
-    await _logEntry(FoodLogEntry(
-      id: '',
-      userId: authUser.id,
-      loggedDate: widget.date,
-      mealType: widget.mealType,
-      source: FoodLogSource.photo,
-      foodName: _photoNameController.text.trim(),
-      calories: calories,
-      proteinG: double.tryParse(_photoProteinController.text.trim()),
-      carbsG: double.tryParse(_photoCarbsController.text.trim()),
-      fatG: double.tryParse(_photoFatController.text.trim()),
-      photoUrl: photoUrl,
-      createdAt: DateTime.now(),
-    ));
-    if (mounted) setState(() => _savingPhotoEntry = false);
+    try {
+      // Best-effort: the photo is uploaded so the log entry keeps its source
+      // image, but a failed upload never blocks saving the (already-editable,
+      // already-confirmed) nutrition estimate itself.
+      final photoBytes = _photoBytes;
+      String? photoUrl;
+      if (photoBytes != null) {
+        try {
+          photoUrl = await MealPhotoStorageService.instance.uploadPhoto(photoBytes);
+        } catch (e) {
+          debugPrint('⚠️ [CALORIES] Meal photo upload failed: $e');
+        }
+      }
+      if (!mounted) return;
+      await _logEntry(FoodLogEntry(
+        id: '',
+        userId: authUser.id,
+        loggedDate: widget.date,
+        mealType: widget.mealType,
+        source: FoodLogSource.photo,
+        foodName: _photoNameController.text.trim(),
+        calories: calories,
+        proteinG: parseLocaleDouble(_photoProteinController.text),
+        carbsG: parseLocaleDouble(_photoCarbsController.text),
+        fatG: parseLocaleDouble(_photoFatController.text),
+        photoUrl: photoUrl,
+        createdAt: DateTime.now(),
+      ));
+    } finally {
+      if (mounted) setState(() => _savingPhotoEntry = false);
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -134,8 +166,16 @@ class _FoodEntrySheetState extends ConsumerState<FoodEntrySheet> {
     });
   }
 
+  /// Saves [entry] and closes the sheet; on failure shows an error and keeps
+  /// the sheet open so the user can retry.
   Future<void> _logEntry(FoodLogEntry entry) async {
-    await ref.read(foodLogServiceProvider).addEntry(entry);
+    try {
+      await ref.read(foodLogServiceProvider).addEntry(entry);
+    } catch (e) {
+      debugPrint('❌ [CALORIES] Failed to log food entry: $e');
+      if (mounted) _showGenericError(context);
+      return;
+    }
     invalidateNutritionLog(ref);
     if (mounted) Navigator.of(context).pop();
   }
@@ -512,7 +552,7 @@ Future<double?> showQuantityGramsDialog(BuildContext context, {required FoodProd
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) {
-        final grams = double.tryParse(controller.text.trim()) ?? 0;
+        final grams = parseLocaleDouble(controller.text) ?? 0;
         return AlertDialog(
           title: Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis),
           content: Column(
@@ -584,20 +624,23 @@ class _ManualEntryFormState extends ConsumerState<_ManualEntryForm> {
     final authUser = ref.read(authUserProvider).valueOrNull;
     if (authUser == null) return;
     setState(() => _saving = true);
-    await widget.onSave(FoodLogEntry(
-      id: '',
-      userId: authUser.id,
-      loggedDate: widget.date,
-      mealType: widget.mealType,
-      source: FoodLogSource.manual,
-      foodName: _nameController.text.trim(),
-      calories: int.parse(_caloriesController.text.trim()),
-      proteinG: double.tryParse(_proteinController.text.trim()),
-      carbsG: double.tryParse(_carbsController.text.trim()),
-      fatG: double.tryParse(_fatController.text.trim()),
-      createdAt: DateTime.now(),
-    ));
-    if (mounted) setState(() => _saving = false);
+    try {
+      await widget.onSave(FoodLogEntry(
+        id: '',
+        userId: authUser.id,
+        loggedDate: widget.date,
+        mealType: widget.mealType,
+        source: FoodLogSource.manual,
+        foodName: _nameController.text.trim(),
+        calories: int.parse(_caloriesController.text.trim()),
+        proteinG: parseLocaleDouble(_proteinController.text),
+        carbsG: parseLocaleDouble(_carbsController.text),
+        fatG: parseLocaleDouble(_fatController.text),
+        createdAt: DateTime.now(),
+      ));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override

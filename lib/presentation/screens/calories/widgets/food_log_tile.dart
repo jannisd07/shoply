@@ -1,12 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 
 class FoodLogTile extends StatelessWidget {
   final FoodLogEntry entry;
-  final VoidCallback onDelete;
 
-  const FoodLogTile({super.key, required this.entry, required this.onDelete});
+  /// Deletes the entry on the server. Runs before the row is dismissed, so a
+  /// failure (thrown error) snaps the row back instead of leaving a ghost.
+  final Future<void> Function() onDelete;
+
+  /// Called once the row has been swiped away; the parent must drop the
+  /// entry from its list synchronously (Dismissible requirement).
+  final VoidCallback onDismissed;
+
+  const FoodLogTile({
+    super.key,
+    required this.entry,
+    required this.onDelete,
+    required this.onDismissed,
+  });
 
   IconData get _sourceIcon => switch (entry.source) {
         FoodLogSource.recipe => Icons.restaurant_menu,
@@ -37,7 +50,21 @@ class FoodLogTile extends StatelessWidget {
         ),
         child: const Icon(Icons.delete_outline, color: AppColors.error),
       ),
-      onDismissed: (_) => onDelete(),
+      confirmDismiss: (_) async {
+        try {
+          await onDelete();
+          return true;
+        } catch (e) {
+          debugPrint('❌ [CALORIES] Failed to delete food log entry: $e');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(context.tr('generic_error'))),
+            );
+          }
+          return false;
+        }
+      },
+      onDismissed: (_) => onDismissed(),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(

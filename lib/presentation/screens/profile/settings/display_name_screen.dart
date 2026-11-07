@@ -25,8 +25,18 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
   @override
   void initState() {
     super.initState();
-    final user = ref.read(currentUserProvider).value;
-    _nameController.text = user?.displayName ?? '';
+    final user = ref.read(currentUserProvider).valueOrNull;
+    if (user != null) {
+      _nameController.text = user.displayName ?? '';
+    } else {
+      // User still loading: fill the field once it arrives (unless the
+      // user already started typing).
+      ref.read(currentUserProvider.future).then((user) {
+        if (mounted && _nameController.text.isEmpty) {
+          _nameController.text = user?.displayName ?? '';
+        }
+      }).catchError((_) {});
+    }
   }
 
   @override
@@ -56,7 +66,7 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -180,8 +190,19 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: source, maxWidth: 512, maxHeight: 512);
+    final XFile? image;
+    try {
+      image = await ImagePicker().pickImage(source: source, maxWidth: 512, maxHeight: 512);
+    } catch (e) {
+      // e.g. camera / photo library permission denied
+      debugPrint('❌ [PROFILE] Image picker failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('generic_error'))),
+        );
+      }
+      return;
+    }
 
     if (image != null) {
       await _uploadProfilePicture(image.path);
@@ -203,7 +224,7 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
         );
       }
     } finally {
-      setState(() => _isUploadingImage = false);
+      if (mounted) setState(() => _isUploadingImage = false);
     }
   }
 
@@ -222,7 +243,7 @@ class _DisplayNameScreenState extends ConsumerState<DisplayNameScreen> {
         );
       }
     } finally {
-      setState(() => _isUploadingImage = false);
+      if (mounted) setState(() => _isUploadingImage = false);
     }
   }
 

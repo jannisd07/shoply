@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/utils/number_parsing.dart';
 import 'package:shoply/core/widgets/paper/paper_widgets.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/services/onboarding_answers_service.dart';
@@ -60,9 +61,9 @@ class _OnboardingGoalPageState extends State<OnboardingGoalPage> {
       _goalType == NutritionGoalType.gainMuscle;
 
   int? get _age => int.tryParse(_ageController.text.trim());
-  double? get _height => double.tryParse(_heightController.text.trim());
-  double? get _currentWeight => double.tryParse(_currentWeightController.text.trim());
-  double? get _targetWeight => double.tryParse(_targetWeightController.text.trim());
+  double? get _height => parseLocaleDouble(_heightController.text);
+  double? get _currentWeight => parseLocaleDouble(_currentWeightController.text);
+  double? get _targetWeight => parseLocaleDouble(_targetWeightController.text);
 
   void _reportDraft() {
     final age = _age;

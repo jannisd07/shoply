@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 
@@ -43,7 +44,7 @@ class _LanguageScreenState extends ConsumerState<LanguageScreen> {
           left: 24,
           right: 24,
           top: 8,
-          bottom: 60 + MediaQuery.of(context).padding.bottom,
+          bottom: MainScaffold.getNavbarClearance(context) + 16,
         ),
         children: [
           Padding(
