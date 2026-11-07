@@ -34,6 +34,31 @@ the Design System section below) take precedence over a skill's house style.
 **Missing?** If `superpowers:*`, `frontend-design:*`, `ui-ux-pro-max:*`, `planning-with-files:*`, `claude-security:*`
 or Context7 is not available in a session, the plugin isn't installed on this machine: say so first.
 
+## Two people, two Macs (interactive sessions)
+
+Two people work on the app at the same time, each with their own Claude session on their own Mac, sitting side by
+side. They say things like "change feature X"; Claude does the whole change and gets it to the other Mac without being
+asked for each git step. Scheduled routines keep following the branch policy below instead.
+
+1. **Start of every task:** `git pull --rebase origin main` (commit or stash local work first). The
+   `.claude/hooks/sync-check.sh` hook flags it when the other Mac has pushed something you don't have.
+2. **Work on a short branch** `feature/<what>` off `main`, one feature per branch, kept small. Name the feature area in
+   the first line of the answer ("Bereich: Rezepte") so the person next to you can avoid it.
+3. **Before pushing:** `dart analyze` (0 errors, 0 warnings), then `git fetch` and merge `origin/main` into the branch.
+   Resolve conflicts yourself; both sides' intent usually survives (two added strings, two added routes). Re-run
+   `dart analyze` after a merge.
+4. **Finish:** fast-forward `main` to the branch, `git push origin main`, delete the branch. Pushing `main` is fine
+   here: the TestFlight workflow only runs manually. Then tell the user in one line that the other Mac can pull.
+5. **Hotspots** both sides touch: `lib/core/localization/app_translations.dart`, `lib/routes/app_router.dart`,
+   `pubspec.yaml` / `pubspec.lock`, `lib/main.dart`, `lib/core/services/service_locator.dart`. Push changes to these
+   as soon as they are done instead of letting them sit on a branch.
+6. **Never** force-push `main`, rewrite pushed history, or push the gitignored secret files.
+
+**Setting up the second Mac:** clone `github.com/jannisd07/shoply`, install Flutter (≥ 3.38, see `pubspec.lock`) and
+CocoaPods, copy the three gitignored files from the first Mac by AirDrop (`lib/core/config/env.dart`,
+`lib/firebase_options.dart`, `ios/Runner/GoogleService-Info.plist`), then `flutter pub get` and `pod install`. The
+plugins from the skills table must be installed in that Mac's Claude Code too; the project skills come with the repo.
+
 ## Branch policy for scheduled routines (standing permission from the owner)
 
 Scheduled/routine Claude Code sessions must NOT each work on their own

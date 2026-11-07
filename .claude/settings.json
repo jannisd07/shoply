@@ -12,6 +12,11 @@
           {
             "type": "command",
             "command": "echo 'Reminder from CLAUDE.md (Skills section): before answering, check the skills table. If a skill fits, load it with the Skill tool without asking, and start the answer about the task with the line \"Skills: …\".'"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/sync-check.sh\"",
+            "timeout": 10
           }
         ]
       }
