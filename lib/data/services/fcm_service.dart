@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -187,7 +189,7 @@ class FCMService {
         id: message.messageId.hashCode,
         title: message.notification!.title ?? 'Avo',
         body: message.notification!.body ?? '',
-        payload: message.data.toString(),
+        payload: jsonEncode(message.data),
         category: _categoryForType(message.data['type'] as String?),
       );
     }
@@ -225,41 +227,7 @@ class FCMService {
     debugPrint('🔔 [FCM] - Data: ${message.data}');
     debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    final type = message.data['type'] as String?;
-    final listId = message.data['listId'] as String?;
-    final listName = message.data['listName'] as String?;
-    final recipeId = message.data['recipeId'] as String?;
-
-    // Navigate based on notification type
-    switch (type) {
-      case 'list_activity':
-      case 'category_change':
-        // Navigate to list activities screen for activity notifications
-        if (listId != null) {
-          NavigationService.instance.navigateToListActivities(listId, listName: listName);
-        }
-        break;
-      case 'list_update':
-      case 'list_invitation':
-        // Navigate to list detail screen
-        if (listId != null) {
-          NavigationService.instance.navigateToList(listId, listName: listName);
-        }
-        break;
-      case 'recipe_rating':
-      case 'recipe_comment':
-        // Navigate to recipe detail screen
-        if (recipeId != null) {
-          NavigationService.instance.navigateToRecipe(recipeId);
-        }
-        break;
-      default:
-        debugPrint('⚠️ [FCM] Unknown notification type: $type');
-        // Default: navigate to list if listId is available
-        if (listId != null) {
-          NavigationService.instance.navigateToList(listId, listName: listName);
-        }
-    }
+    NavigationService.instance.handleNotificationData(message.data);
   }
 
   /// Get current FCM token

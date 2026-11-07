@@ -59,8 +59,41 @@ class NavigationService {
       return;
     }
 
-    _router!.go('/recipes/$recipeId');
+    unawaited(_router!.push('/recipes/$recipeId'));
     debugPrint('✅ [NAVIGATION] Navigated to recipe: $recipeId');
+  }
+
+  /// Route a tapped notification (local or FCM) by its data payload.
+  void handleNotificationData(Map<String, dynamic> data) {
+    final type = data['type'] as String?;
+    final listId = data['listId'] as String?;
+    final listName = data['listName'] as String?;
+    // 'recipe_id' is what older app versions sent for rating pushes.
+    final recipeId = (data['recipeId'] ?? data['recipe_id']) as String?;
+
+    debugPrint('🔔 [NAVIGATION] Notification tapped: $type');
+
+    switch (type) {
+      case 'list_activity':
+      case 'category_change':
+        if (listId != null) {
+          navigateToListActivities(listId, listName: listName);
+        }
+      case 'list_update':
+      case 'list_invitation':
+        if (listId != null) navigateToList(listId, listName: listName);
+      case 'recipe_rating':
+      case 'recipe_like':
+      case 'recipe_comment':
+        if (recipeId != null) navigateToRecipe(recipeId);
+      case 'avo_restock':
+        // Opening the app is enough — the home screen shows the restock
+        // card with add/dismiss actions.
+        break;
+      default:
+        debugPrint('⚠️ [NAVIGATION] Unknown notification type: $type');
+        if (listId != null) navigateToList(listId, listName: listName);
+    }
   }
 
   /// Navigate to diet preferences.
