@@ -118,8 +118,14 @@ Deep Links (`shoply://plan`, `…/calories/add`, `…/avo/voice` usw.) gehen heu
 
 ## Hinweise für B
 
-- `item_merge_service.dart` gibt es nicht. A liefert für den Wochenplan früh in A5:
-  `ItemRepository.addItems(listId, items)` mit Rückgabe eines Tokens und `undoAddItems(token)`.
+- `item_merge_service.dart` gibt es nicht. **Geliefert (A5, vorgezogen):**
+  `ItemRepository.instance.addItems(listId, [NewItem(name:, quantity:, unit:, category:, notes:)])` →
+  `AddItemsResult(token, items)` und `undoAddItems(token)`. Ein Insert für alles, Zusammenführen mit offenen Artikeln
+  gleichen Namens und gleicher Einheit, fehlende Kategorien im Hintergrund. Sobald `categorizeLocal` (B1.5) da ist,
+  stellt A die Hintergrund-Kategorisierung darauf um.
+- **Mengen-Parser** für alle Eingaben: `parseItemInput(text)` / `parseSingleItem(text)` in
+  `lib/core/utils/item_input_parser.dart` („2 Milch“, „500 g Mehl“, „eine halbe Melone“). Avo und Siri können ihn
+  ebenfalls nutzen.
 - Lokal läuft auf Mac 1 Flutter 3.44.8; `pubspec.lock` wird dadurch beim Testen verändert. A committet die Lock-Datei
   nicht mit.
 
