@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shoply/core/design/avo_design_scope.dart';
 import 'package:shoply/core/localization/app_localizations.dart';
 import 'package:shoply/core/theme/app_theme.dart';
 import 'package:shoply/data/services/subscription_service.dart';
@@ -31,6 +32,9 @@ class AvoApp extends ConsumerStatefulWidget {
 }
 
 class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
+  /// Last status bar style handed to SystemChrome.
+  SystemUiOverlayStyle? _appliedOverlayStyle;
+
   late final StreamSubscription<AuthState> _authSubscription;
   String? _accountUserId = SupabaseService.instance.currentUser?.id;
 
@@ -115,7 +119,8 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
   ) async {
     try {
       final lists = await ref.read(userListsProvider.future);
-      final target = _findListByName(lists, listName) ??
+      final target =
+          _findListByName(lists, listName) ??
           await ref.read(listsNotifierProvider.notifier).createList(listName);
 
       await ref
@@ -134,7 +139,8 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
   Future<void> _handleSiriCreateList(String listName) async {
     try {
       final lists = await ref.read(userListsProvider.future);
-      final target = _findListByName(lists, listName) ??
+      final target =
+          _findListByName(lists, listName) ??
           await ref.read(listsNotifierProvider.notifier).createList(listName);
 
       _openList(target);
@@ -148,13 +154,20 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
   /// whole stack with `go`), so back/swipe-back works like every other list
   /// entry point.
   void _openList(ShoppingListModel list) {
-    ref.read(routerProvider).push(
-          Uri(path: '/lists/${list.id}', queryParameters: {'name': list.name})
-              .toString(),
+    ref
+        .read(routerProvider)
+        .push(
+          Uri(
+            path: '/lists/${list.id}',
+            queryParameters: {'name': list.name},
+          ).toString(),
         );
   }
 
-  ShoppingListModel? _findListByName(List<ShoppingListModel> lists, String name) {
+  ShoppingListModel? _findListByName(
+    List<ShoppingListModel> lists,
+    String name,
+  ) {
     for (final list in lists) {
       if (list.name.toLowerCase() == name.toLowerCase()) return list;
     }
@@ -185,10 +198,13 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
     final languageCode = ref.watch(languageProvider);
 
     return AdaptiveApp.router(
-      key: ValueKey('$themeMode-$languageCode'),
+      // No key here: a key built from theme or language rebuilt the whole
+      // app on every change and lost scroll positions and input (A2).
       title: 'Avo',
       materialLightTheme: AppTheme.lightTheme,
       materialDarkTheme: AppTheme.darkTheme,
+      cupertinoLightTheme: AppTheme.cupertinoLight,
+      cupertinoDarkTheme: AppTheme.cupertinoDark,
       themeMode: themeMode,
       routerConfig: router,
       locale: Locale(languageCode),
@@ -200,32 +216,34 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        // Nothing in the app ever declared a status bar style, so iOS kept
-        // whatever was set last — which left the clock and the Wi-Fi/battery
-        // icons drawn in white on the light list background, effectively
-        // invisible. Deriving it from the theme here fixes every screen at
-        // once; a screen that needs something else (a dark hero image behind
-        // the bar, say) can still override with its own AnnotatedRegion,
-        // since the innermost one wins.
-        final isDarkUi = themeMode == ThemeMode.dark ||
+        final isDarkUi =
+            themeMode == ThemeMode.dark ||
             (themeMode == ThemeMode.system &&
                 MediaQuery.platformBrightnessOf(context) == Brightness.dark);
         final overlayStyle = isDarkUi
-            ? SystemUiOverlayStyle.light // light icons for dark backgrounds
+            ? SystemUiOverlayStyle
+                  .light // light icons for dark backgrounds
             : SystemUiOverlayStyle.dark; // dark icons for light backgrounds
-        // Applied imperatively as well as declaratively. The AnnotatedRegion
-        // alone did not reach iOS here — the style is sampled from the layer
-        // tree, and the AppBar on pushed routes annotates its own (derived
-        // from its transparent background, i.e. wrong). Calling SystemChrome
-        // directly is unconditional and wins regardless of sampling.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          SystemChrome.setSystemUIOverlayStyle(overlayStyle);
-        });
-        // On iOS AdaptiveApp builds a CupertinoApp, which (unlike MaterialApp)
-        // has no ScaffoldMessenger; without this every showSnackBar throws.
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: overlayStyle,
-          child: ScaffoldMessenger(child: TutorialOverlay(child: child!)),
+        // The AnnotatedRegion alone did not reach iOS (pushed AppBars
+        // annotate their own, wrong style), so the style is also set
+        // directly, but only when it actually changes.
+        if (overlayStyle != _appliedOverlayStyle) {
+          _appliedOverlayStyle = overlayStyle;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            SystemChrome.setSystemUIOverlayStyle(overlayStyle);
+          });
+        }
+        // On iOS AdaptiveApp builds a CupertinoApp: no Material Theme and no
+        // ScaffoldMessenger. The Theme makes leftover Material widgets follow
+        // the D2 tokens; without the messenger every showSnackBar throws.
+        return AvoDesignScope(
+          child: Theme(
+            data: AppTheme.of(isDarkUi ? Brightness.dark : Brightness.light),
+            child: AnnotatedRegion<SystemUiOverlayStyle>(
+              value: overlayStyle,
+              child: ScaffoldMessenger(child: TutorialOverlay(child: child!)),
+            ),
+          ),
         );
       },
     );
