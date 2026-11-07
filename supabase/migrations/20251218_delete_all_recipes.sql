@@ -1,21 +1,10 @@
--- Delete all recipes and related data
--- This migration removes all existing recipes so users can create fresh ones
+-- 20251218_delete_all_recipes (neutralized)
+--
+-- This was a one-off data wipe (DELETE FROM recipes / recipe_ratings /
+-- recipe_comments / saved_recipes / collection_recipes) that ran once in
+-- December 2025. It stays in the migration chain only so the CLI's
+-- migration history keeps matching the remote project; its body is now a
+-- no-op so `supabase db reset` or a push to a fresh project no longer
+-- deletes every recipe. The original statements are in git history.
 
--- Delete related data first (foreign key constraints)
--- Using IF EXISTS pattern with DO blocks for tables that may not exist
-DELETE FROM recipe_ratings WHERE true;
-
-DO $$ BEGIN
-  DELETE FROM recipe_comments WHERE true;
-EXCEPTION WHEN undefined_table THEN NULL;
-END $$;
-
-DELETE FROM saved_recipes WHERE true;
-
-DO $$ BEGIN
-  DELETE FROM collection_recipes WHERE true;
-EXCEPTION WHEN undefined_table THEN NULL;
-END $$;
-
--- Delete all recipes
-DELETE FROM recipes WHERE true;
+select 1;
