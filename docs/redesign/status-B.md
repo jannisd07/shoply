@@ -4,7 +4,8 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 
 ## Stand
 
-2026-11-07: Plan steht in [`docs/superpowers/plans/2026-11-07-teil-b.md`](../superpowers/plans/2026-11-07-teil-b.md).
+2026-11-07, 23:50: Zwei Workflows laufen (P0/P1 mit 14 Paketen; parallel nativer Unterbau, Kalorien- und
+Wochenplan-Logik, Evals, Avo-Tool-Abdeckung, Screen-Specs). Plan steht in [`docs/superpowers/plans/2026-11-07-teil-b.md`](../superpowers/plans/2026-11-07-teil-b.md).
 Jetzt läuft P0 (die Anfragen 2–4 von A: Slot-Stubs, Kalorien-Alias, Kill-Switch-Provider), parallel P1: Edge Function
 `ai` mit Quoten, Claude-Client, Kategorisierung lokal zuerst, Angebots-Logik (Region ohne 10115, Ersparnis-Funktion,
 Markt pro Liste), App-Start. Sichtbare Screens erst ab S2.
@@ -23,18 +24,35 @@ Markt pro Liste), App-Start. Sichtbare Screens erst ab S2.
 
 ## Anfragen an Teil A
 
-1. **Paywall ohne Angebote.** `lib/presentation/screens/subscription/subscription_screen.dart:180-185` und der Schlüssel
-   `premium_feat_deals` (DE/EN) versprechen Angebote als Pro. Angebote sind nie Pro (Plan 8). Bitte streichen.
-2. **`showAppBottomSheet` noch nicht löschen.** Elf B-Dateien nutzen es heute. Ich baue sie in P2 auf Vollbild um und
-   melde, wenn keine B-Datei es mehr braucht.
-3. **Ordner für B-Systemseiten.** `/settings/siri` und `/settings/widgets` brauchen einen B-Ordner. Vorschlag in
-   `owner.sh`: `lib/presentation/screens/system/*` → B. Dazu `evals/*` → B (promptfoo-Evals für die KI).
-4. **Vorwarnung Kategorisierung (kommt mit B1.5):** `item_repository.dart:106-125,167-178` wartet heute vor dem Insert
-   auf die KI. Sobald `AiCategorizationService.categorizeLocal` (synchron) und `refineCategory` (Hintergrund) da sind,
-   bitte darauf umstellen. Die alten Methoden bleiben bis dahin unverändert nutzbar.
-5. **Vorwarnung Start (B3):** Für das Startbudget (≤ 150 ms vor `runApp`) brauche ich später zwei Dinge aus A-Dateien:
-   den Remount-Key `app.dart:188` entfernen und den Router-Redirect synchron machen (`app_router.dart:405`).
-   Genauer Wortlaut folgt mit dem B3-Messergebnis.
+Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die Logik dahinter läuft schon).
+
+6. **Prio 1 – S2-Komponenten zuerst für die B-Screens, gern in Teilen (S2a).** Ich baue nicht gegen Tokens allein, sonst
+   doppelte Arbeit. Gebraucht (Namen wie im D2-Komponenten-Blatt): Toolbar mit Glas-Knopf 44, Gruppe (Radius 26) mit
+   Zeile/Trennlinie, Karte (Radius 20), Abschnittstitel, Chips, Segmented Control, kompakter `ValueStepper`, getönte
+   Kapsel (Hauptaktion), Glas-Eingabefeld (Avo-Composer), `StatusRow`, `EmptyState`, `SkeletonSection`, `UndoToast`
+   mit Host, `SuccessMoment`, `EditorScaffold` (Vollbild-Bearbeiten mit Schließen), zentrierter Bestätigungsdialog,
+   `ProgressRing` und einfache Balken-Charts (Kalorien, Verlauf), `ProBadge` und `ProGate.run`. Dazu die D2-Tab-Bar mit
+   dem **Avo-Tab auf `/avo`**. Was davon zuerst kommt, sag kurz in status-A, dann ziehe ich die Screens in derselben
+   Reihenfolge nach.
+7. **Prio 2 – Avo-Kontext:** ein Provider `avoScreenContextProvider` (`screen`, `listId`, `listName`), den A-Screens
+   setzen, plus ein Navigations-Helfer `openAppDestination(String id)` für Avo-Antwortkarten („Liste öffnen“). Ohne das
+   startet Avo immer mit der ersten Liste.
+8. **Prio 2 – Home-Hinweise:** der Vertrag `TodayHintSource` aus deinem A4-Plan, sobald er steht. Die Daten liefere ich
+   schon (Wochenplan heute, Kalorien übrig, Ersparnis, offene Beträge).
+9. **Prio 3 – `AppBrand` und `pro_features`** (Name „Avo“, Pro-Liste), damit Avos App-Wissen nicht von Hand gepflegt
+   wird.
+10. **Prio 3 – Deep-Link-Übersetzung mit Fehlerseite (S2)** für Widgets und Siri: `shopping?list=`,
+    `lists/<id>?focus=add`, `avo/voice`, `plan?day=`, `calories/water?ml=`.
+11. **Prio 4 – `ShoppingItemModel.barcode` (optional, nullable)**, damit `ArticleImage` ein Open-Food-Facts-Foto nur bei
+    echtem Barcode zeigt.
+12. **Vorwarnung:** `ListPriceSummaryBar` und die Ein-Argument-Form von `OfferSuggestionsBar(query:, onSelect:)` bleiben
+    als Übergang. Bitte beim Listen-Umbau `ListOfferSummary(listId:)` und `OfferSuggestionsBar(listId:, query:)` nutzen,
+    dann lösche ich die Übergänge.
+
+Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
+5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald
+`categorizeLocal` gepusht ist). Danke auch für `addItems`/`undoAddItems` und `parseItemInput`: Der Wochenplan und Avo
+nutzen beide direkt.
 
 ## Erledigte Anfragen von Teil A
 
