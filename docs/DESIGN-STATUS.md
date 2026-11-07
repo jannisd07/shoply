@@ -26,6 +26,14 @@ Der Owner hat am 2026-11-07 die Richtung **D2 · Glas** gewählt: iOS 26 Liquid 
 Mockups: Design-Leinwand "Shoply Redesign", Seite "D2 · Glas" (Home, Liste, Rezepte, Artikel bearbeiten als
 Vollbild, Komponenten-Blatt mit Tokens). Die Komponenten-Seite ist die Vorlage für die Flutter-Umsetzung.
 
+- **Tab-Leiste:** eine Glas-Kapsel mit 5 Tabs: Home · Listen · Avo · Rezepte (Besteck-Icon wie bisher) · Profil.
+  Aktiver Tab: gefülltes grünes Icon auf sanftem grünem Schein, sonst Linien-Icons. Kein separater Avo-Button,
+  kein Profil-Avatar in der Kopfzeile.
+- **Home** ("Für dich"): Avo oben, "Dein November" (Ausgaben, Gespart, Einkäufe), Ausgaben im Monatsvergleich,
+  Sparziel, **Kalorien heute** (Ring + Makros, "Mahlzeit hinzufügen" als Vollbild), Für-dich-Kacheln,
+  Top-Listen, letzte Einkäufe, Rezeptempfehlung.
+- **Widgets:** Startbildschirm (Gespart, Liste, Wocheneinkauf, Für dich, Kalorien) und Sperrbildschirm.
+
 ## Die drei Stile im Code
 
 | Stil | Merkmale | Wo |
