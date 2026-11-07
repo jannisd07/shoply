@@ -180,7 +180,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     final features = [
       context.tr('premium_feat_lists'),
       context.tr('premium_feat_avo'),
-      context.tr('premium_feat_deals'),
+      // Offers are never Pro (Plan 8): no deals line here.
       context.tr('premium_feat_stats'),
     ];
 
