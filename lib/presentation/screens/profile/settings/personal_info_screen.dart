@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/utils/number_parsing.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
@@ -35,32 +35,21 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
   }
 
   Future<void> _loadUserData() async {
-    final user = SupabaseService.instance.currentUser;
-    if (user == null) return;
-
     try {
-      final response = await SupabaseService.instance
-          .from('users')
-          .select('age, height, height_unit, gender')
-          .eq('id', user.id)
-          .maybeSingle();
-
-      if (response != null && mounted) {
-        setState(() {
-          if (response['age'] != null) {
-            _ageController.text = response['age'].toString();
-          }
-          if (response['height'] != null) {
-            _heightController.text = response['height'].toString();
-          }
-          _selectedHeightUnit = response['height_unit'] as String? ?? 'cm';
-          _selectedGender = response['gender'] as String?;
-        });
-      }
+      // currentUserProvider already holds these columns; no extra query.
+      final user = await ref.read(currentUserProvider.future);
+      if (user == null || !mounted) return;
+      setState(() {
+        if (user.age != null) _ageController.text = user.age.toString();
+        if (user.height != null) _heightController.text = user.height.toString();
+        _selectedHeightUnit = user.heightUnit ?? 'cm';
+        _selectedGender = user.gender;
+      });
     } catch (e) {
+      debugPrint('❌ [PERSONAL_INFO] Failed to load user data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e')),
+          SnackBar(content: Text(context.tr('generic_error'))),
         );
       }
     }
@@ -84,7 +73,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
 
     try {
       final age = _ageController.text.isNotEmpty ? int.parse(_ageController.text) : null;
-      final height = _heightController.text.isNotEmpty ? double.parse(_heightController.text) : null;
+      final height = parseLocaleDouble(_heightController.text);
 
       await SupabaseService.instance.from('users').update({
         'age': age,
@@ -104,14 +93,15 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
       if (mounted) {
         setState(() => _hasChanges = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Personal information updated')),
+          SnackBar(content: Text(context.tr('personal_info_updated'))),
         );
         ref.invalidate(currentUserProvider);
       }
     } catch (e) {
+      debugPrint('❌ [PERSONAL_INFO] Failed to save: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving: $e')),
+          SnackBar(content: Text(context.tr('generic_error'))),
         );
       }
     } finally {
@@ -204,7 +194,7 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               style: TextStyle(color: textPrimary),
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*[.,]?\d*')),
               ],
               decoration: InputDecoration(
                 hintText: _selectedHeightUnit == 'cm' ? '170' : '5.7',

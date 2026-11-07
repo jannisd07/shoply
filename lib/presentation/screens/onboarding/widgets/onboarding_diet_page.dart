@@ -1,25 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shoply/core/constants/diet_preferences.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/widgets/paper/paper_widgets.dart';
-
-/// Same diet-preference ids used by the Profile → Diet preferences screen
-/// (`diet_preferences_screen.dart`) — collecting them here just moves the
-/// question earlier, it doesn't invent a second taxonomy.
-const List<String> kOnboardingDietIds = [
-  'vegetarian',
-  'vegan',
-  'gluten_free',
-  'dairy_free',
-  'pescatarian',
-  'keto',
-  'paleo',
-  'low_carb',
-  'halal',
-  'kosher',
-  'nut_free',
-  'low_sodium',
-];
 
 /// Onboarding page: pick any diet preferences that apply. Feeds the exact
 /// same `users.diet_preferences` field the rest of the app already reads
@@ -55,7 +38,7 @@ class OnboardingDietPage extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: kOnboardingDietIds.map((id) {
+            children: kDietPreferenceIds.map((id) {
               final isSelected = selected.contains(id);
               return _DietChip(
                 label: context.tr('diet_$id'),
