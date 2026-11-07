@@ -350,7 +350,10 @@ class AvoNudgeService {
   /// rather than claiming a "nearby" offer from the nationwide fallback.
   Future<List<OfferNudge>> getOfferNudges({int limit = 2}) async {
     try {
-      final zipInfo = await UserLocationService.instance.getZipInfo();
+      // Runs in the background (home card, scheduled reminder): never pop
+      // the location permission dialog from here.
+      final zipInfo = await UserLocationService.instance
+          .getZipInfo(allowPermissionPrompt: false);
       if (!zipInfo.isReal) return [];
 
       final stats = await _getStats();

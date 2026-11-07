@@ -1,17 +1,23 @@
+import 'package:shoply/core/utils/product_name_normalizer.dart';
 import 'package:shoply/data/models/product_category.dart';
 
-/// Service for intelligent product classification
-/// Uses a hybrid approach: keyword matching + ML-based classification
+/// Keyword-based product classification (fallback step of
+/// SmartCategorizationService).
 class ProductClassifierService {
   static final ProductClassifierService _instance = ProductClassifierService._();
   static ProductClassifierService get instance => _instance;
   
   ProductClassifierService._();
 
-  /// Initialize the classifier (load ML model if available)
-  Future<void> initialize() async {
-    // TODO: Load TensorFlow Lite model when available
-  }
+  /// Keyword lists per category, normalized once on first use instead of on
+  /// every classify() call.
+  late final Map<ProductCategory, List<String>> _normalizedKeywords = {
+    for (final category in ProductCategory.values)
+      category: _getCategoryKeywords(category)
+          .map(_normalizeProductName)
+          .where((k) => k.isNotEmpty)
+          .toList(growable: false),
+  };
 
   /// Classify a product name into a category
   /// Uses intelligent keyword matching with confidence scoring
@@ -51,43 +57,25 @@ class ProductClassifierService {
     );
   }
 
-  /// Normalize product name for better matching
-  /// Handles typos, special characters, and common variations
+  /// Normalize product name for better matching, including common typos
+  /// and English spellings.
   String _normalizeProductName(String name) {
-    return name
-        .toLowerCase()
-        .trim()
-        // Remove special characters
-        .replaceAll(RegExp(r'[^\w\s]'), '')
-        // Normalize German umlauts
-        .replaceAll('ä', 'ae')
-        .replaceAll('ö', 'oe')
-        .replaceAll('ü', 'ue')
-        .replaceAll('ß', 'ss')
-        // Common typos and variations
-        .replaceAll('gauda', 'gouda')  // Gouda typo
-        .replaceAll('jogurt', 'joghurt')  // Joghurt typo
-        .replaceAll('yogurt', 'joghurt')  // English variant
-        .replaceAll('yoghurt', 'joghurt')  // English variant
-        .replaceAll('kaese', 'kaese')  // Käse without umlaut
-        .replaceAll('broetchen', 'broetchen')  // Brötchen without umlaut
-        // Remove extra spaces
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    return normalizeProductName(name)
+        .replaceAll('gauda', 'gouda')
+        .replaceAll('jogurt', 'joghurt')
+        .replaceAll('yogurt', 'joghurt')
+        .replaceAll('yoghurt', 'joghurt');
   }
 
   /// Calculate confidence score for a category based on keyword matching
   double _calculateCategoryScore(String productName, ProductCategory category) {
-    final keywords = _getCategoryKeywords(category);
+    final keywords = _normalizedKeywords[category]!;
 
     double score = 0.0;
     int exactMatches = 0;
     int partialMatches = 0;
 
-    for (final keyword in keywords) {
-      // Normalize keyword for comparison
-      final normalizedKeyword = _normalizeProductName(keyword);
-      
+    for (final normalizedKeyword in keywords) {
       if (productName.contains(normalizedKeyword)) {
         // Exact match gets highest score
         if (productName == normalizedKeyword) {
@@ -316,11 +304,6 @@ class ProductClassifierService {
           'lotterie', 'rubbellos', 'zigarette', 'tabak', 'feuerzeug',
           'pfandbon', 'gutschein', 'geschenkkarte', 'tüte', 'tragetasche'];
     }
-  }
-
-  /// Batch classify multiple products
-  List<ProductClassificationResult> classifyBatch(List<String> productNames) {
-    return productNames.map((name) => classify(name)).toList();
   }
 }
 

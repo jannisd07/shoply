@@ -45,8 +45,7 @@ class RecipeOfferService {
   /// Offers for [ingredientNames] around [zipCode], via the persistent cache
   /// when the exact recipe+zip+ingredients snapshot was checked within
   /// [cacheTtl]. Never throws — a failed search for one ingredient simply
-  /// yields no match for it (OfferPriceService already returns empty on any
-  /// error).
+  /// yields no match for it, and such an incomplete result is not cached.
   Future<RecipeOffersResult> getOffers({
     required String recipeId,
     required List<String> ingredientNames,
@@ -58,30 +57,43 @@ class RecipeOfferService {
     final cached = await _loadCached(recipeId, signature);
     if (cached != null) return cached;
 
-    // Concurrent fetch — the service's internal throttle still serializes
-    // actual request starts (sequential awaits would add ~250ms of pure
-    // queue latency per ingredient on top).
-    final fetched = await Future.wait(names.map((name) async {
-      final offers =
-          await OfferPriceService.instance.searchOffers(name, zipCode: zipCode);
-      return MapEntry(name, pickBestOffer(name, offers));
-    }));
-
-    final matches = <RecipeIngredientOffer>[
-      for (final entry in fetched)
-        if (entry.value != null)
-          RecipeIngredientOffer.fromStoreOffer(entry.key, entry.value!),
-    ];
-
+    final fetched = await matchOffers(names, zipCode: zipCode);
     final result = RecipeOffersResult(
       recipeId: recipeId,
       zipCode: zipCode,
       checkedIngredientCount: names.length,
-      matches: matches,
+      matches: fetched.matches,
       signature: signature,
     );
-    await _saveCached(result);
+    // Don't pin a transient API failure (empty result) for [cacheTtl].
+    if (fetched.complete) await _saveCached(result);
     return result;
+  }
+
+  /// The best current offer for each of [names] around [zipCode], in input
+  /// order (names without a relevant offer are left out). `complete` is
+  /// false when at least one search failed. Never throws.
+  ///
+  /// Searches run concurrently; OfferPriceService's throttle still spaces
+  /// out the actual request starts.
+  static Future<({List<RecipeIngredientOffer> matches, bool complete})>
+      matchOffers(List<String> names, {required String zipCode}) async {
+    var complete = true;
+    final fetched = await Future.wait(names.map((name) async {
+      final offers = await OfferPriceService.instance
+          .trySearchOffers(name, zipCode: zipCode);
+      if (offers == null) complete = false;
+      return MapEntry(name, pickBestOffer(name, offers ?? const []));
+    }));
+
+    return (
+      matches: [
+        for (final entry in fetched)
+          if (entry.value != null)
+            RecipeIngredientOffer.fromStoreOffer(entry.key, entry.value!),
+      ],
+      complete: complete,
+    );
   }
 
   /// Ingredient names worth searching: trimmed, ≥3 chars, no pantry staples,

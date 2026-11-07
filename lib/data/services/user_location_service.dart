@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,15 +44,35 @@ class UserLocationService {
   /// suggestions still return offers from the big nationwide chains.
   static const String defaultZip = '10115';
 
+  /// After a failed GPS fix (no permission, timeout, outside Germany) don't
+  /// try again for this long — every attempt can take up to 10 s.
+  static const _gpsRetryAfter = Duration(minutes: 30);
+  DateTime? _gpsFailedAt;
+
+  /// One GPS fix shared by concurrent callers (zip, zip info, coordinates).
+  Future<Position?>? _positionInFlight;
+
   /// Always returns a usable zip. [isReal] is false when it's [defaultZip],
   /// which the UI surfaces as a "set your PLZ" hint.
-  Future<ZipInfo> getZipInfo({bool forceRefresh = false}) async {
-    final zip = await getZipCode(forceRefresh: forceRefresh);
+  ///
+  /// Pass `allowPermissionPrompt: false` from background work so it never
+  /// pops the system location dialog.
+  Future<ZipInfo> getZipInfo({
+    bool forceRefresh = false,
+    bool allowPermissionPrompt = true,
+  }) async {
+    final zip = await getZipCode(
+      forceRefresh: forceRefresh,
+      allowPermissionPrompt: allowPermissionPrompt,
+    );
     if (zip != null && zip.isNotEmpty) return ZipInfo(zip, true);
     return const ZipInfo(defaultZip, false);
   }
 
-  Future<String?> getZipCode({bool forceRefresh = false}) async {
+  Future<String?> getZipCode({
+    bool forceRefresh = false,
+    bool allowPermissionPrompt = true,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
 
     final manual = prefs.getString(_manualZipKey);
@@ -67,7 +88,10 @@ class UserLocationService {
       }
     }
 
-    final fromGps = await _zipFromGps();
+    final fromGps = await _zipFromGps(
+      forceRefresh: forceRefresh,
+      allowPermissionPrompt: allowPermissionPrompt,
+    );
     if (fromGps != null) {
       await prefs.setString(_zipKey, fromGps);
       await prefs.setString(_zipTimeKey, DateTime.now().toIso8601String());
@@ -94,9 +118,15 @@ class UserLocationService {
     return prefs.getString(_manualZipKey);
   }
 
-  Future<String?> _zipFromGps() async {
+  Future<String?> _zipFromGps({
+    required bool forceRefresh,
+    required bool allowPermissionPrompt,
+  }) async {
     try {
-      final position = await _getPosition();
+      final position = await _getPosition(
+        forceRefresh: forceRefresh,
+        allowPermissionPrompt: allowPermissionPrompt,
+      );
       if (position == null) return null;
 
       final placemarks = await placemarkFromCoordinates(
@@ -114,15 +144,16 @@ class UserLocationService {
             (p.country == 'Germany');
         final zip = p.postalCode;
         if (isGerman && zip != null && zip.isNotEmpty) {
-          print('✅ [LOCATION] Resolved German zip code: $zip');
+          debugPrint('✅ [LOCATION] Resolved German zip code: $zip');
           return zip;
         }
       }
 
-      print('⚠️ [LOCATION] No German placemark found; using fallback zip');
+      debugPrint('⚠️ [LOCATION] No German placemark found; using fallback zip');
+      _gpsFailedAt = DateTime.now();
       return null;
     } catch (e) {
-      print('❌ [LOCATION] Failed to resolve zip: $e');
+      debugPrint('❌ [LOCATION] Failed to resolve zip: $e');
       return null;
     }
   }
@@ -132,7 +163,10 @@ class UserLocationService {
   /// fallback — a zip alone can't place a store on a map — so this returns
   /// null whenever GPS isn't available, and callers must handle that by
   /// simply not showing distance info rather than guessing.
-  Future<UserCoordinates?> getCoordinates({bool forceRefresh = false}) async {
+  Future<UserCoordinates?> getCoordinates({
+    bool forceRefresh = false,
+    bool allowPermissionPrompt = true,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
 
     if (!forceRefresh) {
@@ -147,43 +181,68 @@ class UserLocationService {
       }
     }
 
-    final position = await _getPosition();
+    final position = await _getPosition(
+      forceRefresh: forceRefresh,
+      allowPermissionPrompt: allowPermissionPrompt,
+    );
     if (position == null) return null;
-
-    await prefs.setDouble(_latKey, position.latitude);
-    await prefs.setDouble(_lonKey, position.longitude);
-    await prefs.setString(_coordsTimeKey, DateTime.now().toIso8601String());
     return UserCoordinates(position.latitude, position.longitude);
   }
 
   /// Shared permission-check + fix, used by both the zip resolver and
-  /// [getCoordinates] so there's only one place that requests location
-  /// permission.
-  Future<Position?> _getPosition() async {
+  /// [getCoordinates]. Concurrent callers share one fix; every successful
+  /// fix also refreshes the cached coordinates.
+  Future<Position?> _getPosition({
+    required bool forceRefresh,
+    required bool allowPermissionPrompt,
+  }) {
+    final failedAt = _gpsFailedAt;
+    if (!forceRefresh &&
+        failedAt != null &&
+        DateTime.now().difference(failedAt) < _gpsRetryAfter) {
+      return Future.value(null);
+    }
+    return _positionInFlight ??= _fetchPosition(allowPermissionPrompt)
+        .whenComplete(() => _positionInFlight = null);
+  }
+
+  Future<Position?> _fetchPosition(bool allowPermissionPrompt) async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
-        print('⚠️ [LOCATION] Location services disabled');
+        debugPrint('⚠️ [LOCATION] Location services disabled');
+        _gpsFailedAt = DateTime.now();
         return null;
       }
 
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
+      if (permission == LocationPermission.denied && allowPermissionPrompt) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        print('⚠️ [LOCATION] Permission denied');
+        debugPrint('⚠️ [LOCATION] Permission denied');
+        // Only back off after the user actually answered; a background
+        // caller must not block a later interactive prompt.
+        if (allowPermissionPrompt) _gpsFailedAt = DateTime.now();
         return null;
       }
 
-      return await Geolocator.getCurrentPosition(
+      final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.low,
           timeLimit: Duration(seconds: 10),
         ),
       );
+      _gpsFailedAt = null;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_latKey, position.latitude);
+      await prefs.setDouble(_lonKey, position.longitude);
+      await prefs.setString(_coordsTimeKey, DateTime.now().toIso8601String());
+      return position;
     } catch (e) {
-      print('❌ [LOCATION] Failed to get position: $e');
+      debugPrint('❌ [LOCATION] Failed to get position: $e');
+      _gpsFailedAt = DateTime.now();
       return null;
     }
   }

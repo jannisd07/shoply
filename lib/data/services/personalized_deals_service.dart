@@ -1,6 +1,5 @@
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
-import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/recipe_offer_service.dart';
 
 /// Matches items already on a user's shopping lists against current
@@ -22,7 +21,7 @@ class PersonalizedDealsService {
   static const maxCheckedItems = 10;
 
   /// Distinct, worth-checking item names from [openItems]: trimmed, ≥2 chars
-  /// (matches [OfferPriceService.searchOffers]'s own minimum), de-duplicated
+  /// (matches OfferPriceService.searchOffers' own minimum), de-duplicated
   /// case-insensitively (first spelling wins — callers should pass
   /// most-recently-updated items first), capped at [maxCheckedItems].
   static List<String> selectCandidateNames(List<ShoppingItemModel> openItems) {
@@ -48,22 +47,14 @@ class PersonalizedDealsService {
   }) async {
     if (names.isEmpty) return const [];
 
-    final fetched = await Future.wait(names.map((name) async {
-      final offers =
-          await OfferPriceService.instance.searchOffers(name, zipCode: zipCode);
-      return MapEntry(name, RecipeOfferService.pickBestOffer(name, offers));
-    }));
-
-    final matches = <RecipeIngredientOffer>[
-      for (final entry in fetched)
-        if (entry.value != null)
-          RecipeIngredientOffer.fromStoreOffer(entry.key, entry.value!),
-    ]..sort((a, b) {
+    final fetched =
+        await RecipeOfferService.matchOffers(names, zipCode: zipCode);
+    return fetched.matches
+      ..sort((a, b) {
         final aDiscount = a.discountPercent ?? -1;
         final bDiscount = b.discountPercent ?? -1;
         if (aDiscount != bDiscount) return bDiscount - aDiscount;
         return a.price.compareTo(b.price);
       });
-    return matches;
   }
 }

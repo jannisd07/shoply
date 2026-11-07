@@ -85,46 +85,8 @@ class NotificationService {
 
     try {
       final data = jsonDecode(response.payload!);
-      final type = data['type'] as String?;
-      final listId = data['listId'] as String?;
-      final listName = data['listName'] as String?;
-      final recipeId = data['recipeId'] as String?;
-
-      debugPrint('🔔 [NOTIFICATIONS] Type: $type, Data: $data');
-
-      // Navigate based on notification type
-      switch (type) {
-        case 'list_activity':
-        case 'category_change':
-          // Navigate to list activities screen for activity notifications
-          if (listId != null) {
-            NavigationService.instance.navigateToListActivities(listId, listName: listName);
-          }
-          break;
-        case 'list_update':
-        case 'list_invitation':
-          // Navigate to list detail screen
-          if (listId != null) {
-            NavigationService.instance.navigateToList(listId, listName: listName);
-          }
-          break;
-        case 'recipe_like':
-        case 'recipe_comment':
-          // Navigate to recipe detail screen
-          if (recipeId != null) {
-            NavigationService.instance.navigateToRecipe(recipeId);
-          }
-          break;
-        case 'avo_restock':
-          // Opening the app is enough — the home screen shows the
-          // restock card with add/dismiss actions.
-          break;
-        default:
-          debugPrint('⚠️ [NOTIFICATIONS] Unknown notification type: $type');
-          // Default: navigate to list if listId is available
-          if (listId != null) {
-            NavigationService.instance.navigateToList(listId, listName: listName);
-          }
+      if (data is Map<String, dynamic>) {
+        NavigationService.instance.handleNotificationData(data);
       }
     } catch (e) {
       debugPrint('❌ [NOTIFICATIONS] Failed to parse payload: $e');

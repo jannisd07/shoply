@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -55,6 +56,8 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   void initState() {
     super.initState();
     _loadRecipe();
+    // Count the view once per opening (not on reloads after rating).
+    unawaited(_recipeService.trackRecipeView(widget.recipeId));
   }
 
   Future<void> _loadRecipe() async {
@@ -109,47 +112,6 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     }
   }
 
-  List<Ingredient> get _adjustedIngredients {
-    if (_recipe == null) return [];
-    
-    final baseIngredients = _recipe!.ingredients
-        .map((ing) => ing.adjustForServings(_recipe!.defaultServings, _servings))
-        .toList();
-    
-    // Wenn Toggle aktiviert ist, versuche Anpassung basierend auf User-Präferenzen
-    if (_showAdaptedIngredients) {
-      final user = ref.watch(currentUserProvider).value;
-      if (user != null && (user.allergies.isNotEmpty || user.dietPreferences.isNotEmpty)) {
-        // Konvertiere User-Präferenzen zu Enums
-        final allergies = user.allergies
-            .map((a) => AllergyType.values.firstWhere(
-                  (type) => type.name == a,
-                  orElse: () => AllergyType.gluten,
-                ))
-            .toList();
-        
-        final diets = user.dietPreferences
-            .map((d) => DietType.values.firstWhere(
-                  (type) => type.name == d,
-                  orElse: () => DietType.none,
-                ))
-            .toList();
-        
-        // Hole angepasste Zutaten mit Substitutionen
-        final withSubstitutions = IngredientSubstitutionService.getIngredientsWithSubstitutions(
-          ingredients: baseIngredients,
-          allergies: allergies,
-          diets: diets,
-        );
-        
-        // Nutze angepasste Zutat falls Substitution vorhanden
-        return withSubstitutions.map((ws) => ws.adaptedIngredient).toList();
-      }
-    }
-    
-    return baseIngredients;
-  }
-  
   List<IngredientWithSubstitution> get _ingredientsWithInfo {
     if (_recipe == null) return [];
     

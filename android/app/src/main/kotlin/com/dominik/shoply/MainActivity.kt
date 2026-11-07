@@ -7,32 +7,11 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL_OAUTH = "com.shoply.oauth"
     private val CHANNEL_WIDGET = "com.shoply.widget"
     private val CHANNEL_SIRI = "com.shoply.app/siri"
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        
-        // OAuth channel for handling redirects
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_OAUTH)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "showOAuthWindow" -> {
-                        val authUrl = call.argument<String>("authUrl")
-                        val redirectScheme = call.argument<String>("redirectScheme")
-                        if (authUrl != null) {
-                            // Open OAuth URL in browser
-                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(authUrl))
-                            startActivity(intent)
-                            result.success(true)
-                        } else {
-                            result.error("INVALID_URL", "Auth URL is required", null)
-                        }
-                    }
-                    else -> result.notImplemented()
-                }
-            }
         
         // Widget channel for home screen widgets
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_WIDGET)

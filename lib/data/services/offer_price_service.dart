@@ -1,8 +1,9 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/core/utils/request_throttle.dart';
 import 'package:shoply/data/models/store_offer.dart';
 
 /// Live supermarket offers via the marktguru API (unofficial).
@@ -51,31 +52,58 @@ class OfferPriceService {
 
   final Map<String, _CachedOffers> _searchCache = {};
   static const _searchCacheTtl = Duration(minutes: 30);
-  DateTime _lastRequest = DateTime.fromMillisecondsSinceEpoch(0);
-  // Serializes throttle turns so concurrent callers (e.g. a basket comparison
-  // fetching many items at once via Future.wait) still space out request
-  // *starts* by minGap, instead of all reading the stale _lastRequest at once
-  // and firing simultaneously.
-  Future<void> _throttleQueue = Future.value();
+
+  /// Identical concurrent searches share one request.
+  final Map<String, Future<List<StoreOffer>?>> _inFlight = {};
+
+  /// Concurrent callers (e.g. a basket comparison via Future.wait) still
+  /// space out request starts.
+  final _throttle = RequestThrottle(const Duration(milliseconds: 250));
+
+  /// A single key re-extraction shared by all concurrent callers.
+  Future<void>? _keysRefresh;
 
   /// Search current offers for [query] around [zipCode].
-  /// Returns offers sorted by price (cheapest first), grocery chains only.
+  /// Returns offers sorted by value (cheapest first), grocery chains only;
+  /// empty when nothing was found or the request failed.
   Future<List<StoreOffer>> searchOffers(
     String query, {
     required String zipCode,
     int limit = 30,
   }) async {
-    final normalized = query.trim().toLowerCase();
-    if (normalized.length < 2) return const [];
+    return await trySearchOffers(query, zipCode: zipCode, limit: limit) ??
+        const [];
+  }
 
-    final cacheKey = '$normalized|$zipCode';
+  /// Like [searchOffers], but returns null when a request failed (network,
+  /// timeout, non-200) so callers can tell "no offers" from "don't know"
+  /// and avoid caching a failure. Failures are not cached here either.
+  Future<List<StoreOffer>?> trySearchOffers(
+    String query, {
+    required String zipCode,
+    int limit = 30,
+  }) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.length < 2) return Future.value(const <StoreOffer>[]);
+
+    final cacheKey = '$normalized|$zipCode|$limit';
     final cached = _searchCache[cacheKey];
     if (cached != null &&
         DateTime.now().difference(cached.fetchedAt) < _searchCacheTtl) {
-      return cached.offers;
+      return Future.value(cached.offers);
     }
 
+    return _inFlight[cacheKey] ??= _search(normalized, zipCode, limit)
+        .whenComplete(() => _inFlight.remove(cacheKey));
+  }
+
+  Future<List<StoreOffer>?> _search(
+    String normalized,
+    String zipCode,
+    int limit,
+  ) async {
     var results = await _rawSearch(normalized, zipCode: zipCode, limit: limit);
+    if (results == null) return null;
 
     // Branded/compound/specific terms often miss (e.g. "golden toast" → 0, or
     // "Toastbrötchen" → only one store). Retry with a broader generic stem and
@@ -86,6 +114,7 @@ class OfferPriceService {
     final retailerCount = results.map((o) => o.retailerUniqueName).toSet().length;
     if (generic != null && generic != normalized && retailerCount < 2) {
       final fallback = await _rawSearch(generic, zipCode: zipCode, limit: limit);
+      if (fallback == null) return null;
       final seen = results.map((o) => o.id).toSet();
       results = [
         ...results,
@@ -96,17 +125,19 @@ class OfferPriceService {
       ]..sort(_byValue);
     }
 
-    _searchCache[cacheKey] = _CachedOffers(DateTime.now(), results);
+    _searchCache['$normalized|$zipCode|$limit'] =
+        _CachedOffers(DateTime.now(), results);
     return results;
   }
 
-  Future<List<StoreOffer>> _rawSearch(
+  /// One API search; null when the request failed.
+  Future<List<StoreOffer>?> _rawSearch(
     String q, {
     required String zipCode,
     required int limit,
   }) async {
     await _ensureKeys();
-    await _throttle();
+    await _throttle.wait();
 
     final uri = Uri.parse('$_baseUrl/offers/search').replace(
       queryParameters: {
@@ -126,8 +157,8 @@ class OfferPriceService {
         response = await _get(uri);
       }
       if (response.statusCode != 200) {
-        print('❌ [OFFERS] Search failed (${response.statusCode}) for "$q"');
-        return const [];
+        debugPrint('❌ [OFFERS] Search failed (${response.statusCode}) for "$q"');
+        return null;
       }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -141,11 +172,11 @@ class OfferPriceService {
           .toList()
         ..sort(_byValue);
 
-      print('✅ [OFFERS] "$q" @$zipCode → ${results.length} offers');
+      debugPrint('✅ [OFFERS] "$q" @$zipCode → ${results.length} offers');
       return results;
     } catch (e) {
-      print('❌ [OFFERS] Search error for "$q": $e');
-      return const [];
+      debugPrint('❌ [OFFERS] Search error for "$q": $e');
+      return null;
     }
   }
 
@@ -156,13 +187,11 @@ class OfferPriceService {
   /// is a kind of Öl, not a kind of Olive. Multi-word queries therefore keep
   /// the last word ("Bio Vollmilch 3,5%" → "vollmilch").
   ///
-  /// Single words used to be cut to a 5-character *prefix*, which does the
-  /// opposite — it keeps the qualifier and discards the head noun, so
-  /// "Olivenöl" became "olive" and the fallback happily matched a jar of
-  /// olives. Now a single word is split at a known grocery head noun
-  /// ("Olivenöl" → "öl", "Vollkornbrot" → "brot"). When no head noun is
-  /// recognised the full word is returned, which makes the caller skip the
-  /// broadening entirely — no match beats a wrong match.
+  /// A single word is returned unchanged, which makes the caller skip the
+  /// broadening entirely: every way of shortening a German compound drifts
+  /// the meaning — a prefix keeps the qualifier ("olivenöl" → "olive", a jar
+  /// of olives), splitting at the head drops it ("vollmilch" → "milch", any
+  /// fat content). No match beats a wrong match.
   String? _genericTerm(String query) {
     final cleaned = query
         .toLowerCase()
@@ -175,15 +204,7 @@ class OfferPriceService {
         .where((w) => w.length >= 3 && !_stopWords.contains(w))
         .toList();
     if (words.isEmpty) return null;
-    if (words.length >= 2) return words.last;
-    // Single word: return it unchanged, which makes the caller skip
-    // broadening altogether. Every way of shortening a German compound
-    // drifts the meaning — a prefix keeps the qualifier and drops the head
-    // ("olivenöl" → "olive", a jar of olives), while splitting at the head
-    // drops the qualifier ("vollmilch" → "milch", any fat content;
-    // "apfelsaft" → "saft", any juice). Both produce a confidently wrong
-    // price. Showing no price is the honest outcome.
-    return words.first;
+    return words.last;
   }
 
   static const Set<String> _stopWords = {
@@ -244,26 +265,6 @@ class OfferPriceService {
     }).timeout(const Duration(seconds: 12));
   }
 
-  Future<void> _throttle() {
-    // Chain onto the queue so each caller's wait+timestamp-update runs to
-    // completion before the next one reads _lastRequest — without this, N
-    // concurrent callers (Future.wait) would all see the same stale
-    // _lastRequest and pass the gap check together.
-    final turn = _throttleQueue.then((_) async {
-      const minGap = Duration(milliseconds: 250);
-      final elapsed = DateTime.now().difference(_lastRequest);
-      if (elapsed < minGap) {
-        await Future.delayed(minGap - elapsed);
-      }
-      _lastRequest = DateTime.now();
-    });
-    // Keep the queue alive even if this turn's caller later fails downstream;
-    // failures happen after _throttle() resolves, so this future itself
-    // never rejects.
-    _throttleQueue = turn;
-    return turn;
-  }
-
   Future<void> _ensureKeys() async {
     if (_apiKey != null && _clientKey != null) return;
 
@@ -286,7 +287,14 @@ class OfferPriceService {
   }
 
   /// Re-extract the public API keys from the marktguru web app config.
-  Future<void> _refreshKeys() async {
+  /// Concurrent callers (cold start, or several 401s at once) share one
+  /// download of the marktguru homepage.
+  Future<void> _refreshKeys() {
+    return _keysRefresh ??=
+        _downloadKeys().whenComplete(() => _keysRefresh = null);
+  }
+
+  Future<void> _downloadKeys() async {
     try {
       final response = await http.get(
         Uri.parse('https://www.marktguru.de'),
@@ -315,13 +323,13 @@ class OfferPriceService {
               'fetchedAt': DateTime.now().toIso8601String(),
             }),
           );
-          print('✅ [OFFERS] Refreshed marktguru API keys');
+          debugPrint('✅ [OFFERS] Refreshed marktguru API keys');
           return;
         }
       }
-      print('⚠️ [OFFERS] Could not extract keys, using fallback');
+      debugPrint('⚠️ [OFFERS] Could not extract keys, using fallback');
     } catch (e) {
-      print('⚠️ [OFFERS] Key refresh failed ($e), using fallback');
+      debugPrint('⚠️ [OFFERS] Key refresh failed ($e), using fallback');
     }
     _apiKey = _fallbackApiKey;
     _clientKey = _fallbackClientKey;
