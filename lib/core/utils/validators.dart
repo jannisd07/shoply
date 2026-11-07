@@ -1,77 +1,38 @@
+import 'package:shoply/core/localization/app_localizations.dart';
+import 'package:shoply/core/localization/app_translations.dart';
+
+/// Form validators. Messages follow the app language (the locale the
+/// AppLocalizations delegate last loaded), so they can be used as plain
+/// `validator:` tear-offs without a BuildContext.
 class Validators {
-  /// Validates email format
+  static String _tr(String key) =>
+      AppTranslations.get(key, AppLocalizations.currentLanguageCode);
+
+  static final RegExp _emailRegex = RegExp(
+    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+  );
+
+  /// Validates email format. Surrounding whitespace (e.g. the trailing space
+  /// iOS autocomplete inserts) is ignored; the auth calls trim as well.
   static String? validateEmail(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Email is required';
-    }
-    
-    final emailRegex = RegExp(
-      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-    );
-    
-    if (!emailRegex.hasMatch(value)) {
-      return 'Please enter a valid email';
-    }
-    
+    final email = value?.trim() ?? '';
+    if (email.isEmpty) return _tr('validation_email_required');
+    if (!_emailRegex.hasMatch(email)) return _tr('validation_email_invalid');
     return null;
   }
-  
+
   /// Validates password strength
   static String? validatePassword(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Password is required';
+      return _tr('validation_password_required');
     }
-    
-    if (value.length < 8) {
-      return 'Password must be at least 8 characters';
-    }
-    
+    if (value.length < 8) return _tr('validation_password_min_length');
     if (!value.contains(RegExp(r'[A-Z]'))) {
-      return 'Password must contain at least one uppercase letter';
+      return _tr('validation_password_uppercase');
     }
-    
     if (!value.contains(RegExp(r'[0-9]'))) {
-      return 'Password must contain at least one number';
+      return _tr('validation_password_number');
     }
-    
-    return null;
-  }
-  
-  /// Validates required field
-  static String? validateRequired(String? value, String fieldName) {
-    if (value == null || value.trim().isEmpty) {
-      return '$fieldName is required';
-    }
-    return null;
-  }
-  
-  /// Validates name (display name)
-  static String? validateName(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Name is required';
-    }
-    
-    if (value.trim().length < 2) {
-      return 'Name must be at least 2 characters';
-    }
-    
-    return null;
-  }
-  
-  /// Validates share code (6 alphanumeric characters)
-  static String? validateShareCode(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Share code is required';
-    }
-
-    if (value.length != 6) {
-      return 'Share code must be 6 characters';
-    }
-
-    if (!RegExp(r'^[A-Z0-9]{6}$').hasMatch(value.toUpperCase())) {
-      return 'Share code must contain only letters and numbers';
-    }
-
     return null;
   }
 }

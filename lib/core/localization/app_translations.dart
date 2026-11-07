@@ -1049,6 +1049,14 @@ class AppTranslations {
     'joined_list_message': 'You joined "{listName}"',
     'leave_list_confirm': 'Do you really want to leave "{name}"?',
     'remove_member_confirm': 'Remove {name} from this list?',
+
+    // Form validation
+    'validation_email_required': 'Email is required',
+    'validation_email_invalid': 'Please enter a valid email',
+    'validation_password_required': 'Password is required',
+    'validation_password_min_length': 'Password must be at least 8 characters',
+    'validation_password_uppercase': 'Password must contain at least one uppercase letter',
+    'validation_password_number': 'Password must contain at least one number',
   };
 
   static const Map<String, String> _de = {
@@ -2092,5 +2100,13 @@ class AppTranslations {
     'joined_list_message': 'Du bist „{listName}“ beigetreten',
     'leave_list_confirm': 'Möchtest du „{name}“ wirklich verlassen?',
     'remove_member_confirm': '{name} von dieser Liste entfernen?',
+
+    // Form validation
+    'validation_email_required': 'E-Mail ist erforderlich',
+    'validation_email_invalid': 'Bitte gib eine gültige E-Mail ein',
+    'validation_password_required': 'Passwort ist erforderlich',
+    'validation_password_min_length': 'Das Passwort muss mindestens 8 Zeichen lang sein',
+    'validation_password_uppercase': 'Das Passwort muss mindestens einen Großbuchstaben enthalten',
+    'validation_password_number': 'Das Passwort muss mindestens eine Zahl enthalten',
   };
 }

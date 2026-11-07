@@ -16,6 +16,10 @@ class AppLocalizations {
   static const LocalizationsDelegate<AppLocalizations> delegate =
       _AppLocalizationsDelegate();
 
+  /// Language of the locale the delegate last loaded (i.e. the app's current
+  /// language), for code without a BuildContext such as form validators.
+  static String currentLanguageCode = 'en';
+
   static const List<Locale> supportedLocales = [
     Locale('en', ''), // English (default)
     Locale('de', ''), // German
@@ -68,6 +72,7 @@ class _AppLocalizationsDelegate
 
   @override
   Future<AppLocalizations> load(Locale locale) async {
+    AppLocalizations.currentLanguageCode = locale.languageCode;
     return AppLocalizations(locale);
   }
 
