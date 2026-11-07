@@ -1,59 +1,49 @@
 import 'dart:async';
-import 'dart:ui';
 import 'dart:io';
-import 'package:shoply/core/constants/paper_colors.dart';
 
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter_app_badger/flutter_app_badger.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_config.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
-import 'package:shoply/core/constants/app_text_styles.dart';
-import 'package:shoply/core/constants/categories.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/app_localizations.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/core/utils/diet_checker.dart';
+import 'package:shoply/data/models/custom_category.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
-import 'package:shoply/data/services/list_import_service.dart';
-import 'package:shoply/data/services/mascot_notification_service.dart';
-import 'package:shoply/data/services/shopping_history_service.dart';
-import 'package:shoply/data/services/supabase_service.dart';
-import 'package:shoply/data/services/notification_service.dart';
-import 'package:shoply/data/services/contextual_prompt_service.dart';
+import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/app_review_service.dart';
+import 'package:shoply/data/services/category_order_service.dart';
+import 'package:shoply/data/services/dynamic_tutorial_service.dart';
+import 'package:shoply/data/services/list_import_service.dart';
+import 'package:shoply/data/services/notification_service.dart';
+import 'package:shoply/data/services/unread_service.dart';
+import 'package:shoply/presentation/screens/lists/category_order_screen.dart';
+import 'package:shoply/presentation/screens/lists/list_settings_screen.dart';
+import 'package:shoply/presentation/screens/lists/shopping_trip_completion.dart';
+import 'package:shoply/presentation/screens/lists/widgets/add_item_composer.dart';
+import 'package:shoply/presentation/screens/lists/widgets/attachment_sheet.dart';
+import 'package:shoply/presentation/screens/lists/widgets/import_review_sheet.dart';
+import 'package:shoply/presentation/screens/lists/widgets/item_form_dialog.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_category_section.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_detail_menu.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_drag_controller.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_price_summary_bar.dart';
+import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
+import 'package:shoply/presentation/screens/lists/widgets/share_list_dialog.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
-import 'package:shoply/presentation/state/last_list_provider.dart';
 import 'package:shoply/presentation/widgets/common/empty_state.dart';
 import 'package:shoply/presentation/widgets/common/loading_indicator.dart';
 import 'package:shoply/presentation/widgets/recommendations/ml_recommendations_section.dart';
-import 'package:shoply/presentation/screens/lists/widgets/background_selection_sheet.dart';
-import 'package:shoply/presentation/screens/lists/category_order_screen.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:shoply/data/services/unread_service.dart'; // Neu
-import 'package:flutter_app_badger/flutter_app_badger.dart'; // Neu
-import 'package:shoply/data/services/dynamic_tutorial_service.dart';
-import 'package:shoply/presentation/screens/lists/list_settings_screen.dart';
-import 'package:shoply/data/repositories/list_repository.dart';
-import 'package:shoply/data/models/store_offer.dart';
-import 'package:shoply/presentation/providers/price_comparison_provider.dart';
-import 'package:shoply/presentation/screens/lists/widgets/add_item_composer.dart';
-import 'package:shoply/data/services/checkout_store_resolver.dart';
-import 'package:shoply/data/services/store_locator_service.dart';
-import 'package:shoply/data/services/user_location_service.dart';
-import 'package:shoply/presentation/screens/lists/widgets/checkout_store_sheet.dart';
-import 'package:shoply/presentation/screens/lists/widgets/attachment_sheet.dart';
-import 'package:shoply/presentation/screens/lists/widgets/import_review_sheet.dart';
-import 'package:shoply/presentation/screens/lists/widgets/item_offer_sheet.dart';
-import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
-import 'package:shoply/presentation/screens/lists/widgets/list_price_summary_bar.dart';
-import 'package:shoply/presentation/screens/history/widgets/split_cost_sheet.dart';
 
 class ListDetailScreen extends ConsumerStatefulWidget {
   final String listId;
@@ -73,6 +63,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   final _searchController = TextEditingController();
   final _focusNode = FocusNode();
   final _scrollController = ScrollController();
+  late final _dragController = ListDragController(_scrollController);
+
+  /// Name from the route, replaced after a local rename. The lists
+  /// provider's copy wins once loaded, so collaborator renames show too.
   late String _listName;
 
   // Debounced copy of the add-bar text used for live offer search, so a
@@ -80,28 +74,15 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   final ValueNotifier<String> _offerQuery = ValueNotifier<String>('');
   Timer? _offerQueryDebounce;
 
-  // Drag and drop state
-  ShoppingItemModel? _draggedItem;
-  String? _draggedFromCategory;
-  bool _isDragging = false;
-
-  // Auto-scroll state
-  Timer? _autoScrollTimer;
-  int _scrollDirection = 0; // -1 = up, 0 = none, 1 = down
-  double _scrollSpeed = 0.0;
-
-  // Custom categories cache
+  // Custom categories and saved order (device-local).
   List<CustomCategory> _customCategories = [];
-  bool _customCategoriesLoaded = false;
-
-  // Category order cache
   List<String> _categoryOrder = [];
 
-  // List owner info
-  String? _ownerId;
-
-  // Key counter for forcing popup menu rebuild after navigation
-  int _popupMenuKeyCounter = 0;
+  // Grouping cache: regrouped only when items, categories or locale change.
+  List<ListCategoryGroup> _groups = const [];
+  List<ShoppingItemModel>? _groupsItems;
+  String? _groupsLanguage;
+  bool _groupsDirty = true;
 
   // True once the push transition has fully settled. Heavy work (refresh
   // fetches, the ML recommendations section) waits for this so the
@@ -120,163 +101,27 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   final GlobalKey _bottomBarKey = GlobalKey();
   double _bottomBarHeight = 110;
 
-  void _syncBottomBarHeight() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final box =
-          _bottomBarKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box == null || !box.hasSize) return;
-      // Bar height plus the gap it floats above the safe area.
-      final h = box.size.height + 14;
-      if ((h - _bottomBarHeight).abs() > 1) {
-        setState(() => _bottomBarHeight = h);
-      }
-    });
-  }
-
   // Review prompt state — ensures we only fire rating prompt once per session
   // when the user completes an entire list (all items checked off).
   bool _listCompletionReviewFired = false;
   int? _lastCheckedCount;
-
-  /// Start the auto-scroll timer
-  void _startAutoScrollTimer() {
-    _autoScrollTimer?.cancel();
-    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
-      _performAutoScroll();
-    });
-  }
-
-  /// Stop the auto-scroll timer
-  void _stopAutoScrollTimer() {
-    _autoScrollTimer?.cancel();
-    _autoScrollTimer = null;
-    _scrollDirection = 0;
-    _scrollSpeed = 0.0;
-  }
-
-  /// Perform the actual scrolling based on current direction and speed
-  void _performAutoScroll() {
-    if (!_scrollController.hasClients || _scrollDirection == 0) {
-      return;
-    }
-
-    final currentOffset = _scrollController.offset;
-    final maxOffset = _scrollController.position.maxScrollExtent;
-
-    if (_scrollDirection < 0) {
-      // Scrolling up
-      if (currentOffset <= 0) return;
-      final newOffset = (currentOffset - _scrollSpeed).clamp(0.0, maxOffset);
-      _scrollController.jumpTo(newOffset);
-    } else if (_scrollDirection > 0) {
-      // Scrolling down
-      if (currentOffset >= maxOffset) return;
-      final newOffset = (currentOffset + _scrollSpeed).clamp(0.0, maxOffset);
-      _scrollController.jumpTo(newOffset);
-    }
-  }
-
-  /// Auto-scroll the list when dragging near edges
-  /// This enables users to drag items between categories that are far apart
-  void _handleAutoScroll(double globalY) {
-    // Always check scroll controller first
-    if (!_scrollController.hasClients) {
-      debugPrint('🔴 [AUTOSCROLL] No scroll clients!');
-      return;
-    }
-
-    final screenHeight = MediaQuery.of(context).size.height;
-    final topPadding = MediaQuery.of(context).padding.top;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
-    // Define scroll zones - larger zones for easier activation
-    // Top zone starts right below status bar (not app bar, so we have more area)
-    final topEdge = topPadding + 60; // Just below status bar + some margin
-    // Bottom zone: above the bottom safe area
-    final bottomEdge = screenHeight - bottomPadding - 100;
-
-    // Scroll zone threshold - how close to edge to start scrolling
-    const scrollEdgeThreshold = 180.0; // Even larger zone
-    // Maximum scroll speed - pixels per frame (at 60fps this is ~1500px/sec)
-    const maxScrollSpeed = 25.0;
-    // Minimum scroll speed for smooth start
-    const minScrollSpeed = 8.0;
-
-    // Calculate distance from edges
-    final distanceFromTop = globalY - topEdge;
-    final distanceFromBottom = bottomEdge - globalY;
-
-    debugPrint(
-      '🔵 [AUTOSCROLL] globalY=$globalY, topEdge=$topEdge, bottomEdge=$bottomEdge, distTop=$distanceFromTop, distBottom=$distanceFromBottom',
-    );
-
-    // Top edge detection - scroll up when finger is near top
-    if (distanceFromTop < scrollEdgeThreshold) {
-      // Calculate speed based on proximity (closer = faster)
-      // Use exponential curve for smoother acceleration
-      final normalizedDistance = (distanceFromTop / scrollEdgeThreshold).clamp(
-        0.0,
-        1.0,
-      );
-      final proximity = 1.0 - normalizedDistance;
-      _scrollSpeed =
-          minScrollSpeed +
-          (maxScrollSpeed - minScrollSpeed) * proximity * proximity;
-
-      if (_scrollDirection != -1) {
-        _scrollDirection = -1;
-        debugPrint('🔼 [AUTOSCROLL] Starting UP scroll, speed=$_scrollSpeed');
-        HapticFeedback.selectionClick();
-      }
-      if (_autoScrollTimer == null) {
-        _startAutoScrollTimer();
-      }
-    }
-    // Bottom edge detection - scroll down when finger is near bottom
-    else if (distanceFromBottom < scrollEdgeThreshold) {
-      // Calculate speed based on proximity (closer = faster)
-      final normalizedDistance = (distanceFromBottom / scrollEdgeThreshold)
-          .clamp(0.0, 1.0);
-      final proximity = 1.0 - normalizedDistance;
-      _scrollSpeed =
-          minScrollSpeed +
-          (maxScrollSpeed - minScrollSpeed) * proximity * proximity;
-
-      if (_scrollDirection != 1) {
-        _scrollDirection = 1;
-        debugPrint('🔽 [AUTOSCROLL] Starting DOWN scroll, speed=$_scrollSpeed');
-        HapticFeedback.selectionClick();
-      }
-      if (_autoScrollTimer == null) {
-        _startAutoScrollTimer();
-      }
-    }
-    // Not near edges - stop auto-scrolling
-    else {
-      if (_scrollDirection != 0) {
-        debugPrint('⏹️ [AUTOSCROLL] Stopping scroll');
-        _scrollDirection = 0;
-        _scrollSpeed = 0.0;
-      }
-    }
-  }
 
   @override
   void initState() {
     super.initState();
     _listName = widget.listName;
     _searchController.addListener(_onSearchChangedForOffers);
+    // Cheap SharedPreferences read; done right away so items filed under a
+    // custom category don't jump sections once it arrives.
+    _loadCustomCategories();
     // Defer all non-critical work until the push transition has settled:
     // the ItemsNotifier already loads (and realtime-streams) on first
     // watch, so the first frame renders from that state and nothing below
     // competes with the transition for frame time.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final route = ModalRoute.of(context);
-      final animation = route?.animation;
-      if (animation == null ||
-          animation.status == AnimationStatus.completed) {
+      final animation = ModalRoute.of(context)?.animation;
+      if (animation == null || animation.status == AnimationStatus.completed) {
         _onRouteTransitionSettled();
       } else {
         _routeAnimation = animation;
@@ -297,24 +142,22 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   void _onRouteTransitionSettled() {
     if (!mounted || _routeTransitionDone) return;
     setState(() => _routeTransitionDone = true);
-
-    // Refresh items (constructor load may already be in flight — loadItems
-    // keeps showing current data while refreshing).
-    ref.read(itemsNotifierProvider(widget.listId).notifier).loadItems();
-    // Track this list as last accessed
-    ref
-        .read(lastAccessedListProvider.notifier)
-        .setLastAccessedList(widget.listId);
-    _markAsRead(); // Mark as read & clear badge
-
-    // Notify tutorial that list was opened
+    _markAsRead();
     DynamicTutorialService.instance.onListOpened();
+  }
 
-    // Load custom categories
-    _loadCustomCategories();
-
-    // Load list owner info
-    _loadListOwner();
+  void _syncBottomBarHeight() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box =
+          _bottomBarKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      // Bar height plus the gap it floats above the safe area.
+      final h = box.size.height + 14;
+      if ((h - _bottomBarHeight).abs() > 1) {
+        setState(() => _bottomBarHeight = h);
+      }
+    });
   }
 
   /// Debounces the add-bar text into [_offerQuery] (300ms) so live offer
@@ -337,51 +180,55 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     if (_offerQuery.value != value) _offerQuery.value = value;
   }
 
-  Future<void> _loadListOwner() async {
-    try {
-      final list = await ListRepository.instance.getListById(widget.listId);
-      if (mounted && list != null) {
-        setState(() => _ownerId = list.ownerId);
-      }
-    } catch (e) {
-      debugPrint('❌ Failed to load list owner: $e');
-    }
-  }
-
   Future<void> _loadCustomCategories() async {
     final service = CategoryOrderService();
     final categories = await service.getCustomCategories(widget.listId);
     final order = await service.getCategoryOrder(widget.listId);
-    if (mounted) {
-      setState(() {
-        _customCategories = categories;
-        _categoryOrder = order;
-        _customCategoriesLoaded = true;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _customCategories = categories;
+      _categoryOrder = order;
+      _groupsDirty = true;
+    });
   }
 
   Future<void> _markAsRead() async {
-    // 1. Internen Status (roter Punkt) löschen
     await UnreadService().markAsRead(widget.listId);
 
-    // 2. App Icon Badge löschen
     try {
       if (await FlutterAppBadger.isAppBadgeSupported()) {
         FlutterAppBadger.removeBadge();
       }
     } catch (e) {
-      debugPrint('Failed to remove badge: $e');
+      debugPrint('⚠️ [LIST_DETAIL] Failed to remove badge: $e');
     }
 
-    // 3. Notifications löschen (für sauberes Notification Center)
-    await NotificationService.instance.cancelAll();
+    await _clearThisListsNotifications();
+  }
+
+  /// Removes delivered notifications about this list from the Notification
+  /// Center. Scheduled reminders and other lists' notifications stay.
+  Future<void> _clearThisListsNotifications() async {
+    if (!(Platform.isIOS || Platform.isAndroid)) return;
+    try {
+      final active =
+          await FlutterLocalNotificationsPlugin().getActiveNotifications();
+      for (final notification in active) {
+        final id = notification.id;
+        final payload = notification.payload;
+        if (id != null && payload != null && payload.contains(widget.listId)) {
+          await NotificationService.instance.cancel(id);
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ [LIST_DETAIL] Failed to clear notifications: $e');
+    }
   }
 
   @override
   void dispose() {
     _routeAnimation?.removeStatusListener(_routeAnimationStatusListener);
-    _autoScrollTimer?.cancel();
+    _dragController.dispose();
     _offerQueryDebounce?.cancel();
     _searchController.removeListener(_onSearchChangedForOffers);
     _searchController.dispose();
@@ -391,37 +238,75 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     super.dispose();
   }
 
+  ShoppingListModel? _listFromProvider() {
+    final lists = ref.read(listsNotifierProvider).valueOrNull;
+    return lists?.where((l) => l.id == widget.listId).firstOrNull;
+  }
+
+  String get _currentListName => _listFromProvider()?.name ?? _listName;
+
+  List<ListCategoryGroup> _groupedItems(
+    List<ShoppingItemModel> items,
+    String languageCode,
+  ) {
+    if (_groupsDirty ||
+        !identical(items, _groupsItems) ||
+        languageCode != _groupsLanguage) {
+      _groups = groupItemsByCategory(
+        items,
+        customCategories: _customCategories,
+        categoryOrder: _categoryOrder,
+        languageCode: languageCode,
+      );
+      _groupsItems = items;
+      _groupsLanguage = languageCode;
+      _groupsDirty = false;
+    }
+    return _groups;
+  }
+
+  void _onItemsChanged(
+    AsyncValue<List<ShoppingItemModel>>? previous,
+    AsyncValue<List<ShoppingItemModel>> next,
+  ) {
+    // Detect when the user completes an entire shopping list (all items
+    // checked) — the perfect moment to ask for a rating.
+    final items = next.asData?.value;
+    if (items == null || items.isEmpty) return;
+    final checked = items.where((i) => i.isChecked).length;
+    final prevCount = _lastCheckedCount;
+    _lastCheckedCount = checked;
+
+    if (checked == items.length &&
+        prevCount != null &&
+        prevCount < items.length &&
+        !_listCompletionReviewFired) {
+      _listCompletionReviewFired = true;
+      // Fire and forget — respects AppReviewService throttling internally.
+      AppReviewService.instance.trackPositiveAction('completed_list');
+      Future.delayed(const Duration(milliseconds: 800), () {
+        AppReviewService.instance.maybeRequestReview(reason: 'completed_list');
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final itemsAsync = ref.watch(itemsNotifierProvider(widget.listId));
+    ref.listen(itemsNotifierProvider(widget.listId), _onItemsChanged);
+    // Rebuild on renames (also by collaborators).
+    final listName = ref.watch(
+          listsNotifierProvider.select(
+            (lists) => lists.valueOrNull
+                ?.where((l) => l.id == widget.listId)
+                .firstOrNull
+                ?.name,
+          ),
+        ) ??
+        _listName;
 
-    // Detect when the user completes an entire shopping list (all items checked).
-    // This is a genuine positive moment — the perfect time to ask for a rating.
-    ref.listen<AsyncValue<List<ShoppingItemModel>>>(
-      itemsNotifierProvider(widget.listId),
-      (previous, next) {
-        final items = next.asData?.value;
-        if (items == null || items.isEmpty) return;
-        final checked = items.where((i) => i.isChecked).length;
-        final allChecked = checked == items.length;
-        final prevCount = _lastCheckedCount;
-        _lastCheckedCount = checked;
-
-        if (allChecked &&
-            prevCount != null &&
-            prevCount < items.length &&
-            !_listCompletionReviewFired) {
-          _listCompletionReviewFired = true;
-          // Fire and forget — respects AppReviewService throttling internally.
-          AppReviewService.instance.trackPositiveAction('completed_list');
-          Future.delayed(const Duration(milliseconds: 800), () {
-            AppReviewService.instance.maybeRequestReview(
-              reason: 'completed_list',
-            );
-          });
-        }
-      },
-    );
+    final items = itemsAsync.valueOrNull;
+    final openCount = items?.where((i) => !i.isChecked).length ?? 0;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -444,7 +329,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _listName,
+              listName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: PaperTextStyles.serif(
@@ -452,10 +337,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                 color: AppColors.textPrimary(context),
               ),
             ),
-            if (itemsAsync.valueOrNull != null &&
-                itemsAsync.valueOrNull!.isNotEmpty)
+            if (items != null && items.isNotEmpty)
               Text(
-                '${itemsAsync.valueOrNull!.where((i) => !i.isChecked).length} ${context.tr('items_open_suffix')} · ${itemsAsync.valueOrNull!.length} ${context.tr('items')}',
+                '$openCount ${context.tr('items_open_suffix')} · ${items.length} ${context.tr('items')}',
                 style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textSecondary(context),
@@ -464,211 +348,17 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
           ],
         ),
         leadingWidth: 60,
-        leading: PlatformInfo.isIOS26OrHigher()
-            ? Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: Center(
-                  // Messages-metric nav button: 40pt glass circle inside a
-                  // >=44pt hit target.
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Center(
-                      child: AdaptiveButton.icon(
-                        icon: Icons.chevron_left,
-                        style: AdaptiveButtonStyle.glass,
-                        size: AdaptiveButtonSize.small,
-                        minSize: const Size(40, 40),
-                        padding: EdgeInsets.zero,
-                        useSmoothRectangleBorder: false,
-                        onPressed: () {
-                          if (Navigator.of(context).canPop()) {
-                            Navigator.of(context).pop();
-                          } else {
-                            context.go('/home');
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            : IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                onPressed: () {
-                  if (Navigator.of(context).canPop()) {
-                    Navigator.of(context).pop();
-                  } else {
-                    context.go('/home');
-                  }
-                },
-              ),
+        leading: _BackButton(onPressed: _goBack),
         actions: [
-          // Settings button
-          if (PlatformInfo.isIOS26OrHigher())
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: AdaptivePopupMenuButton.icon<int>(
-                key: ValueKey('settings_popup_$_popupMenuKeyCounter'),
-                icon: 'ellipsis.circle',
-                // Messages-metric: 40pt glass circle (was 36 — too small).
-                size: 40,
-                buttonStyle: PopupButtonStyle.glass,
-                items: [
-                  AdaptivePopupMenuItem<int>(
-                    label: context.tr('rename_list'),
-                    icon: 'pencil',
-                    value: 0,
-                  ),
-                  AdaptivePopupMenuItem<int>(
-                    label: context.tr('change_background'),
-                    icon: 'photo',
-                    value: 1,
-                  ),
-                  AdaptivePopupMenuItem<int>(
-                    label: context.tr('category_order'),
-                    icon: 'arrow.up.arrow.down',
-                    value: 2,
-                  ),
-                  AdaptivePopupMenuItem<int>(
-                    label: context.tr('list_settings'),
-                    icon: 'gearshape',
-                    value: 3,
-                  ),
-                ],
-                onSelected: (index, entry) async {
-                  setState(() {
-                    _popupMenuKeyCounter++;
-                  });
-
-                  final selected = entry.value;
-                  if (selected == null) return;
-
-                  if (selected == 0) {
-                    _showRenameListDialog();
-                  } else if (selected == 1) {
-                    _showBackgroundSelectionDialog();
-                  } else if (selected == 2) {
-                    _showCategoryOrderScreen();
-                  } else if (selected == 3) {
-                    _showListSettingsScreen();
-                  }
-                },
-              ),
-            )
-          else
-            IconButton(
-              icon: Icon(
-                Icons.more_horiz_rounded,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                showCupertinoModalPopup<void>(
-                  context: context,
-                  builder: (ctx) => CupertinoActionSheet(
-                    actions: [
-                      CupertinoActionSheetAction(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _showRenameListDialog();
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(CupertinoIcons.pencil, size: 20),
-                            const SizedBox(width: 10),
-                            Text(context.tr('rename_list')),
-                          ],
-                        ),
-                      ),
-                      CupertinoActionSheetAction(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _showBackgroundSelectionDialog();
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(CupertinoIcons.photo, size: 20),
-                            const SizedBox(width: 10),
-                            Text(context.tr('change_background')),
-                          ],
-                        ),
-                      ),
-                      CupertinoActionSheetAction(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _showCategoryOrderScreen();
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              CupertinoIcons.arrow_up_arrow_down,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(context.tr('category_order')),
-                          ],
-                        ),
-                      ),
-                      CupertinoActionSheetAction(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _showListSettingsScreen();
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(CupertinoIcons.gear, size: 20),
-                            const SizedBox(width: 10),
-                            Text(context.tr('list_settings')),
-                          ],
-                        ),
-                      ),
-                    ],
-                    cancelButton: CupertinoActionSheetAction(
-                      isDefaultAction: true,
-                      onPressed: () => Navigator.pop(ctx),
-                      child: Text(context.tr('cancel')),
-                    ),
-                  ),
-                );
-              },
+          ListDetailMenuButton(onSelected: _onMenuSelected),
+          _ShareButton(
+            onPressed: () => showShareListDialog(
+              context,
+              ref,
+              listId: widget.listId,
+              listName: _currentListName,
             ),
-          // Share button
-          if (PlatformInfo.isIOS26OrHigher())
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              // 36pt visual inside a 44pt hit target, matching the back
-              // button. The box used to be 36 as well, leaving this the one
-              // navigation control below Apple's minimum touch size.
-              child: SizedBox(
-                width: 44,
-                height: 44,
-                child: Center(
-                  child: AdaptiveButton.icon(
-                    icon: Icons.ios_share,
-                    style: AdaptiveButtonStyle.glass,
-                    size: AdaptiveButtonSize.small,
-                    minSize: const Size(36, 36),
-                    padding: EdgeInsets.zero,
-                    useSmoothRectangleBorder: false,
-                    onPressed: _showShareDialog,
-                  ),
-                ),
-              ),
-            )
-          else
-            IconButton(
-              icon: Icon(
-                Icons.ios_share,
-                size: 22,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              onPressed: _showShareDialog,
-            ),
+          ),
         ],
       ),
       body: Stack(
@@ -683,258 +373,193 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
                   AppDimensions.screenHorizontalPadding,
                   6,
                 ),
-                child: Builder(
-                  builder: (context) {
-                    final items = itemsAsync.valueOrNull ?? [];
-                    final total = items.length;
-                    final done = items.where((i) => i.isChecked).length;
-                    final progress = total > 0 ? done / total : 0.0;
-                    return Container(
-                      height: 3,
-                      color: AppColors.divider(context),
-                      alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: progress.clamp(0.0, 1.0),
-                        heightFactor: 1,
-                        child: ColoredBox(
-                          color: AppColors.accentColor(context),
-                        ),
-                      ),
-                    );
-                  },
+                child: _ProgressHairline(
+                  total: items?.length ?? 0,
+                  done: (items?.length ?? 0) - openCount,
                 ),
               ),
-
-              // Items List
               Expanded(
-            key: DynamicTutorialService.instance.listItemsAreaKey,
-            child: itemsAsync.when(
-              data: (items) {
-                // Update tutorial with list items data
-                DynamicTutorialService.instance.updateListItemsData(
-                  hasItems: items.isNotEmpty,
-                );
-                if (items.isEmpty) {
-                  return EmptyState(
-                    icon: Icons.shopping_cart,
-                    title: AppLocalizations.of(context).emptyList,
-                    subtitle:
-                        'Füge Produkte hinzu, um mit dem Einkaufen zu beginnen',
-                    actionText: AppLocalizations.of(context).addItem,
-                    onActionPressed: () => _showAddItemDialog(context),
-                  );
-                }
-
-                // Group items by category
-                final groupedItems = _groupItemsByCategory(items);
-
-                // Only the padding depends on the keyboard inset — scoped
-                // via a Builder so keyboard frames re-layout the list's
-                // visible rows (content stays reachable above the composer)
-                // without rebuilding the whole screen. Dismissal itself is
-                // handled by keyboardDismissBehavior.onDrag alone; the old
-                // unfocus-on-scroll-start listener fought it and forced a
-                // full keyboard animation on every scroll.
-                return Builder(
-                  builder: (context) => ListView.builder(
-                    controller: _scrollController,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.only(
-                      left: AppDimensions.screenHorizontalPadding,
-                      right: AppDimensions.screenHorizontalPadding,
-                      // Safe area / keyboard + the floating bar's *measured*
-                      // height. This used to be a hardcoded 96, which stopped
-                      // being enough once the bar grew to price-summary +
-                      // composer (44pt hit target): the last rows disappeared
-                      // behind it. Measuring keeps it right through Dynamic
-                      // Type, a wrapped composer and future additions.
-                      bottom: MediaQuery.viewInsetsOf(context).bottom +
-                          MediaQuery.paddingOf(context).bottom +
-                          _bottomBarHeight,
-                    ),
-                    itemCount:
-                        groupedItems.length +
-                        2, // +1 for recommendations, +1 for Complete Button
-                    itemBuilder: (context, index) {
-                      // ML-powered AI Recommendations Section at the top —
-                      // deferred until the push transition settled so its
-                      // provider work never competes with transition frames.
-                      if (index == 0) {
-                        if (!_routeTransitionDone) {
-                          return const SizedBox.shrink();
-                        }
-                        return MLRecommendationsSection(
-                          listId: widget.listId,
-                          onAddItem: (itemName, category, quantity) {
-                            _addItemFromRecommendation(
-                              itemName,
-                              category,
-                              quantity,
-                            );
-                          },
-                        );
-                      }
-
-                      // Complete Shopping Button am Ende — Paper ink pill
-                      if (index == groupedItems.length + 1) {
-                        final isDark =
-                            Theme.of(context).brightness == Brightness.dark;
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 24, bottom: 24),
-                          child: SizedBox(
-                            height: 54,
-                            child: ElevatedButton(
-                              onPressed: () =>
-                                  _completeShoppingTrip(context, ref, items),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: isDark
-                                    ? PaperColors.paper
-                                    : PaperColors.ink,
-                                foregroundColor: isDark
-                                    ? PaperColors.ink
-                                    : PaperColors.paper,
-                                elevation: 0,
-                                shape: const StadiumBorder(),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.check_rounded, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    AppLocalizations.of(
-                                      context,
-                                    ).completeShopping,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      final entry =
-                          groupedItems[index -
-                              1]; // -1 because recommendations is at index 0
-                      final category = entry['category'] as String;
-                      final categoryId = entry['category_id'] as String;
-                      final categoryItems =
-                          entry['items'] as List<ShoppingItemModel>;
-                      final categoryColor = entry['category_color'] as Color;
-                      final categoryIcon = entry['category_icon'] as IconData;
-                      final isCustomCategory = entry['is_custom'] as bool;
-
-                      return _buildCategorySection(
-                        category: category,
-                        categoryId: categoryId,
-                        categoryItems: categoryItems,
-                        categoryColor: categoryColor,
-                        categoryIcon: categoryIcon,
-                        isCustomCategory: isCustomCategory,
-                      );
-                    },
-                  ),
-                );
-              },
+                key: DynamicTutorialService.instance.listItemsAreaKey,
+                child: itemsAsync.when(
+                  data: _buildItemsList,
                   loading: () =>
                       LoadingIndicator(message: context.tr('loading_items')),
                   error: (error, stack) =>
-                      Center(child: Text('Error: $error')),
+                      Center(child: Text(context.tr('loading_error'))),
                 ),
               ),
             ],
           ),
-
-          // Messages-style composer riding the keyboard. Wrapped in its own
-          // Builder so ONLY this subtree depends on the per-frame keyboard
-          // inset — the engine animates viewInsets in lockstep with the iOS
-          // keyboard, so positioning the bar at viewInsets.bottom directly
-          // (no second animation) moves it on the exact same curve/frames.
-          // The max() keeps the crossover between "resting above the home
-          // indicator" and "riding the keyboard" continuous — no jump when
-          // the inset passes zero, and a hardware keyboard (inset stays 0)
-          // leaves the bar docked at the bottom with no gap.
-          Builder(
-            builder: (barContext) {
-              final keyboardInset =
-                  MediaQuery.viewInsetsOf(barContext).bottom;
-              final safeBottom = MediaQuery.paddingOf(barContext).bottom;
-              final restingBottom = safeBottom > 20 ? safeBottom - 8 : 12.0;
-              final riding = keyboardInset + 8;
-              return Positioned(
-                left: 10,
-                right: 10,
-                bottom: riding > restingBottom ? riding : restingBottom,
-                child: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _searchController,
-                  builder: (context, value, _) {
-                    final liveQuery = value.text.trim();
-                    final isSearching = liveQuery.length >= 2;
-                    // Re-measure whenever the bar's composition changes
-                    // (suggestions appear, composer wraps, …).
-                    _syncBottomBarHeight();
-                    return Column(
-                      key: _bottomBarKey,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // While searching, show live offer suggestions
-                        // (debounced query so fast typing doesn't fire an
-                        // API call per keystroke); otherwise the basket
-                        // price-comparison summary. Never both stacked.
-                        if (isSearching)
-                          ValueListenableBuilder<String>(
-                            valueListenable: _offerQuery,
-                            builder: (context, query, _) {
-                              if (query.length < 2) {
-                                return const SizedBox.shrink();
-                              }
-                              return OfferSuggestionsBar(
-                                query: query,
-                                onSelect: _addItemFromOffer,
-                              );
-                            },
-                          )
-                        else if (keyboardInset == 0)
-                          Consumer(
-                            builder: (context, ref, _) {
-                              final items = ref
-                                      .watch(itemsNotifierProvider(
-                                          widget.listId))
-                                      .valueOrNull ??
-                                  const <ShoppingItemModel>[];
-                              return ListPriceSummaryBar(
-                                listId: widget.listId,
-                                items: items,
-                              );
-                            },
-                          ),
-                        const SizedBox(height: 6),
-                        KeyedSubtree(
-                          key: DynamicTutorialService
-                              .instance.addItemInputKey,
-                          child: AddItemComposer(
-                            controller: _searchController,
-                            focusNode: _focusNode,
-                            plusButtonKey: _plusButtonKey,
-                            onSubmit: _quickAddItem,
-                            onPlusTap: _openAttachmentSheet,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              );
-            },
-          ),
+          _buildBottomBar(),
         ],
       ),
     );
+  }
+
+  Widget _buildItemsList(List<ShoppingItemModel> items) {
+    DynamicTutorialService.instance.updateListItemsData(
+      hasItems: items.isNotEmpty,
+    );
+    if (items.isEmpty) {
+      return EmptyState(
+        icon: Icons.shopping_cart,
+        title: AppLocalizations.of(context).emptyList,
+        subtitle: context.tr('empty_list_hint'),
+        actionText: AppLocalizations.of(context).addItem,
+        onActionPressed: _showAddItemDialog,
+      );
+    }
+
+    final groups = _groupedItems(
+      items,
+      Localizations.localeOf(context).languageCode,
+    );
+
+    // Only the padding depends on the keyboard inset — scoped via a Builder
+    // so keyboard frames re-layout the list's visible rows without
+    // rebuilding the whole screen. Dismissal is handled by
+    // keyboardDismissBehavior.onDrag alone.
+    return Builder(
+      builder: (context) => ListView.builder(
+        controller: _scrollController,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.only(
+          left: AppDimensions.screenHorizontalPadding,
+          right: AppDimensions.screenHorizontalPadding,
+          // Safe area / keyboard + the floating bar's *measured* height, so
+          // the last rows never hide behind the composer.
+          bottom: MediaQuery.viewInsetsOf(context).bottom +
+              MediaQuery.paddingOf(context).bottom +
+              _bottomBarHeight,
+        ),
+        // +1 for recommendations, +1 for the complete button
+        itemCount: groups.length + 2,
+        itemBuilder: (context, index) {
+          // ML recommendations at the top — deferred until the push
+          // transition settled so its provider work never competes with
+          // transition frames.
+          if (index == 0) {
+            if (!_routeTransitionDone) return const SizedBox.shrink();
+            return MLRecommendationsSection(
+              listId: widget.listId,
+              onAddItem: _addItemFromRecommendation,
+            );
+          }
+
+          if (index == groups.length + 1) {
+            return _CompleteShoppingButton(
+              onPressed: () => completeShoppingTrip(
+                this.context,
+                ref,
+                listId: widget.listId,
+                listName: _currentListName,
+                items: items,
+              ),
+            );
+          }
+
+          final group = groups[index - 1];
+          return ListCategorySection(
+            key: ValueKey(group.id),
+            group: group,
+            listId: widget.listId,
+            dragController: _dragController,
+            onEditItem: _showEditItemDialog,
+          );
+        },
+      ),
+    );
+  }
+
+  /// Messages-style composer riding the keyboard. Wrapped in its own Builder
+  /// so ONLY this subtree depends on the per-frame keyboard inset — the
+  /// engine animates viewInsets in lockstep with the iOS keyboard, so
+  /// positioning the bar at viewInsets.bottom directly moves it on the exact
+  /// same curve/frames. The max() keeps the crossover between "resting above
+  /// the home indicator" and "riding the keyboard" continuous.
+  Widget _buildBottomBar() {
+    return Builder(
+      builder: (barContext) {
+        final keyboardInset = MediaQuery.viewInsetsOf(barContext).bottom;
+        final safeBottom = MediaQuery.paddingOf(barContext).bottom;
+        final restingBottom = safeBottom > 20 ? safeBottom - 8 : 12.0;
+        final riding = keyboardInset + 8;
+        return Positioned(
+          left: 10,
+          right: 10,
+          bottom: riding > restingBottom ? riding : restingBottom,
+          child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, value, _) {
+              final isSearching = value.text.trim().length >= 2;
+              // Re-measure whenever the bar's composition changes
+              // (suggestions appear, composer wraps, …).
+              _syncBottomBarHeight();
+              return Column(
+                key: _bottomBarKey,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // While searching, show live offer suggestions (debounced
+                  // query); otherwise the basket price-comparison summary.
+                  // Never both stacked.
+                  if (isSearching)
+                    ValueListenableBuilder<String>(
+                      valueListenable: _offerQuery,
+                      builder: (context, query, _) {
+                        if (query.length < 2) return const SizedBox.shrink();
+                        return OfferSuggestionsBar(
+                          query: query,
+                          onSelect: _addItemFromOffer,
+                        );
+                      },
+                    )
+                  else if (keyboardInset == 0)
+                    Consumer(
+                      builder: (context, ref, _) => ListPriceSummaryBar(
+                        listId: widget.listId,
+                        items: ref
+                                .watch(itemsNotifierProvider(widget.listId))
+                                .valueOrNull ??
+                            const <ShoppingItemModel>[],
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  KeyedSubtree(
+                    key: DynamicTutorialService.instance.addItemInputKey,
+                    child: AddItemComposer(
+                      controller: _searchController,
+                      focusNode: _focusNode,
+                      plusButtonKey: _plusButtonKey,
+                      onSubmit: _quickAddItem,
+                      onPlusTap: _openAttachmentSheet,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _goBack() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/home');
+    }
+  }
+
+  void _onMenuSelected(ListDetailMenuAction action) {
+    switch (action) {
+      case ListDetailMenuAction.rename:
+        _showRenameListDialog();
+      case ListDetailMenuAction.categoryOrder:
+        _showCategoryOrderScreen();
+      case ListDetailMenuAction.settings:
+        _showListSettingsScreen();
+    }
   }
 
   /// "+" button → attachment sheet → AI extraction → review → import.
@@ -957,11 +582,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   Future<void> _importReviewedItems(List<ExtractedListItem> reviewed) async {
     final toImport = [
       for (final item in reviewed)
-        (
-          name: item.name,
-          quantity: item.quantity ?? 1.0,
-          unit: item.unit,
-        ),
+        (name: item.name, quantity: item.quantity ?? 1.0, unit: item.unit),
     ];
     try {
       await ref
@@ -994,386 +615,50 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     }
   }
 
+  bool _dietWarningFor(String name) {
+    final user = ref.read(currentUserProvider).value;
+    return user != null &&
+        DietChecker.checkDietWarning(name, user.dietPreferences);
+  }
 
-  /// Build a category section with drag target for receiving items
-  Widget _buildCategorySection({
-    required String category,
-    required String categoryId,
-    required List<ShoppingItemModel> categoryItems,
-    required Color categoryColor,
-    required IconData categoryIcon,
-    required bool isCustomCategory,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return DragTarget<ShoppingItemModel>(
-      onWillAcceptWithDetails: (details) {
-        // Accept if dragged from a different category
-        return _draggedFromCategory != categoryId;
-      },
-      onAcceptWithDetails: (details) async {
-        final item = details.data;
-        // Update item's category
-        await ref
-            .read(itemsNotifierProvider(widget.listId).notifier)
-            .updateItem(item.id, {'category_id': categoryId});
-        // Record preference so AI learns the user's category choice
-        CategoryDetector.recordUserCategoryChange(item.name, category);
-        HapticFeedback.mediumImpact();
-        setState(() {
-          _isDragging = false;
-          _draggedItem = null;
-          _draggedFromCategory = null;
-        });
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: isHovering
-              ? BoxDecoration(
-                  color: categoryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: categoryColor.withValues(alpha: 0.5),
-                    width: 2,
-                  ),
-                )
-              : null,
-          padding: isHovering ? const EdgeInsets.all(8) : EdgeInsets.zero,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Category Header - paper kicker style
-              if (category.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(
-                    top: AppDimensions.spacingLarge,
-                    bottom: AppDimensions.spacingSmall,
-                  ),
-                  child: Text(
-                    category.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 2,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary(context),
-                    ),
-                  ),
-                ),
-              // Items List or empty state for custom categories
-              if (categoryItems.isEmpty && isCustomCategory)
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey.shade900 : PaperColors.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.grey.shade800
-                          : PaperColors.hairline,
-                      style: BorderStyle.solid,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.drag_indicator_rounded,
-                        size: 18,
-                        color: isDark
-                            ? Colors.grey.shade600
-                            : PaperColors.faint,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        context.tr('drag_items_here'),
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.grey.shade500
-                              : PaperColors.muted,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: categoryItems.length,
-                      itemBuilder: (context, index) {
-                        return _buildDraggableItemTile(
-                          categoryItems[index],
-                          index,
-                          categoryId,
-                        );
-                      },
-                    ),
-                    // Drop zone AFTER the last item so users can move
-                    // items to the very end of a category.
-                    DragTarget<ShoppingItemModel>(
-                      onWillAcceptWithDetails: (details) {
-                        if (categoryItems.isEmpty) return true;
-                        // Accept if the dragged item isn't already last in this category
-                        return details.data.id != categoryItems.last.id;
-                      },
-                      onAcceptWithDetails: (details) async {
-                        final draggedItem = details.data;
-                        final fromCat = _draggedFromCategory;
-                        final notifier = ref.read(
-                          itemsNotifierProvider(widget.listId).notifier,
-                        );
-
-                        if (fromCat != categoryId) {
-                          // Cross-category: change category first
-                          await notifier.updateItem(draggedItem.id, {
-                            'category_id': categoryId,
-                          });
-                        }
-                        // Place after the last item in this category.
-                        if (categoryItems.isNotEmpty) {
-                          await notifier.reorderItemAfter(
-                            draggedItem.id,
-                            categoryItems.last.id,
-                          );
-                        }
-                        HapticFeedback.lightImpact();
-                        setState(() {
-                          _isDragging = false;
-                          _draggedItem = null;
-                          _draggedFromCategory = null;
-                        });
-                      },
-                      builder: (context, candidateData, rejectedData) {
-                        final isHovering = candidateData.isNotEmpty;
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          height: isHovering ? 40 : 20,
-                          margin: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: isHovering
-                              ? BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: AppColors.accentColor(
-                                      context,
-                                    ).withValues(alpha: 0.4),
-                                    width: 1.5,
-                                  ),
-                                )
-                              : null,
-                          child: isHovering
-                              ? Center(
-                                  child: Container(
-                                    width: 40,
-                                    height: 3,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.accentColor(
-                                        context,
-                                      ).withValues(alpha: 0.5),
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                )
-                              : null,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        );
-      },
+  void _showAddError(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          context.tr('error_adding', params: {'error': e.toString()}),
+        ),
+        backgroundColor: Colors.red,
+      ),
     );
   }
 
-  List<Map<String, dynamic>> _groupItemsByCategory(
-    List<ShoppingItemModel> items,
-  ) {
-    // Get user's language
-    final locale = Localizations.localeOf(context);
-    final languageCode = locale.languageCode;
-
-    // Group items by category ID (including custom categories)
-    final Map<String, List<ShoppingItemModel>> categoryMap = {};
-
-    // First, add all custom categories (even empty ones) so they're always visible
-    for (final customCat in _customCategories) {
-      categoryMap[customCat.id] = [];
-    }
-
-    for (final item in items) {
-      // Prefer new category_id field, fallback to legacy category field
-      String categoryId = item.categoryId ?? item.category ?? 'other';
-
-      // If it's not a valid built-in ID and not a custom ID, try to convert name → ID
-      if (!Categories.allIds.contains(categoryId) &&
-          !categoryId.startsWith('custom_')) {
-        categoryId =
-            Categories.getIdByName(categoryId, languageCode) ?? 'other';
-      }
-
-      if (!categoryMap.containsKey(categoryId)) {
-        categoryMap[categoryId] = [];
-      }
-      categoryMap[categoryId]!.add(item);
-    }
-
-    // Build sorted list using saved category order
-    final sortedCategories = <String>[];
-
-    // If we have a saved category order, use it
-    if (_categoryOrder.isNotEmpty) {
-      // Add categories in saved order (only if they have items or are custom)
-      for (final categoryId in _categoryOrder) {
-        final hasItems =
-            categoryMap.containsKey(categoryId) &&
-            categoryMap[categoryId]!.isNotEmpty;
-        final isCustom = categoryId.startsWith('custom_');
-        if (hasItems || isCustom) {
-          sortedCategories.add(categoryId);
-        }
-      }
-
-      // Add any categories with items that weren't in the saved order (new categories)
-      for (final categoryId in categoryMap.keys) {
-        if (!sortedCategories.contains(categoryId) &&
-            categoryMap[categoryId]!.isNotEmpty) {
-          sortedCategories.add(categoryId);
-        }
-      }
-    } else {
-      // Fallback: custom categories first, then built-in categories
-      for (final customCat in _customCategories) {
-        if (!sortedCategories.contains(customCat.id)) {
-          sortedCategories.add(customCat.id);
-        }
-      }
-
-      // Then add built-in categories that have items
-      for (final category in Categories.all) {
-        if (categoryMap.containsKey(category.id) &&
-            categoryMap[category.id]!.isNotEmpty) {
-          sortedCategories.add(category.id);
-        }
-      }
-    }
-
-    // Convert to list of maps for ListView
-    return sortedCategories.map((categoryId) {
-      // Sort items by order_index within each category
-      final categoryItems = categoryMap[categoryId] ?? [];
-      final sortedItems = List<ShoppingItemModel>.from(categoryItems);
-      sortedItems.sort((a, b) {
-        final aIndex = a.orderIndex ?? a.sortOrder ?? 999;
-        final bIndex = b.orderIndex ?? b.sortOrder ?? 999;
-        return aIndex.compareTo(bIndex);
-      });
-
-      // Get category display info
-      String categoryName;
-      Color categoryColor;
-      IconData categoryIcon;
-      bool isCustom = false;
-
-      if (categoryId.startsWith('custom_')) {
-        // Find the custom category
-        final customCat = _customCategories.firstWhere(
-          (c) => c.id == categoryId,
-          orElse: () => CustomCategory(
-            id: categoryId,
-            name: 'Unknown',
-            color: Colors.grey,
-          ),
-        );
-        categoryName = customCat.name;
-        categoryColor = customCat.color;
-        categoryIcon = Icons.label_rounded;
-        isCustom = true;
-      } else {
-        final categoryData = Categories.getById(categoryId);
-        categoryName = categoryData.getName(languageCode);
-        categoryColor = categoryData.color;
-        categoryIcon = categoryData.icon;
-      }
-
-      return {
-        'category': categoryName,
-        'category_id': categoryId,
-        'category_color': categoryColor,
-        'category_icon': categoryIcon,
-        'is_custom': isCustom,
-        'items': sortedItems,
-      };
-    }).toList();
-  }
-
-  void _quickAddItem(String name) async {
-    print('🚀🚀🚀 [LIST_DETAIL] _quickAddItem CALLED for "$name"');
-    print('🚀 [LIST_DETAIL] listId: ${widget.listId}');
-
+  Future<void> _quickAddItem(String name) async {
     try {
-      final user = ref.read(currentUserProvider).value;
-
-      // Let Gemini handle categorization automatically (category: null)
-      // ItemRepository will call GeminiCategorizationService if category is null
-
-      final isDietWarning = user != null
-          ? DietChecker.checkDietWarning(name, user.dietPreferences)
-          : false;
-
-      print('🚀 [LIST_DETAIL] Calling itemsNotifierProvider.addItem...');
-      await ref
-          .read(itemsNotifierProvider(widget.listId).notifier)
-          .addItem(
+      // category: null lets Gemini categorize the item.
+      await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
             name: name,
-            category: null, // Let Gemini categorize automatically
-            isDietWarning: isDietWarning,
+            category: null,
+            isDietWarning: _dietWarningFor(name),
           );
-
-      print('✅ [LIST_DETAIL] Successfully added item: $name');
     } catch (e) {
-      print('❌ [LIST_DETAIL] Failed to add item "$name": $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.tr('error_adding', params: {'error': e.toString()}),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      debugPrint('❌ [LIST_DETAIL] Failed to add item "$name": $e');
+      _showAddError(e);
     }
-
-    // Note: No need to invalidate listsNotifierProvider - the itemsNotifierProvider
-    // already handles state updates and the list count will update automatically
   }
 
   /// Adds a real product from a live retailer offer (see [OfferSuggestionsBar])
   /// to the list, carrying its price/retailer/unit along with it.
-  void _addItemFromOffer(StoreOffer offer) async {
+  Future<void> _addItemFromOffer(StoreOffer offer) async {
     HapticFeedback.mediumImpact();
     _searchController.clear();
     _focusNode.unfocus();
 
     try {
-      final user = ref.read(currentUserProvider).value;
-      final isDietWarning = user != null
-          ? DietChecker.checkDietWarning(offer.productName, user.dietPreferences)
-          : false;
-
       await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
             name: offer.productName,
             category: null,
-            isDietWarning: isDietWarning,
+            isDietWarning: _dietWarningFor(offer.productName),
             price: offer.price,
             priceCurrency: 'EUR',
             priceRetailer: offer.retailerName,
@@ -1384,1073 +669,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
             autoParse: false,
           );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.tr('error_adding', params: {'error': e.toString()}),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _showAddItemDialog(BuildContext context, {String prefill = ''}) {
-    // Dismiss keyboard from the search bar before opening the sheet
-    FocusManager.instance.primaryFocus?.unfocus();
-
-    final nameController = TextEditingController(text: prefill);
-    final quantityController = TextEditingController(text: '1');
-    final notesController = TextEditingController();
-    String? selectedUnit;
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1C1C1E) : PaperColors.surface;
-    final fillColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : PaperColors.paper;
-    final fg = AppColors.textPrimary(context);
-    final muted = AppColors.textSecondary(context);
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (context) {
-        return Center(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 24,
-                right: 24,
-              ),
-              child: Material(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(20),
-                clipBehavior: Clip.antiAlias,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                  child: StatefulBuilder(
-                    builder: (context, setDialogState) {
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Header row with title and X button
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                AppLocalizations.of(context).addItem,
-                                style: PaperTextStyles.serif(22, color: fg),
-                              ),
-                              GestureDetector(
-                                onTap: () => Navigator.pop(context),
-                                child: Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: BoxDecoration(
-                                    color: muted.withValues(alpha: 0.1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    size: 16,
-                                    color: muted,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-
-                          TextField(
-                            controller: nameController,
-                            style: TextStyle(color: fg, fontSize: 16),
-                            decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context).itemName,
-                              hintStyle: TextStyle(
-                                color: muted.withValues(alpha: 0.5),
-                              ),
-                              filled: true,
-                              fillColor: fillColor,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                            ),
-                            autofocus: prefill.isEmpty,
-                            textCapitalization: TextCapitalization.sentences,
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Quantity field
-                          TextField(
-                            controller: quantityController,
-                            style: TextStyle(color: fg, fontSize: 16),
-                            decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context).quantity,
-                              hintStyle: TextStyle(
-                                color: muted.withValues(alpha: 0.5),
-                              ),
-                              filled: true,
-                              fillColor: fillColor,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                            ),
-                            keyboardType: TextInputType.number,
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Unit pill selector
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: ['pcs', 'kg', 'g', 'l', 'ml', 'pack'].map(
-                              (unit) {
-                                final isSelected = selectedUnit == unit;
-                                return GestureDetector(
-                                  onTap: () {
-                                    setDialogState(() {
-                                      selectedUnit = isSelected ? null : unit;
-                                    });
-                                    HapticFeedback.selectionClick();
-                                  },
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 150),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? (isDark
-                                                ? Colors.white
-                                                : Colors.black)
-                                          : fillColor,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      unit,
-                                      style: TextStyle(
-                                        color: isSelected
-                                            ? (isDark
-                                                  ? Colors.black
-                                                  : Colors.white)
-                                            : muted,
-                                        fontSize: 14,
-                                        fontWeight: isSelected
-                                            ? FontWeight.w600
-                                            : FontWeight.w400,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ).toList(),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          TextField(
-                            controller: notesController,
-                            style: TextStyle(color: fg, fontSize: 16),
-                            decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context).notes,
-                              hintStyle: TextStyle(
-                                color: muted.withValues(alpha: 0.5),
-                              ),
-                              filled: true,
-                              fillColor: fillColor,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                            ),
-                            maxLines: 2,
-                            textCapitalization: TextCapitalization.sentences,
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Monochrome CTA
-                          GestureDetector(
-                            onTap: () async {
-                              if (nameController.text.trim().isEmpty) return;
-
-                              final name = nameController.text.trim();
-
-                              try {
-                                final user = ref
-                                    .read(currentUserProvider)
-                                    .value;
-
-                                final isDietWarning = user != null
-                                    ? DietChecker.checkDietWarning(
-                                        name,
-                                        user.dietPreferences,
-                                      )
-                                    : false;
-
-                                await ref
-                                    .read(
-                                      itemsNotifierProvider(
-                                        widget.listId,
-                                      ).notifier,
-                                    )
-                                    .addItem(
-                                      name: name,
-                                      quantity:
-                                          double.tryParse(
-                                            quantityController.text,
-                                          ) ??
-                                          1.0,
-                                      unit: selectedUnit,
-                                      category: null,
-                                      notes: notesController.text.trim().isEmpty
-                                          ? null
-                                          : notesController.text.trim(),
-                                      isDietWarning: isDietWarning,
-                                    );
-
-                                Navigator.pop(context);
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      context.tr(
-                                        'error_adding',
-                                        params: {'error': e.toString()},
-                                      ),
-                                    ),
-                                    backgroundColor: AppColors.error,
-                                  ),
-                                );
-                              }
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: isDark ? Colors.white : Colors.black,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  AppLocalizations.of(context).addItem,
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark ? Colors.black : Colors.white,
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> _fetchUserInfo(String? userId) async {
-    if (userId == null || userId.isEmpty) return null;
-    try {
-      final response = await SupabaseService.instance.client
-          .from('users')
-          .select('display_name, avatar_url')
-          .eq('id', userId)
-          .maybeSingle();
-      return response;
-    } catch (e) {
-      debugPrint('❌ Failed to fetch user info: $e');
-      return null;
-    }
-  }
-
-  void _showEditItemDialog(BuildContext context, ShoppingItemModel item) {
-    final nameController = TextEditingController(text: item.name);
-    final quantityText = item.quantity % 1 == 0
-        ? item.quantity.toInt().toString()
-        : item.quantity.toString();
-    final quantityController = TextEditingController(text: quantityText);
-    final notesController = TextEditingController(text: item.notes ?? '');
-    String selectedUnit = item.unit ?? 'pcs';
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1C1C1E) : PaperColors.surface;
-    final fillColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : PaperColors.paper;
-    final fg = AppColors.textPrimary(context);
-    final muted = AppColors.textSecondary(context);
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (context) {
-        return Center(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 24,
-                right: 24,
-              ),
-              child: Material(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(20),
-                clipBehavior: Clip.antiAlias,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                  child: StatefulBuilder(
-                    builder: (context, setDialogState) {
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Header row
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                AppLocalizations.of(context).editItem,
-                                style: PaperTextStyles.serif(22, color: fg),
-                              ),
-                              GestureDetector(
-                                onTap: () => Navigator.pop(context),
-                                child: Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: BoxDecoration(
-                                    color: muted.withValues(alpha: 0.1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    size: 16,
-                                    color: muted,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Added By Section
-                          if (item.addedBy != null && item.addedBy!.isNotEmpty)
-                            FutureBuilder<Map<String, dynamic>?>(
-                              future: _fetchUserInfo(item.addedBy),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: Center(
-                                      child: CupertinoActivityIndicator(
-                                        radius: 10,
-                                        color: muted,
-                                      ),
-                                    ),
-                                  );
-                                }
-
-                                final userInfo = snapshot.data;
-                                final displayName =
-                                    userInfo?['display_name'] as String? ??
-                                    context.tr('unknown_user');
-                                final avatarUrl =
-                                    userInfo?['avatar_url'] as String?;
-                                final userId = item.addedBy!;
-
-                                return GestureDetector(
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    context.push(
-                                      '/author/$userId',
-                                      extra: {'authorName': displayName},
-                                    );
-                                  },
-                                  child: Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: fillColor,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 16,
-                                          backgroundColor: muted.withValues(
-                                            alpha: 0.15,
-                                          ),
-                                          backgroundImage:
-                                              avatarUrl != null &&
-                                                  avatarUrl.isNotEmpty
-                                              ? NetworkImage(avatarUrl)
-                                              : null,
-                                          child:
-                                              avatarUrl == null ||
-                                                  avatarUrl.isEmpty
-                                              ? Text(
-                                                  displayName.isNotEmpty
-                                                      ? displayName[0]
-                                                            .toUpperCase()
-                                                      : '?',
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: fg,
-                                                  ),
-                                                )
-                                              : null,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                context.tr('added_by'),
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: muted,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 1),
-                                              Text(
-                                                displayName,
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: fg,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Icon(
-                                          Icons.chevron_right_rounded,
-                                          color: muted,
-                                          size: 20,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-
-                          // Name Field
-                          TextField(
-                            controller: nameController,
-                            style: TextStyle(color: fg, fontSize: 16),
-                            decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context).itemName,
-                              hintStyle: TextStyle(
-                                color: muted.withValues(alpha: 0.5),
-                              ),
-                              filled: true,
-                              fillColor: fillColor,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                            ),
-                            textCapitalization: TextCapitalization.sentences,
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Quantity field
-                          TextField(
-                            controller: quantityController,
-                            style: TextStyle(color: fg, fontSize: 16),
-                            decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context).quantity,
-                              hintStyle: TextStyle(
-                                color: muted.withValues(alpha: 0.5),
-                              ),
-                              filled: true,
-                              fillColor: fillColor,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Unit pill selector
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: Categories.units.map((unit) {
-                              final isSelected = selectedUnit == unit;
-                              return GestureDetector(
-                                onTap: () {
-                                  setDialogState(() {
-                                    selectedUnit = isSelected ? 'pcs' : unit;
-                                  });
-                                  HapticFeedback.selectionClick();
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 150),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? (isDark ? Colors.white : Colors.black)
-                                        : fillColor,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    unit,
-                                    style: TextStyle(
-                                      color: isSelected
-                                          ? (isDark
-                                                ? Colors.black
-                                                : Colors.white)
-                                          : muted,
-                                      fontSize: 14,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Notes Field
-                          TextField(
-                            controller: notesController,
-                            style: TextStyle(color: fg, fontSize: 16),
-                            decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context).notes,
-                              hintStyle: TextStyle(
-                                color: muted.withValues(alpha: 0.5),
-                              ),
-                              filled: true,
-                              fillColor: fillColor,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                            ),
-                            maxLines: 2,
-                            textCapitalization: TextCapitalization.sentences,
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Action Buttons
-                          Row(
-                            children: [
-                              // Delete Button
-                              GestureDetector(
-                                onTap: () async {
-                                  await ref
-                                      .read(
-                                        itemsNotifierProvider(
-                                          widget.listId,
-                                        ).notifier,
-                                      )
-                                      .deleteItem(item.id);
-                                  ref.invalidate(listsNotifierProvider);
-                                  if (context.mounted) {
-                                    Navigator.pop(context);
-                                  }
-                                },
-                                child: Container(
-                                  height: 52,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.delete_outline_rounded,
-                                      color: Colors.red.shade400,
-                                      size: 22,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(width: 10),
-
-                              // Save Button
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    final quantity =
-                                        double.tryParse(
-                                          quantityController.text,
-                                        ) ??
-                                        1.0;
-                                    ref
-                                        .read(
-                                          itemsNotifierProvider(
-                                            widget.listId,
-                                          ).notifier,
-                                        )
-                                        .updateItem(item.id, {
-                                          'name': nameController.text.trim(),
-                                          'quantity': quantity,
-                                          'unit': selectedUnit,
-                                          'notes':
-                                              notesController.text
-                                                  .trim()
-                                                  .isEmpty
-                                              ? null
-                                              : notesController.text.trim(),
-                                        });
-                                    ref.invalidate(listsNotifierProvider);
-                                    Navigator.pop(context);
-                                  },
-                                  child: Container(
-                                    height: 52,
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? Colors.white
-                                          : Colors.black,
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        AppLocalizations.of(context).save,
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark
-                                              ? Colors.black
-                                              : Colors.white,
-                                          letterSpacing: -0.3,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _showShareDialog() async {
-    try {
-      final code = await ref
-          .read(listsNotifierProvider.notifier)
-          .generateShareCode(widget.listId);
-
-      if (!mounted) return;
-
-      final isDark = Theme.of(context).brightness == Brightness.dark;
-      final fg = AppColors.textPrimary(context);
-      final muted = AppColors.textSecondary(context);
-      final dim = AppColors.textTertiary(context);
-
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: isDark ? const Color(0xFF1C1C1E) : PaperColors.surface,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  AppLocalizations.of(context).shareCodeTitle,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: fg,
-                    letterSpacing: -0.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-
-                Text(
-                  AppLocalizations.of(context).shareCodeMessage,
-                  style: TextStyle(
-                    color: muted,
-                    fontSize: 14,
-                    letterSpacing: -0.2,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-
-                // Code display
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: code));
-                    HapticFeedback.lightImpact();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(context.tr('code_copied')),
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : Colors.black.withValues(alpha: 0.03),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          code,
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 6,
-                            color: fg,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Icon(Icons.copy_rounded, size: 18, color: dim),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-
-                Text(
-                  context.tr('tap_to_copy'),
-                  style: TextStyle(color: dim, fontSize: 12),
-                ),
-                const SizedBox(height: 24),
-
-                // Share buttons row
-                Row(
-                  children: [
-                    // Share Code button
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.pop(context);
-                          _shareListViaSystem(code);
-                        },
-                        child: Container(
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.numbers_rounded,
-                                  size: 18,
-                                  color: fg,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Code',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: fg,
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Share Link button
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.pop(context);
-                          _shareListViaLink();
-                        },
-                        child: Container(
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white : Colors.black,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.link_rounded,
-                                  size: 18,
-                                  color: isDark ? Colors.black : Colors.white,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Link',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark ? Colors.black : Colors.white,
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.tr('error_generic', params: {'error': e.toString()}),
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _showShareCodeDialog() async {
-    try {
-      final code = await ref
-          .read(listsNotifierProvider.notifier)
-          .generateShareCode(widget.listId);
-
-      AdaptiveAlertDialog.show(
-        context: context,
-        title: AppLocalizations.of(context).shareCodeTitle,
-        message: '${AppLocalizations.of(context).shareCodeMessage}\n\n$code',
-        icon: PlatformInfo.isIOS26OrHigher() ? 'qrcode' : Icons.qr_code,
-        actions: [
-          AlertAction(
-            title: AppLocalizations.of(context).cancel,
-            style: AlertActionStyle.cancel,
-            onPressed: () {},
-          ),
-          AlertAction(
-            title: AppLocalizations.of(context).copy,
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: code));
-            },
-          ),
-          AlertAction(
-            title: AppLocalizations.of(context).share,
-            style: AlertActionStyle.primary,
-            onPressed: () {
-              _shareListViaSystem(code);
-            },
-          ),
-        ],
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.tr('error_generic', params: {'error': e.toString()}),
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _onShareSelected() async {
-    try {
-      // Ask for notification permission the first time a list is shared.
-      // Users want to know when collaborators update the list.
-      if (await ContextualPromptService.instance.shouldShowNotifPrompt()) {
-        if (!mounted) return;
-        await ContextualPromptService.instance.showNotifPrompt(context);
-        if (!mounted) return;
-      }
-
-      final code = await ref
-          .read(listsNotifierProvider.notifier)
-          .generateShareCode(widget.listId);
-
-      AdaptiveAlertDialog.show(
-        context: context,
-        title: AppLocalizations.of(context).shareDialogTitle,
-        message: AppLocalizations.of(context).shareDialogMessage(code),
-        icon: PlatformInfo.isIOS26OrHigher()
-            ? 'square.and.arrow.up'
-            : Icons.ios_share,
-        actions: [
-          AlertAction(
-            title: AppLocalizations.of(context).cancel,
-            style: AlertActionStyle.cancel,
-            onPressed: () {},
-          ),
-          AlertAction(
-            title: AppLocalizations.of(context).share,
-            onPressed: () {
-              _shareListViaSystem(code);
-            },
-          ),
-          AlertAction(
-            title: AppLocalizations.of(context).copyAndContinue,
-            style: AlertActionStyle.primary,
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: code));
-              _shareListViaSystem(code);
-            },
-          ),
-        ],
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.tr('error_generic', params: {'error': e.toString()}),
-            ),
-          ),
-        );
-      }
+      _showAddError(e);
     }
   }
 
@@ -2462,996 +681,278 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     if (itemName == null || itemName.isEmpty) return;
 
     try {
-      await ref
-          .read(itemsNotifierProvider(widget.listId).notifier)
-          .addItem(
+      await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
             name: itemName,
             quantity: quantity ?? 1.0,
             category: category,
           );
-
-      if (mounted) {
-        // Note: No need to invalidate - the itemsNotifierProvider handles state updates
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$itemName zur Liste hinzugefügt'),
-            duration: const Duration(seconds: 2),
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr('item_added_named', params: {'name': itemName}),
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Fehler: $e')));
-      }
-    }
-  }
-
-  /// Which shop the trip happened in, or null when it stays unknown.
-  ///
-  /// Never blocks the checkout: any failure (no GPS fix, Overpass down,
-  /// user skips) returns null and the trip is recorded without a shop.
-  Future<String?> _resolveCheckoutStore(BuildContext context) async {
-    StoreResolution resolution;
-    try {
-      final coords = await UserLocationService.instance.getCoordinates();
-      if (coords == null) {
-        resolution = const StoreUnknown(locationDenied: true);
-      } else {
-        final stores = await StoreLocatorService.instance.findNearbyStores(
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        );
-        resolution = CheckoutStoreResolver.resolve(stores);
-      }
-    } catch (_) {
-      resolution = const StoreUnknown();
-    }
-
-    // Unambiguous: record it without interrupting the checkout at all.
-    if (resolution is StoreResolved) return resolution.store.displayName;
-
-    if (!context.mounted) return null;
-    return showCheckoutStoreSheet(context, resolution: resolution);
-  }
-
-  Future<void> _completeShoppingTrip(
-    BuildContext context,
-    WidgetRef ref,
-    List<ShoppingItemModel> items,
-  ) async {
-    // Filter only checked items
-    final checkedItems = items.where((item) => item.isChecked).toList();
-
-    if (checkedItems.isEmpty) {
-      AdaptiveAlertDialog.show(
-        context: context,
-        title: context.tr('no_checked_items'),
-        message: context.tr('no_checked_items_message'),
-        icon: PlatformInfo.isIOS26OrHigher()
-            ? 'exclamationmark.circle.fill'
-            : Icons.info_outline,
-        iconColor: Colors.orange,
-        actions: [
-          AlertAction(
-            title: context.tr('ok'),
-            style: AlertActionStyle.primary,
-            onPressed: () {},
-          ),
-        ],
-      );
-      return;
-    }
-
-    // Show confirmation dialog
-    bool confirmed = false;
-    await AdaptiveAlertDialog.show(
-      context: context,
-      title: context.tr('complete_shopping_question'),
-      message: context.tr(
-        'complete_shopping_checked_message',
-        params: {'count': checkedItems.length.toString()},
-      ),
-      icon: PlatformInfo.isIOS26OrHigher()
-          ? 'checkmark.circle.fill'
-          : Icons.check_circle_outline,
-      iconColor: AppColors.success,
-      actions: [
-        AlertAction(
-          title: AppLocalizations.of(context).cancel,
-          style: AlertActionStyle.cancel,
-          onPressed: () {},
+          duration: const Duration(seconds: 2),
         ),
-        AlertAction(
-          title: context.tr('complete_btn'),
-          style: AlertActionStyle.primary,
-          onPressed: () {
-            confirmed = true;
-          },
-        ),
-      ],
-    );
-
-    if (!confirmed) return;
-
-    // Work out which shop this was, so purchase stats learn *where* you buy
-    // what. Resolves silently from GPS when unambiguous; only asks when it
-    // genuinely cannot tell (shopping centre, or no location access).
-    final storeName = await _resolveCheckoutStore(context);
-    final itemsForHistory = storeName == null
-        ? checkedItems
-        : [
-            for (final item in checkedItems)
-              item.priceRetailer == null || item.priceRetailer!.isEmpty
-                  ? item.copyWith(priceRetailer: storeName)
-                  : item,
-          ];
-
-    try {
-      // Save only checked items to history. Purchase tracking (for the
-      // "you usually buy X every N days" nudges) happens inside this call —
-      // it used to also be called again right here, silently double-counting
-      // every completed trip's items in item_purchase_stats.
-      final historyService = ShoppingHistoryService();
-      final historyEntry = await historyService.completeShoppingTrip(
-        listId: widget.listId,
-        listName: widget.listName,
-        items: itemsForHistory,
-      );
-
-      // Delete only checked items from the list
-      final itemIds = checkedItems.map((item) => item.id).toList();
-      await SupabaseService.instance
-          .from('shopping_items')
-          .delete()
-          .inFilter('id', itemIds);
-
-      // 🔔 Send notification to all list members about shopping completion
-      if (Platform.isIOS || Platform.isAndroid) {
-        try {
-          final userId = SupabaseService.instance.currentUser?.id;
-          if (userId != null) {
-            await _sendShoppingCompleteNotifications(
-              widget.listId,
-              widget.listName,
-              checkedItems.length,
-              userId,
-            );
-          }
-        } catch (e) {
-          debugPrint('⚠️ Failed to send shopping complete notifications: $e');
-        }
-      }
-
-      // Refresh the items list and home screen
-      ref.invalidate(itemsNotifierProvider(widget.listId));
-      ref.invalidate(listsNotifierProvider);
-
-      // On a trip-count milestone (10th, 25th, … trip), the confirmation
-      // becomes a small celebration instead of the generic line.
-      String? milestone;
-      try {
-        milestone = await MascotNotificationService.instance
-            .milestoneMessageForCompletedTrip();
-      } catch (_) {}
-
-      // Offer an immediate "split this trip" shortcut when the list has
-      // someone else to split with — the home-screen SplitTripNudgeCard
-      // covers the same case for anyone who doesn't act on it right now.
-      var canSplit = false;
-      try {
-        final members =
-            await ref.read(listRepositoryProvider).getListMembers(widget.listId);
-        canSplit = members.length >= 2;
-      } catch (_) {}
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              milestone ??
-                  '✅ ${checkedItems.length} Artikel erfolgreich abgeschlossen!',
-            ),
-            backgroundColor: AppColors.success,
-            duration: canSplit
-                ? const Duration(seconds: 6)
-                : (milestone != null
-                    ? const Duration(seconds: 5)
-                    : const Duration(seconds: 4)),
-            action: canSplit
-                ? SnackBarAction(
-                    label: context.tr('split_trip_cost'),
-                    textColor: Colors.white,
-                    onPressed: () =>
-                        showSplitCostSheet(context, ref, entry: historyEntry),
-                  )
-                : null,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.tr('error_completing', params: {'error': e.toString()}),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _showRenameListDialog() {
-    final nameController = TextEditingController(
-      text: _listName ?? widget.listName,
-    );
-
-    showCupertinoDialog(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text(context.tr('rename_list_title')),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(
-            controller: nameController,
-            autofocus: true,
-            placeholder: context.tr('list_name'),
-            textCapitalization: TextCapitalization.sentences,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: CupertinoColors.systemGrey6,
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(AppLocalizations.of(context).cancel),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () async {
-              final newName = nameController.text.trim();
-              if (newName.isNotEmpty && newName != widget.listName) {
-                try {
-                  await ref.read(listsNotifierProvider.notifier).updateList(
-                    widget.listId,
-                    {'name': newName},
-                  );
-                  if (mounted) {
-                    Navigator.pop(ctx);
-                    setState(() {
-                      _listName = newName;
-                    });
-                    ref.invalidate(listsNotifierProvider);
-                  }
-                } catch (e) {
-                  if (mounted) Navigator.pop(ctx);
-                }
-              } else {
-                Navigator.pop(ctx);
-              }
-            },
-            child: Text(context.tr('save')),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteListDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.tr('delete_list_question')),
-        content: Text(
-          context.tr(
-            'delete_list_message',
-            params: {'listName': widget.listName},
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(context.tr('cancel')),
-          ),
-          TextButton(
-            onPressed: () async {
-              // Close dialog first
-              Navigator.pop(context);
-
-              try {
-                print(
-                  '🗑️ Deleting list: ${widget.listName} (${widget.listId})',
-                );
-
-                // Delete the list
-                await ref
-                    .read(listsNotifierProvider.notifier)
-                    .deleteList(widget.listId);
-
-                print('✅ List deleted successfully');
-
-                if (mounted) {
-                  // Refresh the lists
-                  ref.invalidate(listsNotifierProvider);
-
-                  // Navigate to home page
-                  context.go('/home');
-
-                  print('✅ Navigated to home page');
-
-                  // Show success message
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        context.tr(
-                          'list_deleted',
-                          params: {'name': widget.listName},
-                        ),
-                      ),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                print('❌ Failed to delete list: $e');
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        context.tr(
-                          'error_deleting',
-                          params: {'error': e.toString()},
-                        ),
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(context.tr('delete')),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Send shopping complete notifications to all list members
-  Future<void> _sendShoppingCompleteNotifications(
-    String listId,
-    String listName,
-    int itemCount,
-    String completedByUserId,
-  ) async {
-    try {
-      debugPrint('🔔 [LIST_DETAIL] Sending shopping complete notifications...');
-
-      // Get all list members except the person who completed the shopping
-      final membersResponse = await SupabaseService.instance
-          .from('list_members')
-          .select('user_id')
-          .eq('list_id', listId)
-          .neq('user_id', completedByUserId);
-
-      debugPrint(
-        '🔔 [LIST_DETAIL] Found ${(membersResponse as List).length} members to notify',
-      );
-
-      // Get the name of the person who completed the shopping
-      final completerResponse = await SupabaseService.instance
-          .from('users')
-          .select('display_name')
-          .eq('id', completedByUserId)
-          .single();
-
-      final completerName =
-          completerResponse['display_name'] as String? ?? 'Someone';
-
-      // Send FCM push notification to each member
-      for (final member in membersResponse) {
-        final memberId = member['user_id'] as String;
-
-        try {
-          // Get user's FCM token and display name
-          final userResponse = await SupabaseService.instance
-              .from('users')
-              .select('fcm_token, display_name')
-              .eq('id', memberId)
-              .single();
-
-          final fcmToken = userResponse['fcm_token'] as String?;
-
-          if (fcmToken != null && fcmToken.isNotEmpty) {
-            // Send via Supabase Edge Function
-            await SupabaseService.instance.client.functions.invoke(
-              'send-push-notification',
-              body: {
-                'token': fcmToken,
-                'notification': {
-                  'title': 'Shopping Complete!',
-                  'body': '$completerName completed shopping for "$listName"',
-                },
-                'data': {'type': 'shopping_complete', 'listId': listId},
-              },
-            );
-
-            debugPrint('✅ [LIST_DETAIL] Sent push notification to member');
-          }
-        } catch (e) {
-          debugPrint('⚠️ [LIST_DETAIL] Failed to send push to member: $e');
-        }
-      }
-
-      debugPrint(
-        '✅ Sent shopping complete notifications to ${membersResponse.length} members',
       );
     } catch (e) {
-      debugPrint('❌ Failed to send shopping complete notifications: $e');
+      _showAddError(e);
     }
   }
 
-  /// Build a draggable item tile with tap zones:
-  /// - Left 2/3: tap to toggle check
-  /// - Right 1/3: tap to edit (with pencil icon in quantity box)
-  /// - Long press: start drag to move to different category OR reorder
-  ///   within the same category (drop onto another item)
-  Widget _buildDraggableItemTile(
-    ShoppingItemModel item,
-    int index,
-    String categoryId,
-  ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // Each item is also a DragTarget so we can reorder within a category
-    // AND accept cross-category drops directly onto an item position.
-    return DragTarget<ShoppingItemModel>(
-      onWillAcceptWithDetails: (details) => details.data.id != item.id,
-      onAcceptWithDetails: (details) async {
-        final draggedItem = details.data;
-        final fromCat = _draggedFromCategory;
-        if (fromCat == categoryId) {
-          // ── Same category → reorder ──
-          await ref
-              .read(itemsNotifierProvider(widget.listId).notifier)
-              .reorderItemToPosition(draggedItem.id, item.id);
-          HapticFeedback.lightImpact();
-        } else {
-          // ── Different category → move to this category at this position ──
-          await ref
-              .read(itemsNotifierProvider(widget.listId).notifier)
-              .updateItem(draggedItem.id, {'category_id': categoryId});
-          // Then reorder so it lands at this item's position
-          await ref
-              .read(itemsNotifierProvider(widget.listId).notifier)
-              .reorderItemToPosition(draggedItem.id, item.id);
-          HapticFeedback.mediumImpact();
-        }
-        setState(() {
-          _isDragging = false;
-          _draggedItem = null;
-          _draggedFromCategory = null;
-        });
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Insertion indicator line when another item hovers here
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              height: isHovering ? 3 : 0,
-              margin: isHovering
-                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 2)
-                  : EdgeInsets.zero,
-              decoration: BoxDecoration(
-                color: isHovering
-                    ? AppColors.accentColor(context).withValues(alpha: 0.7)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Listener(
-              onPointerMove: (event) {
-                if (_isDragging) _handleAutoScroll(event.position.dy);
-              },
-              child: LongPressDraggable<ShoppingItemModel>(
-                data: item,
-                delay: const Duration(milliseconds: 300),
-                onDragStarted: () {
-                  debugPrint('🎯 [DRAG] Started dragging item: ${item.name}');
-                  HapticFeedback.mediumImpact();
-                  setState(() {
-                    _isDragging = true;
-                    _draggedItem = item;
-                    _draggedFromCategory = categoryId;
-                  });
-                },
-                onDragUpdate: (details) {
-                  _handleAutoScroll(details.globalPosition.dy);
-                },
-                onDragEnd: (details) {
-                  debugPrint('🎯 [DRAG] Drag ended');
-                  _stopAutoScrollTimer();
-                  setState(() {
-                    _isDragging = false;
-                    _draggedItem = null;
-                    _draggedFromCategory = null;
-                  });
-                },
-                onDraggableCanceled: (_, __) {
-                  debugPrint('🎯 [DRAG] Drag cancelled');
-                  _stopAutoScrollTimer();
-                  setState(() {
-                    _isDragging = false;
-                    _draggedItem = null;
-                    _draggedFromCategory = null;
-                  });
-                },
-                feedback: Material(
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    width: MediaQuery.of(context).size.width - 64,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentColor(
-                        context,
-                      ).withValues(alpha: 0.95),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.drag_indicator_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            item.name,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} ${item.unit ?? ''}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                childWhenDragging: Opacity(
-                  opacity: 0.3,
-                  child: _buildItemTileContent(item, isDark),
-                ),
-                child: Dismissible(
-                  key: Key(item.id),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(
-                      Icons.delete,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                  confirmDismiss: (direction) async {
-                    HapticFeedback.heavyImpact();
-                    return true;
-                  },
-                  onDismissed: (direction) async {
-                    await ref
-                        .read(itemsNotifierProvider(widget.listId).notifier)
-                        .deleteItem(item.id);
-                    ref.invalidate(listsNotifierProvider);
-                    if (context.mounted) {
-                      HapticFeedback.lightImpact();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            '${item.name} ${context.tr('deleted')}',
-                          ),
-                          duration: const Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                  child: _buildItemTileContent(item, isDark),
-                ),
-              ), // LongPressDraggable
-            ), // Listener
-          ],
-        );
-      },
-    ); // DragTarget
+  void _showAddItemDialog() {
+    showItemFormDialog(context, listId: widget.listId);
   }
 
-  /// The actual content of an item tile with 2/3 check zone and 1/3 edit zone
-  Widget _buildItemTileContent(ShoppingItemModel item, bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.divider(context), width: 1),
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: Row(
-          children: [
-            // LEFT 2/3 ZONE: Tap to check/uncheck
-            Expanded(
-              flex: 2,
-              child: GestureDetector(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  ref
-                      .read(itemsNotifierProvider(widget.listId).notifier)
-                      .toggleItemChecked(item.id, !item.isChecked);
-                },
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 13, 8, 13),
-                  child: Row(
-                    children: [
-                      // Checkbox - paper circle
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          color: item.isChecked
-                              ? AppColors.accentColor(context)
-                              : Colors.transparent,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: item.isChecked
-                                ? AppColors.accentColor(context)
-                                : AppColors.textTertiary(context),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: item.isChecked
-                            ? const Icon(
-                                Icons.check_rounded,
-                                color: Colors.white,
-                                size: 14,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 14),
-                      // Item name and notes
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.name,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w400,
-                                decoration: item.isChecked
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                                decorationColor: AppColors.textTertiary(
-                                  context,
-                                ),
-                                color: item.isChecked
-                                    ? AppColors.textTertiary(context)
-                                    : AppColors.textPrimary(context),
-                              ),
-                            ),
-                            if (item.notes != null &&
-                                item.notes!.isNotEmpty) ...[
-                              const SizedBox(height: 3),
-                              Text(
-                                item.notes!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? Colors.grey.shade500
-                                      : PaperColors.muted,
-                                ),
-                              ),
-                            ],
-                            if (item.hasPrice) ...[
-                              const SizedBox(height: 3),
-                              Text(
-                                [
-                                  '${item.price!.toStringAsFixed(2)} €',
-                                  if (item.priceUnit != null) item.priceUnit!,
-                                  if (item.priceRetailer != null)
-                                    item.priceRetailer!,
-                                ].join(' · '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.accentColor(context),
-                                ),
-                              ),
-                            ],
-                            if (!item.isChecked)
-                              Consumer(
-                                builder: (context, chipRef, _) {
-                                  final comparison = chipRef
-                                      .watch(basketComparisonProvider(
-                                          widget.listId))
-                                      .valueOrNull;
-                                  final offer = comparison
-                                      ?.cheapestOfferFor(item.name.trim());
-                                  if (offer == null ||
-                                      !ItemOfferChip.isWorthShowing(
-                                          item, offer)) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return ItemOfferChip(
-                                    item: item,
-                                    offer: offer,
-                                    onTap: () => showItemOfferSheet(
-                                      context,
-                                      ref: ref,
-                                      listId: widget.listId,
-                                      item: item,
-                                      offer: offer,
-                                    ),
-                                  );
-                                },
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // RIGHT ZONE: Tap to edit item
-            GestureDetector(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                _showEditItemDialog(context, item);
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 10, 16, 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity}${item.unit != null && item.unit!.isNotEmpty ? ' ${item.unit}' : ''}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: item.isChecked
-                            ? AppColors.textTertiary(context)
-                            : AppColors.textSecondary(context),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.drag_indicator,
-                      size: 16,
-                      color: AppColors.textTertiary(context),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _showEditItemDialog(ShoppingItemModel item) {
+    showItemFormDialog(context, listId: widget.listId, item: item);
   }
 
-  void _showQuickEditPopup(BuildContext context, ShoppingItemModel item) {
-    double quantity = item.quantity;
-    final notesController = TextEditingController(text: item.notes ?? '');
-
-    showCupertinoDialog(
+  Future<void> _showRenameListDialog() async {
+    final currentName = _currentListName;
+    final newName = await showCupertinoDialog<String>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => CupertinoAlertDialog(
-          title: Text(item.name),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Column(
-              children: [
-                // Quantity stepper
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minSize: 36,
-                      onPressed: quantity > 1
-                          ? () {
-                              setDialogState(() => quantity--);
-                              HapticFeedback.selectionClick();
-                            }
-                          : null,
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemGrey5,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(CupertinoIcons.minus, size: 18),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Text(
-                        '${quantity % 1 == 0 ? quantity.toInt() : quantity}',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minSize: 36,
-                      onPressed: () {
-                        setDialogState(() => quantity++);
-                        HapticFeedback.selectionClick();
-                      },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemGrey5,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(CupertinoIcons.plus, size: 18),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Notes field
-                CupertinoTextField(
-                  controller: notesController,
-                  placeholder: 'Notiz hinzufügen',
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemGrey6,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  style: const TextStyle(fontSize: 14),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(context.tr('cancel')),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () {
-                Navigator.pop(ctx);
-                ref
-                    .read(itemsNotifierProvider(widget.listId).notifier)
-                    .updateItem(item.id, {
-                      'quantity': quantity,
-                      'notes': notesController.text.trim().isEmpty
-                          ? null
-                          : notesController.text.trim(),
-                    });
-                HapticFeedback.mediumImpact();
-              },
-              child: Text(context.tr('save')),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _RenameListDialog(initialName: currentName),
     );
+
+    if (newName == null || newName.isEmpty || newName == currentName) return;
+    try {
+      await ref
+          .read(listsNotifierProvider.notifier)
+          .updateList(widget.listId, {'name': newName});
+      if (mounted) setState(() => _listName = newName);
+    } catch (e) {
+      debugPrint('❌ [LIST_DETAIL] Failed to rename list: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('action_failed'))),
+      );
+    }
   }
 
-  /// Old method kept for compatibility but should not be used
-  Widget _buildItemTile(ShoppingItemModel item, int index) {
-    return _buildDraggableItemTile(item, index, 'other');
-  }
-
-  void _showBackgroundSelectionDialog() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => BackgroundSelectionSheet(listId: widget.listId),
-      ),
-    );
-  }
-
-  void _showCategoryOrderScreen() async {
+  Future<void> _showCategoryOrderScreen() async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (context) =>
-            CategoryOrderScreen(listId: widget.listId, listName: _listName),
+        builder: (context) => CategoryOrderScreen(
+          listId: widget.listId,
+          listName: _currentListName,
+        ),
       ),
     );
 
-    // If categories were reordered, refresh the items list and reload custom categories
-    if (result == true) {
+    // Order or custom categories changed: regroup, and reload items in case
+    // a deleted custom category moved some of them to 'other'.
+    if (result == true && mounted) {
       await _loadCustomCategories();
-      ref.invalidate(itemsNotifierProvider(widget.listId));
-      setState(() {});
+      unawaited(
+        ref.read(itemsNotifierProvider(widget.listId).notifier).loadItems(),
+      );
     }
   }
 
   void _showListSettingsScreen() {
-    if (_ownerId == null) return;
-
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ListSettingsScreen(
           listId: widget.listId,
-          listName: _listName,
-          ownerId: _ownerId!,
+          listName: _currentListName,
+          // Null until the lists have loaded; the settings screen then
+          // looks the owner up itself.
+          ownerId: _listFromProvider()?.ownerId,
         ),
       ),
     );
   }
+}
 
-  void _shareListViaSystem([String? code]) {
-    final base = 'Schau dir meine Einkaufsliste "${widget.listName}" an!';
-    final withCode = code != null && code.isNotEmpty
-        ? '\n\nTrete mit diesem Code bei: $code\nÖffne Avo und tippe auf "Liste beitreten".'
-        : '\n\nLade Avo herunter und trete meiner Liste bei.';
-    final box = context.findRenderObject() as RenderBox?;
-    Share.share(
-      '$base$withCode',
-      subject: 'Meine Avo Einkaufsliste',
-      sharePositionOrigin: box != null
-          ? box.localToGlobal(Offset.zero) & box.size
-          : const Rect.fromLTWH(0, 0, 100, 100),
-    );
+class _RenameListDialog extends StatefulWidget {
+  final String initialName;
+
+  const _RenameListDialog({required this.initialName});
+
+  @override
+  State<_RenameListDialog> createState() => _RenameListDialogState();
+}
+
+class _RenameListDialogState extends State<_RenameListDialog> {
+  late final _controller = TextEditingController(text: widget.initialName);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
-  void _shareListViaLink() {
-    final webLink = 'https://shoplyai.app/list/${widget.listId}';
-    final box = context.findRenderObject() as RenderBox?;
-    Share.share(
-      '🛒 ${widget.listName}\n\n$webLink',
-      subject: widget.listName,
-      sharePositionOrigin: box != null
-          ? box.localToGlobal(Offset.zero) & box.size
-          : const Rect.fromLTWH(0, 0, 100, 100),
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoAlertDialog(
+      title: Text(context.tr('rename_list_title')),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: CupertinoTextField(
+          controller: _controller,
+          autofocus: true,
+          placeholder: context.tr('list_name'),
+          textCapitalization: TextCapitalization.sentences,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: CupertinoColors.systemGrey6,
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
+      actions: [
+        CupertinoDialogAction(
+          onPressed: () => Navigator.pop(context),
+          child: Text(AppLocalizations.of(context).cancel),
+        ),
+        CupertinoDialogAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: Text(context.tr('save')),
+        ),
+      ],
+    );
+  }
+}
+
+class _BackButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _BackButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!PlatformInfo.isIOS26OrHigher()) {
+      return IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+        onPressed: onPressed,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: Center(
+        // Messages-metric nav button: 40pt glass circle inside a >=44pt hit
+        // target.
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: AdaptiveButton.icon(
+              icon: Icons.chevron_left,
+              style: AdaptiveButtonStyle.glass,
+              size: AdaptiveButtonSize.small,
+              minSize: const Size(40, 40),
+              padding: EdgeInsets.zero,
+              useSmoothRectangleBorder: false,
+              onPressed: onPressed,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShareButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _ShareButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!PlatformInfo.isIOS26OrHigher()) {
+      return IconButton(
+        icon: Icon(
+          Icons.ios_share,
+          size: 22,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        onPressed: onPressed,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      // 36pt visual inside a 44pt hit target, matching the back button.
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Center(
+          child: AdaptiveButton.icon(
+            icon: Icons.ios_share,
+            style: AdaptiveButtonStyle.glass,
+            size: AdaptiveButtonSize.small,
+            minSize: const Size(36, 36),
+            padding: EdgeInsets.zero,
+            useSmoothRectangleBorder: false,
+            onPressed: onPressed,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProgressHairline extends StatelessWidget {
+  final int total;
+  final int done;
+
+  const _ProgressHairline({required this.total, required this.done});
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total > 0 ? done / total : 0.0;
+    return Container(
+      height: 3,
+      color: AppColors.divider(context),
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: progress.clamp(0.0, 1.0),
+        heightFactor: 1,
+        child: ColoredBox(color: AppColors.accentColor(context)),
+      ),
+    );
+  }
+}
+
+/// "Complete shopping" — Paper ink pill at the end of the list.
+class _CompleteShoppingButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _CompleteShoppingButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, bottom: 24),
+      child: SizedBox(
+        height: 54,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isDark ? PaperColors.paper : PaperColors.ink,
+            foregroundColor: isDark ? PaperColors.ink : PaperColors.paper,
+            elevation: 0,
+            shape: const StadiumBorder(),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.check_rounded, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                AppLocalizations.of(context).completeShopping,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

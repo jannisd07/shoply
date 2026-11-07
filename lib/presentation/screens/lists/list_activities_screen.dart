@@ -39,7 +39,12 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
   }
 
   Future<void> _loadActivities() async {
-    final activities = await _activityService.getActivities(widget.listId);
+    var activities = <ListActivity>[];
+    try {
+      activities = await _activityService.getActivities(widget.listId);
+    } catch (e) {
+      debugPrint('❌ [LIST_ACTIVITIES] Failed to load activities: $e');
+    }
     if (mounted) {
       setState(() {
         _activities = activities;
@@ -155,13 +160,13 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withOpacity(0.08)
-                        : Colors.white.withOpacity(0.8),
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.white.withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isDark
-                          ? Colors.white.withOpacity(0.1)
-                          : Colors.black.withOpacity(0.05),
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.black.withValues(alpha: 0.05),
                     ),
                   ),
                   child: Column(
@@ -203,8 +208,8 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
               border: Border(
                 bottom: BorderSide(
                   color: isDark
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
             )
@@ -217,7 +222,7 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: _getActivityColor(activity.type).withOpacity(0.15),
+              color: _getActivityColor(activity.type).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
@@ -311,8 +316,6 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
   }
 
   void _showClearConfirmation() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -328,6 +331,7 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
             onPressed: () async {
               Navigator.pop(context);
               await _activityService.clearActivities(widget.listId);
+              if (!mounted) return;
               setState(() {
                 _activities = [];
               });

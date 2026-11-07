@@ -9,6 +9,7 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/screens/lists/widgets/zip_code_sheet.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 
 /// Compact "known total + cheapest store" chip for the list detail screen.
@@ -231,79 +232,20 @@ class _ZipPromptChip extends ConsumerWidget {
   }
 }
 
-/// Paper-styled dialog to set/change the manual zip code used for offers.
-/// Returns true when a valid PLZ was saved.
+/// Lets the user set/change the manual zip code used for offers (Paper
+/// zip sheet). Returns true when a zip was saved.
 Future<bool> showManualZipDialog(
   BuildContext context,
   WidgetRef ref,
   String listId,
 ) async {
-  final controller = TextEditingController(
-    text: await UserLocationService.instance.getManualZipCode() ?? '',
-  );
+  final current = await UserLocationService.instance.getManualZipCode();
   if (!context.mounted) return false;
-
-  final saved = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: AppColors.surface(ctx),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(
-        ctx.tr('enter_zip_title'),
-        style: PaperTextStyles.serif(18, color: AppColors.textPrimary(ctx)),
-      ),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        maxLength: 5,
-        style: TextStyle(fontSize: 16, color: AppColors.textPrimary(ctx)),
-        decoration: InputDecoration(
-          hintText: '10115',
-          counterText: '',
-          hintStyle: TextStyle(color: AppColors.textTertiary(ctx)),
-          enabledBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.border(ctx)),
-          ),
-          focusedBorder: UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.accentColor(ctx)),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: Text(
-            ctx.tr('cancel'),
-            style: TextStyle(color: AppColors.textSecondary(ctx)),
-          ),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: Text(
-            ctx.tr('save'),
-            style: TextStyle(
-              color: AppColors.accentColor(ctx),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  var changed = false;
-  if (saved == true) {
-    final zip = controller.text.trim();
-    if (zip.length == 5) {
-      await UserLocationService.instance.setManualZipCode(zip);
-      ref.invalidate(userZipCodeProvider);
-      ref.invalidate(effectiveZipProvider);
-      ref.invalidate(basketComparisonProvider(listId));
-      changed = true;
-    }
+  final changed = await showZipCodeSheet(context, initialZip: current);
+  if (changed) {
+    ref.invalidate(effectiveZipProvider);
+    ref.invalidate(basketComparisonProvider(listId));
   }
-  controller.dispose();
   return changed;
 }
 

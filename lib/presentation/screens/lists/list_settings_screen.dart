@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,19 +9,21 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/widgets/common/paper_settings.dart';
+import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 
 class ListSettingsScreen extends ConsumerStatefulWidget {
   final String listId;
   final String listName;
-  final String ownerId;
+  /// Null when the caller doesn't know it yet; looked up on load.
+  final String? ownerId;
 
   const ListSettingsScreen({
     super.key,
     required this.listId,
     required this.listName,
-    required this.ownerId,
+    this.ownerId,
   });
 
   @override
@@ -36,36 +40,39 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
   void initState() {
     super.initState();
     _currentUserId = SupabaseService.instance.currentUser?.id;
-    _isCreator = _currentUserId == widget.ownerId;
+    _isCreator = widget.ownerId != null && _currentUserId == widget.ownerId;
     _loadMembers();
   }
 
   Future<void> _loadMembers() async {
     setState(() => _isLoading = true);
     try {
-      final membersResponse = await SupabaseService.instance
-          .from('list_members')
-          .select('user_id, role')
-          .eq('list_id', widget.listId);
+      final repository = ref.read(listRepositoryProvider);
+      final results = await Future.wait([
+        repository.getListMembers(widget.listId),
+        if (widget.ownerId == null) repository.getListById(widget.listId),
+      ]);
+      final rows = results[0] as List<Map<String, dynamic>>;
+      final ownerId = widget.ownerId ??
+          (results.length > 1
+              ? (results[1] as ShoppingListModel?)?.ownerId
+              : null);
 
-      final List<Map<String, dynamic>> members = [];
-      for (final member in (membersResponse as List)) {
-        final userId = member['user_id'] as String;
-        final role = member['role'] as String? ?? 'member';
-        final userResponse = await SupabaseService.instance
-            .from('users')
-            .select('display_name, avatar_url, email')
-            .eq('id', userId)
-            .maybeSingle();
-        members.add({
-          'user_id': userId,
-          'role': role,
-          'display_name': userResponse?['display_name'] as String? ?? 'Unknown',
-          'avatar_url': userResponse?['avatar_url'] as String?,
-          'email': userResponse?['email'] as String?,
-          'is_owner': role == 'owner',
-        });
-      }
+      final members = [
+        for (final row in rows)
+          {
+            'user_id': row['user_id'] as String,
+            'role': row['role'] as String? ?? 'member',
+            'display_name':
+                (row['user'] as Map<String, dynamic>?)?['display_name']
+                        as String? ??
+                    'Unknown',
+            'avatar_url':
+                (row['user'] as Map<String, dynamic>?)?['avatar_url']
+                    as String?,
+            'is_owner': row['role'] == 'owner',
+          },
+      ];
       members.sort((a, b) {
         if (a['is_owner'] == true && b['is_owner'] != true) return -1;
         if (b['is_owner'] == true && a['is_owner'] != true) return 1;
@@ -76,13 +83,21 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
       if (mounted) {
         setState(() {
           _members = members;
+          _isCreator = ownerId != null && _currentUserId == ownerId;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint('❌ Failed to load members: $e');
+      debugPrint('❌ [LIST_SETTINGS] Failed to load members: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showError() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('action_failed'))),
+    );
   }
 
   Future<void> _removeMember(String userId, String displayName) async {
@@ -117,7 +132,8 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
         HapticFeedback.mediumImpact();
         await _loadMembers();
       } catch (e) {
-        debugPrint('❌ Failed to remove member: $e');
+        debugPrint('❌ [LIST_SETTINGS] Failed to remove member: $e');
+        _showError();
       }
     }
   }
@@ -152,10 +168,11 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
             .eq('list_id', widget.listId)
             .eq('user_id', _currentUserId!);
         HapticFeedback.heavyImpact();
-        ref.invalidate(listsNotifierProvider);
+        unawaited(ref.read(listsNotifierProvider.notifier).loadLists());
         if (mounted) context.go('/home');
       } catch (e) {
-        debugPrint('❌ Failed to leave list: $e');
+        debugPrint('❌ [LIST_SETTINGS] Failed to leave list: $e');
+        _showError();
       }
     }
   }
@@ -193,7 +210,8 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
         HapticFeedback.heavyImpact();
         if (mounted) context.go('/home');
       } catch (e) {
-        debugPrint('❌ Failed to delete list: $e');
+        debugPrint('❌ [LIST_SETTINGS] Failed to delete list: $e');
+        _showError();
       }
     }
   }
