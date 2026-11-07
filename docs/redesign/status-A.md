@@ -77,8 +77,8 @@ Deep Links (`shoply://plan`, `…/calories/add`, `…/avo/voice` usw.) gehen heu
   `moduleEnabledProvider(AppModule)` (bool, wirkt sofort), `appModulesProvider.notifier.setEnabled(m, on)` und
   `setAll(...)`.
 - Gespeichert auf dem Gerät und in `user_preferences.modules` (jsonb). Die Migration
-  `database/migrations/20261107230000_a_user_modules.sql` ist **angelegt, aber nicht angewendet** (Owner). Bis dahin
-  bleibt die Wahl nur auf dem Gerät, die App läuft normal weiter.
+  `database/migrations/20261107230000_a_user_modules.sql` ist **angewendet** (07.11.2026, Projekt ShoplyAI, mit
+  Freigabe des Owners).
 - `AppModule.mealPlan` ist `released: false`: Er zählt überall als aus und erscheint weder im Onboarding noch in den
   Einstellungen, bis B den Wochenplan fertig hat. Dann bitte als Anfrage melden, A schaltet ihn frei. Zum Entwickeln:
   `setDebugUnlocked(AppModule.mealPlan, true)` (nur Debug-Build).
@@ -93,6 +93,8 @@ Deep Links (`shoply://plan`, `…/calories/add`, `…/avo/voice` usw.) gehen heu
   vorgeschlagen, Konzept F-15). Grund: Sparen und Planen helfen fast allen; Kalorien sind ein Nischenthema mit
   Gesundheitsdaten, Kosten teilen betrifft nur geteilte Listen.
 - `claude/daily`: während des Umbaus pausieren, danach wieder einschalten (siehe Anfrage 1).
+- **Paletten freigegeben** (hell = D2, dunkel und erhöhter Kontrast abgeleitet, alle Texte ≥ 4,5:1).
+- **Abhak-Ring dunkler als D2:** #8A8A8E (3,4:1 statt 1,7:1), damit Bedienelemente 3:1 erreichen.
 
 ## Anfragen an Teil B
 
@@ -133,9 +135,8 @@ Deep Links (`shoply://plan`, `…/calories/add`, `…/avo/voice` usw.) gehen heu
 ## Fragen an den Owner
 
 Offen:
-- Migration `20261107230000_a_user_modules.sql` anwenden (Module im Konto speichern)?
 - Free gegen Pro (kommt nach der Analyse in A9).
 - Neue Maskottchen-Grafiken und das finale App-Icon-Motiv (A10, mit Bild-Prompts).
 - TestFlight und App Store (erst am Ende).
 
-Beantwortet am 07.11.2026: App-Name, Module beim ersten Start, `claude/daily` (siehe oben).
+Beantwortet am 07.11.2026: App-Name, Module beim ersten Start, `claude/daily`, Paletten, Abhak-Ring, Migration der Modulwahl (siehe oben).

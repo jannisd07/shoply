@@ -50,16 +50,10 @@ void main() {
     });
   });
 
-  test('controls reach 3:1 except the D2 ring awaiting the owner', () {
-    for (final c in [
-      AvoColors.dark,
-      AvoColors.lightHighContrast,
-      AvoColors.darkHighContrast,
-    ]) {
+  test('the unchecked ring reaches 3:1 in every variant (owner 07.11.)', () {
+    for (final c in variants.values) {
       expect(contrast(c.uncheckedRing, c.surface), greaterThanOrEqualTo(3));
     }
-    // Light keeps D2's #C7C7CC until the owner decides (status-A.md).
-    expect(AvoColors.light.uncheckedRing, const Color(0xFFC7C7CC));
   });
 
   test('D2 light values are exact', () {

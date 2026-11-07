@@ -3,8 +3,8 @@
 -- Shape: {"offers": true, "meal_plan": true, "calories": false, "avo": true, "cost_split": false}
 -- An empty object means "never chosen"; the app then keeps the device choice.
 -- Existing RLS on user_preferences (own row only) covers the new column.
--- NOT APPLIED YET: the owner applies it in the Supabase SQL editor. Until then
--- the app keeps module choices on the device only and logs a warning.
+-- Applied 2026-11-07 to project rtwzzerhgieyxsijemsd (ShoplyAI) with the
+-- owner's approval (Teil A session).
 
 ALTER TABLE public.user_preferences
   ADD COLUMN IF NOT EXISTS modules JSONB NOT NULL DEFAULT '{}'::jsonb;

@@ -148,9 +148,9 @@ class AvoColors extends ThemeExtension<AvoColors> {
     tintIcon: Color(0xFF2E8B47),
     destructive: Color(0xFFD70015),
     red: Color(0xFFFF3B30),
-    // D2 value; 1.68:1 on white. The owner decides whether it may darken
-    // (status-A.md, "Fragen an den Owner"). Increase Contrast uses a 3:1 ring.
-    uncheckedRing: Color(0xFFC7C7CC),
+    // Darker than D2's #C7C7CC (1.68:1) so the ring reaches 3:1 on white;
+    // owner decision 2026-11-07.
+    uncheckedRing: Color(0xFF8A8A8E),
     chipSelected: Color(0xFF1C1C1E),
     onChipSelected: Color(0xFFFFFFFF),
     glassFill: Color(0xA3FFFFFF), // .64
