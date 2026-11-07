@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/author_avatar.dart';
 import 'package:shoply/presentation/state/saved_recipes_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -38,9 +39,13 @@ class _SavedRecipesScreenState extends ConsumerState<SavedRecipesScreen> {
   @override
   Widget build(BuildContext context) {
     final savedState = ref.watch(savedRecipesProvider);
-    
-    // Debug logging
-    print('🔍 [SAVED_RECIPES_SCREEN] isLoading: ${savedState.isLoading}, count: ${savedState.savedRecipes.length}');
+    // toggleSave removes the id from savedIds immediately (optimistic) but
+    // only reloads savedRecipes after the network round trip. Filtering by
+    // savedIds drops an unsaved/dismissed card in the same frame, so a
+    // dismissed Dismissible is never rebuilt.
+    final recipes = savedState.savedRecipes
+        .where((r) => savedState.savedIds.contains(r.id))
+        .toList();
     final backgroundColor = AppColors.recipeBg(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
@@ -81,11 +86,11 @@ class _SavedRecipesScreenState extends ConsumerState<SavedRecipesScreen> {
                           letterSpacing: -0.5,
                         ),
                       ),
-                      if (savedState.savedRecipes.isNotEmpty)
+                      if (recipes.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Text(
-                            '${savedState.savedRecipes.length} ${context.tr('recipes')}',
+                            '${recipes.length} ${context.tr('recipes')}',
                             style: TextStyle(
                               color: textSecondary,
                               fontSize: 14,
@@ -99,12 +104,13 @@ class _SavedRecipesScreenState extends ConsumerState<SavedRecipesScreen> {
             ),
           ),
           
-          // Content
-          if (savedState.isLoading)
+          // Content — the spinner only replaces an empty list; reloads
+          // with data on screen happen underneath it.
+          if (savedState.isLoading && recipes.isEmpty)
             const SliverFillRemaining(
               child: Center(child: CupertinoActivityIndicator()),
             )
-          else if (savedState.savedRecipes.isEmpty)
+          else if (recipes.isEmpty)
             SliverFillRemaining(
               child: _buildEmptyState(context),
             )
@@ -114,21 +120,21 @@ class _SavedRecipesScreenState extends ConsumerState<SavedRecipesScreen> {
                 left: 16,
                 right: 16,
                 top: 8,
-                bottom: 100 + MediaQuery.of(context).padding.bottom,
+                bottom: 100 + MediaQuery.paddingOf(context).bottom,
               ),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final recipe = savedState.savedRecipes[index];
+                    final recipe = recipes[index];
                     return _SavedRecipeCard(
                       recipe: recipe,
-                      onTap: () => context.push('/recipes/${recipe.id}'),
+                      onTap: () => context.push('/recipes/${recipe.id}', extra: recipe),
                       onRemove: () {
                         ref.read(savedRecipesProvider.notifier).toggleSave(recipe.id);
                       },
                     );
                   },
-                  childCount: savedState.savedRecipes.length,
+                  childCount: recipes.length,
                 ),
               ),
             ),
@@ -140,9 +146,7 @@ class _SavedRecipesScreenState extends ConsumerState<SavedRecipesScreen> {
   Widget _buildEmptyState(BuildContext context) {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final cardColor = AppColors.recipeSurface(context);
-    final borderColor = AppColors.recipeBorderColor(context);
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -211,11 +215,10 @@ class _SavedRecipeCard extends ConsumerWidget {
     final cardColor = AppColors.recipeSurface(context);
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final borderColor = AppColors.recipeBorderColor(context);
     final inputFill = AppColors.recipeInput(context);
 
     return Dismissible(
-      key: Key(recipe.id),
+      key: ValueKey(recipe.id),
       direction: DismissDirection.endToStart,
       onDismissed: (_) => onRemove(),
       background: Container(
@@ -249,6 +252,9 @@ class _SavedRecipeCard extends ConsumerWidget {
                       height: 160,
                       width: double.infinity,
                       fit: BoxFit.cover,
+                      memCacheWidth: (MediaQuery.sizeOf(context).width *
+                              MediaQuery.devicePixelRatioOf(context))
+                          .round(),
                       placeholder: (_, __) => Container(
                         height: 160,
                         color: inputFill,
@@ -318,18 +324,12 @@ class _SavedRecipeCard extends ConsumerWidget {
                           ),
                           child: Row(
                             children: [
-                              CircleAvatar(
-                                radius: 12,
+                              AuthorAvatar(
+                                name: recipe.authorName,
+                                avatarUrl: recipe.authorAvatarUrl,
+                                size: 24,
                                 backgroundColor: inputFill,
-                                backgroundImage: recipe.authorAvatarUrl != null
-                                    ? NetworkImage(recipe.authorAvatarUrl!)
-                                    : null,
-                                child: recipe.authorAvatarUrl == null
-                                    ? Text(
-                                        recipe.authorName[0].toUpperCase(),
-                                        style: TextStyle(fontSize: 10, color: textSecondary),
-                                      )
-                                    : null,
+                                initialStyle: TextStyle(fontSize: 10, color: textSecondary),
                               ),
                               const SizedBox(width: 6),
                               Text(
