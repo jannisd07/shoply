@@ -5,9 +5,8 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 ## Stand
 
 07.11.2026: **S1 ist erreicht.** Übersetzungen und Router liegen in Bereichsdateien, das Modulsystem steht. B darf ab
-jetzt seine eigenen Übersetzungs- und Routendateien ändern und `moduleEnabledProvider` abfragen. Als Nächstes baut A die
-Eingabeleiste neu (A3, Bug der Mutter des Owners) und das Fundament (A2: Tokens, Komponenten, D2-Tab-Bar,
-Prüfgerüst). Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`.
+jetzt seine eigenen Übersetzungs- und Routendateien ändern und `moduleEnabledProvider` abfragen. Als Nächstes baut A das Fundament (A2: Tokens, Komponenten, D2-Tab-Bar,
+Prüfgerüst). A3 ist erledigt. Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`.
 
 ## Meilensteine
 
@@ -15,6 +14,7 @@ Prüfgerüst). Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`.
 |---|---|---|---|
 | S0 Aufräumen gemergt | erledigt: `cleanup/group-A` bis `-I` sind in `main` (Merges `b219010` … `6c12eef`, Abgleich `950921d`) | 07.11.2026 | `950921d` |
 | S1 Struktur | **erledigt** | 07.11.2026 | siehe `git log --grep "(a1)"` |
+| A3 Eingabeleiste (Bug der Mutter des Owners) | **erledigt**: Text wird bei keiner Breite (320–440 pt) und keiner Textgröße (bis 3,1×) mehr abgeschnitten, Nachweis `test/screens/lists/add_item_composer_test.dart` (40 Fälle) | 07.11.2026 | siehe `git log --grep "(a3)"` |
 | S2 Fundament | offen | | |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
