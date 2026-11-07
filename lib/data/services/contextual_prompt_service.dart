@@ -38,14 +38,14 @@ class ContextualPromptService {
     }
   }
 
-  Future<void> markDietPromptShown() async {
+  Future<void> _markDietPromptShown() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyDietPromptShown, true);
   }
 
   /// Show the diet preferences dialog.
   Future<void> showDietPrompt(BuildContext context) async {
-    await markDietPromptShown();
+    await _markDietPromptShown();
     if (!context.mounted) return;
 
     showDialog(
@@ -63,14 +63,14 @@ class ContextualPromptService {
     return prefs.getBool(_keyNotifPromptShown) != true;
   }
 
-  Future<void> markNotifPromptShown() async {
+  Future<void> _markNotifPromptShown() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyNotifPromptShown, true);
   }
 
   /// Show a friendly notification permission prompt before sharing.
   Future<void> showNotifPrompt(BuildContext context) async {
-    await markNotifPromptShown();
+    await _markNotifPromptShown();
     if (!context.mounted) return;
 
     await showModalBottomSheet(

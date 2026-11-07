@@ -1,195 +1,18 @@
+import 'package:flutter/foundation.dart';
 import 'package:shoply/data/models/dietary_preference.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/services/ai_ingredient_analyzer.dart';
 
-/// Service für intelligenten Zutatenaustausch basierend auf Allergien und Ernährungspräferenzen
-/// Kombiniert lokale Datenbank mit KI für maximale Abdeckung
+/// Service für Zutatenaustausch basierend auf Allergien und Ernährungspräferenzen
 class IngredientSubstitutionService {
-  static final AIIngredientAnalyzer _aiAnalyzer = AIIngredientAnalyzer();
-  static bool useAI = true; // Toggle für KI-Nutzung
-  
-  /// Passt ein Rezept an die Ernährungspräferenzen an (mit KI-Support)
-  /// Nutzt zuerst lokale Datenbank, dann KI als Fallback
-  static Future<Recipe> adaptRecipeWithAI({
-    required Recipe recipe,
-    List<AllergyType> allergies = const [],
-    List<DietType> diets = const [],
-  }) async {
-    if (allergies.isEmpty && diets.isEmpty) {
-      return recipe;
-    }
-
-    final adaptedIngredients = <Ingredient>[];
-    final warnings = <String>[];
-
-    for (final ingredient in recipe.ingredients) {
-      // Prüfe ob Zutat problematisch ist
-      final hasAllergen = allergies.any((allergy) => 
-        allergy.containsAllergen(ingredient.name)
-      );
-      
-      final needsVeganSubstitute = diets.contains(DietType.vegan) && 
-        _isAnimalProduct(ingredient.name);
-      
-      final needsVegetarianSubstitute = diets.contains(DietType.vegetarian) && 
-        _isMeat(ingredient.name);
-
-      if (hasAllergen || needsVeganSubstitute || needsVegetarianSubstitute) {
-        // 1. Versuch: Lokale Datenbank
-        final localSubstitutes = SubstitutionDatabase.findSubstitutes(
-          ingredient: ingredient.name,
-          allergies: allergies,
-          diets: diets,
-        );
-
-        if (localSubstitutes.isNotEmpty) {
-          final bestSubstitute = localSubstitutes.first;
-          adaptedIngredients.add(
-            Ingredient(
-              name: bestSubstitute.substitute,
-              amount: ingredient.amount,
-              unit: ingredient.unit,
-            ),
-          );
-        } else if (useAI) {
-          // 2. Versuch: KI-Analyse
-          try {
-            final aiResult = await _aiAnalyzer.analyzeIngredient(
-              ingredientName: ingredient.name,
-              amount: ingredient.amount,
-              unit: ingredient.unit,
-              allergies: allergies,
-              diets: diets,
-            );
-
-            if (aiResult.needsReplacement && aiResult.bestSubstitute != null) {
-              final aiSub = aiResult.bestSubstitute!;
-              adaptedIngredients.add(aiSub.toIngredient());
-            } else {
-              warnings.add('⚠️ Kein Ersatz für "${ingredient.name}" gefunden');
-              adaptedIngredients.add(ingredient);
-            }
-          } catch (e) {
-            warnings.add('⚠️ Kein Ersatz für "${ingredient.name}" gefunden');
-            adaptedIngredients.add(ingredient);
-          }
-        } else {
-          // Keine KI, keine lokale DB → Original behalten
-          warnings.add('⚠️ Kein Ersatz für "${ingredient.name}" gefunden');
-          adaptedIngredients.add(ingredient);
-        }
-      } else {
-        // Zutat ist OK
-        adaptedIngredients.add(ingredient);
-      }
-    }
-
-    return Recipe(
-      id: recipe.id,
-      name: recipe.name,
-      description: _addWarningsToDescription(recipe.description, warnings),
-      imageUrl: recipe.imageUrl,
-      prepTimeMinutes: recipe.prepTimeMinutes,
-      cookTimeMinutes: recipe.cookTimeMinutes,
-      defaultServings: recipe.defaultServings,
-      ingredients: adaptedIngredients,
-      instructions: recipe.instructions,
-      authorId: recipe.authorId,
-      authorName: recipe.authorName,
-      createdAt: recipe.createdAt,
-      ratingCount: recipe.ratingCount,
-      averageRating: recipe.averageRating,
-      labels: recipe.labels,
-    );
-  }
-  
-  /// Passt ein Rezept an die Ernährungspräferenzen an
-  static Recipe adaptRecipe({
-    required Recipe recipe,
-    List<AllergyType> allergies = const [],
-    List<DietType> diets = const [],
-  }) {
-    if (allergies.isEmpty && diets.isEmpty) {
-      return recipe;
-    }
-
-    final adaptedIngredients = <Ingredient>[];
-    final warnings = <String>[];
-
-    for (final ingredient in recipe.ingredients) {
-      // Prüfe ob Zutat problematisch ist
-      final hasAllergen = allergies.any((allergy) => 
-        allergy.containsAllergen(ingredient.name)
-      );
-      
-      final needsVeganSubstitute = diets.contains(DietType.vegan) && 
-        _isAnimalProduct(ingredient.name);
-      
-      final needsVegetarianSubstitute = diets.contains(DietType.vegetarian) && 
-        _isMeat(ingredient.name);
-
-      if (hasAllergen || needsVeganSubstitute || needsVegetarianSubstitute) {
-        // Finde Ersatzprodukt
-        final substitutes = SubstitutionDatabase.findSubstitutes(
-          ingredient: ingredient.name,
-          allergies: allergies,
-          diets: diets,
-        );
-
-        if (substitutes.isNotEmpty) {
-          final bestSubstitute = substitutes.first;
-          adaptedIngredients.add(
-            Ingredient(
-              name: bestSubstitute.substitute,
-              amount: ingredient.amount,
-              unit: ingredient.unit,
-            ),
-          );
-        } else {
-          // Keine Ersatz gefunden - Warnung hinzufügen
-          warnings.add('⚠️ Kein Ersatz für "${ingredient.name}" gefunden');
-          adaptedIngredients.add(ingredient); // Original behalten
-        }
-      } else {
-        // Zutat ist OK
-        adaptedIngredients.add(ingredient);
-      }
-    }
-
-    return Recipe(
-      id: recipe.id,
-      name: recipe.name,
-      description: _addWarningsToDescription(recipe.description, warnings),
-      imageUrl: recipe.imageUrl,
-      prepTimeMinutes: recipe.prepTimeMinutes,
-      cookTimeMinutes: recipe.cookTimeMinutes,
-      defaultServings: recipe.defaultServings,
-      ingredients: adaptedIngredients,
-      instructions: recipe.instructions,
-      authorId: recipe.authorId,
-      authorName: recipe.authorName,
-      createdAt: recipe.createdAt,
-      ratingCount: recipe.ratingCount,
-      averageRating: recipe.averageRating,
-      labels: recipe.labels,
-    );
-  }
-
   /// Gibt detaillierte Zutatenliste mit Substitutionen zurück
   static List<IngredientWithSubstitution> getIngredientsWithSubstitutions({
     required List<Ingredient> ingredients,
     List<AllergyType> allergies = const [],
     List<DietType> diets = const [],
   }) {
-    print('🔍 [SUBSTITUTION] Analyzing ${ingredients.length} ingredients');
-    print('📋 [SUBSTITUTION] User allergies: $allergies');
-    print('🥗 [SUBSTITUTION] User diets: $diets');
-    
     final result = <IngredientWithSubstitution>[];
 
     for (final ingredient in ingredients) {
-      print('🧪 [SUBSTITUTION] Analyzing: ${ingredient.name}');
-      
       // Check for allergens
       final hasAllergen = allergies.any((allergy) => 
         allergy.containsAllergen(ingredient.name)
@@ -218,12 +41,6 @@ class IngredientSubstitutionService {
       
       // Add allergy/diet reasons if substitution is needed
       final reasons = needsSubstitution ? _getReasons(ingredient.name, allergies, diets) : dietFlags;
-      
-      print('   - Animal product: $isAnimalProduct');
-      print('   - Meat: $isMeat');
-      print('   - Needs substitution: $needsSubstitution');
-      print('   - Diet flags: $dietFlags');
-      print('   - Reasons: $reasons');
 
       if (needsSubstitution) {
         final substitutes = SubstitutionDatabase.findSubstitutes(
@@ -231,8 +48,6 @@ class IngredientSubstitutionService {
           allergies: allergies,
           diets: diets,
         );
-        
-        print('   - Found ${substitutes.length} substitutes');
 
         result.add(IngredientWithSubstitution(
           original: ingredient,
@@ -250,7 +65,8 @@ class IngredientSubstitutionService {
       }
     }
 
-    print('✅ [SUBSTITUTION] Analysis complete: ${result.length} ingredients processed');
+    debugPrint('✅ [SUBSTITUTION] Analyzed ${result.length} ingredients '
+        '(${result.where((r) => r.needsSubstitution).length} need substitution)');
     return result;
   }
 
@@ -372,11 +188,6 @@ class IngredientSubstitutionService {
     }
 
     return reasons;
-  }
-
-  static String _addWarningsToDescription(String description, List<String> warnings) {
-    if (warnings.isEmpty) return description;
-    return '$description\n\n${warnings.join('\n')}';
   }
 }
 
