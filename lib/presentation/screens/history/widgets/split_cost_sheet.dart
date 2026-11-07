@@ -30,16 +30,11 @@ Future<void> showSplitCostSheet(
 class _Participant {
   final String? userId;
   String name;
-  bool included;
-  double amount;
+  bool included = true;
+  double amount = 0;
   final TextEditingController amountController = TextEditingController();
 
-  _Participant({
-    this.userId,
-    required this.name,
-    this.included = true,
-    this.amount = 0,
-  });
+  _Participant({this.userId, required this.name});
 
   void setAmount(double value) {
     amount = value;

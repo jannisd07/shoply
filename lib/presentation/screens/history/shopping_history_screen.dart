@@ -11,6 +11,7 @@ import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/presentation/screens/history/widgets/split_cost_sheet.dart';
 import 'package:shoply/presentation/state/expense_split_provider.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
+import 'package:shoply/presentation/widgets/common/confirm_dialog.dart';
 
 /// Paper-style activities screen: "Dein Juli." with stats, weekday
 /// rhythm chart and shopping history.
@@ -24,6 +25,28 @@ class ShoppingHistoryScreen extends ConsumerStatefulWidget {
 
 class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
   String? _expandedId;
+
+  Future<void> _confirmDelete(ShoppingHistory entry) async {
+    HapticFeedback.mediumImpact();
+    final confirmed = await confirmDestructive(
+      context,
+      title: context.tr('delete_entry'),
+      message: context.tr('delete_entry_confirm'),
+      confirmLabel: context.tr('delete'),
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await ref
+          .read(shoppingHistoryNotifierProvider.notifier)
+          .deleteHistory(entry.id);
+    } catch (e) {
+      debugPrint('❌ [HISTORY] Failed to delete entry: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('action_failed'))),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +69,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
       ),
       body: historyAsync.when(
         loading: () => const Center(child: CupertinoActivityIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text(context.tr('loading_error'))),
         data: (entries) {
           final monthName =
               DateFormat('MMMM', locale).format(DateTime.now());
@@ -294,12 +317,7 @@ class _ShoppingHistoryScreenState extends ConsumerState<ShoppingHistoryScreen> {
                               _expandedId == entry.id ? null : entry.id;
                         });
                       },
-                      onDelete: () async {
-                        HapticFeedback.mediumImpact();
-                        await ref
-                            .read(shoppingHistoryNotifierProvider.notifier)
-                            .deleteHistory(entry.id);
-                      },
+                      onDelete: () => _confirmDelete(entry),
                     ),
               ],
             ),
