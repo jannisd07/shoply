@@ -7,6 +7,7 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/services/calorie_recipe_nudge_service.dart';
+import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/state/calorie_recipe_nudge_provider.dart';
 
 /// The dedicated in-app "What can I still eat today?" surface — the same
@@ -36,6 +37,7 @@ class WhatCanIEatScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         top: false,
+        bottom: false,
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(remainingCaloriesTodayProvider);
@@ -106,7 +108,7 @@ class _SuggestionsList extends StatelessWidget {
 
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
+      padding: EdgeInsets.fromLTRB(20, 4, 20, MainScaffold.getNavbarClearance(context) + 16),
       itemCount: suggestions.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {

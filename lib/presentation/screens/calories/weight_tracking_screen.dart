@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/utils/number_parsing.dart';
 import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/presentation/screens/calories/widgets/weight_chart.dart';
+import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 
 class WeightTrackingScreen extends ConsumerStatefulWidget {
@@ -25,14 +27,24 @@ class _WeightTrackingScreenState extends ConsumerState<WeightTrackingScreen> {
   }
 
   Future<void> _logWeight() async {
-    final weight = double.tryParse(_weightController.text.trim());
+    final weight = parseLocaleDouble(_weightController.text);
     if (weight == null || weight <= 0 || _saving) return;
     setState(() => _saving = true);
     HapticFeedback.mediumImpact();
-    await ref.read(weightLogServiceProvider).logWeight(weightKg: weight);
-    ref.invalidate(weightHistoryProvider);
-    _weightController.clear();
-    if (mounted) setState(() => _saving = false);
+    try {
+      await ref.read(weightLogServiceProvider).logWeight(weightKg: weight);
+      ref.invalidate(weightHistoryProvider);
+      _weightController.clear();
+    } catch (e) {
+      debugPrint('❌ [CALORIES] Failed to log weight: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('generic_error'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -51,8 +63,10 @@ class _WeightTrackingScreenState extends ConsumerState<WeightTrackingScreen> {
       ),
       body: SafeArea(
         top: false,
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          // Pushed inside the tab shell, so clear the floating navbar.
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MainScaffold.getNavbarClearance(context) + 16),
           children: [
             AppCard(
               child: historyAsync.when(

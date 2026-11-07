@@ -119,22 +119,33 @@ class _LogRecipeSheetState extends ConsumerState<_LogRecipeSheet> {
               if (authUser == null || _saving) return;
               setState(() => _saving = true);
               HapticFeedback.mediumImpact();
-              await ref.read(foodLogServiceProvider).addEntry(FoodLogEntry(
-                    id: '',
-                    userId: authUser.id,
-                    loggedDate: DateTime.now(),
-                    mealType: _meal,
-                    source: FoodLogSource.recipe,
-                    sourceRecipeId: widget.recipeId,
-                    foodName: widget.recipeName,
-                    quantity: _servings,
-                    unit: 'serving',
-                    calories: calories,
-                    proteinG: proteinG,
-                    carbsG: carbsG,
-                    fatG: fatG,
-                    createdAt: DateTime.now(),
-                  ));
+              try {
+                await ref.read(foodLogServiceProvider).addEntry(FoodLogEntry(
+                      id: '',
+                      userId: authUser.id,
+                      loggedDate: DateTime.now(),
+                      mealType: _meal,
+                      source: FoodLogSource.recipe,
+                      sourceRecipeId: widget.recipeId,
+                      foodName: widget.recipeName,
+                      quantity: _servings,
+                      unit: 'serving',
+                      calories: calories,
+                      proteinG: proteinG,
+                      carbsG: carbsG,
+                      fatG: fatG,
+                      createdAt: DateTime.now(),
+                    ));
+              } catch (e) {
+                debugPrint('❌ [CALORIES] Failed to log recipe: $e');
+                if (context.mounted) {
+                  setState(() => _saving = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.tr('generic_error'))),
+                  );
+                }
+                return;
+              }
               invalidateNutritionLog(ref);
 
               String? milestone;
