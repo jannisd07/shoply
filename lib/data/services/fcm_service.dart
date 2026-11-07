@@ -1,19 +1,19 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/navigation_service.dart';
-import 'dart:io';
 
 /// Handle Firebase Cloud Messaging background messages
 @pragma('vm:entry-point')
 Future<void> _handleBackgroundMessage(RemoteMessage message) async {
   try {
-    debugPrint('🔔 [FCM] Background message received');
-    debugPrint('🔔 [FCM] Title: ${message.notification?.title}');
-    debugPrint('🔔 [FCM] Body: ${message.notification?.body}');
     // Don't do heavy processing here - just log
+    debugPrint('🔔 [FCM] Background message received (${message.data['type']})');
   } catch (e) {
     debugPrint('❌ [FCM] Background message error: $e');
   }
@@ -53,28 +53,15 @@ class FCMService {
         return;
       }
 
-      // Delete old token and get a fresh one to fix SENDER_ID_MISMATCH
-      debugPrint('🔄 [FCM] Deleting old token to get fresh one...');
-      try {
-        await _fcm.deleteToken();
-        debugPrint('✅ [FCM] Old token deleted');
-      } catch (e) {
-        debugPrint('⚠️ [FCM] Could not delete old token: $e');
-      }
-      
-      // On iOS, wait for APNs token before getting FCM token
-      if (Platform.isIOS) {
-        await _getTokenWithRetry();
-      } else {
-        _fcmToken = await _fcm.getToken();
-        debugPrint('📱 [FCM] Token: $_fcmToken');
-        if (_fcmToken != null) {
-          await _saveTokenToDatabase(_fcmToken!);
-        }
-      }
+      // Fetch the token in the background: on iOS it can take several
+      // seconds until the APNs token exists, and app start must not wait.
+      unawaited(_getTokenWithRetry());
 
       // Listen for token refresh
-      _fcm.onTokenRefresh.listen(_saveTokenToDatabase);
+      _fcm.onTokenRefresh.listen((token) {
+        _fcmToken = token;
+        _saveTokenToDatabase(token);
+      });
 
       // Handle foreground messages
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
@@ -92,51 +79,45 @@ class FCMService {
       }
 
       debugPrint('✅ [FCM] Initialized successfully');
-    } catch (e, stackTrace) {
+    } catch (e) {
       debugPrint('❌ [FCM] Initialization failed: $e');
-      debugPrint('❌ [FCM] Stack trace: $stackTrace');
     }
   }
 
-  /// Get FCM token with retry for iOS (waits for APNs token)
+  /// Get the FCM token and save it. On iOS the APNs token must exist first,
+  /// so retry for up to ~20 s.
   Future<void> _getTokenWithRetry() async {
     const maxRetries = 10;
     const retryDelay = Duration(seconds: 2);
-    
+
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        debugPrint('🔄 [FCM] Attempt $attempt/$maxRetries to get token...');
-        
-        // Check if APNs token is available
-        final apnsToken = await _fcm.getAPNSToken();
-        if (apnsToken == null) {
-          debugPrint('⏳ [FCM] APNs token not ready yet, waiting...');
+        if (Platform.isIOS && await _fcm.getAPNSToken() == null) {
           await Future.delayed(retryDelay);
           continue;
         }
-        
-        debugPrint('✅ [FCM] APNs token received!');
+
         _fcmToken = await _fcm.getToken();
-        debugPrint('📱 [FCM] FCM Token: ${_fcmToken?.substring(0, 50)}...');
-        
         if (_fcmToken != null) {
+          debugPrint('✅ [FCM] Token received');
           await _saveTokenToDatabase(_fcmToken!);
           return;
         }
       } catch (e) {
-        debugPrint('⚠️ [FCM] Attempt $attempt failed: $e');
-        if (attempt < maxRetries) {
-          await Future.delayed(retryDelay);
-        }
+        debugPrint('⚠️ [FCM] Token attempt $attempt failed: $e');
+      }
+      if (attempt < maxRetries) {
+        await Future.delayed(retryDelay);
       }
     }
-    
+
+    // Usually means push is misconfigured (APNs key in Firebase,
+    // entitlements or provisioning profile).
     debugPrint('❌ [FCM] Failed to get token after $maxRetries attempts');
-    debugPrint('❌ [FCM] This usually means Push Notifications are not properly configured');
-    debugPrint('❌ [FCM] Check: 1) APNs key in Firebase, 2) Entitlements, 3) Provisioning Profile');
   }
 
-  /// Save FCM token to Supabase
+  /// Save FCM token to Supabase. Stored in the single `users.fcm_token`
+  /// column, so only the most recently used device receives pushes.
   Future<void> _saveTokenToDatabase(String token) async {
     try {
       final userId = SupabaseService.instance.currentUser?.id;
@@ -152,10 +133,6 @@ class FCMService {
         return;
       }
 
-      debugPrint('🔥🔥🔥 [FCM] SAVING TOKEN TO DATABASE');
-      debugPrint('🔥 User ID: $userId');
-      debugPrint('🔥 Token (first 50 chars): ${token.substring(0, 50)}...');
-
       await SupabaseService.instance.client
           .from('users')
           .update({
@@ -164,21 +141,15 @@ class FCMService {
           })
           .eq('id', userId);
 
-      debugPrint('✅✅✅ [FCM] TOKEN SUCCESSFULLY SAVED TO DATABASE!');
-      debugPrint('✅ User $userId now has FCM token in database');
+      debugPrint('✅ [FCM] Token saved');
     } catch (e) {
-      debugPrint('❌❌❌ [FCM] FAILED TO SAVE TOKEN: $e');
+      debugPrint('❌ [FCM] Failed to save token: $e');
     }
   }
 
   /// Handle foreground messages - show local notification
   void _handleForegroundMessage(RemoteMessage message) {
-    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    debugPrint('🔔 [FCM] Foreground message received');
-    debugPrint('🔔 [FCM] - Title: ${message.notification?.title}');
-    debugPrint('🔔 [FCM] - Body: ${message.notification?.body}');
-    debugPrint('🔔 [FCM] - Data: ${message.data}');
-    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    debugPrint('🔔 [FCM] Foreground message received (${message.data['type']})');
 
     if (message.notification != null) {
       // Show local notification when app is in foreground.
@@ -220,10 +191,7 @@ class FCMService {
 
   /// Handle notification tap - navigate to relevant screen
   void _handleMessageOpenedApp(RemoteMessage message) {
-    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    debugPrint('🔔 [FCM] Notification tapped!');
-    debugPrint('🔔 [FCM] - Data: ${message.data}');
-    debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    debugPrint('🔔 [FCM] Notification tapped (${message.data['type']})');
 
     final type = message.data['type'] as String?;
     final listId = message.data['listId'] as String?;
@@ -271,10 +239,7 @@ class FCMService {
   /// Save FCM token to database for current user
   /// Call this after user logs in to ensure token is saved
   Future<void> saveTokenForCurrentUser() async {
-    debugPrint('🔵 [FCM] saveTokenForCurrentUser() called');
-    
     if (_fcmToken == null) {
-      debugPrint('⚠️ [FCM] No FCM token available - trying to get one');
       // Try to get token if we don't have one
       try {
         if (Platform.isIOS) {
@@ -289,7 +254,7 @@ class FCMService {
         debugPrint('❌ [FCM] Failed to get token: $e');
       }
     }
-    
+
     if (_fcmToken != null) {
       await _saveTokenToDatabase(_fcmToken!);
     } else {
@@ -309,7 +274,7 @@ class FCMService {
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', userId);
 
-      debugPrint('🔕 [FCM] Token removed from database for user $userId');
+      debugPrint('🔕 [FCM] Token removed from database');
     } catch (e) {
       debugPrint('❌ [FCM] Failed to remove token: $e');
     }
