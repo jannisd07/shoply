@@ -233,10 +233,7 @@ class AppTranslations {
     'no_lists_available': 'No lists available',
     
     // What's New
-    'whats_new_title': 'What\'s New',
-    'whats_new_subtitle': 'Check out the latest features',
     'get_started': 'Get Started',
-    'for_internal_testers': 'For Internal Testers',
 
     // Paper auth & onboarding
     'welcome_kicker': 'Welcome to Shoply',
@@ -1162,6 +1159,25 @@ class AppTranslations {
     'challenge_result_abandoned': 'Ended early',
     'challenge_adherence': '{percent}% adherence',
     'challenge_days_remaining': '{days} days left',
+
+    // Previously missing keys (shown as raw keys)
+    'actions': 'Actions',
+    'contact': 'Contact',
+    'resources': 'Resources',
+    'list_deleted': '"{name}" deleted',
+    'error_deleting': 'Error deleting: {error}',
+    'error_loading_recipes_detail': 'Error loading recipes: {error}',
+    'joined_list_message': 'You joined "{listName}"',
+    'leave_list_confirm': 'Do you really want to leave "{name}"?',
+    'remove_member_confirm': 'Remove {name} from this list?',
+
+    // Form validation
+    'validation_email_required': 'Email is required',
+    'validation_email_invalid': 'Please enter a valid email',
+    'validation_password_required': 'Password is required',
+    'validation_password_min_length': 'Password must be at least 8 characters',
+    'validation_password_uppercase': 'Password must contain at least one uppercase letter',
+    'validation_password_number': 'Password must contain at least one number',
   };
 
   static const Map<String, String> _de = {
@@ -1385,10 +1401,7 @@ class AppTranslations {
     'no_lists_available': 'Keine Listen verfügbar',
     
     // What's New
-    'whats_new_title': 'Was ist neu',
-    'whats_new_subtitle': 'Entdecke die neuesten Funktionen',
     'get_started': 'Los geht\'s',
-    'for_internal_testers': 'Für interne Tester',
 
     // Paper auth & onboarding
     'welcome_kicker': 'Willkommen bei Shoply',
@@ -2318,5 +2331,24 @@ class AppTranslations {
     'challenge_result_abandoned': 'Vorzeitig beendet',
     'challenge_adherence': '{percent}% durchgehalten',
     'challenge_days_remaining': 'Noch {days} Tage',
+
+    // Previously missing keys (shown as raw keys)
+    'actions': 'Aktionen',
+    'contact': 'Kontakt',
+    'resources': 'Ressourcen',
+    'list_deleted': '„{name}“ gelöscht',
+    'error_deleting': 'Fehler beim Löschen: {error}',
+    'error_loading_recipes_detail': 'Fehler beim Laden der Rezepte: {error}',
+    'joined_list_message': 'Du bist „{listName}“ beigetreten',
+    'leave_list_confirm': 'Möchtest du „{name}“ wirklich verlassen?',
+    'remove_member_confirm': '{name} von dieser Liste entfernen?',
+
+    // Form validation
+    'validation_email_required': 'E-Mail ist erforderlich',
+    'validation_email_invalid': 'Bitte gib eine gültige E-Mail ein',
+    'validation_password_required': 'Passwort ist erforderlich',
+    'validation_password_min_length': 'Das Passwort muss mindestens 8 Zeichen lang sein',
+    'validation_password_uppercase': 'Das Passwort muss mindestens einen Großbuchstaben enthalten',
+    'validation_password_number': 'Das Passwort muss mindestens eine Zahl enthalten',
   };
 }

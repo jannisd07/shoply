@@ -1,48 +1,35 @@
 import 'package:shoply/core/constants/categories.dart';
 
 class DietChecker {
-  /// Checks if an item conflicts with the user's diet preferences
+  static final RegExp _nonLetters = RegExp(r'[^a-zäöüß]+');
+
+  /// Checks if an item conflicts with the user's diet preferences.
+  ///
+  /// [dietPreferences] are the stored diet ids ('vegan', 'gluten_free', ...).
+  /// Matching is per word: a word matches a restricted term when it equals
+  /// it or, for terms of 4+ letters, starts with it ('Eier' matches 'eier',
+  /// but 'Reis' or 'Eisbergsalat' do not match 'eis').
   static bool checkDietWarning(String itemName, List<String> dietPreferences) {
-    if (dietPreferences.isEmpty || 
-        dietPreferences.contains('None / No restrictions')) {
-      return false;
-    }
-    
-    final normalizedName = itemName.toLowerCase().trim();
-    
+    if (dietPreferences.isEmpty) return false;
+
+    final words = itemName
+        .toLowerCase()
+        .split(_nonLetters)
+        .where((w) => w.isNotEmpty)
+        .toList();
+    if (words.isEmpty) return false;
+
     for (final diet in dietPreferences) {
       final restrictions = Categories.dietRestrictions[diet];
-      if (restrictions != null) {
-        for (final restriction in restrictions) {
-          if (normalizedName.contains(restriction.toLowerCase())) {
+      if (restrictions == null) continue;
+      for (final term in restrictions) {
+        for (final word in words) {
+          if (word == term || (term.length >= 4 && word.startsWith(term))) {
             return true;
           }
         }
       }
     }
-    
     return false;
-  }
-  
-  /// Gets a warning message for diet conflicts
-  static String getDietWarningMessage(String itemName, List<String> dietPreferences) {
-    final conflicts = <String>[];
-    final normalizedName = itemName.toLowerCase().trim();
-    
-    for (final diet in dietPreferences) {
-      final restrictions = Categories.dietRestrictions[diet];
-      if (restrictions != null) {
-        for (final restriction in restrictions) {
-          if (normalizedName.contains(restriction.toLowerCase())) {
-            conflicts.add(diet);
-            break;
-          }
-        }
-      }
-    }
-    
-    if (conflicts.isEmpty) return '';
-    
-    return 'This item may not match your ${conflicts.join(', ')} diet preferences.';
   }
 }

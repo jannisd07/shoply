@@ -182,46 +182,40 @@ class Categories {
     }
   }
 
-  static Color getColor(String categoryId) {
-    return getById(categoryId).color;
-  }
-
-  static IconData getIcon(String categoryId) {
-    return getById(categoryId).icon;
-  }
-
-  // Diet preferences
-  static const List<String> dietPreferences = [
-    'None / No restrictions',
-    'Vegetarian',
-    'Vegan',
-    'Gluten-free',
-    'Lactose-free',
-    'Low-carb / Keto',
-    'Halal',
-    'Kosher',
-    'Nut allergy',
-    'Other allergies',
+  // Diet-incompatible foods, keyed by the stored diet ids (see
+  // DietPreferencesScreen / onboarding). Terms are lowercase single words;
+  // DietChecker matches them per word (exact, or as a prefix for 4+ letters).
+  static const List<String> _meat = [
+    'meat', 'chicken', 'beef', 'pork', 'lamb', 'turkey', 'bacon', 'ham',
+    'sausage', 'salami', 'gelatin',
+    'fleisch', 'hackfleisch', 'hähnchen', 'huhn', 'rind', 'rinder', 'schwein',
+    'lamm', 'pute', 'puten', 'speck', 'schinken', 'wurst', 'salami',
+    'gelatine',
+  ];
+  static const List<String> _fish = [
+    'fish', 'salmon', 'tuna', 'shrimp', 'prawns',
+    'fisch', 'lachs', 'thunfisch', 'garnelen', 'forelle',
+  ];
+  static const List<String> _dairy = [
+    'milk', 'cheese', 'yogurt', 'yoghurt', 'butter', 'cream',
+    'milch', 'vollmilch', 'käse', 'joghurt', 'sahne', 'quark', 'eis',
+    'mozzarella', 'gouda', 'parmesan',
   ];
 
-  // Diet-incompatible foods
   static const Map<String, List<String>> dietRestrictions = {
-    'Vegan': [
-      'meat', 'fish', 'chicken', 'beef', 'pork', 'lamb', 'turkey',
-      'milk', 'cheese', 'yogurt', 'butter', 'cream', 'eggs', 'honey',
-      'fleisch', 'fisch', 'milch', 'käse', 'eier',
-    ],
-    'Vegetarian': [
-      'meat', 'fish', 'chicken', 'beef', 'pork', 'lamb', 'turkey',
-      'gelatin', 'fleisch', 'fisch',
-    ],
-    'Gluten-free': [
+    'vegan': [..._meat, ..._fish, ..._dairy, 'egg', 'eggs', 'honey', 'ei', 'eier', 'honig'],
+    'vegetarian': [..._meat, ..._fish],
+    'pescatarian': _meat,
+    'gluten_free': [
       'bread', 'pasta', 'wheat', 'barley', 'rye', 'flour', 'cereal',
-      'brot', 'nudeln', 'weizen', 'mehl',
+      'brot', 'brötchen', 'nudeln', 'weizen', 'mehl', 'gerste', 'roggen',
     ],
-    'Lactose-free': [
-      'milk', 'cheese', 'yogurt', 'butter', 'cream', 'ice cream',
-      'milch', 'käse', 'joghurt', 'sahne', 'eis',
+    'dairy_free': _dairy,
+    'nut_free': [
+      'nut', 'nuts', 'peanut', 'peanuts', 'almond', 'almonds', 'walnut',
+      'hazelnut', 'cashew',
+      'nuss', 'nüsse', 'erdnuss', 'erdnüsse', 'mandel', 'mandeln', 'walnuss',
+      'haselnuss', 'cashew',
     ],
   };
 
