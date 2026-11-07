@@ -1884,10 +1884,9 @@ class AvoAssistantService {
       await UnreadService().markAsRead(listId);
       final userId = _supabase.auth.currentUser?.id;
       if (addedItemName != null && userId != null) {
-        await ref.read(itemRepositoryProvider).sendItemAddedNotification(
+        ref.read(itemRepositoryProvider).sendItemAddedNotification(
               listId: listId,
               itemName: addedItemName,
-              addedByUserId: userId,
             );
       }
     } catch (e) {

@@ -756,4 +756,60 @@ class RecipeService {
     }
     return authorMap.values.toList();
   }
+
+  /// All recipes by [authorId], newest first, with ratings and author info.
+  Future<List<Recipe>> getRecipesByAuthor(String authorId) async {
+    try {
+      final response = await _supabase
+          .from('recipes')
+          .select('''
+            *,
+            recipe_ratings!left(user_id, rating)
+          ''')
+          .eq('author_id', authorId)
+          .order('created_at', ascending: false);
+
+      // Fetch author display name
+      Map<String, Map<String, dynamic>> authorData = {};
+      try {
+        final usersResponse = await _supabase
+            .from('users')
+            .select('id, display_name, avatar_url')
+            .eq('id', authorId);
+        
+        for (final user in usersResponse as List) {
+          authorData[user['id'] as String] = user;
+        }
+      } catch (e) {
+        debugPrint('⚠️ [RECIPE_SERVICE] Could not fetch user data: $e');
+      }
+
+      final recipes = (response as List).map((json) {
+        final ratings = (json['recipe_ratings'] as List?) ?? [];
+        final ratingCount = ratings.length;
+        final averageRating = ratingCount > 0
+            ? ratings.fold<double>(0, (sum, r) => sum + (r['rating'] as num).toDouble()) / ratingCount
+            : 0.0;
+        
+        // Get author name from users table, fallback to stored author_name
+        final recipeAuthorId = json['author_id'] as String?;
+        final userData = recipeAuthorId != null ? authorData[recipeAuthorId] : null;
+        final authorName = userData?['display_name'] as String? ?? json['author_name'] as String? ?? 'Unknown';
+        final authorAvatarUrl = userData?['avatar_url'] as String? ?? json['author_avatar_url'] as String?;
+
+        return Recipe.fromJson({
+          ...json,
+          'author_name': authorName,
+          'author_avatar_url': authorAvatarUrl,
+          'average_rating': averageRating,
+          'rating_count': ratingCount,
+        });
+      }).toList();
+
+      return recipes;
+    } catch (e) {
+      debugPrint('❌ [RECIPE_SERVICE] Failed to get recipes by author: $e');
+      return [];
+    }
+  }
 }

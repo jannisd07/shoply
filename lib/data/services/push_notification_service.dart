@@ -110,4 +110,43 @@ class PushNotificationService {
       debugPrint('❌ [PUSH] Failed to cleanup token: $e');
     }
   }
+
+  /// Sends a push to every member of [listId] except [excludeUserId].
+  Future<void> sendToListMembers({
+    required String listId,
+    required String excludeUserId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      // Get all list members except the excluded user
+      final membersResponse = await _supabase
+          .from('list_members')
+          .select('user_id')
+          .eq('list_id', listId)
+          .neq('user_id', excludeUserId);
+
+      final members = membersResponse as List;
+      if (members.isEmpty) {
+        debugPrint('⚠️ [PUSH] No other members in list $listId');
+        return;
+      }
+
+      final userIds = members
+          .map((m) => m['user_id'] as String)
+          .toList();
+
+      await sendToUsers(
+        userIds: userIds,
+        title: title,
+        body: body,
+        data: data,
+      );
+
+      debugPrint('✅ [PUSH] Sent to ${userIds.length} list members');
+    } catch (e) {
+      debugPrint('❌ [PUSH] Failed to send to list members: $e');
+    }
+  }
 }

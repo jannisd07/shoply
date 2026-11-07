@@ -174,6 +174,13 @@ class AppReviewService {
 
     return _ReviewConditions(shouldShow: true, reason: 'All conditions met!');
   }
+
+  /// Remembers that the user rated the app, so we never ask again.
+  Future<void> markAsRated() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyHasRated, true);
+    debugPrint('✅ [APP_REVIEW] User marked as having rated');
+  }
 }
 
 class _ReviewConditions {
