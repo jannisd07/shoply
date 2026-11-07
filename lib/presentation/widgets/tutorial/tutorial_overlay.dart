@@ -16,7 +16,10 @@ class TutorialOverlay extends StatefulWidget {
 
 class _TutorialOverlayState extends State<TutorialOverlay>
     with TickerProviderStateMixin {
-  Rect? _cachedTargetRect;
+  /// Last known target rect; only used to detect layout changes of the
+  /// highlighted widget (e.g. scrolling) so the overlay can follow it.
+  Rect? _lastTargetRect;
+  Timer? _targetRectTimer;
   late final StreamSubscription _authSubscription;
   late AnimationController _fadeController;
   late AnimationController _pulseController;
@@ -32,10 +35,12 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       vsync: this,
     );
 
+    // The overlay wraps the whole app, so the pulse only ticks while the
+    // tutorial is active (see _onTutorialChange).
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
-    )..repeat(reverse: true);
+    );
 
     _fadeAnimation = CurvedAnimation(
       parent: _fadeController,
@@ -65,22 +70,31 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       });
     });
 
-    _startTargetRectRefresh();
     DynamicTutorialService.instance.addListener(_onTutorialChange);
   }
 
   Future<void> _initializeTutorial() async {
     await DynamicTutorialService.instance.initialize();
-    if (DynamicTutorialService.instance.isActive && mounted) {
-      _fadeController.forward();
-    }
+    if (mounted) _onTutorialChange();
   }
 
   void _onTutorialChange() {
+    if (!mounted) return;
     if (DynamicTutorialService.instance.isActive) {
       _fadeController.forward();
+      if (!_pulseController.isAnimating) {
+        _pulseController.repeat(reverse: true);
+      }
+      _targetRectTimer ??= Timer.periodic(
+        const Duration(milliseconds: 100),
+        (_) => _updateTargetRect(),
+      );
     } else {
       _fadeController.reverse();
+      _pulseController.stop();
+      _targetRectTimer?.cancel();
+      _targetRectTimer = null;
+      _lastTargetRect = null;
     }
   }
 
@@ -88,30 +102,20 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   void dispose() {
     DynamicTutorialService.instance.removeListener(_onTutorialChange);
     _authSubscription.cancel();
+    _targetRectTimer?.cancel();
     _fadeController.dispose();
     _pulseController.dispose();
     super.dispose();
   }
 
-  void _startTargetRectRefresh() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        _updateTargetRect();
-        _startTargetRectRefresh();
-      }
-    });
-  }
-
   void _updateTargetRect() {
+    if (!mounted) return;
     final tutorial = DynamicTutorialService.instance;
     final targetKey = tutorial.currentTargetKey;
-    if (targetKey != null) {
-      final newRect = tutorial.getTargetRect(targetKey);
-      if (newRect != _cachedTargetRect) {
-        setState(() => _cachedTargetRect = newRect);
-      }
-    } else if (_cachedTargetRect != null) {
-      setState(() => _cachedTargetRect = null);
+    final newRect =
+        targetKey != null ? tutorial.getTargetRect(targetKey) : null;
+    if (newRect != _lastTargetRect) {
+      setState(() => _lastTargetRect = newRect);
     }
   }
 
