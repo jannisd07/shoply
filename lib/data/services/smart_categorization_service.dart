@@ -1,3 +1,4 @@
+import 'package:shoply/core/utils/product_name_normalizer.dart';
 import 'package:shoply/data/models/product_category.dart';
 import 'package:shoply/data/services/product_knowledge_base.dart';
 import 'package:shoply/data/services/user_category_preferences.dart';
@@ -81,28 +82,18 @@ class SmartCategorizationService {
 
   /// Find similar product in knowledge base using string similarity
   ProductClassificationResult? _findSimilarProduct(String productName) {
-    final normalized = _normalizeProductName(productName);
-    
+    final normalized = normalizeProductName(productName);
+
     double bestSimilarity = 0.0;
     String? bestCategory;
     String? bestMatch;
 
-    // Get all products from knowledge base
-    final allCategories = _knowledgeBase.getStatistics();
-    
-    // Check against all known products by iterating through categories
-    for (final categoryEntry in allCategories.entries) {
-      final category = categoryEntry.key;
-      final products = _knowledgeBase.getProductsForCategory(category);
-      
-      for (final knownProduct in products) {
-        final similarity = _calculateSimilarity(normalized, knownProduct);
-        
-        if (similarity > bestSimilarity) {
-          bestSimilarity = similarity;
-          bestCategory = category;
-          bestMatch = knownProduct;
-        }
+    for (final entry in _knowledgeBase.entries) {
+      final similarity = _calculateSimilarity(normalized, entry.key);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestCategory = entry.value;
+        bestMatch = entry.key;
       }
     }
 
@@ -162,8 +153,12 @@ class SmartCategorizationService {
     final len2 = s2.length;
     final matrix = List.generate(len1 + 1, (_) => List.filled(len2 + 1, 0));
     
-    for (var i = 0; i <= len1; i++) matrix[i][0] = i;
-    for (var j = 0; j <= len2; j++) matrix[0][j] = j;
+    for (var i = 0; i <= len1; i++) {
+      matrix[i][0] = i;
+    }
+    for (var j = 0; j <= len2; j++) {
+      matrix[0][j] = j;
+    }
     
     for (var i = 1; i <= len1; i++) {
       for (var j = 1; j <= len2; j++) {
@@ -215,7 +210,9 @@ class SmartCategorizationService {
     var k = 0;
     for (var i = 0; i < len1; i++) {
       if (!s1Matches[i]) continue;
-      while (!s2Matches[k]) k++;
+      while (!s2Matches[k]) {
+        k++;
+      }
       if (s1[i] != s2[k]) transpositions++;
       k++;
     }
@@ -235,20 +232,6 @@ class SmartCategorizationService {
     }
     
     return jaro + prefix * 0.1 * (1 - jaro);
-  }
-
-  /// Normalize product name
-  String _normalizeProductName(String name) {
-    return name
-        .toLowerCase()
-        .trim()
-        .replaceAll('ä', 'ae')
-        .replaceAll('ö', 'oe')
-        .replaceAll('ü', 'ue')
-        .replaceAll('ß', 'ss')
-        .replaceAll(RegExp(r'[^\w\s]'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
   }
 
   /// Convert category display name to ProductCategory enum

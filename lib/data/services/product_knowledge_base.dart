@@ -1,3 +1,5 @@
+import 'package:shoply/core/utils/product_name_normalizer.dart';
+
 /// Comprehensive product knowledge base for accurate categorization
 /// Contains 2000+ common grocery items mapped to categories
 /// This enables high accuracy even for new users
@@ -469,37 +471,18 @@ class ProductKnowledgeBase {
   /// Get category for a product name
   /// Returns null if no exact match found
   String? getExactCategory(String productName) {
-    final normalized = _normalizeProductName(productName);
+    final normalized = normalizeProductName(productName);
     return _exactMappings[normalized];
   }
 
   /// Check if product exists in knowledge base
   bool hasProduct(String productName) {
-    final normalized = _normalizeProductName(productName);
+    final normalized = normalizeProductName(productName);
     return _exactMappings.containsKey(normalized);
   }
 
-  /// Get all known products for a category
-  List<String> getProductsForCategory(String category) {
-    return _exactMappings.entries
-        .where((entry) => entry.value == category)
-        .map((entry) => entry.key)
-        .toList();
-  }
-
-  /// Normalize product name for matching
-  String _normalizeProductName(String name) {
-    return name
-        .toLowerCase()
-        .trim()
-        .replaceAll('ä', 'ae')
-        .replaceAll('ö', 'oe')
-        .replaceAll('ü', 'ue')
-        .replaceAll('ß', 'ss')
-        .replaceAll(RegExp(r'[^\w\s]'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-  }
+  /// All known products as (normalized name → category display name).
+  Iterable<MapEntry<String, String>> get entries => _exactMappings.entries;
 
   /// Get statistics about the knowledge base
   Map<String, int> getStatistics() {
