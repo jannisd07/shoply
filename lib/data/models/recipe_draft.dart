@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 /// Model for a recipe draft that can be saved locally before publishing
 class RecipeDraft {
