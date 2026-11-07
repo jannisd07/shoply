@@ -1,11 +1,27 @@
 // Supabase Edge Function to send FCM push notifications
 // Deploy: supabase functions deploy send-push-notification
+//
+// Contract:
+//   POST /functions/v1/send-push-notification
+//   Auth: caller's Supabase user JWT (required; the bare anon key is rejected)
+//   Body: { "token": "<recipient FCM token>", "notification": {title, body}, "data": {...} }
+//
+// Authorization: the recipient token must belong to the caller or to a user
+// who shares at least one list with the caller (owner or list_members row).
+//
+// Secrets: FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL, optional
+// FIREBASE_PROJECT_ID (defaults to shoply-92f28). SUPABASE_URL,
+// SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are injected.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.7"
 
-const FIREBASE_PROJECT_ID = "shoply-92f28"
+const FIREBASE_PROJECT_ID = Deno.env.get('FIREBASE_PROJECT_ID') ?? 'shoply-92f28'
 const FIREBASE_PRIVATE_KEY = Deno.env.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n')
 const FIREBASE_CLIENT_EMAIL = Deno.env.get('FIREBASE_CLIENT_EMAIL')
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 // CORS headers for all responses
 const corsHeaders = {
@@ -14,64 +30,56 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-serve(async (req) => {
-  const debugLog: string[] = []
-  const log = (msg: string) => {
-    console.log(msg)
-    debugLog.push(`${new Date().toISOString()} - ${msg}`)
-  }
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
 
+serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  try {
-    log('🚀 Edge Function invoked')
-    
-    // Only allow POST
-    if (req.method !== 'POST') {
-      return new Response(JSON.stringify({ error: 'Method not allowed', debug: debugLog }), {
-        status: 405,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed' }, 405)
+  }
 
-    // Parse request body
-    const body = await req.json()
-    const { token, notification, data } = body
-    
-    log(`📥 Request received - token length: ${token?.length || 0}`)
-    log(`📥 Notification: ${JSON.stringify(notification)}`)
+  try {
+    // 1. Verify the caller's user JWT (the anon key alone has no user).
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const jwt = authHeader.replace('Bearer ', '').trim()
+    if (!jwt) return jsonResponse({ error: 'Unauthorized' }, 401)
+
+    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    })
+    const { data: userData, error: userErr } = await userClient.auth.getUser()
+    const callerId = userData?.user?.id
+    if (userErr || !callerId) return jsonResponse({ error: 'Unauthorized' }, 401)
+
+    // 2. Parse request body
+    const body = await req.json().catch(() => null)
+    const token = typeof body?.token === 'string' ? body.token : ''
+    const notification = body?.notification
+    const data = body?.data
 
     if (!token) {
-      log('❌ No FCM token provided')
-      return new Response(JSON.stringify({ error: 'FCM token required', debug: debugLog }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: 'FCM token required' }, 400)
     }
 
-    // Check environment variables - log actual values for debugging
-    log(`🔑 FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}`)
-    log(`🔑 FIREBASE_PRIVATE_KEY set: ${!!FIREBASE_PRIVATE_KEY}`)
-    log(`🔑 FIREBASE_PRIVATE_KEY length: ${FIREBASE_PRIVATE_KEY?.length || 0}`)
-    log(`🔑 Expected project: ${FIREBASE_PROJECT_ID}`)
+    // 3. The recipient must be the caller or share a list with the caller.
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+    const allowed = await canNotify(admin, callerId, token)
+    if (!allowed) {
+      console.log(`⚠️ Caller ${callerId} may not notify this token`)
+      return jsonResponse({ error: 'Recipient not allowed' }, 403)
+    }
 
-    // Get OAuth2 access token for Firebase
-    log('🔐 Getting Firebase access token...')
+    // 4. Send via FCM HTTP v1
     const accessToken = await getFirebaseAccessToken()
-    log(`✅ Got access token (length: ${accessToken?.length || 0})`)
-    log(`🔗 FCM URL: https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`)
-
-    // Verify token
-    const tokenInfoResp = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`)
-    const tokenInfo = await tokenInfoResp.json()
-    log(`🔍 Token info: scope=${tokenInfo.scope}, expires_in=${tokenInfo.expires_in}, error=${tokenInfo.error_description || 'none'}`)
-
-    log(`📤 Sending to FCM token: ${token.substring(0, 40)}...`)
-
-    // Send FCM message with proper APNs configuration
     const fcmResponse = await fetch(
       `https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`,
       {
@@ -116,64 +124,58 @@ serve(async (req) => {
     )
 
     const fcmResult = await fcmResponse.json()
-    log(`📨 FCM Response status: ${fcmResponse.status}`)
-    log(`📨 FCM Response: ${JSON.stringify(fcmResult)}`)
 
     if (!fcmResponse.ok) {
-      log(`❌ FCM Error: ${JSON.stringify(fcmResult)}`)
-      
-      // Check for specific error types
       const errorCode = fcmResult?.error?.details?.[0]?.errorCode || fcmResult?.error?.code
-      log(`❌ Error code: ${errorCode}`)
-      
+      console.log(`❌ FCM error ${fcmResponse.status} (${errorCode}): ${JSON.stringify(fcmResult)}`)
+
       // UNREGISTERED means token is invalid - should be cleaned up
       if (errorCode === 'UNREGISTERED' || errorCode === 'INVALID_ARGUMENT') {
-        log('⚠️ Token invalid/unregistered, should be removed from database')
-        return new Response(JSON.stringify({ 
-          error: 'Token invalid', 
-          shouldRemove: true,
-          details: fcmResult,
-          debug: debugLog
-        }), {
-          status: 410,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ error: 'Token invalid', shouldRemove: true }, 410)
       }
-      
-      return new Response(JSON.stringify({ 
-        error: 'FCM send failed', 
-        details: fcmResult,
-        debug: debugLog 
-      }), {
-        status: fcmResponse.status,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+
+      return jsonResponse({ error: 'FCM send failed', code: errorCode ?? null }, fcmResponse.status)
     }
-    
-    log('✅ Notification sent successfully!')
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      result: fcmResult,
-      debug: debugLog 
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
+    console.log('✅ Notification sent')
+    return jsonResponse({ success: true }, 200)
   } catch (error) {
-    debugLog.push(`❌ EXCEPTION: ${error.message}`)
-    debugLog.push(`❌ Stack: ${error.stack}`)
-    console.error('Edge Function Error:', error)
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      debug: debugLog 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    console.error('❌ Edge Function Error:', error)
+    return jsonResponse({ error: 'Internal error' }, 500)
   }
 })
+
+// True when `token` belongs to the caller or to a user who shares a list
+// with the caller (as owner or list member).
+async function canNotify(admin: SupabaseClient, callerId: string, token: string): Promise<boolean> {
+  const { data: recipients, error } = await admin
+    .from('users')
+    .select('id')
+    .eq('fcm_token', token)
+  if (error || !recipients || recipients.length === 0) return false
+
+  const recipientIds = recipients.map((r: { id: string }) => r.id)
+  if (recipientIds.includes(callerId)) return true
+
+  const callerLists = await listIdsFor(admin, [callerId])
+  if (callerLists.size === 0) return false
+  const recipientLists = await listIdsFor(admin, recipientIds)
+  for (const id of recipientLists) {
+    if (callerLists.has(id)) return true
+  }
+  return false
+}
+
+async function listIdsFor(admin: SupabaseClient, userIds: string[]): Promise<Set<string>> {
+  const [members, owned] = await Promise.all([
+    admin.from('list_members').select('list_id').in('user_id', userIds),
+    admin.from('shopping_lists').select('id').in('owner_id', userIds),
+  ])
+  const ids = new Set<string>()
+  for (const row of members.data ?? []) ids.add(row.list_id)
+  for (const row of owned.data ?? []) ids.add(row.id)
+  return ids
+}
 
 // URL-safe Base64 encoding (required for JWT)
 function base64UrlEncode(str: string): string {
@@ -183,8 +185,17 @@ function base64UrlEncode(str: string): string {
     .replace(/=+$/, '')
 }
 
+// Access tokens are valid for 1 h; edge isolates are reused between calls,
+// so cache the token in module scope and refresh it 60 s before expiry.
+let cachedAccessToken: { token: string; exp: number } | null = null
+
 // Get Firebase OAuth2 access token using service account
 async function getFirebaseAccessToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000)
+  if (cachedAccessToken && cachedAccessToken.exp - 60 > now) {
+    return cachedAccessToken.token
+  }
+
   if (!FIREBASE_PRIVATE_KEY || !FIREBASE_CLIENT_EMAIL) {
     throw new Error('Missing Firebase credentials in environment variables')
   }
@@ -194,7 +205,6 @@ async function getFirebaseAccessToken(): Promise<string> {
     typ: 'JWT',
   }))
 
-  const now = Math.floor(Date.now() / 1000)
   const jwtPayload = base64UrlEncode(JSON.stringify({
     iss: FIREBASE_CLIENT_EMAIL,
     sub: FIREBASE_CLIENT_EMAIL,
@@ -205,13 +215,11 @@ async function getFirebaseAccessToken(): Promise<string> {
   }))
 
   const unsignedToken = `${jwtHeader}.${jwtPayload}`
-  
-  console.log('🔐 Generating Firebase access token...')
-  
+
   // Sign JWT with private key
   const encoder = new TextEncoder()
   const data = encoder.encode(unsignedToken)
-  
+
   // Import private key
   const key = await crypto.subtle.importKey(
     'pkcs8',
@@ -251,13 +259,14 @@ async function getFirebaseAccessToken(): Promise<string> {
   })
 
   const tokenData = await tokenResponse.json()
-  
+
   if (!tokenResponse.ok || !tokenData.access_token) {
     console.error('❌ Failed to get Firebase access token:', JSON.stringify(tokenData))
     throw new Error(`OAuth token exchange failed: ${tokenData.error_description || tokenData.error || 'Unknown error'}`)
   }
-  
-  console.log('✅ Firebase access token obtained')
+
+  const expiresIn = typeof tokenData.expires_in === 'number' ? tokenData.expires_in : 3600
+  cachedAccessToken = { token: tokenData.access_token, exp: now + expiresIn }
   return tokenData.access_token
 }
 
@@ -267,7 +276,7 @@ function pemToArrayBuffer(pem: string): ArrayBuffer {
     .replace(/-----BEGIN PRIVATE KEY-----/, '')
     .replace(/-----END PRIVATE KEY-----/, '')
     .replace(/\s/g, '')
-  
+
   const binaryString = atob(b64)
   const bytes = new Uint8Array(binaryString.length)
   for (let i = 0; i < binaryString.length; i++) {

@@ -1,0 +1,5 @@
+// Base configuration for the ShoppingListWidgetExtension target.
+// Pulls in FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER (from pubspec `version:`)
+// so the widget's version always matches the Runner app. It deliberately does
+// not include Debug/Release.xcconfig, which pull in the Pods-Runner settings.
+#include? "Generated.xcconfig"

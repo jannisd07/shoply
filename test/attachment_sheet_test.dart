@@ -41,13 +41,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
 
-    // Report what the sheet rendered, then let any pending exception surface
-    // through the normal test-failure path.
-    // ignore: avoid_print
-    print('>>> Kamera sichtbar: ${find.text('Kamera').evaluate().length}');
-    // ignore: avoid_print
-    print('>>> Fotos  sichtbar: ${find.text('Fotos').evaluate().length}');
-    // ignore: avoid_print
-    print('>>> Dateien sichtbar: ${find.text('Dateien').evaluate().length}');
+    // The sheet rendered all three options without a "No Material widget
+    // found" exception (which would fail the test on its own).
+    expect(find.text('Kamera'), findsOneWidget);
+    expect(find.text('Fotos'), findsOneWidget);
+    expect(find.text('Dateien'), findsOneWidget);
   });
 }

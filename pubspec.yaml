@@ -19,13 +19,11 @@ dependencies:
   # IconData, which Flutter made a final class. lucide_icons_flutter is the
   # maintained fork with the same LucideIcons.<name> API.
   lucide_icons_flutter: ^3.1.15
-  flutter_svg: ^2.0.9
   adaptive_platform_ui: ^0.1.99  # iOS 26 Liquid Glass styling
   # liquid_glass_renderer removed; AdaptiveAlertDialog handles native iOS26 styling
   
   # State Management
   flutter_riverpod: ^2.4.9
-  riverpod_annotation: ^2.3.3
   
   # Backend & Database
   supabase_flutter: ^2.3.4
@@ -38,7 +36,6 @@ dependencies:
   
   # Storage
   shared_preferences: ^2.2.2
-  flutter_secure_storage: ^9.0.0
 
   # Network & Images
   cached_network_image: ^3.3.1
@@ -48,7 +45,6 @@ dependencies:
   html: ^0.15.4
   
   # QR & Barcode
-  qr_flutter: ^4.1.0
   # mobile_scanner: ^5.0.06  # Disabled for iOS compatibility
   
   # Notifications
@@ -92,7 +88,6 @@ dependencies:
   # flutter_tesseract_ocr: ^0.4.25  # Commented out - causes iOS build issues with SwiftyTesseract
   pdfx: ^2.6.0
   file_picker: ^8.0.0
-  path_provider: ^2.1.1
   permission_handler: ^11.0.1
 
   # Location (for nearby supermarket offers / price comparison)
@@ -100,9 +95,7 @@ dependencies:
   geocoding: ^3.0.0
 
   # Other
-  reorderables: ^0.6.0
   equatable: ^2.0.5
-  json_annotation: ^4.8.1
   flutter_app_badger: ^1.5.0
   wakelock_plus: ^1.4.0
 
@@ -110,37 +103,16 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-  build_runner: ^2.4.8
-  riverpod_generator: ^2.3.9
-  json_serializable: ^6.7.1
   # hive_generator: ^2.0.1  # Commented out - causes macOS build issues
-  flutter_launcher_icons: ^0.13.1
-  flutter_gen: ^5.9.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 flutter:
   uses-material-design: true
-  generate: true
 
   assets:
-    - assets/images/
-    - assets/icons/
-    - assets/illustrations/
+    # Only referenced by the unused ListsScreen; drop with that screen.
+    - assets/images/app_background.jpg
     - assets/avo/
     - assets/legal/
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  macos:
-    generate: true
-    image_path: "assets/images/new_app_icon.png"
-  image_path: "assets/images/new_app_icon.png"
-  remove_alpha_ios: true
-  # iOS specific
-  ios_content_scaling: "aspect-fill"
-  # Android specific
-  adaptive_icon_background: "#2196F3" # Blue background matching the icon
-  adaptive_icon_foreground: "assets/images/new_app_icon.png"
