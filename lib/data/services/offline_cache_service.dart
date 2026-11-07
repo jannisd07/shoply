@@ -1,18 +1,31 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 
-/// Service for caching recipes offline
+/// Offline cache (recipes, shopping lists + items, user profile) in
+/// SharedPreferences with in-memory mirrors for first-frame reads.
 class OfflineCacheService {
   static final OfflineCacheService instance = OfflineCacheService._();
   OfflineCacheService._();
 
-  static const String _cachedRecipesKey = 'cached_recipes';
-  static const String _cachedSavedRecipeIdsKey = 'cached_saved_recipe_ids';
-  static const String _lastSyncKey = 'last_cache_sync';
-  static const Duration _cacheExpiry = Duration(hours: 24);
+  /// Every key this service writes starts with this prefix, so [clearCache]
+  /// can wipe exactly its own entries and nothing else (recipe drafts,
+  /// migration flags, ...). Not user-scoped: the cache is cleared on sign-out.
+  static const String _prefix = 'offline_cache_v2_';
+  static const String _cachedRecipesKey = '${_prefix}recipes';
+
+  /// Keys written by older app versions before the prefix existed.
+  static const List<String> _legacyKeys = [
+    'cached_recipes',
+    'cached_saved_recipe_ids',
+    'last_cache_sync',
+    'cached_lists',
+  ];
+  static const String _legacyListItemsPrefix = 'cached_list_items_';
 
   SharedPreferences? _prefs;
 
@@ -46,9 +59,8 @@ class OfflineCacheService {
       final prefs = await _preferences;
       final recipesJson = recipes.map((r) => jsonEncode(r.toJson())).toList();
       await prefs.setStringList(_cachedRecipesKey, recipesJson);
-      await prefs.setString(_lastSyncKey, DateTime.now().toIso8601String());
     } catch (e) {
-      print('❌ [OFFLINE] Error caching recipes: $e');
+      debugPrint('❌ [OFFLINE] Error caching recipes: $e');
     }
   }
 
@@ -72,63 +84,8 @@ class OfflineCacheService {
       _memoryRecipes = recipes;
       return recipes;
     } catch (e) {
-      print('❌ [OFFLINE] Error loading cached recipes: $e');
+      debugPrint('❌ [OFFLINE] Error loading cached recipes: $e');
       return [];
-    }
-  }
-
-  /// Cache a single recipe (for viewed recipes)
-  Future<void> cacheRecipe(Recipe recipe) async {
-    try {
-      final prefs = await _preferences;
-      final key = 'recipe_${recipe.id}';
-      await prefs.setString(key, jsonEncode(recipe.toJson()));
-      print('✅ [OFFLINE] Cached recipe: ${recipe.name}');
-    } catch (e) {
-      print('❌ [OFFLINE] Error caching recipe: $e');
-    }
-  }
-
-  /// Get a single cached recipe by ID
-  Future<Recipe?> getCachedRecipe(String recipeId) async {
-    try {
-      final prefs = await _preferences;
-      final key = 'recipe_$recipeId';
-      final json = prefs.getString(key);
-      
-      if (json == null) return null;
-
-      final map = jsonDecode(json) as Map<String, dynamic>;
-      return Recipe.fromJson(map);
-    } catch (e) {
-      print('❌ [OFFLINE] Error loading cached recipe: $e');
-      return null;
-    }
-  }
-
-  // =============================================
-  // SAVED RECIPES CACHING
-  // =============================================
-
-  /// Cache saved recipe IDs
-  Future<void> cacheSavedRecipeIds(Set<String> ids) async {
-    try {
-      final prefs = await _preferences;
-      await prefs.setStringList(_cachedSavedRecipeIdsKey, ids.toList());
-      print('✅ [OFFLINE] Cached ${ids.length} saved recipe IDs');
-    } catch (e) {
-      print('❌ [OFFLINE] Error caching saved recipe IDs: $e');
-    }
-  }
-
-  /// Get cached saved recipe IDs
-  Future<Set<String>> getCachedSavedRecipeIds() async {
-    try {
-      final prefs = await _preferences;
-      final ids = prefs.getStringList(_cachedSavedRecipeIdsKey);
-      return ids?.toSet() ?? {};
-    } catch (e) {
-      return {};
     }
   }
 
@@ -136,8 +93,8 @@ class OfflineCacheService {
   // SHOPPING LISTS CACHING
   // =============================================
 
-  static const String _cachedListsKey = 'cached_lists';
-  static const String _cachedListItemsPrefix = 'cached_list_items_';
+  static const String _cachedListsKey = '${_prefix}lists';
+  static const String _cachedListItemsPrefix = '${_prefix}list_items_';
 
   /// Cache a list of shopping lists
   Future<void> cacheLists(List<ShoppingListModel> lists) async {
@@ -145,9 +102,9 @@ class OfflineCacheService {
       final prefs = await _preferences;
       final listsJson = lists.map((l) => jsonEncode(l.toJson())).toList();
       await prefs.setStringList(_cachedListsKey, listsJson);
-      print('✅ [OFFLINE] Cached ${lists.length} shopping lists');
+      debugPrint('✅ [OFFLINE] Cached ${lists.length} shopping lists');
     } catch (e) {
-      print('❌ [OFFLINE] Error caching shopping lists: $e');
+      debugPrint('❌ [OFFLINE] Error caching shopping lists: $e');
     }
   }
 
@@ -166,10 +123,10 @@ class OfflineCacheService {
         return ShoppingListModel.fromJson(map);
       }).toList();
 
-      print('📦 [OFFLINE] Loaded ${lists.length} cached shopping lists');
+      debugPrint('📦 [OFFLINE] Loaded ${lists.length} cached shopping lists');
       return lists;
     } catch (e) {
-      print('❌ [OFFLINE] Error loading cached shopping lists: $e');
+      debugPrint('❌ [OFFLINE] Error loading cached shopping lists: $e');
       return null;
     }
   }
@@ -209,7 +166,7 @@ class OfflineCacheService {
       final itemsJson = items.map((i) => jsonEncode(i.toJson())).toList();
       await prefs.setStringList('$_cachedListItemsPrefix$listId', itemsJson);
     } catch (e) {
-      print('❌ [OFFLINE] Error caching list items: $e');
+      debugPrint('❌ [OFFLINE] Error caching list items: $e');
     }
   }
 
@@ -233,7 +190,7 @@ class OfflineCacheService {
       _memoryItems[listId] = items;
       return items;
     } catch (e) {
-      print('❌ [OFFLINE] Error loading cached list items: $e');
+      debugPrint('❌ [OFFLINE] Error loading cached list items: $e');
       return null;
     }
   }
@@ -242,6 +199,8 @@ class OfflineCacheService {
   // USER PROFILE CACHING (for offline app start)
   // =============================================
 
+  // Kept on its pre-prefix key so the offline app start keeps working right
+  // after an update; it is checked against the user id on read anyway.
   static const String _cachedProfileKey = 'cached_user_profile';
 
   /// Cache the current user's profile fields needed for the router redirect.
@@ -261,7 +220,7 @@ class OfflineCacheService {
       });
       await prefs.setString(_cachedProfileKey, payload);
     } catch (e) {
-      print('❌ [OFFLINE] Error caching user profile: $e');
+      debugPrint('❌ [OFFLINE] Error caching user profile: $e');
     }
   }
 
@@ -288,86 +247,29 @@ class OfflineCacheService {
   // CACHE MANAGEMENT
   // =============================================
 
-  /// Check if cache is expired
-  Future<bool> isCacheExpired() async {
-    try {
-      final prefs = await _preferences;
-      final lastSyncStr = prefs.getString(_lastSyncKey);
-      
-      if (lastSyncStr == null) return true;
-
-      final lastSync = DateTime.parse(lastSyncStr);
-      return DateTime.now().difference(lastSync) > _cacheExpiry;
-    } catch (e) {
-      return true;
-    }
-  }
-
-  /// Get last sync time
-  Future<DateTime?> getLastSyncTime() async {
-    try {
-      final prefs = await _preferences;
-      final lastSyncStr = prefs.getString(_lastSyncKey);
-      if (lastSyncStr == null) return null;
-      return DateTime.parse(lastSyncStr);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Clear all cached data
+  /// Clear all cached data. Must run on sign-out: the cache is not keyed by
+  /// user, so otherwise the next account would see the previous one's lists.
   Future<void> clearCache() async {
-    // Drop the in-memory mirrors too — this runs on sign-out, and nothing of
-    // the previous account may survive in RAM either.
+    // Drop the in-memory mirrors too — nothing of the previous account may
+    // survive in RAM either.
     _memoryItems.clear();
     _memoryRecipes = null;
     try {
       final prefs = await _preferences;
-      final keys = prefs.getKeys().where((k) =>
-        k.startsWith('cached_') ||
-        k.startsWith('recipe_') ||
-        k.startsWith(_cachedListItemsPrefix) ||
-        k == _lastSyncKey
-      ).toList();
-      
+      final keys = prefs
+          .getKeys()
+          .where((k) =>
+              k.startsWith(_prefix) ||
+              k.startsWith(_legacyListItemsPrefix) ||
+              k == _cachedProfileKey ||
+              _legacyKeys.contains(k))
+          .toList();
       for (final key in keys) {
         await prefs.remove(key);
       }
-      
-      print('✅ [OFFLINE] Cache cleared');
+      debugPrint('✅ [OFFLINE] Cache cleared');
     } catch (e) {
-      print('❌ [OFFLINE] Error clearing cache: $e');
-    }
-  }
-
-  /// Get cache size info
-  Future<CacheInfo> getCacheInfo() async {
-    try {
-      final prefs = await _preferences;
-      final keys = prefs.getKeys().where((k) => 
-        k.startsWith('cached_') || 
-        k.startsWith('recipe_')
-      ).toList();
-      
-      int totalSize = 0;
-      int recipeCount = 0;
-      
-      for (final key in keys) {
-        if (key.startsWith('recipe_')) {
-          recipeCount++;
-        }
-        final value = prefs.getString(key) ?? prefs.getStringList(key)?.join() ?? '';
-        totalSize += value.length;
-      }
-
-      return CacheInfo(
-        recipeCount: recipeCount,
-        sizeBytes: totalSize,
-        lastSync: await getLastSyncTime(),
-        isExpired: await isCacheExpired(),
-      );
-    } catch (e) {
-      return CacheInfo(recipeCount: 0, sizeBytes: 0, lastSync: null, isExpired: true);
+      debugPrint('❌ [OFFLINE] Error clearing cache: $e');
     }
   }
 }
@@ -384,25 +286,4 @@ class CachedUserProfile {
     required this.displayName,
     required this.onboardingCompleted,
   });
-}
-
-/// Information about the cache
-class CacheInfo {
-  final int recipeCount;
-  final int sizeBytes;
-  final DateTime? lastSync;
-  final bool isExpired;
-
-  const CacheInfo({
-    required this.recipeCount,
-    required this.sizeBytes,
-    required this.lastSync,
-    required this.isExpired,
-  });
-
-  String get formattedSize {
-    if (sizeBytes < 1024) return '$sizeBytes B';
-    if (sizeBytes < 1024 * 1024) return '${(sizeBytes / 1024).toStringAsFixed(1)} KB';
-    return '${(sizeBytes / 1024 / 1024).toStringAsFixed(1)} MB';
-  }
 }
