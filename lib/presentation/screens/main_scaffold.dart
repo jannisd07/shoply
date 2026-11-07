@@ -85,6 +85,9 @@ class _SlidingTabsContainerState extends State<SlidingTabsContainer>
               final t = Curves.easeOutCubic.transform(_ctrl.value);
               final progress = _from + (_to - _from) * t;
               final offset = progress * width;
+              final animating = _ctrl.isAnimating;
+              final lo = math.min(_from, _to);
+              final hi = math.max(_from, _to);
               return Stack(
                 children: [
                   for (int i = 0; i < widget.children.length; i++)
@@ -93,10 +96,17 @@ class _SlidingTabsContainerState extends State<SlidingTabsContainer>
                       top: 0,
                       width: width,
                       height: constraints.maxHeight,
-                      child: TickerMode(
-                        // Pause animations in offscreen branches to save CPU.
-                        enabled: i == _to || _ctrl.isAnimating,
-                        child: widget.children[i],
+                      // Off-screen tabs keep their state but skip layout and
+                      // paint; only the tabs crossed by a slide are drawn.
+                      child: Offstage(
+                        offstage: !(i == _to || (animating && i >= lo && i <= hi)),
+                        child: RepaintBoundary(
+                          child: TickerMode(
+                            // Pause animations in offscreen branches to save CPU.
+                            enabled: i == _to || animating,
+                            child: widget.children[i],
+                          ),
+                        ),
                       ),
                     ),
                 ],
