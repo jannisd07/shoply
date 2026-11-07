@@ -36,6 +36,7 @@ Vollbild, Komponenten-Blatt mit Tokens). Die Komponenten-Seite ist die Vorlage f
 - **Avo** ist immer die echte 3D-Figur aus `assets/avo/` (`avo_waving`, `avo_excited`, `avo_thinking`,
   `avo_celebrating`), nie eine gezeichnete Avocado. Pose nach Anlass: winken = Begrüßung, freuen = gute
   Nachricht/Ersparnis, nachdenken = Tipp, feiern = Ziel erreicht. Ausnahme: Avo-Tab-Icon (Funkeln).
+  **Höchstens eine Avo-Figur pro Bildschirmhöhe**, nie zwei Karten mit Avo direkt untereinander.
 
 ## Die drei Stile im Code
 
