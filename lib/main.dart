@@ -9,7 +9,6 @@ import 'package:shoply/app.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/native_oauth_service.dart';
-import 'package:shoply/data/services/product_classifier_service.dart';
 import 'package:shoply/data/services/gemini_categorization_service.dart';
 import 'package:shoply/data/services/analytics_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
@@ -17,37 +16,12 @@ import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/data/services/fcm_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/notification_preferences_service.dart';
-import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/app_review_service.dart';
 import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/data/services/widget_service.dart';
 import 'package:shoply/core/config/env.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
-
-/// One-time migration to add labels to recipes
-Future<void> _runRecipeLabelMigration() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    const migrationKey = 'recipe_labels_migration_v1';
-
-    // Check if migration already ran
-    if (prefs.getBool(migrationKey) == true) {
-      debugPrint('⏭️ [MIGRATION] Recipe labels migration already completed');
-      return;
-    }
-
-    debugPrint('🔄 [MIGRATION] Running one-time recipe labels migration...');
-    final updatedCount = await RecipeService.instance.updateAllRecipesWithLabels();
-
-    // Mark migration as complete
-    await prefs.setBool(migrationKey, true);
-    debugPrint('✅ [MIGRATION] Recipe labels migration complete - updated $updatedCount recipes');
-  } catch (e) {
-    debugPrint('❌ [MIGRATION] Recipe labels migration failed: $e');
-  }
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,67 +52,93 @@ void main() async {
 }
 
 /// Initialize all non-critical services after the app UI is showing.
+///
+/// The services are independent, so they start concurrently: premium status
+/// (SubscriptionService) no longer waits behind the notification permission
+/// dialog, and a failure in one does not stop the others.
 Future<void> _initializeServicesInBackground() async {
+  final isMobile = Platform.isIOS || Platform.isAndroid;
+
+  // Registered first so account side effects never wait on service init.
+  _listenToAuthChanges(isMobile);
+
+  // Pull the offline recipe cache into memory early, so the recipes tab can
+  // paint from it in its first frame instead of waiting on its five network
+  // calls. Cheap (one SharedPreferences read) and independent of the rest.
+  unawaited(OfflineCacheService.instance.warmRecipes());
+
+  final firebaseReady = isMobile ? _initFirebase() : Future<void>.value();
+
+  await Future.wait([
+    firebaseReady,
+    _guarded('NativeOAuth', NativeOAuthService.initialize),
+    _guarded(
+      'Gemini',
+      () => GeminiCategorizationService().initialize(Env.geminiApiKey),
+    ),
+    if (isMobile) ...[
+      _guarded('Subscriptions', SubscriptionService.instance.initialize),
+      _guarded('AppReview', AppReviewService.instance.trackAppOpen),
+      _initNotifications(firebaseReady),
+    ],
+  ]);
+}
+
+Future<void> _guarded(String tag, Future<void> Function() init) async {
   try {
-    // Firebase & Analytics
-    if (Platform.isIOS || Platform.isAndroid) {
-      try {
-        final opts = DefaultFirebaseOptions.currentPlatform;
-        if (!opts.apiKey.startsWith('YOUR_')) {
-          await Firebase.initializeApp(options: opts);
-          await AnalyticsService.instance.initialize();
-        }
-      } catch (e) {
-        debugPrint('⚠️ Firebase not configured: $e');
+    await init();
+  } catch (e) {
+    debugPrint('⚠️ [MAIN] $tag initialization failed: $e');
+  }
+}
+
+/// Firebase core + Analytics. Skipped (loudly) when lib/firebase_options.dart
+/// is still the placeholder from firebase_options.example.dart.
+Future<void> _initFirebase() => _guarded('Firebase', () async {
+      final opts = DefaultFirebaseOptions.currentPlatform;
+      if (opts.apiKey.startsWith('YOUR_')) {
+        debugPrint(
+          '❌ [FIREBASE] lib/firebase_options.dart is the placeholder - '
+          'Firebase, Analytics and FCM push are DISABLED in this build. '
+          'Generate it with flutterfire configure.',
+        );
+        return;
       }
+      await Firebase.initializeApp(options: opts);
+      await AnalyticsService.instance.initialize();
+    });
+
+/// Local notifications, then FCM (which needs Firebase). Runs off the main
+/// init path because the iOS permission prompt blocks until answered.
+Future<void> _initNotifications(Future<void> firebaseReady) async {
+  // initialize() already asks for alert/badge/sound permission on iOS
+  // (DarwinInitializationSettings), and FCMService asks again on Android.
+  await _guarded('Notifications', NotificationService.instance.initialize);
+  await firebaseReady;
+  if (Firebase.apps.isEmpty) return;
+  await _guarded('FCM', FCMService.instance.initialize);
+}
+
+/// Auth side effects: widget credentials, FCM token and reminders.
+void _listenToAuthChanges(bool isMobile) {
+  Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+    final event = data.event;
+    debugPrint('🔐 [AUTH] State changed: $event');
+
+    // Keep the widget's cached Supabase credentials fresh. The widget
+    // process syncs toggles / quick-adds via direct REST calls with this
+    // cached token, so it must follow every token refresh, not just app
+    // launch (home_screen only re-pushes on launch/user change).
+    if (event == AuthChangeEvent.initialSession ||
+        event == AuthChangeEvent.signedIn ||
+        event == AuthChangeEvent.tokenRefreshed) {
+      unawaited(WidgetService.syncCredentialsFromSession(session: data.session));
     }
 
-    // Pull the offline recipe cache into memory early, so the recipes tab can
-    // paint from it in its first frame instead of waiting on its five network
-    // calls. Cheap (one SharedPreferences read) and independent of the rest.
-    unawaited(OfflineCacheService.instance.warmRecipes());
+    if (!isMobile) return;
 
-    // Native OAuth
-    await NativeOAuthService.initialize();
-
-    // Product Classifier
-    await ProductClassifierService.instance.initialize();
-
-    // Gemini AI
-    final geminiService = GeminiCategorizationService();
-    await geminiService.initialize(Env.geminiApiKey);
-
-    // Notifications & Subscriptions
-    if (Platform.isIOS || Platform.isAndroid) {
-      await NotificationService.instance.initialize();
-      await NotificationService.instance.requestPermissions();
-
-      try {
-        await FCMService.instance.initialize();
-      } catch (e) {
-        debugPrint('⚠️ [MAIN] FCM initialization failed: $e');
-      }
-
-      await AppReviewService.instance.trackAppOpen();
-      await SubscriptionService.instance.initialize();
-    }
-
-    // Auth state listener for FCM token & migrations
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
-      final event = data.event;
-      debugPrint('🔐 [AUTH] State changed: $event');
-
-      // Keep the widget's cached Supabase credentials fresh. The widget
-      // process syncs toggles / quick-adds via direct REST calls with this
-      // cached token, so it must follow every token refresh, not just app
-      // launch (home_screen only re-pushes on launch/user change).
-      if (event == AuthChangeEvent.initialSession ||
-          event == AuthChangeEvent.signedIn ||
-          event == AuthChangeEvent.tokenRefreshed) {
-        unawaited(WidgetService.syncCredentialsFromSession(session: data.session));
-      }
-
-      if (event == AuthChangeEvent.signedIn && (Platform.isIOS || Platform.isAndroid)) {
+    try {
+      if (event == AuthChangeEvent.signedIn) {
         // Sync the master notification switch first: saveTokenForCurrentUser
         // respects it, so a user who disabled notifications on another
         // device doesn't get their FCM token resurrected here.
@@ -148,10 +148,9 @@ Future<void> _initializeServicesInBackground() async {
             .rearmRestockReminder(force: true);
         await MascotNotificationService.instance
             .rearmDinnerIdeasReminder(force: true);
-        _runRecipeLabelMigration();
       }
 
-      if (event == AuthChangeEvent.signedOut && (Platform.isIOS || Platform.isAndroid)) {
+      if (event == AuthChangeEvent.signedOut) {
         // Clears the scheduled restock reminder (no user = nothing due).
         await MascotNotificationService.instance
             .rearmRestockReminder(force: true);
@@ -163,8 +162,8 @@ Future<void> _initializeServicesInBackground() async {
         // indefinitely.
         await WidgetService.clearWidget();
       }
-    });
-  } catch (e) {
-    debugPrint('⚠️ [MAIN] Background initialization error: $e');
-  }
+    } catch (e) {
+      debugPrint('⚠️ [AUTH] Auth side effect failed: $e');
+    }
+  });
 }
