@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:intl/intl.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -27,11 +28,27 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   String _selectedProductId = SubscriptionProducts.yearlyId;
   bool _isLoading = false;
 
+  /// True while a StoreKit purchase sheet is open. Kept separate from
+  /// [_isLoading] so the purchase listener never reacts to a restore.
+  bool _purchaseInFlight = false;
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final productsAsync = ref.watch(subscriptionProductsProvider);
-    ref.watch(subscriptionNotifierProvider);
+
+    // purchase() resolves as soon as the StoreKit sheet opens; the real
+    // outcome (purchased / canceled / error) arrives later on the status
+    // stream. Stop the spinner then, and close the paywall on success.
+    ref.listen(subscriptionNotifierProvider, (_, next) {
+      if (!_purchaseInFlight || next is AsyncLoading) return;
+      if (next.valueOrNull == SubscriptionStatus.pending) return;
+      _purchaseInFlight = false;
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      if (next.valueOrNull == SubscriptionStatus.subscribed) {
+        Navigator.of(context).pop(true);
+      }
+    });
 
     ref.listen(subscriptionErrorProvider, (_, asyncError) {
       asyncError.whenData((error) {
@@ -101,7 +118,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   
                   // ── Hero: paper kicker + serif headline ──
                   Text(
-                    'SHOPLY PREMIUM',
+                    context.tr('premium_kicker'),
                     style: TextStyle(
                       fontSize: 11,
                       letterSpacing: 2,
@@ -118,20 +135,20 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   const SizedBox(height: 26),
                   
                   // ── Features ──
-                  _buildFeatures(context, isDark, fg, muted),
+                  _buildFeatures(context, fg),
                   
                   const SizedBox(height: 48),
                   
                   // ── Plans ──
                   if (products.isNotEmpty)
-                    _buildPlans(context, isDark, fg, muted, dim, products)
+                    _buildPlans(context, products)
                   else
                     _buildLoadingPlans(context, muted, dim),
                   
                   const SizedBox(height: 28),
                   
                   // ── CTA ──
-                  _buildCTA(context, isDark, products),
+                  _buildCTA(context, products),
                   
                   const SizedBox(height: 20),
                   
@@ -159,7 +176,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   }
 
   // ── Features list ──
-  Widget _buildFeatures(BuildContext context, bool isDark, Color fg, Color muted) {
+  Widget _buildFeatures(BuildContext context, Color fg) {
     final features = [
       context.tr('premium_feat_lists'),
       context.tr('premium_feat_avo'),
@@ -193,10 +210,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   }
 
   // ── Plan cards: paper side-by-side per mockup ──
-  Widget _buildPlans(
-    BuildContext context, bool isDark, Color fg, Color muted, Color dim,
-    List<ProductDetails> products,
-  ) {
+  Widget _buildPlans(BuildContext context, List<ProductDetails> products) {
     final yearly = products
         .where((p) => p.id == SubscriptionProducts.yearlyId)
         .firstOrNull;
@@ -206,10 +220,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
     String? perMonth;
     if (yearly != null) {
-      final symbol = yearly.price.replaceAll(RegExp(r'[0-9.,\s]'), '');
-      final val = yearly.rawPrice / 12;
-      perMonth =
-          '${val.toStringAsFixed(2).replaceAll('.', ',')} $symbol ${context.tr('per_month_suffix')}';
+      final formatted = NumberFormat.simpleCurrency(
+        locale: Localizations.localeOf(context).toString(),
+        name: yearly.currencyCode,
+      ).format(yearly.rawPrice / 12);
+      perMonth = '$formatted ${context.tr('per_month_suffix')}';
     }
 
     return Row(
@@ -268,7 +283,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               if (mounted) setState(() {});
             },
             child: Text(
-              'Retry',
+              context.tr('retry'),
               style: TextStyle(
                 color: dim,
                 fontSize: 14,
@@ -284,17 +299,12 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   }
 
   // ── CTA button ──
-  Widget _buildCTA(BuildContext context, bool isDark, List<ProductDetails> products) {
+  Widget _buildCTA(BuildContext context, List<ProductDetails> products) {
     final selectedProduct = products.where((p) => p.id == _selectedProductId).firstOrNull;
     final canTap = !_isLoading && selectedProduct != null;
-    final fg = isDark ? Colors.black : Colors.white;
-    final bg = isDark ? Colors.white : Colors.black;
-
-    final yearlyPrice = products
-            .where((p) => p.id == SubscriptionProducts.yearlyId)
-            .firstOrNull
-            ?.price ??
-        '';
+    final footnoteKey = _selectedProductId == SubscriptionProducts.monthlyId
+        ? 'trial_footnote_monthly'
+        : 'trial_footnote';
 
     return Column(
       children: [
@@ -329,7 +339,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         ),
         const SizedBox(height: 10),
         Text(
-          context.tr('trial_footnote', params: {'price': yearlyPrice}),
+          context.tr(footnoteKey, params: {'price': selectedProduct?.price ?? ''}),
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 11,
@@ -343,17 +353,17 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   Future<void> _subscribe(ProductDetails product) async {
     HapticFeedback.mediumImpact();
     setState(() => _isLoading = true);
-    
+    _purchaseInFlight = true;
+
     debugPrint('💳 [UI] Starting purchase for: ${product.id}');
-    
+
     final success = await ref.read(subscriptionNotifierProvider.notifier).purchase(product);
-    
+
     debugPrint('💳 [UI] Purchase initiated: $success');
-    
-    if (mounted) {
-      if (!success) {
-        setState(() => _isLoading = false);
-      }
+
+    if (!success) {
+      _purchaseInFlight = false;
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

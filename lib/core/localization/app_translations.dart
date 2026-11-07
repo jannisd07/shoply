@@ -479,6 +479,12 @@ class AppTranslations {
     'trial_cta': 'Try 14 days free',
     'trial_footnote':
         'Then {price}/year · cancel in your iPhone settings',
+    // Screens cleanup: subscription, calories, profile, auth, onboarding, Avo chat
+    'premium_kicker': 'AVO PREMIUM',
+    'trial_footnote_monthly': 'Then {price}/month · cancel in your iPhone settings',
+    'generic_error': 'Something went wrong. Please try again.',
+    'personal_info_updated': 'Personal information updated',
+    // (end screens cleanup)
     
     // AI Recommendations
     'ai_recommendations': 'AI Recommendations',
@@ -1511,6 +1517,12 @@ class AppTranslations {
     'trial_cta': '14 Tage gratis testen',
     'trial_footnote':
         'Danach {price}/Jahr · Kündigung in den iPhone-Einstellungen',
+    // Screens cleanup: subscription, calories, profile, auth, onboarding, Avo chat
+    'premium_kicker': 'AVO PREMIUM',
+    'trial_footnote_monthly': 'Danach {price}/Monat · Kündigung in den iPhone-Einstellungen',
+    'generic_error': 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
+    'personal_info_updated': 'Persönliche Daten aktualisiert',
+    // (end screens cleanup)
     
     // AI Recommendations
     'ai_recommendations': 'KI-Empfehlungen',
