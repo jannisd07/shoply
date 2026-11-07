@@ -1038,6 +1038,17 @@ class AppTranslations {
     'challenge_result_abandoned': 'Ended early',
     'challenge_adherence': '{percent}% adherence',
     'challenge_days_remaining': '{days} days left',
+
+    // Previously missing keys (shown as raw keys)
+    'actions': 'Actions',
+    'contact': 'Contact',
+    'resources': 'Resources',
+    'list_deleted': '"{name}" deleted',
+    'error_deleting': 'Error deleting: {error}',
+    'error_loading_recipes_detail': 'Error loading recipes: {error}',
+    'joined_list_message': 'You joined "{listName}"',
+    'leave_list_confirm': 'Do you really want to leave "{name}"?',
+    'remove_member_confirm': 'Remove {name} from this list?',
   };
 
   static const Map<String, String> _de = {
@@ -2070,5 +2081,16 @@ class AppTranslations {
     'challenge_result_abandoned': 'Vorzeitig beendet',
     'challenge_adherence': '{percent}% durchgehalten',
     'challenge_days_remaining': 'Noch {days} Tage',
+
+    // Previously missing keys (shown as raw keys)
+    'actions': 'Aktionen',
+    'contact': 'Kontakt',
+    'resources': 'Ressourcen',
+    'list_deleted': '„{name}“ gelöscht',
+    'error_deleting': 'Fehler beim Löschen: {error}',
+    'error_loading_recipes_detail': 'Fehler beim Laden der Rezepte: {error}',
+    'joined_list_message': 'Du bist „{listName}“ beigetreten',
+    'leave_list_confirm': 'Möchtest du „{name}“ wirklich verlassen?',
+    'remove_member_confirm': '{name} von dieser Liste entfernen?',
   };
 }

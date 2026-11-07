@@ -1,6 +1,5 @@
 class AppConfig {
   // Share link configuration
-  // TODO: Replace with your actual domain
   static const String shareDomain = 'https://shoplyai.app';
   static const String sharePathPrefix = '/join';
   

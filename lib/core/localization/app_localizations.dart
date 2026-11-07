@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shoply/core/localization/app_translations.dart';
 
 /// Localizations delegate plus a few typed getters still used by the list
-/// detail and home screens. New code should use `context.tr('key')` from
+/// detail and home screens. New code should use `context.tr(...)` from
 /// localization_helper.dart instead of adding getters here.
 class AppLocalizations {
   final Locale locale;
