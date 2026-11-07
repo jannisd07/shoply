@@ -951,9 +951,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
         child: Material(
           color: Colors.transparent,
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.88,
+            width: MediaQuery.sizeOf(context).width * 0.88,
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.75,
+              maxHeight: MediaQuery.sizeOf(context).height * 0.75,
             ),
             decoration: BoxDecoration(
               color: Theme.of(context).brightness == Brightness.dark
