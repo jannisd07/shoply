@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/mascot/avo_mascot.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
@@ -10,6 +9,7 @@ import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/presentation/state/avo_nudge_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/screens/home/widgets/nudge_card.dart';
 
 /// Home-screen card with Avo's nudges, computed from the user's own data:
 /// restock suggestions ("you buy milk about every 5 days — last bought 8
@@ -43,78 +43,67 @@ class AvoNudgeCard extends ConsumerWidget {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppDimensions.screenHorizontalPadding,
-        8,
-        AppDimensions.screenHorizontalPadding,
-        0,
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface(context),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border(context)),
-        ),
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const AvoMascot(size: 22, expression: AvoExpression.thinking),
-                const SizedBox(width: 8),
-                Text(
-                  context
-                      .tr(suggestions.isNotEmpty
+    return NudgeCardShell(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const AvoMascot(size: 22, expression: AvoExpression.thinking),
+              const SizedBox(width: 8),
+              Text(
+                context
+                    .tr(
+                      suggestions.isNotEmpty
                           ? 'restock_title'
-                          : 'offer_nudge_title')
-                      .toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    letterSpacing: 1.5,
-                    fontWeight: FontWeight.w600,
-                    color: textSecondary,
-                  ),
+                          : 'offer_nudge_title',
+                    )
+                    .toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: 1.5,
+                  fontWeight: FontWeight.w600,
+                  color: textSecondary,
                 ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            for (final suggestion in suggestions)
-              _SuggestionRow(
-                suggestion: suggestion,
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          for (final suggestion in suggestions)
+            _SuggestionRow(
+              suggestion: suggestion,
+              offer: offerByItem[suggestion.itemName],
+              textPrimary: textPrimary,
+              textSecondary: textSecondary,
+              accent: accent,
+              onAdd: () => _addToList(
+                context,
+                ref,
+                name: suggestion.displayName,
+                quantity: suggestion.preferredQuantity,
+                category: suggestion.preferredCategory,
                 offer: offerByItem[suggestion.itemName],
-                textPrimary: textPrimary,
-                textSecondary: textSecondary,
-                accent: accent,
-                onAdd: () => _addToList(
-                  context,
-                  ref,
-                  name: suggestion.displayName,
-                  quantity: suggestion.preferredQuantity,
-                  category: suggestion.preferredCategory,
-                  offer: offerByItem[suggestion.itemName],
-                ),
-                onSnooze: () => _snooze(ref, suggestion),
               ),
-            for (final offer in offers)
-              _OfferRow(
+              onSnooze: () => _snooze(ref, suggestion),
+            ),
+          for (final offer in offers)
+            _OfferRow(
+              offer: offer,
+              textPrimary: textPrimary,
+              textSecondary: textSecondary,
+              accent: accent,
+              onAdd: () => _addToList(
+                context,
+                ref,
+                name: offer.displayName,
+                quantity: offer.preferredQuantity,
+                category: offer.preferredCategory,
                 offer: offer,
-                textPrimary: textPrimary,
-                textSecondary: textSecondary,
-                accent: accent,
-                onAdd: () => _addToList(
-                  context,
-                  ref,
-                  name: offer.displayName,
-                  quantity: offer.preferredQuantity,
-                  category: offer.preferredCategory,
-                  offer: offer,
-                ),
-                onSnooze: () => _snoozeOffer(ref, offer),
               ),
-          ],
-        ),
+              onSnooze: () => _snoozeOffer(ref, offer),
+            ),
+        ],
       ),
     );
   }
@@ -137,8 +126,10 @@ class AvoNudgeCard extends ConsumerWidget {
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       final target = sorted.first;
 
-      await ref.read(itemRepositoryProvider).addItem(
-            listId: target.id,
+      // Through the list's notifier so an open list updates right away.
+      await ref
+          .read(itemsNotifierProvider(target.id).notifier)
+          .addItem(
             name: name,
             quantity: quantity ?? 1.0,
             category: category,
@@ -160,10 +151,12 @@ class AvoNudgeCard extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.tr('restock_added_to', params: {
-              'item': name,
-              'list': target.name,
-            })),
+            content: Text(
+              context.tr(
+                'restock_added_to',
+                params: {'item': name, 'list': target.name},
+              ),
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -191,18 +184,24 @@ class AvoNudgeCard extends ConsumerWidget {
 /// the actual offered product — it can be more specific than the item.
 String _offerLine(BuildContext context, OfferNudge offer) {
   if (offer.hasDisclosedDiscount) {
-    return context.tr('offer_nudge_line', params: {
+    return context.tr(
+      'offer_nudge_line',
+      params: {
+        'product': offer.productName,
+        'pct': '${offer.discountPercent}',
+        'store': offer.retailerName,
+        'price': offer.price.toStringAsFixed(2),
+      },
+    );
+  }
+  return context.tr(
+    'offer_nudge_line_simple',
+    params: {
       'product': offer.productName,
-      'pct': '${offer.discountPercent}',
       'store': offer.retailerName,
       'price': offer.price.toStringAsFixed(2),
-    });
-  }
-  return context.tr('offer_nudge_line_simple', params: {
-    'product': offer.productName,
-    'store': offer.retailerName,
-    'price': offer.price.toStringAsFixed(2),
-  });
+    },
+  );
 }
 
 class _SuggestionRow extends StatelessWidget {
@@ -228,14 +227,20 @@ class _SuggestionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final usualDay = suggestion.usualWeekday;
     final rhythmLine = usualDay != null
-        ? context.tr('restock_line_weekday', params: {
-            'avg': '${suggestion.averageDays}',
-            'weekday': context.tr('weekday_adverb_$usualDay'),
-          })
-        : context.tr('restock_line', params: {
-            'avg': '${suggestion.averageDays}',
-            'days': '${suggestion.daysSince}',
-          });
+        ? context.tr(
+            'restock_line_weekday',
+            params: {
+              'avg': '${suggestion.averageDays}',
+              'weekday': context.tr('weekday_adverb_$usualDay'),
+            },
+          )
+        : context.tr(
+            'restock_line',
+            params: {
+              'avg': '${suggestion.averageDays}',
+              'days': '${suggestion.daysSince}',
+            },
+          );
 
     return _NudgeRow(
       title: suggestion.displayName,
@@ -372,7 +377,11 @@ class _NudgeRow extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.only(left: 4, top: 6, bottom: 6),
-                child: Icon(Icons.close_rounded, size: 16, color: textSecondary),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: textSecondary,
+                ),
               ),
             ),
           ],

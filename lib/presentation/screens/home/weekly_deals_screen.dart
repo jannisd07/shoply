@@ -7,7 +7,6 @@ import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/store_offer.dart';
-import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/zip_code_sheet.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -493,8 +492,7 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
     setState(() => _adding = true);
     HapticFeedback.mediumImpact();
     try {
-      await ItemRepository.instance.addItem(
-        listId: listId,
+      await ref.read(itemsNotifierProvider(listId).notifier).addItem(
         name: widget.display.productName,
         price: widget.display.price,
         priceCurrency: 'EUR',
@@ -503,8 +501,6 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
         priceOldValue: widget.display.regularPrice,
         autoParse: false,
       );
-      ref.invalidate(itemsNotifierProvider(listId));
-      ref.invalidate(listsNotifierProvider);
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -563,7 +559,7 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Text('Error: $e'),
+                child: Text(context.tr('loading_error')),
               ),
               data: (lists) {
                 if (lists.isEmpty) {

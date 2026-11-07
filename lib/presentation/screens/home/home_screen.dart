@@ -17,8 +17,9 @@ import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/presentation/screens/history/shopping_history_screen.dart';
-import 'package:shoply/presentation/state/last_list_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/widgets/common/confirm_dialog.dart';
+import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
 import 'package:shoply/presentation/screens/home/home_nudge_card_order.dart';
@@ -42,7 +43,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  bool _hasAutoOpened = false;
   bool _isCreatingTutorialList = false;
   String? _lastUserId;
   StreamSubscription<AuthState>? _authSubscription;
@@ -52,30 +52,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     _lastUserId = SupabaseService.instance.currentUser?.id;
 
-    // Lade Listen sofort beim Start
+    // The lists notifier loads itself on creation.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(listsNotifierProvider.notifier).loadLists();
-      _autoOpenLastList();
       _syncWidgetCredentials();
       unawaited(_ensureTutorialListExists());
     });
 
     DynamicTutorialService.instance.addListener(_handleTutorialChange);
 
-    // Auth-Listener für User-Wechsel
+    // Keep the tutorial pointed at the most recently updated list.
+    ref.listenManual<AsyncValue<List<ShoppingListModel>>>(
+      listsNotifierProvider,
+      (_, next) => _updateTutorialListsData(next.valueOrNull),
+      fireImmediately: true,
+    );
+
+    // Reload account-scoped data when the signed-in user changes.
     _authSubscription = SupabaseService.instance.client.auth.onAuthStateChange
         .listen((data) {
       final newUserId = data.session?.user.id;
       if (_lastUserId != newUserId && mounted) {
-        setState(() {
-          _lastUserId = newUserId;
-        });
-
-        // Lade Listen neu
+        _lastUserId = newUserId;
         ref.read(listsNotifierProvider.notifier).loadLists();
+        ref.invalidate(recentHistoryProvider);
         _syncWidgetCredentials();
       }
     });
+  }
+
+  void _updateTutorialListsData(List<ShoppingListModel>? lists) {
+    if (lists == null) return;
+    final tutorial = DynamicTutorialService.instance;
+    if (lists.isEmpty) {
+      tutorial.updateListsData(hasLists: false, firstListId: null);
+      if (tutorial.isActive &&
+          tutorial.currentStepId == TutorialStepId.openShoppingList) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => unawaited(_ensureTutorialListExists()),
+        );
+      }
+      return;
+    }
+    final newest =
+        lists.reduce((a, b) => b.updatedAt.isAfter(a.updatedAt) ? b : a);
+    tutorial.updateListsData(hasLists: true, firstListId: newest.id);
   }
 
   @override
@@ -121,73 +141,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       final list = await ref
           .read(listsNotifierProvider.notifier)
-          .createList('Meine erste Liste');
+          .createList(context.tr('my_first_list'));
       tutorial.updateListsData(hasLists: true, firstListId: list.id);
     } catch (e) {
-      debugPrint('Error creating tutorial list: $e');
+      debugPrint('❌ [HOME] Error creating tutorial list: $e');
     } finally {
       _isCreatingTutorialList = false;
     }
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    // Prüfe bei jeder Navigation ob sich der User geändert hat
-    final currentUserId = SupabaseService.instance.currentUser?.id;
-    if (_lastUserId != currentUserId) {
-      _lastUserId = currentUserId;
-
-      // Lade Listen IMMER neu (auch bei null)
-      Future.microtask(() {
-        ref.read(listsNotifierProvider.notifier).loadLists();
-        // Also refresh shopping history
-        ref.invalidate(recentHistoryProvider);
-      });
-    }
-  }
-
-  @override
-  void activate() {
-    super.activate();
-    // Wird aufgerufen wenn der Screen wieder aktiv wird (z.B. nach Tab-Wechsel)
-    // Nur neu laden wenn bereits initialisiert
-    if (_lastUserId != null) {
-      Future.microtask(() {
-        ref.read(listsNotifierProvider.notifier).loadLists();
-        // Also refresh shopping history
-        ref.invalidate(recentHistoryProvider);
-      });
-    }
-  }
-
   void _syncWidgetCredentials() {
     unawaited(WidgetService.syncCredentialsFromSession());
-  }
-
-  Future<void> _autoOpenLastList() async {
-    if (_hasAutoOpened) return;
-    _hasAutoOpened = true;
-
-    final lastListAsync = ref.read(lastAccessedListProvider);
-    final listsAsync = ref.read(listsNotifierProvider);
-
-    lastListAsync.whenData((lastListId) {
-      if (lastListId != null && mounted) {
-        listsAsync.whenData((lists) {
-          final list = lists.cast<dynamic>().firstWhere(
-            (l) => l.id == lastListId,
-            orElse: () => null,
-          );
-          if (list != null && mounted) {
-            context.push(
-              '/lists/$lastListId?name=${Uri.encodeComponent(list.name)}',
-            );
-          }
-        });
-      }
-    });
   }
 
   // Native iOS-style refresh indicator with smooth animation
@@ -283,10 +247,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ],
                     );
                   },
-              onRefresh: () async {
-                ref.invalidate(listsNotifierProvider);
-                await Future.delayed(const Duration(milliseconds: 800));
-              },
+              onRefresh: () =>
+                  ref.read(listsNotifierProvider.notifier).loadLists(),
             ),
             // Safe Area nach dem Refresh Control
             SliverSafeArea(
@@ -425,20 +387,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   final tutorial = DynamicTutorialService.instance;
 
                   if (lists.isEmpty) {
-                    if (tutorial.isActive &&
-                        tutorial.currentStepId ==
-                            TutorialStepId.openShoppingList) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        unawaited(_ensureTutorialListExists());
-                      });
-                    }
-
-                    // Update tutorial that there are no lists
-                    tutorial.updateListsData(
-                      hasLists: false,
-                      firstListId: null,
-                    );
-
                     return Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppDimensions.screenHorizontalPadding,
@@ -484,14 +432,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               final list = sortedLists[index];
                               final isFirstList = index == 0;
 
-                              // Update tutorial with user data
-                              if (isFirstList) {
-                                tutorial.updateListsData(
-                                  hasLists: true,
-                                  firstListId: list.id,
-                                );
-                              }
-
                               return _PaperListRow(
                                 key: ValueKey(list.id),
                                 index: index,
@@ -514,20 +454,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     tutorial.completeCurrentStep();
                                   }
                                 },
-                                onLongPress: () async {
-                                  HapticFeedback.mediumImpact();
-                                  final shouldDelete =
-                                      await _showDeleteConfirmation(
-                                    context,
-                                    list.name,
-                                    ref,
-                                  );
-                                  if (shouldDelete == true) {
-                                    ref
-                                        .read(listsNotifierProvider.notifier)
-                                        .deleteList(list.id);
-                                  }
-                                },
+                                onLongPress: () => _deleteList(list),
                               );
                             },
                           ),
@@ -854,46 +781,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  // removed custom glass dialog helper in favor of AdaptiveAlertDialog.inputShow
-
-  Future<bool?> _showDeleteConfirmation(
-    BuildContext context,
-    String listName,
-    WidgetRef ref,
-  ) async {
-    final localizations = AppLocalizations.of(context);
-    final completer = Completer<bool?>();
-
-    AdaptiveAlertDialog.show(
-      context: context,
-      title: localizations.deleteListTitle,
-      message: localizations.deleteListMessage(listName),
-      icon: PlatformInfo.isIOS26OrHigher() ? 'trash.fill' : Icons.delete,
+  Future<void> _deleteList(ShoppingListModel list) async {
+    HapticFeedback.mediumImpact();
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await confirmDestructive(
+      context,
+      title: l10n.deleteListTitle,
+      message: l10n.deleteListMessage(list.name),
+      confirmLabel: l10n.deleteConfirm,
       iconSize: 48,
-      iconColor: Colors.red,
-      actions: [
-        AlertAction(
-          title: localizations.cancel,
-          onPressed: () {
-            if (!completer.isCompleted) {
-              completer.complete(false);
-            }
-          },
-          style: AlertActionStyle.cancel,
-        ),
-        AlertAction(
-          title: localizations.deleteConfirm,
-          onPressed: () {
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          },
-          style: AlertActionStyle.destructive,
-        ),
-      ],
     );
-
-    return completer.future;
+    if (!confirmed) return;
+    try {
+      await ref.read(listsNotifierProvider.notifier).deleteList(list.id);
+    } catch (e) {
+      debugPrint('❌ [HOME] Failed to delete list: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('action_failed'))),
+      );
+    }
   }
 
   Widget _homeNudgeCard(HomeNudgeCardKind kind) {
