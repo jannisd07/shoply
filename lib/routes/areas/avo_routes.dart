@@ -7,9 +7,10 @@ import 'package:shoply/routes/app_branch.dart';
 // builder (if the area has a root screen) and four lists. Teil A places them;
 // Teil B only edits this file. See docs/redesign/status-A.md, "Routen".
 
-/// The screen at RoutePaths.avo (full screen until S2, then the Avo tab).
+/// Root of the Avo tab at RoutePaths.avo. `?q=` hands a question over
+/// (the "Frag Avo …" field on Home); Avo sends it exactly once.
 Widget buildAvoRoot(BuildContext context, GoRouterState state) =>
-    const AvoChatScreen();
+    AvoChatScreen(initialQuestion: state.uri.queryParameters['q']);
 
 /// Children of the area root, with paths relative to it. They open in the
 /// root's navigator; add `parentNavigatorKey: rootNavigatorKey` to open one

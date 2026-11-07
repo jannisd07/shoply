@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/app_translations.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
@@ -15,6 +16,7 @@ import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/ai/avo_chat_message.dart';
+import 'package:shoply/presentation/screens/ai/avo_initial_question.dart';
 import 'package:shoply/presentation/screens/ai/widgets/avo_chat_widgets.dart';
 import 'package:shoply/presentation/screens/ai/widgets/avo_payload_cards.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
@@ -78,8 +80,13 @@ List<String> buildSuggestionChipKeys({
 // SCREEN
 // ════════════════════════════════════════════════════════
 
+/// Root of the Avo tab (`/avo`). [initialQuestion] is the `q` of the route:
+/// sent once as the person's message, e.g. from "Frag Avo …" on Home.
 class AvoChatScreen extends ConsumerStatefulWidget {
-  const AvoChatScreen({super.key});
+  const AvoChatScreen({super.key, this.initialQuestion});
+
+  final String? initialQuestion;
+
   @override
   ConsumerState<AvoChatScreen> createState() => _AvoChatScreenState();
 }
@@ -97,11 +104,36 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
   /// frozen snapshot, so the card reads this to reflect taps.
   final Map<String, bool> _checkedOverrides = {};
 
+  final _initialQuestion = AvoInitialQuestion();
+  late final Future<void> _ready;
+
   @override
   void initState() {
     super.initState();
     _shuffleChips();
-    _initAvo();
+    _ready = _initAvo();
+    _handOver(widget.initialQuestion);
+  }
+
+  @override
+  void didUpdateWidget(AvoChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialQuestion != oldWidget.initialQuestion) {
+      _handOver(widget.initialQuestion);
+    }
+  }
+
+  /// Sends a question handed over through the route, once, after Avo is
+  /// ready and the first frame is on screen.
+  void _handOver(String? question) {
+    final q = _initialQuestion.take(question);
+    if (q == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _ready;
+      if (!mounted) return;
+      _controller.text = q;
+      await _send();
+    });
   }
 
   void _shuffleChips() {
@@ -356,10 +388,8 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
     final view = View.of(context);
     final rawKbd = view.viewInsets.bottom / view.devicePixelRatio;
     final kbdOpen = rawKbd > 0;
-    // Full-screen route (no navbar). Closed: hug the bottom edge so the
-    // composer corners run concentric with the iPhone display corners.
-    final inputPad =
-        kbdOpen ? 6.0 : max(MediaQuery.of(context).padding.bottom - 8.0, 12.0);
+    // Root of the Avo tab: closed, the composer floats above the tab bar.
+    final inputPad = kbdOpen ? 6.0 : ShellInsets.aboveTabBar(context);
 
     return Scaffold(
       backgroundColor: AppColors.background(context),
@@ -374,14 +404,6 @@ class _AvoChatScreenState extends ConsumerState<AvoChatScreen> {
               isTyping: _isTyping,
               isSubscribed: ref.watch(isSubscribedProvider),
               keyboardOpen: kbdOpen,
-              onBack: () {
-                HapticFeedback.lightImpact();
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/home');
-                }
-              },
               onNewChat: () {
                 HapticFeedback.mediumImpact();
                 AvoAssistantService.instance.resetChat();

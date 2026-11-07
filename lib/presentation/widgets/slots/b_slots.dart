@@ -61,6 +61,10 @@ export 'package:shoply/presentation/widgets/home_sections/home_sections.dart'
         homeSpendingHasContentProvider,
         homeWaterHasContentProvider;
 
+// Avo tab (Stufe 3): A's screens set where the person is.
+export 'package:shoply/presentation/providers/avo_screen_context_provider.dart'
+    show AvoScreenContext, avoScreenContextProvider;
+
 // Onboarding, settings, modules.
 export 'package:shoply/presentation/providers/app_flags_provider.dart'
     show offersAvailableProvider, offersRemoteEnabledProvider;

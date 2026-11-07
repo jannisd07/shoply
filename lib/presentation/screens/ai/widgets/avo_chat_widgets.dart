@@ -300,14 +300,13 @@ class _AvoTypingDotsState extends State<AvoTypingDots>
 }
 
 // ════════════════════════════════════════════════════════
-// HEADER — back, Avo avatar + status, premium badge, new chat
+// HEADER — Avo avatar + status, premium badge, new chat (tab root, no back)
 // ════════════════════════════════════════════════════════
 
 class AvoChatHeader extends StatelessWidget {
   final bool isTyping;
   final bool isSubscribed;
   final bool keyboardOpen;
-  final VoidCallback onBack;
   final VoidCallback onNewChat;
 
   const AvoChatHeader({
@@ -315,7 +314,6 @@ class AvoChatHeader extends StatelessWidget {
     required this.isTyping,
     required this.isSubscribed,
     required this.keyboardOpen,
-    required this.onBack,
     required this.onNewChat,
   });
 
@@ -327,15 +325,6 @@ class AvoChatHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 10, 16, 8),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: onBack,
-            child: _CircleIcon(
-              color: circleColor,
-              icon: Icons.arrow_back_ios_new_rounded,
-              size: 16,
-            ),
-          ),
-          const SizedBox(width: 10),
           Container(
             width: 38,
             height: 38,

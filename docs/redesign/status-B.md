@@ -5,7 +5,7 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 ## Stand
 
 2026-11-08: **Vorrang-Aufgaben aus `prompt-b-vorrang.md`:** Stufe 1 (Slot-Hüllen) und Stufe 2 (Home-Abschnitte) sind
-gepusht, Stufe 3 (Avo im Tab) folgt direkt. **A importiert nur `lib/presentation/widgets/slots/b_slots.dart`.**
+gepusht, Stufe 3 (Avo im Tab) ebenfalls. **A importiert nur `lib/presentation/widgets/slots/b_slots.dart`.**
 Danach geht es mit P0/P1 weiter (Edge Function `ai`, Claude-Client, Kategorisierung, Angebots-Logik, App-Start), parallel
 nativer Unterbau, Kalorien- und Wochenplan-Logik, Evals und Screen-Specs. Plan:
 [`docs/superpowers/plans/2026-11-07-teil-b.md`](../superpowers/plans/2026-11-07-teil-b.md).
@@ -67,6 +67,12 @@ nutzen beide direkt.
   `HomeWaterTile`, `HomeRecentTrips`, `HomeCookToday` mit je `home…HasContentProvider` (synchron, heute `false`),
   Datei `lib/presentation/widgets/home_sections/home_sections.dart`, über `b_slots.dart` exportiert, Test mit
   `layoutMatrix`. Die alten Home-Karten überführe bzw. lösche ich, sobald Home (A4) sie nicht mehr zeigt.
+- **Vorrang Stufe 3 – Avo im Tab** (Commit mit dieser Zeile): `/avo` ist die Wurzel des Avo-Tabs, kein `pop()` und
+  kein Zurück-Knopf mehr, die Eingabe sitzt über der Tab-Bar (`ShellInsets.aboveTabBar`). `buildAvoRoot` liest
+  `?q=` und schickt die Frage genau einmal (`AvoInitialQuestion`, getestet). **`avoScreenContextProvider`** liegt in
+  `lib/presentation/providers/avo_screen_context_provider.dart` (`StateProvider<AvoScreenContext?>`,
+  `AvoScreenContext { String screen; String? listId; String? listName; }`), auch über `b_slots.dart` exportiert.
+  Bitte in den A-Screens setzen (Liste, Einkaufsmodus, Rezept, Home). Avo liest ihn ab dem B5-Umbau.
 - `claude/daily`: in Jannis' Account nicht vorhanden (siehe 07.11.), nichts zu pausieren.
 - Kalorien-Alias: `calorieTrackingEnabledProvider` folgt `AppModule.calories`; `.notifier.setEnabled` bleibt für die
   A-Aufrufer gültig und schreibt ins Modulsystem.
