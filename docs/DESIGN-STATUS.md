@@ -33,6 +33,9 @@ Vollbild, Komponenten-Blatt mit Tokens). Die Komponenten-Seite ist die Vorlage f
   Sparziel, **Kalorien heute** (Ring + Makros, "Mahlzeit hinzufügen" als Vollbild), Für-dich-Kacheln,
   Top-Listen, letzte Einkäufe, Rezeptempfehlung.
 - **Widgets:** Startbildschirm (Gespart, Liste, Wocheneinkauf, Für dich, Kalorien) und Sperrbildschirm.
+- **Avo** ist immer die echte 3D-Figur aus `assets/avo/` (`avo_waving`, `avo_excited`, `avo_thinking`,
+  `avo_celebrating`), nie eine gezeichnete Avocado. Pose nach Anlass: winken = Begrüßung, freuen = gute
+  Nachricht/Ersparnis, nachdenken = Tipp, feiern = Ziel erreicht. Ausnahme: Avo-Tab-Icon (Funkeln).
 
 ## Die drei Stile im Code
 
