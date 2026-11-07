@@ -91,6 +91,9 @@ class ShoppingListModel extends Equatable {
       'updated_at': updatedAt.toIso8601String(),
       'last_accessed_at': lastAccessedAt?.toIso8601String(),
       'order_index': orderIndex,
+      // Not DB columns: kept so the offline cache restores list counts.
+      'item_count': itemCount,
+      'unchecked_count': uncheckedCount,
       'background_gradient': backgroundGradient,
       'background_type': backgroundType,
       'background_value': backgroundValue,
