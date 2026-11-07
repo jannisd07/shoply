@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/presentation/screens/auth/welcome_screen.dart';
 import 'package:shoply/presentation/screens/calories/calories_screen.dart';
 import 'package:shoply/presentation/screens/home/home_screen.dart';
@@ -211,7 +212,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                     name: 'recipe-detail',
                     builder: (context, state) {
                       final recipeId = state.pathParameters['recipeId']!;
-                      return RecipeDetailScreen(recipeId: recipeId);
+                      final extra = state.extra;
+                      return RecipeDetailScreen(
+                        recipeId: recipeId,
+                        initialRecipe: extra is Recipe ? extra : null,
+                      );
                     },
                   ),
                 ],
@@ -336,7 +341,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'shared-recipe',
         builder: (context, state) {
           final recipeId = state.pathParameters['recipeId']!;
-          return RecipeDetailScreen(recipeId: recipeId);
+          final extra = state.extra;
+          return RecipeDetailScreen(
+            recipeId: recipeId,
+            initialRecipe: extra is Recipe ? extra : null,
+          );
         },
       ),
       // Deep link route for shared lists (accessible without auth context)

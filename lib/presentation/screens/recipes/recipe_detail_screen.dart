@@ -1,4 +1,5 @@
-import 'dart:ui';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,8 +10,11 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
 import 'package:shoply/core/constants/app_text_styles.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/models/dietary_preference.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
+import 'package:shoply/data/models/user_model.dart';
+import 'package:shoply/presentation/screens/recipes/recipe_user_diet.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/author_avatar.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/servings_stepper.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/ingredient_substitution_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
@@ -35,9 +39,14 @@ import 'package:shoply/presentation/screens/subscription/subscription_screen.dar
 class RecipeDetailScreen extends ConsumerStatefulWidget {
   final String recipeId;
 
+  /// The recipe as already loaded by the list the user tapped, if any. It is
+  /// shown immediately and refreshed in the background; deep links pass none.
+  final Recipe? initialRecipe;
+
   const RecipeDetailScreen({
     super.key,
     required this.recipeId,
+    this.initialRecipe,
   });
 
   @override
@@ -49,140 +58,74 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   Recipe? _recipe;
   bool _isLoading = true;
   int _servings = 1;
-  bool _showAdaptedIngredients = true; // Toggle für angepasste Zutaten
-  
+  bool _showAdaptedIngredients = true;
+
   @override
   void initState() {
     super.initState();
-    _loadRecipe();
+    final initial = widget.initialRecipe;
+    if (initial != null && initial.id == widget.recipeId) {
+      _recipe = initial;
+      _servings = initial.defaultServings;
+      _isLoading = false;
+      _loadRecipe(silent: true);
+    } else {
+      _loadRecipe();
+    }
   }
 
-  Future<void> _loadRecipe() async {
-    setState(() => _isLoading = true);
+  /// Fetches the full recipe. With [silent] the current content stays on
+  /// screen while loading (background refresh), and servings are kept.
+  Future<void> _loadRecipe({bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
     try {
-      print('🔍 [RECIPE_DETAIL] Loading recipe with ID: ${widget.recipeId}');
-      print('📏 [RECIPE_DETAIL] ID type: ${widget.recipeId.runtimeType}');
-      print('📐 [RECIPE_DETAIL] ID length: ${widget.recipeId.length}');
-      
       final recipe = await _recipeService.getRecipeById(widget.recipeId);
-      
-      print('✅ [RECIPE_DETAIL] Recipe loaded successfully: ${recipe.name}');
-      print('👤 [RECIPE_DETAIL] Author: ${recipe.authorName} (${recipe.authorId})');
-      print('🖼️ [RECIPE_DETAIL] Image URL: ${recipe.imageUrl}');
-      
-      if (mounted) {
-        setState(() {
-          _recipe = recipe;
-          _servings = recipe.defaultServings;
-          _isLoading = false;
-        });
-      }
-    } catch (e, stackTrace) {
-      print('❌ [RECIPE_DETAIL] Error loading recipe: $e');
-      print('📋 [RECIPE_DETAIL] Recipe ID was: ${widget.recipeId}');
-      print('📚 [RECIPE_DETAIL] Stack trace: $stackTrace');
-      
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _recipe = null; // Explicitly set to null to show error
-        });
-        
-        // Show more detailed error
-        final errorMessage = e.toString().contains('Recipe not found') 
-            ? 'Recipe not found. It may have been deleted or the link is invalid.'
-            : 'Error loading recipe: $e';
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$errorMessage\nID: ${widget.recipeId}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Retry',
-              textColor: Colors.white,
-              onPressed: _loadRecipe,
-            ),
+      if (!mounted) return;
+      setState(() {
+        if (!silent || _recipe == null) _servings = recipe.defaultServings;
+        _recipe = recipe;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('❌ [RECIPE_DETAIL] Error loading recipe ${widget.recipeId}: $e');
+      if (!mounted) return;
+      // A failed background refresh keeps the recipe we already show.
+      if (silent && _recipe != null) return;
+      setState(() {
+        _isLoading = false;
+        _recipe = null;
+      });
+      final notFound = e.toString().contains('Recipe not found');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr(
+              notFound ? 'recipe_not_found_detail' : 'recipe_load_failed')),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: context.tr('retry'),
+            textColor: Colors.white,
+            onPressed: _loadRecipe,
           ),
-        );
-      }
+        ),
+      );
     }
   }
 
-  List<Ingredient> get _adjustedIngredients {
+  /// The recipe's ingredients scaled to the current servings, each with the
+  /// substitution info for [user]'s diet/allergies (empty profile if null).
+  List<IngredientWithSubstitution> _ingredientsWithInfo(UserModel? user) {
     if (_recipe == null) return [];
-    
+
     final baseIngredients = _recipe!.ingredients
         .map((ing) => ing.adjustForServings(_recipe!.defaultServings, _servings))
         .toList();
-    
-    // Wenn Toggle aktiviert ist, versuche Anpassung basierend auf User-Präferenzen
-    if (_showAdaptedIngredients) {
-      final user = ref.watch(currentUserProvider).value;
-      if (user != null && (user.allergies.isNotEmpty || user.dietPreferences.isNotEmpty)) {
-        // Konvertiere User-Präferenzen zu Enums
-        final allergies = user.allergies
-            .map((a) => AllergyType.values.firstWhere(
-                  (type) => type.name == a,
-                  orElse: () => AllergyType.gluten,
-                ))
-            .toList();
-        
-        final diets = user.dietPreferences
-            .map((d) => DietType.values.firstWhere(
-                  (type) => type.name == d,
-                  orElse: () => DietType.none,
-                ))
-            .toList();
-        
-        // Hole angepasste Zutaten mit Substitutionen
-        final withSubstitutions = IngredientSubstitutionService.getIngredientsWithSubstitutions(
-          ingredients: baseIngredients,
-          allergies: allergies,
-          diets: diets,
-        );
-        
-        // Nutze angepasste Zutat falls Substitution vorhanden
-        return withSubstitutions.map((ws) => ws.adaptedIngredient).toList();
-      }
-    }
-    
-    return baseIngredients;
-  }
-  
-  List<IngredientWithSubstitution> get _ingredientsWithInfo {
-    if (_recipe == null) return [];
-    
-    final baseIngredients = _recipe!.ingredients
-        .map((ing) => ing.adjustForServings(_recipe!.defaultServings, _servings))
-        .toList();
-    
-    final user = ref.watch(currentUserProvider).value;
-    
-    // Get user preferences (empty lists if user is null)
-    final allergies = user?.allergies
-        .map((a) => AllergyType.values.firstWhere(
-              (type) => type.name == a,
-              orElse: () => AllergyType.gluten,
-            ))
-        .toList() ?? [];
-    
-    final diets = user?.dietPreferences
-        .map((d) => DietType.values.firstWhere(
-              (type) => type.name == d,
-              orElse: () => DietType.none,
-            ))
-        .toList() ?? [];
-    
-    print('🔍 [RECIPE_DETAIL] Analyzing ingredients for user');
-    print('   - User allergies: $allergies');
-    print('   - User diets: $diets');
-    
-    // Always call substitution service to get diet flags
+
+    // Always call the substitution service to get diet flags.
     return IngredientSubstitutionService.getIngredientsWithSubstitutions(
       ingredients: baseIngredients,
-      allergies: allergies,
-      diets: diets,
+      allergies: user?.allergyTypes ?? const [],
+      diets: user?.dietTypes ?? const [],
     );
   }
 
@@ -216,7 +159,10 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     final textColor = AppColors.textPrimary(context);
     final textSecondary = isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
     final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
-    
+    final user = ref.watch(currentUserProvider).value;
+    final isOwnRecipe = user != null && _recipe!.authorId == user.id;
+    final ingredientsWithInfo = _ingredientsWithInfo(user);
+
     return Scaffold(
       backgroundColor: scaffoldBg,
       body: CustomScrollView(
@@ -255,6 +201,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                   CachedNetworkImage(
                     imageUrl: _recipe!.imageUrl,
                     fit: BoxFit.cover,
+                    memCacheWidth: (MediaQuery.sizeOf(context).width *
+                            MediaQuery.devicePixelRatioOf(context))
+                        .round(),
                     placeholder: (context, url) => Container(
                       color: AppColors.recipeInput(context),
                       child: const Center(child: CupertinoActivityIndicator()),
@@ -303,40 +252,18 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                             },
                             child: Row(
                               children: [
-                                // Author avatar
-                                if (_recipe!.authorAvatarUrl != null && _recipe!.authorAvatarUrl!.isNotEmpty)
-                                  Container(
-                                    width: 22,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white54, width: 1),
-                                      image: DecorationImage(
-                                        image: NetworkImage(_recipe!.authorAvatarUrl!),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Container(
-                                    width: 22,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.white24,
-                                      border: Border.all(color: Colors.white54, width: 1),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        _recipe!.authorName.isNotEmpty ? _recipe!.authorName[0].toUpperCase() : '?',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
+                                AuthorAvatar(
+                                  name: _recipe!.authorName,
+                                  avatarUrl: _recipe!.authorAvatarUrl,
+                                  size: 22,
+                                  backgroundColor: Colors.white24,
+                                  border: Border.all(color: Colors.white54, width: 1),
+                                  initialStyle: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
                                   ),
+                                ),
                                 const SizedBox(width: 6),
                                 Text(
                                   _recipe!.authorName,
@@ -354,66 +281,49 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
               ),
             ),
             actions: [
-              // Delete button (only for own recipes)
-              Consumer(
-                builder: (context, ref, _) {
-                  final currentUser = ref.watch(currentUserProvider).value;
-                  final isOwnRecipe = currentUser != null && _recipe?.authorId == currentUser.id;
-                  
-                  if (!isOwnRecipe) return const SizedBox.shrink();
-                  
-                  return Container(
-                    margin: const EdgeInsets.only(right: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.8),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
-                      onPressed: () => _showDeleteConfirmation(),
-                    ),
-                  );
-                },
-              ),
-              // Edit button (only for own recipes) or Bookmark button (for others)
-              Consumer(
-                builder: (context, ref, _) {
-                  final currentUser = ref.watch(currentUserProvider).value;
-                  final isOwnRecipe = currentUser != null && _recipe?.authorId == currentUser.id;
-                  
-                  if (isOwnRecipe) {
-                    // Edit button for own recipes
+              if (isOwnRecipe) ...[
+                // Delete + edit for own recipes
+                Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
+                    onPressed: _showDeleteConfirmation,
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.recipeAccentColor(context).withValues(alpha: 0.9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.edit_rounded, color: Colors.white, size: 22),
+                    onPressed: _editRecipe,
+                  ),
+                ),
+              ] else
+                // Bookmark for other users' recipes
+                Consumer(
+                  builder: (context, ref, _) {
+                    final isSaved = ref.watch(isRecipeSavedProvider(widget.recipeId));
                     return Container(
                       margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.recipeAccentColor(context).withOpacity(0.9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.edit_rounded, color: Colors.white, size: 22),
-                        onPressed: () {
-                          context.push('/recipes/add', extra: {'recipeId': widget.recipeId});
-                        },
-                      ),
-                    );
-                  }
-                  
-                  // Bookmark button for other users' recipes
-                  final isSaved = ref.watch(isRecipeSavedProvider(widget.recipeId));
-                  return Container(
-                    margin: const EdgeInsets.only(right: 4),
-                    // Glass while unsaved; once saved it becomes a solid
-                    // white pill so the active state is unmistakable —
-                    // translucency reads as "off" at a glance.
-                    child: AdaptiveGlass(
-                      isCircle: true,
-                      opaqueColor: isSaved ? Colors.white : Colors.black54,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: isSaved ? Colors.white : Colors.transparent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
+                      // Glass while unsaved; once saved it becomes a solid
+                      // white pill so the active state is unmistakable —
+                      // translucency reads as "off" at a glance.
+                      child: AdaptiveGlass(
+                        isCircle: true,
+                        opaqueColor: isSaved ? Colors.white : Colors.black54,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: isSaved ? Colors.white : Colors.transparent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
                             icon: Icon(
                               isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
                               color: isSaved ? Colors.black : Colors.white,
@@ -423,7 +333,8 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                               ref.read(savedRecipesProvider.notifier).toggleSave(widget.recipeId);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(isSaved ? 'Recipe unsaved' : 'Recipe saved'),
+                                  content: Text(context.tr(
+                                      isSaved ? 'recipe_unsaved_toast' : 'recipe_saved_toast')),
                                   duration: const Duration(seconds: 2),
                                 ),
                               );
@@ -431,9 +342,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                           ),
                         ),
                       ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
               Container(
                 margin: const EdgeInsets.only(right: 8),
                 child: AdaptiveGlass(
@@ -464,16 +375,16 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                   _QuickInfoItem(
                     icon: Icons.schedule_rounded,
                     value: '${_recipe!.totalTimeMinutes}',
-                    label: 'min total',
-                    color: textSecondary, // Changed from recipeStepColor
+                    label: context.tr('recipe_min_total'),
+                    color: textSecondary,
                   ),
                   Container(width: 1, height: 40, color: borderColor),
                   _QuickInfoItem(
                     icon: Icons.restaurant_rounded,
                     value: '$_servings',
-                    label: 'servings',
-                    color: textSecondary, // Changed from recipeAccentColor
-                    onTap: () => _showServingsDialog(),
+                    label: context.tr('portions'),
+                    color: textSecondary,
+                    onTap: _showServingsDialog,
                   ),
                   Container(width: 1, height: 40, color: borderColor),
                   _QuickInfoItem(
@@ -560,28 +471,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                     averageRating: _recipe!.averageRating,
                     ratingCount: _recipe!.ratingCount,
                     userRating: _recipe!.userRating,
-                    onRate: (rating) async {
-                      if (_recipe == null) return;
-                      final previousRating = _recipe!.userRating;
-                      final newRating = rating.toInt();
-                      setState(() {
-                        final newAverageRating = previousRating == null
-                            ? ((_recipe!.averageRating * _recipe!.ratingCount) + newRating) / (_recipe!.ratingCount + 1)
-                            : ((_recipe!.averageRating * _recipe!.ratingCount) - previousRating + newRating) / _recipe!.ratingCount;
-                        final newRatingCount = previousRating == null ? _recipe!.ratingCount + 1 : _recipe!.ratingCount;
-                        _recipe = _recipe!.copyWith(averageRating: newAverageRating, ratingCount: newRatingCount, userRating: newRating);
-                      });
-                      await _recipeService.rateRecipe(_recipe!.id, newRating);
-                      
-                      // Refresh recipe data across the app so main page shows updated rating
-                      refreshRecipeData(ref);
-                      
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(previousRating == null ? '✅ ${context.tr('rating_submitted')}' : '✅ ${context.tr('rating_updated')}'), duration: const Duration(seconds: 2)),
-                        );
-                      }
-                    },
+                    onRate: _rate,
                   ),
                 ],
               ),
@@ -610,9 +500,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                       Text(context.tr('ingredients'), style: AppTextStyles.h3.copyWith(color: textColor)),
                       const Spacer(),
                       // Toggle for adapted ingredients
-                      if (ref.watch(currentUserProvider).value != null &&
-                          (ref.watch(currentUserProvider).value!.allergies.isNotEmpty ||
-                           ref.watch(currentUserProvider).value!.dietPreferences.isNotEmpty))
+                      if (user != null && user.hasDietProfile)
                         Row(
                           children: [
                             Text(
@@ -642,7 +530,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                   const SizedBox(height: 12),
                   
                   // Zutaten mit Substitutions-Info
-                  ..._ingredientsWithInfo.map((ingredientInfo) {
+                  ...ingredientsWithInfo.map((ingredientInfo) {
                     final isSubstituted = ingredientInfo.needsSubstitution && 
                                          ingredientInfo.bestSubstitute != null &&
                                          _showAdaptedIngredients;
@@ -673,11 +561,11 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                                         children: [
                                           if (isSubstituted) ...[
                                             TextSpan(
-                                              text: '${ingredientInfo.adaptedIngredient.displayText}',
+                                              text: ingredientInfo.adaptedIngredient.displayText,
                                               style: const TextStyle(fontWeight: FontWeight.bold),
                                             ),
                                             TextSpan(
-                                              text: ' (statt ${ingredientInfo.original.name})',
+                                              text: ' (${context.tr('ingredient_instead_of', params: {'name': ingredientInfo.original.name})})',
                                               style: TextStyle(
                                                 color: textSecondary,
                                                 fontSize: 12,
@@ -727,7 +615,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _addToShoppingList,
+                      onPressed: () => _addToShoppingList(ingredientsWithInfo),
                       icon: const Icon(Icons.add_shopping_cart),
                       label: Text(context.tr('add_to_shopping_list')),
                       style: ElevatedButton.styleFrom(
@@ -820,7 +708,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
 
           // Bottom padding
           SliverToBoxAdapter(
-            child: SizedBox(height: 100 + MediaQuery.of(context).padding.bottom),
+            child: SizedBox(height: 100 + MediaQuery.paddingOf(context).bottom),
           ),
         ],
       ),
@@ -832,7 +720,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     final url = _recipe!.sourceUrl!;
     final sourceLabel = _recipe!.sourceName == 'wikibooks'
         ? 'Wikibooks Cookbook'
-        : 'external source';
+        : context.tr('recipe_source_external');
     final licenseLabel =
         _recipe!.sourceName == 'wikibooks' ? 'CC BY-SA 4.0' : null;
     return Padding(
@@ -873,7 +761,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                           color: AppColors.textTertiary(context),
                         ),
                         children: [
-                          const TextSpan(text: 'Source: '),
+                          TextSpan(text: context.tr('recipe_source_label')),
                           TextSpan(
                             text: sourceLabel,
                             style: TextStyle(
@@ -905,72 +793,105 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     return count.toString();
   }
 
+  /// Servings stepper dialog; stays open while adjusting.
   void _showServingsDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.tr('adjust_servings')),
-        content: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.remove_circle_outline, size: 32),
-              onPressed: _servings > 1 ? () {
-                setState(() => _servings--);
-                Navigator.pop(context);
-              } : null,
-            ),
-            const SizedBox(width: 16),
-            Text('$_servings', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-            const SizedBox(width: 16),
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline, size: 32),
-              onPressed: () {
-                setState(() => _servings++);
-                Navigator.pop(context);
-              },
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(dialogContext.tr('adjust_servings')),
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ServingsStepper(
+                value: _servings,
+                valueFontSize: 32,
+                onChanged: (value) {
+                  setState(() => _servings = value);
+                  setDialogState(() {});
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(dialogContext.tr('done')),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(context.tr('done'))),
-        ],
       ),
     );
   }
 
-  // Like functionality temporarily disabled - will be replaced with favorites system
-  // Future<void> _toggleLike() async {
-  //   try {
-  //     await _recipeService.toggleLike(_recipe!.id, false);
-  //     _loadRecipe();
-  //   } catch (e) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error: $e')),
-  //       );
-  //     }
-  //   }
-  // }
+  /// Optimistically shows the new rating, then saves it; reverts and tells
+  /// the user when saving fails.
+  Future<void> _rate(double rating) async {
+    final before = _recipe;
+    if (before == null) return;
+    final previousRating = before.userRating;
+    final newRating = rating.toInt();
+    final count = before.ratingCount;
+    final total = before.averageRating * count;
+    setState(() {
+      _recipe = before.copyWith(
+        averageRating: previousRating == null
+            ? (total + newRating) / (count + 1)
+            : (total - previousRating + newRating) / max(1, count),
+        ratingCount: previousRating == null ? count + 1 : count,
+        userRating: newRating,
+      );
+    });
+
+    try {
+      await _recipeService.rateRecipe(before.id, newRating);
+      if (!mounted) return;
+      // Refresh recipe data across the app so lists show the new rating.
+      refreshRecipeData(ref);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '✅ ${context.tr(previousRating == null ? 'rating_submitted' : 'rating_updated')}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ [RECIPE_DETAIL] Failed to save rating: $e');
+      if (!mounted) return;
+      setState(() => _recipe = before);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('rating_save_failed'))),
+      );
+    }
+  }
+
+  /// Opens the editor; reloads this page when the recipe was saved.
+  Future<void> _editRecipe() async {
+    final saved = await context.push<bool>(
+      '/recipes/add',
+      extra: {'recipeId': widget.recipeId},
+    );
+    if (saved == true && mounted) _loadRecipe(silent: true);
+  }
 
   void _showDeleteConfirmation() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rezept löschen'),
-        content: const Text('Möchtest du dieses Rezept wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.tr('delete_recipe_title')),
+        content: Text(dialogContext.tr('delete_recipe_confirm')),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Abbrechen'),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(dialogContext.tr('cancel')),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               await _deleteRecipe();
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Löschen'),
+            child: Text(dialogContext.tr('delete')),
           ),
         ],
       ),
@@ -979,24 +900,22 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
 
   Future<void> _deleteRecipe() async {
     setState(() => _isLoading = true);
-    
+
     try {
       await _recipeService.deleteRecipe(widget.recipeId);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rezept wurde gelöscht')),
-        );
-        // Navigate to recipes page
-        context.go('/recipes');
-      }
+      if (!mounted) return;
+      refreshRecipeData(ref);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('recipe_deleted'))),
+      );
+      context.go('/recipes');
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Löschen: $e')),
-        );
-      }
+      debugPrint('❌ [RECIPE_DETAIL] Failed to delete recipe: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('recipe_delete_failed'))),
+      );
     }
   }
 
@@ -1012,10 +931,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     );
   }
 
-  void _addToShoppingList() {
-    // Get ingredients with substitution info for the current servings
-    final ingredientsWithInfo = _ingredientsWithInfo;
-
+  /// [ingredientsWithInfo] are already scaled to the current servings.
+  Future<void> _addToShoppingList(
+      List<IngredientWithSubstitution> ingredientsWithInfo) async {
     // Current offers already fetched for this recipe (if any) — added
     // ingredients carry their offer price into the list's total (Feature 1).
     final offersResult =
@@ -1027,7 +945,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     };
 
     // Show dialog centered on screen
-    showDialog(
+    final result = await showDialog<AddIngredientsResult>(
       context: context,
       builder: (context) => Center(
         child: Material(
@@ -1047,7 +965,10 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
             child: SelectListBottomSheet(
               ingredientsWithInfo: ingredientsWithInfo,
               defaultServings: _servings,
-              recipeDefaultServings: _recipe!.defaultServings,
+              // The ingredients are already scaled to _servings, so the
+              // sheet must scale relative to that, not to the recipe's
+              // default (that scaled the amounts twice).
+              recipeDefaultServings: _servings,
               useAdaptedIngredients: _showAdaptedIngredients,
               ingredientOffers: ingredientOffers,
             ),
@@ -1055,6 +976,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
         ),
       ),
     );
+    if (result != null && mounted) showAddIngredientsResult(context, result);
   }
 
   Widget _buildCookingModeButton(BuildContext context) {
@@ -1192,7 +1114,7 @@ class _QuickInfoItem extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                'tap to adjust',
+                context.tr('tap_to_adjust'),
                 style: TextStyle(fontSize: 9, color: color),
               ),
             ),

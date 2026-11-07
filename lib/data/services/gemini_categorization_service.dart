@@ -17,7 +17,7 @@ class GeminiCategorizationService {
   GenerativeModel? _model;
   final Map<String, String> _categoryCache = {};
   DateTime? _lastApiCall;
-  static const _rateLimitMs = 1000; // 1 second between API calls
+  static const _rateLimitMs = 1100; // CLAUDE.md: never less than 1100ms between calls
 
   /// Initialize Gemini model
   Future<void> initialize(String apiKey) async {
