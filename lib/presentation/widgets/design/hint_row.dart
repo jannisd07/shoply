@@ -1,0 +1,283 @@
+import 'package:flutter/physics.dart';
+import 'package:flutter/widgets.dart';
+
+import 'package:shoply/core/design/design.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
+
+/// Card padding (D2 hint card: 12 top and bottom, 14 at the sides).
+const EdgeInsetsDirectional _kPadding = EdgeInsetsDirectional.fromSTEB(
+  14, // D2
+  AvoSpacing.m,
+  14, // D2
+  AvoSpacing.m,
+);
+
+/// Gap between the leading widget and the text (D2).
+const double _kGap = 10; // D2
+
+/// Soft card shadow (D2 `.card`: 0 1px 2px rgba(0,0,0,.04)).
+const double _kShadowAlpha = 0.04; // D2
+const double _kShadowBlur = 2; // D2
+const Offset _kShadowOffset = Offset(0, 1); // D2
+
+/// Close glyph: two strokes in a 12 pt square.
+const double _kCloseGlyph = 12;
+const double _kCloseStroke = 1.8;
+
+/// Pressed opacity next to [AvoMotion.pressedScale] (Konzept 00 §12.20).
+const double _kPressedOpacity = 0.9;
+
+/// A compact hint card (Konzept 00 §12.12, optics D2-FuerDich "Tipp von Avo"):
+/// white surface, radius 20, 15/20 text, optional leading figure or icon, an
+/// optional action and an optional close button.
+///
+/// With [onTap] the whole card is one button (it shrinks while pressed) and
+/// [actionLabel] is shown as a tinted link below the text; without [onTap]
+/// the label is not shown. [onDismiss] adds a close button with a 44 pt
+/// target in the top corner. From AX1 on the leading widget sits above the
+/// text. The card fills the width it gets (give it a bounded width, as a
+/// column or list does). Content (savings, store suggestion, Pro offer) comes
+/// from the caller; show at most two hints per screen.
+class HintRow extends StatelessWidget {
+  /// Creates a hint.
+  const HintRow({
+    super.key,
+    required this.text,
+    this.leading,
+    this.actionLabel,
+    this.onTap,
+    this.onDismiss,
+    this.dismissLabel,
+  });
+
+  /// The hint in one or two sentences.
+  final String text;
+
+  /// Optional icon tile or small `AvoFigure` before the text.
+  final Widget? leading;
+
+  /// Tinted link text below [text] ("Rezepte mit Avocado"); needs [onTap].
+  final String? actionLabel;
+
+  /// Makes the whole card a button.
+  final VoidCallback? onTap;
+
+  /// Shows a close button that calls this.
+  final VoidCallback? onDismiss;
+
+  /// VoiceOver label of the close button; defaults to `common_close`.
+  final String? dismissLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final tap = onTap;
+    final dismiss = onDismiss;
+    final action = tap != null ? actionLabel : null;
+    final lead = leading;
+
+    final textBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(text, style: context.text(AvoTextStyle.subhead)),
+        if (action != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AvoSpacing.xs),
+            child: Text(
+              action,
+              style: context.text(
+                AvoTextStyle.subhead,
+                color: colors.tint,
+                weight: FontWeight.w600,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    final Widget content;
+    if (lead == null) {
+      content = textBlock;
+    } else if (context.isAccessibilityText) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          lead,
+          const SizedBox(height: AvoSpacing.s),
+          textBlock,
+        ],
+      );
+    } else {
+      content = Row(
+        children: [
+          lead,
+          const SizedBox(width: _kGap),
+          Expanded(child: textBlock),
+        ],
+      );
+    }
+
+    final padding = dismiss == null
+        ? _kPadding
+        : _kPadding.copyWith(end: AvoSizes.hitTarget);
+
+    Widget card = DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AvoRadii.card),
+        boxShadow: [
+          BoxShadow(
+            color: colors.shadow.withValues(alpha: _kShadowAlpha),
+            offset: _kShadowOffset,
+            blurRadius: _kShadowBlur,
+          ),
+        ],
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minHeight: AvoSizes.hitTarget,
+          minWidth: double.infinity,
+        ),
+        child: Padding(padding: padding, child: content),
+      ),
+    );
+
+    card = Semantics(
+      container: true,
+      button: tap != null,
+      label: [text, ?action].join(', '),
+      onTap: tap,
+      child: ExcludeSemantics(
+        child: tap == null ? card : _PressScale(onTap: tap, child: card),
+      ),
+    );
+
+    if (dismiss == null) return card;
+    return Stack(
+      children: [
+        card,
+        PositionedDirectional(
+          top: 0,
+          end: 0,
+          child: Semantics(
+            container: true,
+            button: true,
+            label: dismissLabel ?? context.tr('common_close'),
+            onTap: dismiss,
+            child: ExcludeSemantics(
+              child: _PressScale(
+                onTap: dismiss,
+                child: SizedBox.square(
+                  dimension: AvoSizes.hitTarget,
+                  child: Center(
+                    child: CustomPaint(
+                      size: const Size.square(_kCloseGlyph),
+                      painter: _ClosePainter(colors.secondaryLabel),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ClosePainter extends CustomPainter {
+  const _ClosePainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _kCloseStroke
+      ..strokeCap = StrokeCap.round;
+    canvas
+      ..drawLine(Offset.zero, Offset(size.width, size.height), paint)
+      ..drawLine(Offset(size.width, 0), Offset(0, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(_ClosePainter old) => old.color != color;
+}
+
+/// Shrinks its child to [AvoMotion.pressedScale] and 90 % opacity the moment
+/// it is touched, on an interruptible spring. Reduce Motion: no scaling, only
+/// the dimming.
+class _PressScale extends StatefulWidget {
+  const _PressScale({required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<_PressScale>
+    with SingleTickerProviderStateMixin {
+  /// 0 = resting, 1 = fully pressed. Created eagerly: dispose must never be
+  /// the first access (a lazy controller would look up TickerMode there).
+  late final AnimationController _press;
+
+  @override
+  void initState() {
+    super.initState();
+    _press = AnimationController.unbounded(vsync: this);
+  }
+
+  /// Read in build: [_to] also runs from onTapCancel while the tree is being
+  /// torn down, when the context may no longer be used.
+  bool _reduceMotion = false;
+
+  void _to(double target) {
+    if (!mounted) return;
+    if (_reduceMotion) {
+      _press
+        ..stop()
+        ..value = target;
+      return;
+    }
+    _press.animateWith(
+      SpringSimulation(AvoMotion.quick, _press.value, target, _press.velocity),
+    );
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = _reduceMotion = context.reduceMotion;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTapDown: (_) => _to(1),
+      onTapUp: (_) => _to(0),
+      onTapCancel: () => _to(0),
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _press,
+        builder: (context, child) {
+          final t = _press.value.clamp(0.0, 1.0);
+          final scale = reduce ? 1.0 : 1 - (1 - AvoMotion.pressedScale) * t;
+          return Opacity(
+            opacity: 1 - (1 - _kPressedOpacity) * t,
+            child: Transform.scale(scale: scale, child: child),
+          );
+        },
+        child: widget.child,
+      ),
+    );
+  }
+}
