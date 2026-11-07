@@ -7,7 +7,6 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shoply/core/localization/app_localizations.dart';
 import 'package:shoply/core/theme/app_theme.dart';
-import 'package:shoply/core/widgets/update_dialog.dart';
 import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
@@ -33,6 +32,7 @@ class AvoApp extends ConsumerStatefulWidget {
 
 class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
   late final StreamSubscription<AuthState> _authSubscription;
+  String? _accountUserId = SupabaseService.instance.currentUser?.id;
 
   @override
   void initState() {
@@ -62,6 +62,11 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
       if (data.event == AuthChangeEvent.initialSession ||
           data.event == AuthChangeEvent.signedIn ||
           data.event == AuthChangeEvent.signedOut) {
+        // Providers were first built for the session restored before
+        // runApp, so only an actual account switch needs a refetch.
+        final userId = data.session?.user.id;
+        if (userId == _accountUserId) return;
+        _accountUserId = userId;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _refreshAccountScopedState();
         });
@@ -120,10 +125,7 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
           .read(itemsNotifierProvider(target.id).notifier)
           .addItem(name: itemName, quantity: quantity ?? 1.0);
 
-      ref.read(routerProvider).go(
-            Uri(path: '/list/${target.id}', queryParameters: {'name': target.name})
-                .toString(),
-          );
+      _openList(target);
       debugPrint('✅ [SIRI] Added "$itemName" to "${target.name}"');
     } catch (e) {
       debugPrint('❌ [SIRI] Failed to add "$itemName" to "$listName": $e');
@@ -138,14 +140,23 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
       final target = _findListByName(lists, listName) ??
           await ref.read(listsNotifierProvider.notifier).createList(listName);
 
-      ref.read(routerProvider).go(
-            Uri(path: '/list/${target.id}', queryParameters: {'name': target.name})
-                .toString(),
-          );
+      _openList(target);
       debugPrint('✅ [SIRI] Opened list "${target.name}"');
     } catch (e) {
       debugPrint('❌ [SIRI] Failed to create list "$listName": $e');
     }
+  }
+
+  /// Opens [list] on top of the home tab (instead of replacing the whole
+  /// stack with the public `/list/:id` share route), so back/swipe-back
+  /// returns to home like every other list entry point.
+  void _openList(ShoppingListModel list) {
+    final router = ref.read(routerProvider);
+    router.go('/home');
+    router.push(
+      Uri(path: '/lists/${list.id}', queryParameters: {'name': list.name})
+          .toString(),
+    );
   }
 
   ShoppingListModel? _findListByName(List<ShoppingListModel> lists, String name) {
@@ -194,9 +205,6 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          showUpdateDialogIfNeeded(context);
-        });
         // Nothing in the app ever declared a status bar style, so iOS kept
         // whatever was set last — which left the clock and the Wi-Fi/battery
         // icons drawn in white on the light list background, effectively

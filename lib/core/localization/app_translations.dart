@@ -196,10 +196,7 @@ class AppTranslations {
     'no_lists_available': 'No lists available',
     
     // What's New
-    'whats_new_title': 'What\'s New',
-    'whats_new_subtitle': 'Check out the latest features',
     'get_started': 'Get Started',
-    'for_internal_testers': 'For Internal Testers',
 
     // Paper auth & onboarding
     'welcome_kicker': 'Welcome to Shoply',
@@ -1227,10 +1224,7 @@ class AppTranslations {
     'no_lists_available': 'Keine Listen verfügbar',
     
     // What's New
-    'whats_new_title': 'Was ist neu',
-    'whats_new_subtitle': 'Entdecke die neuesten Funktionen',
     'get_started': 'Los geht\'s',
-    'for_internal_testers': 'Für interne Tester',
 
     // Paper auth & onboarding
     'welcome_kicker': 'Willkommen bei Shoply',
