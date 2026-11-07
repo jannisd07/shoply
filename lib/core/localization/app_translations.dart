@@ -538,6 +538,16 @@ class AppTranslations {
     'avo_setting_updated': '{setting} updated',
     'avo_setting_failed': 'Couldn\'t change {setting}',
     'avo_unknown_error': 'Unknown error',
+    'onb_illus_produce': 'FRUIT & VEG',
+    'onb_illus_tomatoes': 'Tomatoes',
+    'onb_illus_avocados': 'Avocados',
+    'onb_illus_dairy': 'DAIRY',
+    'onb_illus_milk': 'Milk',
+    'onb_illus_yogurt': 'Yogurt',
+    'onb_illus_checked_off': 'Marie checked off "Milk"',
+    'onb_illus_recipe': 'Roast vegetables',
+    'onb_illus_recipe_meta': '35 min · vegetarian',
+    'onb_illus_swap': 'Cream → oat cream',
     // (end screens cleanup)
     
     // AI Recommendations
@@ -1630,6 +1640,16 @@ class AppTranslations {
     'avo_setting_updated': '{setting} aktualisiert',
     'avo_setting_failed': '{setting} konnte nicht geändert werden',
     'avo_unknown_error': 'Unbekannter Fehler',
+    'onb_illus_produce': 'OBST & GEMÜSE',
+    'onb_illus_tomatoes': 'Tomaten',
+    'onb_illus_avocados': 'Avocados',
+    'onb_illus_dairy': 'MILCHPRODUKTE',
+    'onb_illus_milk': 'Milch',
+    'onb_illus_yogurt': 'Joghurt',
+    'onb_illus_checked_off': 'Marie hat „Milch“ abgehakt',
+    'onb_illus_recipe': 'Ofengemüse',
+    'onb_illus_recipe_meta': '35 Min · vegetarisch',
+    'onb_illus_swap': 'Sahne → Hafercreme',
     // (end screens cleanup)
     
     // AI Recommendations

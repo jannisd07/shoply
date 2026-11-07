@@ -15,14 +15,20 @@ import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 /// Key used to track onboarding completion in SharedPreferences
 const String kOnboardingCompleteKey = 'onboarding_complete_v1';
 
+/// In-memory copy of the flag; the router asks on every navigation.
+bool? _onboardingCompleteCache;
+
 /// Check if onboarding has been completed
 Future<bool> hasCompletedOnboarding() async {
+  final cached = _onboardingCompleteCache;
+  if (cached != null) return cached;
   final prefs = await SharedPreferences.getInstance();
-  return prefs.getBool(kOnboardingCompleteKey) ?? false;
+  return _onboardingCompleteCache = prefs.getBool(kOnboardingCompleteKey) ?? false;
 }
 
 /// Mark onboarding as completed
 Future<void> markOnboardingComplete() async {
+  _onboardingCompleteCache = true;
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(kOnboardingCompleteKey, true);
 }
@@ -375,14 +381,14 @@ class _SortedListIllustration extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              _MiniKicker('OBST & GEMÜSE'),
-              _MiniItem('Tomaten', checked: true),
-              _MiniItem('Avocados'),
-              SizedBox(height: 8),
-              _MiniKicker('MILCHPRODUKTE'),
-              _MiniItem('Milch'),
-              _MiniItem('Joghurt'),
+            children: [
+              _MiniKicker(context.tr('onb_illus_produce')),
+              _MiniItem(context.tr('onb_illus_tomatoes'), checked: true),
+              _MiniItem(context.tr('onb_illus_avocados')),
+              const SizedBox(height: 8),
+              _MiniKicker(context.tr('onb_illus_dairy')),
+              _MiniItem(context.tr('onb_illus_milk')),
+              _MiniItem(context.tr('onb_illus_yogurt')),
             ],
           ),
         ),
@@ -426,9 +432,9 @@ class _SharedListIllustration extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              child: const Text(
-                'Marie hat „Milch" abgehakt',
-                style: TextStyle(fontSize: 13, color: PaperColors.ink),
+              child: Text(
+                context.tr('onb_illus_checked_off'),
+                style: const TextStyle(fontSize: 13, color: PaperColors.ink),
               ),
             ),
           ],
@@ -471,25 +477,25 @@ class _RecipesIllustration extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              Text('Ofengemüse', style: PaperTextStyles.serif(16)),
+              Text(context.tr('onb_illus_recipe'), style: PaperTextStyles.serif(16)),
               const SizedBox(height: 4),
-              const Text(
-                '35 Min · vegetarisch',
-                style: TextStyle(fontSize: 11, color: PaperColors.muted),
+              Text(
+                context.tr('onb_illus_recipe_meta'),
+                style: const TextStyle(fontSize: 11, color: PaperColors.muted),
               ),
               const SizedBox(height: 10),
               Row(
-                children: const [
-                  Icon(
+                children: [
+                  const Icon(
                     Icons.swap_horiz,
                     size: 14,
                     color: PaperColors.terracotta,
                   ),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Sahne → Hafercreme',
-                      style: TextStyle(
+                      context.tr('onb_illus_swap'),
+                      style: const TextStyle(
                         fontSize: 12,
                         color: PaperColors.terracotta,
                       ),
