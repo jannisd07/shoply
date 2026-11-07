@@ -1,38 +1,27 @@
 import 'dart:async';
+import 'dart:io' show Platform;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/presentation/screens/auth/welcome_screen.dart';
-import 'package:shoply/presentation/screens/calories/calories_screen.dart';
-import 'package:shoply/presentation/screens/home/home_screen.dart';
-import 'package:shoply/presentation/screens/ai/avo_chat_screen.dart';
-import 'package:shoply/presentation/screens/recipes/recipes_screen.dart';
-import 'package:shoply/presentation/screens/recipes/recipe_detail_screen.dart';
-import 'package:shoply/presentation/screens/recipes/multi_step_recipe_screen.dart';
-import 'package:shoply/presentation/screens/recipes/recipe_author_page.dart';
-import 'package:shoply/presentation/screens/recipes/saved_recipes_screen.dart';
-import 'package:shoply/presentation/screens/recipes/my_recipes_screen.dart';
-import 'package:shoply/presentation/screens/recipes/category_recipes_screen.dart';
-import 'package:shoply/presentation/screens/recipes/creators_screen.dart';
-import 'package:shoply/presentation/screens/recipes/all_recipes_screen.dart';
-import 'package:shoply/presentation/screens/recipes/recipe_drafts_screen.dart';
-import 'package:shoply/presentation/screens/profile/profile_screen.dart';
-import 'package:shoply/presentation/screens/profile/settings/diet_preferences_screen.dart';
-import 'package:shoply/presentation/screens/lists/list_detail_screen.dart';
-import 'package:shoply/presentation/screens/lists/list_activities_screen.dart';
+import 'package:shoply/data/services/analytics_service.dart';
+import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart'
-    show OnboardingScreen, hasCompletedOnboarding;
-import 'package:shoply/data/services/supabase_service.dart';
-import 'package:shoply/data/services/analytics_service.dart';
+    show hasCompletedOnboarding;
+import 'package:shoply/routes/app_branch.dart';
+import 'package:shoply/routes/areas/auth_routes.dart';
+import 'package:shoply/routes/areas/avo_routes.dart';
+import 'package:shoply/routes/areas/calories_routes.dart';
+import 'package:shoply/routes/areas/history_routes.dart';
+import 'package:shoply/routes/areas/home_routes.dart';
+import 'package:shoply/routes/areas/lists_routes.dart';
+import 'package:shoply/routes/areas/offers_routes.dart';
+import 'package:shoply/routes/areas/plan_routes.dart';
+import 'package:shoply/routes/areas/profile_routes.dart';
+import 'package:shoply/routes/areas/recipes_routes.dart';
+import 'package:shoply/routes/route_paths.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:io' show Platform;
-
-import 'package:shoply/presentation/screens/auth/login_screen.dart';
-import 'package:shoply/presentation/screens/auth/signup_screen.dart';
-import 'package:shoply/presentation/screens/auth/reset_password_screen.dart';
-import 'package:shoply/presentation/screens/auth/name_prompt_screen.dart';
 
 /// Forwards navigation events to the Firebase Analytics observer.
 ///
@@ -104,266 +93,11 @@ final routerProvider = Provider<GoRouter>((ref) {
   ];
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: supabase.currentUser != null ? '/home' : '/onboarding',
     refreshListenable: GoRouterRefreshStream(supabase.authStateChanges),
     observers: observers,
-    routes: [
-      // Onboarding (first-time users)
-      GoRoute(
-        path: '/onboarding',
-        name: 'onboarding',
-        builder: (context, state) => const OnboardingScreen(),
-      ),
-
-      // Welcome / Auth Entry (returning users who completed onboarding)
-      GoRoute(
-        path: '/welcome',
-        name: 'welcome',
-        builder: (context, state) => const WelcomeScreen(),
-      ),
-
-      GoRoute(
-        path: '/login',
-        name: 'login',
-        builder: (context, state) => const LoginScreen(),
-      ),
-
-      GoRoute(
-        path: '/signup',
-        name: 'signup',
-        builder: (context, state) => const SignUpScreen(),
-      ),
-
-      GoRoute(
-        path: '/reset-password',
-        name: 'reset-password',
-        builder: (context, state) => const ResetPasswordScreen(),
-      ),
-
-      // Name prompt route (after login if no display name)
-      GoRoute(
-        path: '/name-prompt',
-        name: 'name-prompt',
-        builder: (context, state) => const NamePromptScreen(),
-      ),
-
-      // Main app with bottom navigation – StatefulShellRoute keeps each tab's
-      // state alive (no rebuilds when switching tabs) and lets us render a
-      // smooth horizontal slide transition between branches.
-      StatefulShellRoute(
-        builder: (context, state, navigationShell) =>
-            MainScaffold(navigationShell: navigationShell),
-        navigatorContainerBuilder: (context, navigationShell, children) =>
-            SlidingTabsContainer(
-              currentIndex: navigationShell.currentIndex,
-              children: children,
-            ),
-        branches: [
-          // Branch 0: Home
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/home',
-                name: 'home',
-                pageBuilder: (context, state) => NoTransitionPage(
-                  key: state.pageKey,
-                  child: const HomeScreen(),
-                ),
-              ),
-            ],
-          ),
-
-          // Branch 1: Recipes + nested routes
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/recipes',
-                name: 'recipes',
-                pageBuilder: (context, state) => NoTransitionPage(
-                  key: state.pageKey,
-                  child: RecipesScreen(
-                    initialQuery: state.uri.queryParameters['q'],
-                  ),
-                ),
-                routes: [
-                  GoRoute(
-                    path: 'add',
-                    name: 'add-recipe',
-                    builder: (context, state) {
-                      final extra = state.extra as Map<String, dynamic>?;
-                      final draftId = extra?['draftId'] as String?;
-                      final recipeId = extra?['recipeId'] as String?;
-                      return MultiStepRecipeScreen(
-                        draftId: draftId,
-                        recipeId: recipeId,
-                      );
-                    },
-                  ),
-                  GoRoute(
-                    path: 'drafts',
-                    name: 'recipe-drafts',
-                    builder: (context, state) => const RecipeDraftsScreen(),
-                  ),
-                  GoRoute(
-                    path: 'saved',
-                    name: 'saved-recipes',
-                    builder: (context, state) => const SavedRecipesScreen(),
-                  ),
-                  GoRoute(
-                    path: 'my',
-                    name: 'my-recipes',
-                    builder: (context, state) => const MyRecipesScreen(),
-                  ),
-                  GoRoute(
-                    path: 'creators',
-                    name: 'creators',
-                    builder: (context, state) => const CreatorsScreen(),
-                  ),
-                  GoRoute(
-                    path: 'popular',
-                    name: 'popular-recipes',
-                    builder: (context, state) =>
-                        const AllRecipesScreen(popularOnly: true),
-                  ),
-                  GoRoute(
-                    path: 'all',
-                    name: 'all-recipes',
-                    builder: (context, state) => const AllRecipesScreen(),
-                  ),
-                  GoRoute(
-                    path: 'category/:categoryId',
-                    name: 'category-recipes',
-                    builder: (context, state) {
-                      final categoryId = state.pathParameters['categoryId']!;
-                      return CategoryRecipesScreen(categoryId: categoryId);
-                    },
-                  ),
-                  GoRoute(
-                    path: ':recipeId',
-                    name: 'recipe-detail',
-                    builder: (context, state) {
-                      final recipeId = state.pathParameters['recipeId']!;
-                      final extra = state.extra;
-                      return RecipeDetailScreen(
-                        recipeId: recipeId,
-                        initialRecipe: extra is Recipe ? extra : null,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          // Branch 2: Calories (tab only shown when the user opted in;
-          // the branch always exists so the index mapping stays stable)
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/calories',
-                name: 'calories',
-                pageBuilder: (context, state) => NoTransitionPage(
-                  key: state.pageKey,
-                  child: const CaloriesScreen(),
-                ),
-              ),
-            ],
-          ),
-
-          // Branch 3: Profile
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/profile',
-                name: 'profile',
-                pageBuilder: (context, state) => NoTransitionPage(
-                  key: state.pageKey,
-                  child: const ProfileScreen(),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      // Separate routes outside ShellRoute (no bottom nav)
-      GoRoute(
-        path: '/avo',
-        name: 'avo-chat',
-        pageBuilder: (context, state) => CupertinoPage(
-          key: state.pageKey,
-          child: const AvoChatScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/lists/:listId',
-        name: 'list-detail',
-        pageBuilder: (context, state) {
-          final listId = state.pathParameters['listId']!;
-          final listName =
-              state.uri.queryParameters['name'] ?? 'Shopping List';
-          return CupertinoPage(
-            key: state.pageKey,
-            child: ListDetailScreen(listId: listId, listName: listName),
-          );
-        },
-        routes: [
-          GoRoute(
-            path: 'activities',
-            name: 'list-activities',
-            builder: (context, state) {
-              final listId = state.pathParameters['listId']!;
-              final listName =
-                  state.uri.queryParameters['name'] ?? 'Shopping List';
-              return ListActivitiesScreen(
-                listId: listId,
-                listName: listName,
-              );
-            },
-          ),
-        ],
-      ),
-      GoRoute(
-        path: '/author/:authorId',
-        name: 'author-profile',
-        builder: (context, state) {
-          final authorId = state.pathParameters['authorId']!;
-          final authorName = state.extra != null && state.extra is Map
-              ? (state.extra as Map)['authorName'] as String?
-              : null;
-          return RecipeAuthorPage(authorId: authorId, authorName: authorName);
-        },
-      ),
-      GoRoute(
-        path: '/diet-preferences',
-        name: 'diet-preferences',
-        builder: (context, state) => const DietPreferencesScreen(),
-      ),
-      // Deep link route for shared recipes (accessible without auth context)
-      GoRoute(
-        path: '/recipe/:recipeId',
-        name: 'shared-recipe',
-        builder: (context, state) {
-          final recipeId = state.pathParameters['recipeId']!;
-          final extra = state.extra;
-          return RecipeDetailScreen(
-            recipeId: recipeId,
-            initialRecipe: extra is Recipe ? extra : null,
-          );
-        },
-      ),
-      // Shared-list and invite deep links are aliases of /lists/:listId.
-      // Logged-out users are sent to sign in first (top-level redirect).
-      GoRoute(
-        path: '/list/:listId',
-        name: 'shared-list',
-        redirect: (context, state) => _sharedListTarget(state),
-      ),
-      GoRoute(
-        path: '/invite/:listId',
-        name: 'list-invite',
-        redirect: (context, state) => _sharedListTarget(state),
-      ),
-    ],
+    routes: buildAppRoutes(),
     redirect: (context, state) async {
       final isLoggedIn = SupabaseService.instance.currentUser != null;
       final uri = state.uri;
@@ -399,7 +133,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // A shared list needs an account (RLS returns nothing otherwise):
       // remember the link and resume it after sign-in.
       if (!isLoggedIn && isSharedListLink) {
-        _pendingListLink = _sharedListTarget(state);
+        _pendingListLink = sharedListTarget(state);
       }
 
       if (!_onboardingDone) _onboardingDone = await hasCompletedOnboarding();
@@ -456,11 +190,91 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-/// Maps `/list/:id` and `/invite/:id` onto the canonical `/lists/:id` route.
-String _sharedListTarget(GoRouterState state) {
-  final listId = state.pathParameters['listId'] ??
-      state.uri.pathSegments.last;
-  final listName = state.uri.queryParameters['name'] ?? 'Shared List';
-  return Uri(path: '/lists/$listId', queryParameters: {'name': listName})
-      .toString();
-}
+/// Routes Teil B wants inside [branch], from all B area files.
+List<RouteBase> _bBranch(AppBranch branch) => [
+  ...?avoBranchRoutes[branch],
+  ...?caloriesBranchRoutes[branch],
+  ...?planBranchRoutes[branch],
+  ...?offersBranchRoutes[branch],
+  ...?historyBranchRoutes[branch],
+];
+
+/// All routes of the app, assembled from the area files in `routes/areas/`.
+///
+/// Tabs (StatefulShellRoute keeps each tab's state alive and lets us render a
+/// smooth horizontal slide between branches): Home, Rezepte, Kalorien (only
+/// shown when the user opted in; the branch always exists so the index
+/// mapping stays stable), Profil. Everything else opens full screen without
+/// the tab bar. From S2 on the tabs follow D2 (see [AppBranch]); until then
+/// routes for the Listen and Avo tabs open full screen.
+List<RouteBase> buildAppRoutes() => [
+  ...authRoutes,
+  StatefulShellRoute(
+    builder: (context, state, navigationShell) =>
+        MainScaffold(navigationShell: navigationShell),
+    navigatorContainerBuilder: (context, navigationShell, children) =>
+        SlidingTabsContainer(
+          currentIndex: navigationShell.currentIndex,
+          children: children,
+        ),
+    branches: [
+      // Branch 0: Home
+      StatefulShellBranch(
+        routes: [...homeBranchRoutes, ..._bBranch(AppBranch.home)],
+      ),
+      // Branch 1: Recipes + nested routes
+      StatefulShellBranch(
+        routes: [...recipesBranchRoutes, ..._bBranch(AppBranch.recipes)],
+      ),
+      // Branch 2: Calories (Teil B screen)
+      StatefulShellBranch(
+        routes: [
+          GoRoute(
+            path: RoutePaths.calories,
+            name: 'calories',
+            pageBuilder: (context, state) => NoTransitionPage(
+              key: state.pageKey,
+              child: buildCaloriesRoot(context, state),
+            ),
+            routes: caloriesChildRoutes,
+          ),
+        ],
+      ),
+      // Branch 3: Profile
+      StatefulShellBranch(
+        routes: [...profileBranchRoutes, ..._bBranch(AppBranch.profile)],
+      ),
+    ],
+  ),
+  // Separate routes outside the shell (no bottom nav)
+  GoRoute(
+    path: RoutePaths.avo,
+    name: 'avo-chat',
+    pageBuilder: (context, state) =>
+        CupertinoPage(key: state.pageKey, child: buildAvoRoot(context, state)),
+    routes: avoChildRoutes,
+  ),
+  ...listsRoutes,
+  ...recipesRoutes,
+  ...profileRoutes,
+  GoRoute(
+    path: RoutePaths.offers,
+    name: 'offers',
+    builder: buildOffersRoot,
+    routes: offersChildRoutes,
+  ),
+  GoRoute(
+    path: RoutePaths.history,
+    name: 'history',
+    builder: buildHistoryRoot,
+    routes: historyChildRoutes,
+  ),
+  // No Listen and Avo tabs yet: their routes open full screen.
+  ..._bBranch(AppBranch.lists),
+  ..._bBranch(AppBranch.avo),
+  ...avoRootRoutes,
+  ...caloriesRootRoutes,
+  ...planRootRoutes,
+  ...offersRootRoutes,
+  ...historyRootRoutes,
+];
