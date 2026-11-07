@@ -4,7 +4,8 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
-07.11.2026: **S1 ist erreicht.** Übersetzungen und Router liegen in Bereichsdateien, das Modulsystem steht. B darf ab
+07.11.2026: **S2a ist erreicht**: B kann seine Screens auf die Komponenten aus Teil 1 und die neue Tab-Struktur
+umbauen (Avo ist ein Tab, Kalorien ein Push im Home-Tab). S2b folgt direkt. Davor: **S1 ist erreicht.** Übersetzungen und Router liegen in Bereichsdateien, das Modulsystem steht. B darf ab
 jetzt seine eigenen Übersetzungs- und Routendateien ändern und `moduleEnabledProvider` abfragen. Als Nächstes baut A das Fundament (A2: Tokens, Komponenten, D2-Tab-Bar,
 Prüfgerüst). A3 ist erledigt. Aus A2 sind schon da und nutzbar: Tokens (`lib/core/design/design.dart`:
 `context.colors`, `context.text(AvoTextStyle.body)`, `AvoSpacing`, `AvoRadii`, `AvoMotion`, `AvoHaptics`) und das
@@ -19,7 +20,8 @@ folgen mit S2. Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`. **Vorrang-Au
 | S0 Aufräumen gemergt | erledigt: `cleanup/group-A` bis `-I` sind in `main` (Merges `b219010` … `6c12eef`, Abgleich `950921d`) | 07.11.2026 | `950921d` |
 | S1 Struktur | **erledigt** | 07.11.2026 | siehe `git log --grep "(a1)"` |
 | A3 Eingabeleiste (Bug der Mutter des Owners) | **erledigt**: Text wird bei keiner Breite (320–440 pt) und keiner Textgröße (bis 3,1×) mehr abgeschnitten, Nachweis `test/screens/lists/add_item_composer_test.dart` (40 Fälle) | 07.11.2026 | siehe `git log --grep "(a3)"` |
-| S2 Fundament | offen | | |
+| S2a Fundament Teil 1 | **erledigt**: D2-Tab-Bar (Home, Listen, Avo, Rezepte, Profil; Avo-Tab auf `/avo`), Kalorien als Push im Home-Tab, Fehlerseite, Modul-Wächter, Deep-Link-Übersetzung, Komponenten Teil 1 (Liste in `prompt-b-vorrang.md`) | 07.11.2026 | `ce66d9f`, `f16e071` |
+| S2 Fundament (S2b: Editor, Eingabefeld, Menüs, Zeilen/Karten, Charts, `ProGate.run`, `AppBrand`) | in Arbeit | | |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
