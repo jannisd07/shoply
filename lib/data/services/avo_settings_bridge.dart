@@ -11,7 +11,6 @@ import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
-import 'package:shoply/presentation/state/user_profile_provider.dart';
 
 /// Result of a single setting change, used for UI confirmation cards.
 class SettingChangeResult {
@@ -385,7 +384,6 @@ class AvoSettingsBridge {
     await UserService().updateUserProfile(updated);
     // Force the profile provider to refetch so UI rebuilds.
     ref.invalidate(currentUserProvider);
-    ref.invalidate(userProfileProvider);
     return SettingChangeResult(
       success: true,
       key: key,
@@ -426,7 +424,6 @@ class AvoSettingsBridge {
     final updated = apply(user, list);
     await UserService().updateUserProfile(updated);
     ref.invalidate(currentUserProvider);
-    ref.invalidate(userProfileProvider);
     return SettingChangeResult(
       success: true,
       key: key,
