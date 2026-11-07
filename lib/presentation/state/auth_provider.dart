@@ -25,17 +25,20 @@ final authUserProvider = StreamProvider<User?>((ref) {
 /// When the account changes, the offline cache of the previous account is
 /// wiped so nothing of it leaks into the next session.
 final authUserIdProvider = Provider<String?>((ref) {
-  ref.listenSelf((previous, next) {
-    if (previous != null && previous != next) {
-      unawaited(OfflineCacheService.instance.clearCache());
-    }
-  });
-
   final auth = ref.watch(authUserProvider);
-  return auth.hasValue
+  final userId = auth.hasValue
       ? auth.value?.id
       : SupabaseService.instance.currentUser?.id;
+
+  final previous = _lastSeenUserId;
+  _lastSeenUserId = userId;
+  if (previous != null && previous != userId) {
+    unawaited(OfflineCacheService.instance.clearCache());
+  }
+  return userId;
 });
+
+String? _lastSeenUserId;
 
 /// Provider for current user model. Caches the display_name/onboarding flag
 /// in [OfflineCacheService] on every successful fetch so the router can still
