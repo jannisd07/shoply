@@ -56,6 +56,8 @@ class ExpenseSplitService {
   /// The payer's own share (if they have one) is created already marked as
   /// paid, since they settled it at the register.
   /// Replaces any existing splits for this trip (re-splitting overwrites).
+  /// The new rows are inserted before the old ones are deleted, so a failed
+  /// insert leaves the previous splits (and their paid state) intact.
   Future<List<ExpenseSplit>> createSplits({
     required String historyId,
     required double totalCost,
@@ -70,7 +72,11 @@ class ExpenseSplitService {
         ? currentUserId
         : paidByUserId;
 
-    await _supabase.from('expense_splits').delete().eq('history_id', historyId);
+    final oldRows = await _supabase
+        .from('expense_splits')
+        .select('id')
+        .eq('history_id', historyId);
+    final oldIds = oldRows.map((r) => r['id'] as String).toList();
 
     bool isPayersOwnShare(SplitShare s) => s.userId != null
         ? s.userId == effectivePaidByUserId
@@ -90,8 +96,8 @@ class ExpenseSplitService {
             ).toInsertJson())
         .toList();
 
-    final inserted = rows.isEmpty
-        ? <dynamic>[]
+    final List<Map<String, dynamic>> inserted = rows.isEmpty
+        ? const []
         : await _supabase.from('expense_splits').insert(rows).select();
 
     await _supabase.from('shopping_history').update({
@@ -100,9 +106,11 @@ class ExpenseSplitService {
       'paid_by_name': paidByName,
     }).eq('id', historyId);
 
-    return (inserted as List)
-        .map((j) => ExpenseSplit.fromJson(j as Map<String, dynamic>))
-        .toList();
+    if (oldIds.isNotEmpty) {
+      await _supabase.from('expense_splits').delete().inFilter('id', oldIds);
+    }
+
+    return inserted.map(ExpenseSplit.fromJson).toList();
   }
 
   Future<List<ExpenseSplit>> getSplitsForHistory(String historyId) async {
