@@ -6,8 +6,7 @@ import 'package:shoply/presentation/state/auth_provider.dart';
 /// unconfigured, or the user is signed out. autoDispose so a fresh home
 /// visit always reflects the latest food log.
 final remainingCaloriesTodayProvider = FutureProvider.autoDispose<int?>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return null;
+  if (ref.watch(authUserIdProvider) == null) return null;
   return CalorieRecipeNudgeService.instance.getRemainingCaloriesToday();
 });
 

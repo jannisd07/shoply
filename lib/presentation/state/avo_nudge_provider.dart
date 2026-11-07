@@ -7,8 +7,7 @@ import 'package:shoply/presentation/state/auth_provider.dart';
 /// autoDispose so a fresh visit to home recomputes against current lists.
 final restockSuggestionsProvider =
     FutureProvider.autoDispose<List<RestockSuggestion>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return const [];
+  if (ref.watch(authUserIdProvider) == null) return const [];
   return AvoNudgeService.instance.getRestockSuggestions(limit: 3);
 });
 
@@ -17,8 +16,7 @@ final restockSuggestionsProvider =
 /// watching this does not hit the offers API on every home visit.
 final offerNudgesProvider =
     FutureProvider.autoDispose<List<OfferNudge>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return const [];
+  if (ref.watch(authUserIdProvider) == null) return const [];
   return AvoNudgeService.instance.getOfferNudges(limit: 2);
 });
 
@@ -30,8 +28,7 @@ final offerNudgesProvider =
 /// simply shows the top two of the same computation.
 final personalFlyerProvider =
     FutureProvider.autoDispose<List<FlyerSection>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return const [];
+  if (ref.watch(authUserIdProvider) == null) return const [];
   final nudges = await AvoNudgeService.instance.getOfferNudges(limit: 12);
   return groupOffersByRetailer(nudges);
 });

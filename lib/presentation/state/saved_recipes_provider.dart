@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/app_review_service.dart';
+import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/widget_service.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 
 /// State for saved recipes
 class SavedRecipesState {
@@ -43,27 +45,25 @@ class SavedRecipesNotifier extends StateNotifier<SavedRecipesState> {
 
   /// Load saved recipe IDs and full recipes
   Future<void> loadSavedRecipes() async {
-    print('🔄 [SAVED_RECIPES_PROVIDER] loadSavedRecipes called');
     state = state.copyWith(isLoading: true);
     
     try {
-      final ids = await _recipeService.getSavedRecipeIds();
-      print('📋 [SAVED_RECIPES_PROVIDER] Got ${ids.length} saved IDs: $ids');
-      
-      final recipes = await _recipeService.getSavedRecipes();
-      print('📚 [SAVED_RECIPES_PROVIDER] Got ${recipes.length} saved recipes');
-      
+      final (ids, recipes) = await (
+        _recipeService.getSavedRecipeIds(),
+        _recipeService.getSavedRecipes(),
+      ).wait;
+      if (!mounted) return;
+
       state = state.copyWith(
         savedIds: ids,
         savedRecipes: recipes,
         isLoading: false,
       );
-      print('✅ [SAVED_RECIPES_PROVIDER] State updated - savedIds: ${state.savedIds.length}, savedRecipes: ${state.savedRecipes.length}');
+      debugPrint('✅ [SAVED_RECIPES_PROVIDER] Loaded ${recipes.length} saved recipes');
       unawaited(_updateSavedRecipesWidget(recipes));
-    } catch (e, stackTrace) {
-      print('❌ [SAVED_RECIPES_PROVIDER] Error loading saved recipes: $e');
-      print('❌ [SAVED_RECIPES_PROVIDER] Stack: $stackTrace');
-      state = state.copyWith(isLoading: false);
+    } catch (e) {
+      debugPrint('❌ [SAVED_RECIPES_PROVIDER] Error loading saved recipes: $e');
+      if (mounted) state = state.copyWith(isLoading: false);
     }
   }
 
@@ -83,7 +83,7 @@ class SavedRecipesNotifier extends StateNotifier<SavedRecipesState> {
           .toList();
       await WidgetService.updateSavedRecipesWidget(recipes: widgetRecipes);
     } catch (e) {
-      print('⚠️ [SAVED_RECIPES_PROVIDER] Failed to refresh saved-recipes widget: $e');
+      debugPrint('⚠️ [SAVED_RECIPES_PROVIDER] Failed to refresh saved-recipes widget: $e');
     }
   }
 
@@ -148,9 +148,11 @@ class SavedRecipesNotifier extends StateNotifier<SavedRecipesState> {
   bool isSaved(String recipeId) => state.savedIds.contains(recipeId);
 }
 
-/// Provider for saved recipes
-final savedRecipesProvider = 
+/// Provider for saved recipes. Rebuilt per signed-in account, so the next
+/// user never sees the previous user's saved hearts.
+final savedRecipesProvider =
     StateNotifierProvider<SavedRecipesNotifier, SavedRecipesState>((ref) {
+  ref.watch(authUserIdProvider);
   return SavedRecipesNotifier(RecipeService());
 });
 
