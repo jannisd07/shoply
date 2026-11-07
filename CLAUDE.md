@@ -50,7 +50,7 @@ asked for each git step. Scheduled routines keep following the branch policy bel
 4. **Finish:** fast-forward `main` to the branch, `git push origin main`, delete the branch. Pushing `main` is fine
    here: the TestFlight workflow only runs manually. Then tell the user in one line that the other Mac can pull.
 5. **Hotspots** both sides touch: `lib/core/localization/app_translations.dart`, `lib/routes/app_router.dart`,
-   `pubspec.yaml` / `pubspec.lock`, `lib/main.dart`, `lib/core/services/service_locator.dart`. Push changes to these
+   `pubspec.yaml` / `pubspec.lock`, `ios/Podfile.lock` + `Package.resolved`, `lib/main.dart`. Push changes to these
    as soon as they are done instead of letting them sit on a branch.
 6. **Never** force-push `main`, rewrite pushed history, or push the gitignored secret files.
 
@@ -141,11 +141,11 @@ flutter build ios --release
 xcrun simctl spawn <SIMULATOR_ID> log stream --predicate 'processImagePath contains "Runner"' 2>&1 | grep -E "\[TAG\]"
 ```
 
-There is only a minimal smoke test (`test/widget_test.dart`, run via `flutter test`). Primary verification is `flutter build ios --simulator --debug`.
+`flutter test` runs ~170 unit/widget tests (incl. a full-app compile smoke test and a translation-key check). Primary on-device verification is `flutter build ios --simulator --debug`. CI (`.github/workflows/check.yml`) runs `dart analyze --fatal-warnings` + `flutter test` on every push.
 
 ### Verification baseline (keep it green)
 
-- `dart analyze` must report **0 errors and 0 warnings**. There are ~680 pre-existing `info`-level lints (mostly `withOpacity` deprecations) — don't chase them unless asked, but never add new errors/warnings.
+- `dart analyze` must report **0 errors and 0 warnings** (CI fails otherwise). About 60 `info`-level lints remain (mostly `withOpacity` deprecations) — don't chase them unless asked, but never add new errors/warnings.
 - After any change to `lib/`, run `dart analyze` (fast) before claiming success. For non-trivial changes, also run `flutter build ios --simulator --debug`.
 
 ## Live Development Workflow
@@ -175,15 +175,15 @@ lib/
 ├── core/
 │   ├── config/env.dart          # API keys (gitignored - copy from env.example.dart)
 │   ├── constants/               # AppColors, AppDimensions, AppTextStyles, categories
-│   ├── localization/            # Bilingual support (DE/EN) via AppLocalizations
-│   ├── services/service_locator.dart  # Services.x accessor pattern
+│   ├── localization/            # Bilingual support (DE/EN): context.tr('key') / AppTranslations
 │   ├── theme/app_theme.dart     # Material 3 light/dark themes
-│   ├── widgets/                 # design_system.dart, liquid_glass_widgets.dart
-│   └── gamification/            # Mascot ("Avo") greeting & gamification
+│   ├── utils/                   # normalizeProductName, request_throttle, number_parsing (German commas)
+│   ├── widgets/                 # design_system.dart, paper/
+│   └── mascot/                  # Mascot ("Avo") greeting
 ├── data/
 │   ├── models/                  # Data classes (see Model Location Map below)
 │   ├── repositories/            # ItemRepository, ListRepository
-│   └── services/                # ~50 service classes (business logic, API clients)
+│   └── services/                # ~60 singleton services (business logic, API clients)
 ├── presentation/
 │   ├── screens/                 # Feature-organized: home/, recipes/, ai/, profile/, auth/, lists/
 │   ├── widgets/                 # Shared widgets: common/, recipes/, recommendations/, deals/
@@ -194,16 +194,16 @@ lib/
 
 ### Key Architectural Patterns
 
-- **Navigation**: GoRouter with `ShellRoute` wrapping 4 bottom tabs (Home, Recipes, Avo Chat, Profile) via `MainScaffold`. Auth redirects in `redirect:` callback check Supabase session + onboarding status.
+- **Navigation**: GoRouter with `StatefulShellRoute` wrapping 3 tabs (Home, Recipes, Profile) via `MainScaffold`. Avo chat (`/avo`) and list detail (`/lists/:listId`) are full-screen routes outside the shell — open them with `context.push`, never `go`. The redirect checks session + onboarding without any network call.
 - **State**: Riverpod providers in `presentation/state/`. `FutureProvider` for one-time fetches, `StreamProvider` for realtime (Supabase streams), `Provider` for singletons.
-- **Services**: Singleton pattern (`ServiceName.instance`) for most services. Accessible via `Services.x` from `lib/core/services/service_locator.dart`. Initialized sequentially in `main()`.
+- **Services**: Singleton pattern (`ServiceName.instance`) or a Riverpod provider. There is no service locator. `main()` initializes Supabase before `runApp`, everything else concurrently in the background.
 - **iOS 26 Styling**: Uses `adaptive_platform_ui` package for Liquid Glass effects. Custom `MainScaffold` implements floating glass pill navbar with spring physics animations.
-- **AI Categorization**: Gemini 1.5-flash via `GeminiCategorizationService` with 1.1s rate limiting and SharedPreferences cache. Falls back to `ProductClassifierService` keyword matching (1000+ German/English keywords across 29 categories). Language-agnostic category IDs (e.g., `'dairy'`) displayed in current locale.
-- **Avo AI Chat**: Gemini 2.0 Flash Lite via `AvoAssistantService`. Can add items to lists, search recipes, analyze lists. Tab at `/avo`.
+- **AI Categorization**: `gemini-2.0-flash-lite` via `GeminiCategorizationService` with a serialized 1100 ms rate limit and SharedPreferences cache. Falls back to `ProductClassifierService` keyword matching (1000+ German/English keywords across 29 categories). Language-agnostic category IDs (e.g., `'dairy'`) displayed in current locale.
+- **Avo AI Chat**: Gemini 2.0 Flash Lite via `AvoAssistantService`. Can add items to lists, search recipes, analyze lists. Full-screen route `/avo`.
 - **Premium**: `SubscriptionService` handles iOS IAP. Features gated via `subscription.isPremium`. Android IAP not implemented.
   - Product IDs: `shoply_premium_monthly` ($2.99/month), `shoply_premium_yearly` ($29.99/year), both with 14-day free trial.
   - Supabase DB functions: `activate_subscription`, `activate_trial`, `is_premium_user`
-- **Push Notifications**: Local (`flutter_local_notifications`) + FCM (`firebase_messaging`). FCM tokens stored in `user_devices` table in Supabase.
+- **Push Notifications**: Local (`flutter_local_notifications`) + FCM (`firebase_messaging`). FCM token stored in `users.fcm_token` (one device per user; `user_devices` exists but is unused — see docs/OPEN-ISSUES.md).
 
 ### Model Location Map (class name != file name)
 
@@ -251,11 +251,25 @@ URL scheme: `shoply://` + Universal Links. Routes handled by `DeepLinkService`. 
 `lib/firebase_options.dart` is gitignored - generate via `flutterfire configure`.
 `ios/Runner/GoogleService-Info.plist` is gitignored - download from Firebase Console.
 
+## Docs (keep them true)
+
+Human-facing docs live in `docs/` (German): [ARCHITECTURE.md](docs/ARCHITECTURE.md) (how the app works, where things
+are), [OPEN-ISSUES.md](docs/OPEN-ISSUES.md) (owner-only tasks: backend, deploys, secrets, product decisions),
+[DESIGN-STATUS.md](docs/DESIGN-STATUS.md), [CHANGELOG.md](docs/CHANGELOG.md). Maintain them as part of the work,
+without being asked:
+- A change to architecture, data flow, startup, navigation or a convention → update ARCHITECTURE.md in the same commit.
+- Something only the owner can do (SQL migration, `supabase functions deploy`, a secret, a product decision) →
+  add it to OPEN-ISSUES.md; remove entries that are done.
+- A larger change (new feature, redesign step, big refactor) → one entry at the top of CHANGELOG.md.
+- Never recreate long status dumps like the archived `docs/archive/FEATURE_IMPLEMENTATION_STATUS.md`.
+
 ## Conventions
 
 - **Import order**: Dart core → Flutter framework → third-party (alphabetical) → app imports (core → data → presentation)
 - **Widget extraction**: Screen-specific widgets in `screens/<feature>/widgets/`, shared in `widgets/<category>/`. Extract if >100 lines (single use) or >50 lines (multi-use).
-- **Service locator**: Prefer `Services.x` over direct `ServiceName.instance` in new code.
+- **Services**: `ServiceName.instance` or a Riverpod provider; write list/item data only through `ItemRepository`/`ListRepository` (they handle optimistic state, realtime and pushes).
+- **Snackbars**: `ScaffoldMessenger.of(context)` works on iOS because `app.dart` wraps the app in a `ScaffoldMessenger` (CupertinoApp has none). Keep that wrapper.
+- **Debug output**: `debugPrint`, never `print`.
 - **Gemini API calls**: Always maintain 1100ms minimum delay between requests. Check SharedPreferences cache first. Never reduce this delay.
 - **Platform guards**: Firebase, FCM, IAP, Siri, Analytics are iOS/Android only. Always check `Platform.isIOS` or `Platform.isAndroid` before using.
 - **pubspec.yaml**: Many packages are commented out with explanations (macOS compat, iOS build issues). Don't re-enable without testing.
@@ -272,11 +286,11 @@ URL scheme: `shoply://` + Universal Links. Routes handled by `DeepLinkService`. 
 | Xcode codesigning errors on simulator | Already fixed via identity `-` |
 | FCM not working | Needs `GoogleService-Info.plist` in `ios/Runner/` |
 | IAP not working on simulator | Expected — requires real device + sandbox account |
-| `No space left on device` during build | Disk is chronically full. Free space with `rm -rf ~/Library/Developer/Xcode/DerivedData` and `flutter clean`, then check `df -h /` |
+| `No space left on device` during build | Disk is chronically full. A global hook cleans caches automatically below 25 GB (`~/.claude/scripts/mac-cleanup.sh`); also `flutter clean`, then check `df -h /System/Volumes/Data` |
 
 ## Design System
 
-Dark-mode-first, minimalist design. Key values:
+**The current state is mixed (Paper + Liquid Glass + old Material) — see [docs/DESIGN-STATUS.md](docs/DESIGN-STATUS.md) before any UI work; a redesign is planned.** On iOS `AppTheme` is ignored (CupertinoApp), so colors/fonts come from tokens used directly in widgets. Target values:
 - 90% monochrome with 10% accent color
 - Cards: 16-20px border radius, soft layered shadows, 24px internal padding
 - Sections: minimum 24-32px spacing between sections

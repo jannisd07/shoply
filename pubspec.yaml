@@ -113,6 +113,5 @@ flutter:
 
   assets:
     # Only referenced by the unused ListsScreen; drop with that screen.
-    - assets/images/app_background.jpg
     - assets/avo/
     - assets/legal/

@@ -104,3 +104,7 @@ ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 # `build` may be a symlink to a non-synced location on machines where the
 # project sits in iCloud Drive; the trailing-slash pattern misses that.
 build
+
+# Desktop targets were removed; flutter pub get may regenerate stubs
+/linux/
+/windows/

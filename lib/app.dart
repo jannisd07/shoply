@@ -221,9 +221,11 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           SystemChrome.setSystemUIOverlayStyle(overlayStyle);
         });
+        // On iOS AdaptiveApp builds a CupertinoApp, which (unlike MaterialApp)
+        // has no ScaffoldMessenger; without this every showSnackBar throws.
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: overlayStyle,
-          child: TutorialOverlay(child: child!),
+          child: ScaffoldMessenger(child: TutorialOverlay(child: child!)),
         );
       },
     );
