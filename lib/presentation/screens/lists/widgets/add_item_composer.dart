@@ -1,7 +1,7 @@
-import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -58,18 +58,16 @@ class AddItemComposer extends StatefulWidget {
 }
 
 // Metrics read off the iOS 26 Messages composer.
-const double _kControlSize = 38; // circle diameter == capsule min height
+const double _kControlSize = 38; // circle diameter
 const double _kHitTarget = 44;
+
+/// The capsule is at least as tall as the "+" hit target, so the row height
+/// always equals the capsule height and the glass behind it matches exactly.
+const double _kCapsuleMinHeight = _kHitTarget;
 const double _kGap = 8; // visual gap between circle and capsule
 const double _kTextLeftInset = 16;
 
 class _AddItemComposerState extends State<AddItemComposer> {
-  final GlobalKey _contentKey = GlobalKey();
-
-  /// Height of the bar; grows as the field wraps. Seeded with the
-  /// single-line height so the very first frame is already correct.
-  double _height = _kControlSize;
-
   bool get _hasText => widget.controller.text.trim().isNotEmpty;
   bool _lastHasText = false;
 
@@ -77,15 +75,6 @@ class _AddItemComposerState extends State<AddItemComposer> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onTextChanged);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Text scale / locale changes resize the field without touching the
-    // controller, so the glass shape has to be re-measured here too —
-    // otherwise XXL Dynamic Type leaves the capsule glass too short.
-    _scheduleHeightSync();
   }
 
   @override
@@ -102,20 +91,6 @@ class _AddItemComposerState extends State<AddItemComposer> {
       _lastHasText = has;
       if (mounted) setState(() {});
     }
-    _scheduleHeightSync();
-  }
-
-  /// The glass shapes are absolute rects, so the native side needs the real
-  /// content height. Reading it after layout costs one extra frame, but only
-  /// on the frames where the text actually wraps.
-  void _scheduleHeightSync() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final box = _contentKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box == null || !box.hasSize) return;
-      final h = box.size.height;
-      if ((h - _height).abs() > 0.5) setState(() => _height = h);
-    });
   }
 
   void _submit() {
@@ -134,10 +109,10 @@ class _AddItemComposerState extends State<AddItemComposer> {
   Widget build(BuildContext context) {
     final reduceTransparency = MediaQuery.highContrastOf(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final useNativeGlass = Platform.isIOS && !reduceTransparency;
+    final useNativeGlass =
+        defaultTargetPlatform == TargetPlatform.iOS && !reduceTransparency;
 
     final content = Row(
-      key: _contentKey,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         _PlusButton(
@@ -183,8 +158,9 @@ class _AddItemComposerState extends State<AddItemComposer> {
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
                         isDense: true,
+                        // (44 - 17 pt line) / 2: one line fills the capsule.
                         contentPadding:
-                            const EdgeInsets.symmetric(vertical: 9),
+                            const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onSubmitted: (_) => _submit(),
                     ),
@@ -200,51 +176,50 @@ class _AddItemComposerState extends State<AddItemComposer> {
 
     if (!useNativeGlass) return content;
 
-    // One container effect owning both backgrounds, so they merge.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final h = _height;
-        const circleInset = (_kHitTarget - _kControlSize) / 2;
-        final capsuleLeft = _kHitTarget + _kGap;
-
-        return SizedBox(
-          height: h,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(
-                child: LiquidGlassGroup(
-                  // Slightly under the visual gap, so the shapes reach for
-                  // each other without fusing at rest.
-                  spacing: 14,
-                  shapes: [
-                    LiquidGlassShape(
-                      rect: Rect.fromLTWH(
-                        circleInset,
-                        h - _kControlSize,
-                        _kControlSize,
-                        _kControlSize,
-                      ),
-                      isCapsule: true,
+    // One container effect owning both backgrounds, so they merge. The
+    // Flutter content alone decides the height (it grows with Dynamic Type
+    // and wrapping lines); the glass fills the same box and reads its size in
+    // the same layout pass. Never give this Stack a fixed height: that is
+    // what clipped the text before (A3).
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final h = constraints.maxHeight;
+              const circleInset = (_kHitTarget - _kControlSize) / 2;
+              const capsuleLeft = _kHitTarget + _kGap;
+              return LiquidGlassGroup(
+                // Slightly under the visual gap, so the shapes reach for
+                // each other without fusing at rest.
+                spacing: 14,
+                shapes: [
+                  LiquidGlassShape(
+                    rect: Rect.fromLTWH(
+                      circleInset,
+                      h - _kControlSize - circleInset,
+                      _kControlSize,
+                      _kControlSize,
                     ),
-                    LiquidGlassShape(
-                      rect: Rect.fromLTWH(
-                        capsuleLeft,
-                        0,
-                        (width - capsuleLeft).clamp(0.0, double.infinity),
-                        h,
-                      ),
-                      isCapsule: true,
+                    isCapsule: true,
+                  ),
+                  LiquidGlassShape(
+                    rect: Rect.fromLTWH(
+                      capsuleLeft,
+                      0,
+                      (width - capsuleLeft).clamp(0.0, double.infinity),
+                      h,
                     ),
-                  ],
-                ),
-              ),
-              content,
-            ],
+                    isCapsule: true,
+                  ),
+                ],
+              );
+            },
           ),
-        );
-      },
+        ),
+        content,
+      ],
     );
   }
 }
@@ -345,7 +320,7 @@ class _Capsule extends StatelessWidget {
     // No fixed height, so XXL Dynamic Type grows the capsule instead of
     // clipping the text.
     final sized = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: _kControlSize),
+      constraints: const BoxConstraints(minHeight: _kCapsuleMinHeight),
       child: child,
     );
 
@@ -356,7 +331,7 @@ class _Capsule extends StatelessWidget {
         : (isDark
             ? Colors.black.withValues(alpha: 0.35)
             : Colors.white.withValues(alpha: 0.55));
-    final radius = BorderRadius.circular(_kControlSize / 2);
+    final radius = BorderRadius.circular(_kCapsuleMinHeight / 2);
 
     return ClipRRect(
       borderRadius: radius,
@@ -406,7 +381,7 @@ class _SendButton extends StatelessWidget {
               onTap: onTap,
               child: SizedBox(
                 width: _kControlSize,
-                height: _kControlSize,
+                height: _kCapsuleMinHeight,
                 child: Center(
                   child: Container(
                     width: 30,
