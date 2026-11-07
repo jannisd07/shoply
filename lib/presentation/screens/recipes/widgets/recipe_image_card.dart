@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -63,135 +61,144 @@ class RecipeImageCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isSaved = ref.watch(isRecipeSavedProvider(recipe.id));
+    // Decode at tile size, not at the uploaded photo's full resolution.
+    // Grid tiles pass no width; half the screen is a safe upper bound there.
+    final tileWidth = width ?? MediaQuery.sizeOf(context).width / 2;
+    final cacheWidth = (tileWidth * MediaQuery.devicePixelRatioOf(context))
+        .round();
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: width,
-        height: height,
-        margin: margin,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(_radius),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 14,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(_radius),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CachedNetworkImage(
-                imageUrl: recipe.imageUrl,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => const _ImageFallback(),
-                errorWidget: (_, __, ___) => const _ImageFallback(),
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: width,
+          height: height,
+          margin: margin,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(_radius),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
               ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(_radius),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CachedNetworkImage(
+                  imageUrl: recipe.imageUrl,
+                  fit: BoxFit.cover,
+                  memCacheWidth: cacheWidth,
+                  placeholder: (_, __) => const _ImageFallback(),
+                  errorWidget: (_, __, ___) => const _ImageFallback(),
+                ),
 
-              // Readability scrim: only the lower half is darkened, so the
-              // photo itself stays as vivid as in the Photos app.
-              const Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.center,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0x00000000),
-                        Color(0x99000000),
-                      ],
+                // Readability scrim: only the lower half is darkened, so the
+                // photo itself stays as vivid as in the Photos app.
+                const Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.center,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x00000000), Color(0x99000000)],
+                      ),
                     ),
                   ),
                 ),
-              ),
 
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 10,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      recipe.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        height: 1.2,
-                        shadows: [
-                          // Backstop for the rare photo that is bright right
-                          // where the text sits.
-                          Shadow(color: Color(0x66000000), blurRadius: 6),
-                        ],
-                      ),
-                    ),
-                    if (metaLine != null && metaLine!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 10,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        metaLine!,
-                        maxLines: 1,
+                        recipe.name,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xE6FFFFFF),
-                          fontSize: 11.5,
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
                           height: 1.2,
                           shadows: [
+                            // Backstop for the rare photo that is bright right
+                            // where the text sits.
                             Shadow(color: Color(0x66000000), blurRadius: 6),
                           ],
                         ),
                       ),
+                      if (metaLine != null && metaLine!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          metaLine!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xE6FFFFFF),
+                            fontSize: 11.5,
+                            height: 1.2,
+                            shadows: [
+                              Shadow(color: Color(0x66000000), blurRadius: 6),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
 
-              if (badgeText != null && badgeText!.isNotEmpty)
-                Positioned(
-                  top: 10,
-                  left: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: (badgeColor ?? Colors.black).withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      badgeText!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
+                if (badgeText != null && badgeText!.isNotEmpty)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: (badgeColor ?? Colors.black).withValues(
+                          alpha: 0.9,
+                        ),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        badgeText!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
-                ),
 
-              if (showBookmark)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: _BookmarkButton(
-                    isSaved: isSaved,
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      ref
-                          .read(savedRecipesProvider.notifier)
-                          .toggleSave(recipe.id);
-                    },
+                if (showBookmark)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _BookmarkButton(
+                      isSaved: isSaved,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        ref
+                            .read(savedRecipesProvider.notifier)
+                            .toggleSave(recipe.id);
+                      },
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -213,8 +220,12 @@ class _ImageFallback extends StatelessWidget {
   }
 }
 
-/// Glass circle over the photo, sized to a 44pt touch target while staying
-/// visually small — the same rule the composer's "+" follows.
+/// Translucent circle over the photo, sized to a 44pt touch target while
+/// staying visually small — the same rule the composer's "+" follows.
+///
+/// A solid translucent fill instead of a per-tile BackdropFilter: the blur
+/// cost a save layer per visible tile and caused scroll jank, while the
+/// photo's dark scrim already keeps the icon readable.
 class _BookmarkButton extends StatelessWidget {
   final bool isSaved;
   final VoidCallback onTap;
@@ -230,30 +241,23 @@ class _BookmarkButton extends StatelessWidget {
         width: 44,
         height: 44,
         child: Center(
-          child: ClipOval(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: isSaved
-                      ? Colors.white
-                      : Colors.black.withValues(alpha: 0.28),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    width: 0.8,
-                  ),
-                ),
-                child: Icon(
-                  isSaved
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  size: 16,
-                  color: isSaved ? Colors.black : Colors.white,
-                ),
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: isSaved
+                  ? Colors.white
+                  : Colors.black.withValues(alpha: 0.38),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 0.8,
               ),
+            ),
+            child: Icon(
+              isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+              size: 16,
+              color: isSaved ? Colors.black : Colors.white,
             ),
           ),
         ),

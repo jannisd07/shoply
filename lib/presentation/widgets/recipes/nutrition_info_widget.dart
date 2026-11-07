@@ -25,7 +25,6 @@ class NutritionInfoWidget extends StatelessWidget {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
     final cardColor = AppColors.recipeSurface(context);
-    final borderColor = AppColors.recipeBorderColor(context);
 
     // Adjust for servings if needed
     final adjustedNutrition = servings > 1 
