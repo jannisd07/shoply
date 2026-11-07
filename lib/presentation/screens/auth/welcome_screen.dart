@@ -4,88 +4,36 @@ import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/widgets/paper/paper_widgets.dart';
-import 'package:shoply/data/services/supabase_service.dart';
+import 'package:shoply/presentation/screens/auth/social_auth.dart';
+import 'package:shoply/presentation/screens/auth/widgets/google_logo.dart';
 
 /// Welcome Screen — paper-style auth entry point with social login
 /// and email signup/login.
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
-  void _handleAppleLogin(BuildContext context) async {
-    try {
-      debugPrint('🍎 Apple Sign In tapped');
-      final success = await SupabaseService.instance.signInWithApple();
-      if (success && context.mounted) {
-        // OAuth flow completed successfully - user is now logged in
-        // Navigation will be handled by auth state listener
-        debugPrint('✅ Apple Sign In success!');
-      }
-    } catch (e) {
-      debugPrint('❌ Apple Sign In error: $e');
-      if (context.mounted) {
-        String errorMessage = 'Apple Sign In fehlgeschlagen';
-
-        if (e.toString().contains('validation_failed') ||
-            e.toString().contains('OAuth secret') ||
-            e.toString().contains('Unsupported provider')) {
-          errorMessage =
-              'Apple Sign In ist noch nicht konfiguriert.\nBitte verwenden Sie Email/Passwort.';
-        } else if (e.toString().contains('nicht verfügbar') ||
-            e.toString().contains('error 1000') ||
-            e.toString().contains('AuthorizationErrorCode.unknown')) {
-          errorMessage =
-              'Apple Sign In ist im Simulator nicht verfügbar.\nBitte auf einem echten Gerät testen.';
-        } else if (e.toString().contains('canceled')) {
-          return;
-        }
-
-        _showErrorDialog(context, errorMessage);
-      }
-    }
+  Future<void> _signIn(BuildContext context, SocialAuthProvider provider) {
+    return signInWithSocialProvider(
+      context,
+      provider,
+      onError: (message) => _showErrorDialog(context, message),
+    );
   }
 
   void _showErrorDialog(BuildContext context, String message) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hinweis'),
+        title: Text(context.tr('notice_title')),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
+            child: Text(context.tr('ok')),
           ),
         ],
       ),
     );
-  }
-
-  void _handleGoogleLogin(BuildContext context) async {
-    try {
-      debugPrint('🔵 Google Sign In tapped');
-      final success = await SupabaseService.instance.signInWithGoogle();
-      if (success && context.mounted) {
-        debugPrint('✅ Google Sign In success!');
-        // Navigation will be handled by auth state listener
-      }
-    } catch (e) {
-      debugPrint('❌ Google Sign In error: $e');
-      if (context.mounted) {
-        String errorMessage = 'Google Sign In fehlgeschlagen';
-
-        if (e.toString().contains('validation_failed') ||
-            e.toString().contains('OAuth') ||
-            e.toString().contains('konfiguriert')) {
-          errorMessage =
-              'Google Sign In ist noch nicht konfiguriert.\nBitte verwenden Sie Email/Passwort.';
-        } else if (e.toString().contains('canceled') ||
-            e.toString().contains('cancelled')) {
-          return;
-        }
-
-        _showErrorDialog(context, errorMessage);
-      }
-    }
   }
 
   @override
@@ -156,23 +104,14 @@ class WelcomeScreen extends StatelessWidget {
                     size: 20,
                     color: PaperColors.ink,
                   ),
-                  onPressed: () => _handleAppleLogin(context),
+                  onPressed: () => _signIn(context, SocialAuthProvider.apple),
                 ),
                 const SizedBox(height: 10),
               ],
               PaperOutlineButton(
                 label: context.tr('continue_with_google'),
-                leading: Image.network(
-                  'https://www.google.com/favicon.ico',
-                  height: 18,
-                  width: 18,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.g_mobiledata,
-                    size: 22,
-                    color: PaperColors.creamInk,
-                  ),
-                ),
-                onPressed: () => _handleGoogleLogin(context),
+                leading: const GoogleLogo(),
+                onPressed: () => _signIn(context, SocialAuthProvider.google),
               ),
               const SizedBox(height: 14),
               PaperPrimaryButton(

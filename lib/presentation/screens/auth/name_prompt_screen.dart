@@ -1,19 +1,24 @@
-import 'package:flutter/material.dart';
-import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/paper_colors.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/mascot/avo_mascot.dart';
 import 'package:shoply/data/services/supabase_service.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 
-class NamePromptScreen extends StatefulWidget {
+/// Shown once after a new account is created (`/name-prompt?new=1`) so the
+/// user can pick the display name shown on shared lists.
+class NamePromptScreen extends ConsumerStatefulWidget {
   const NamePromptScreen({super.key});
 
   @override
-  State<NamePromptScreen> createState() => _NamePromptScreenState();
+  ConsumerState<NamePromptScreen> createState() => _NamePromptScreenState();
 }
 
-class _NamePromptScreenState extends State<NamePromptScreen> {
+class _NamePromptScreenState extends ConsumerState<NamePromptScreen> {
   final _nameController = TextEditingController();
   bool _isLoading = false;
 
@@ -25,13 +30,15 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
 
   Future<void> _saveName() async {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty || _isLoading) return;
 
     setState(() => _isLoading = true);
 
     try {
       final user = SupabaseService.instance.currentUser;
       if (user != null) {
+        // Upsert (not update): right after sign-up the users row may not
+        // exist yet.
         await SupabaseService.instance.client.from('users').upsert({
           'id': user.id,
           'email': user.email,
@@ -39,39 +46,27 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
           'auth_provider': user.appMetadata['provider'],
           'updated_at': DateTime.now().toIso8601String(),
         });
+        ref.invalidate(currentUserProvider);
       }
 
-      if (mounted) {
-        context.go('/home');
-      }
+      if (mounted) context.go('/home');
     } catch (e) {
-      debugPrint('Error saving name: $e');
+      debugPrint('❌ [NAME_PROMPT] Failed to save name: $e');
       if (mounted) {
-        context.go('/home');
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('generic_error'))),
+        );
       }
     }
   }
 
-  Future<void> _skip() async {
-    // Save "User" as display name so router doesn't redirect back
-    try {
-      final user = SupabaseService.instance.currentUser;
-      if (user != null) {
-        await SupabaseService.instance.client.from('users').upsert({
-          'id': user.id,
-          'email': user.email,
-          'display_name': 'User',
-          'auth_provider': user.appMetadata['provider'],
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-      }
-    } catch (e) {
-      debugPrint('Error saving default name: $e');
-    }
-
-    if (mounted) {
-      context.go('/home');
-    }
+  /// Skipping keeps the provider name (e.g. a Google full name) or leaves it
+  /// empty; the router no longer requires a display name, so nothing is
+  /// written.
+  void _skip() {
+    if (_isLoading) return;
+    context.go('/home');
   }
 
   @override
@@ -109,7 +104,7 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Hey! Ich bin Avo 🥑\nWie darf ich dich nennen?',
+                  context.tr('name_prompt_greeting'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 18,
@@ -133,7 +128,7 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                   color: isDark ? Colors.white : PaperColors.ink,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Dein Name',
+                  hintText: context.tr('name_prompt_hint'),
                   hintStyle: TextStyle(
                     color: isDark ? Colors.white38 : Colors.black38,
                   ),
@@ -170,13 +165,13 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
                     elevation: 0,
                   ),
                   child: _isLoading
-                      ? CupertinoActivityIndicator(
+                      ? const CupertinoActivityIndicator(
                           radius: 10,
                           color: Colors.white,
                         )
-                      : const Text(
-                          'Weiter',
-                          style: TextStyle(
+                      : Text(
+                          context.tr('continue_text'),
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -190,7 +185,7 @@ class _NamePromptScreenState extends State<NamePromptScreen> {
               TextButton(
                 onPressed: _skip,
                 child: Text(
-                  'Überspringen',
+                  context.tr('skip'),
                   style: TextStyle(
                     color: isDark ? Colors.white54 : Colors.black54,
                     fontSize: 14,

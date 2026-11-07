@@ -3,6 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_dimensions.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/utils/validators.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -18,7 +20,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -45,20 +47,21 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       try {
         await SupabaseService.instance.signOut();
       } catch (e) {
-        debugPrint("⚠️ [RESET_PASSWORD] Sign out failed (ignoring): $e");
+        debugPrint('⚠️ [RESET_PASSWORD] Sign out failed (ignoring): $e');
       }
-      
+
       if (mounted) {
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          const SnackBar(
-            content: Text('Password updated successfully! Please login.'),
+        // App-level messenger (this State's context sits above the screen's
+        // own ScaffoldMessenger), so the confirmation survives the route
+        // change and shows on /welcome. maybeOf: the iOS CupertinoApp root
+        // has no ScaffoldMessenger unless app.dart adds one.
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(context.tr('password_updated_login')),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 3),
           ),
         );
-        
-        // 3. Navigate to Login
-        // Use GoRouter to clear stack and go to login
         context.go('/welcome');
       }
     } catch (e) {
@@ -66,7 +69,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (mounted) {
         _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
-            content: Text('Failed to update password: ${e.toString()}'),
+            content: Text(context.tr('password_update_failed')),
             backgroundColor: AppColors.error,
           ),
         );
@@ -78,10 +81,21 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     }
   }
 
+  /// Leaves the reset flow: the OTP left a recovery session behind, so sign
+  /// out before returning to the welcome screen.
+  Future<void> _cancel() async {
+    try {
+      await SupabaseService.instance.signOut();
+    } catch (e) {
+      debugPrint('⚠️ [RESET_PASSWORD] Sign out failed (ignoring): $e');
+    }
+    if (mounted) context.go('/welcome');
+  }
+
   @override
   Widget build(BuildContext context) {
-    const backgroundColor = Color(0xFF121212); 
-    const inputFillColor = Color(0xFF2C2C2E); 
+    const backgroundColor = Color(0xFF121212);
+    const inputFillColor = Color(0xFF2C2C2E);
     const inputBorderColor = Color(0xFF3A3A3C);
 
     return ScaffoldMessenger(
@@ -91,9 +105,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         appBar: AppBar(
           backgroundColor: backgroundColor,
           elevation: 0,
-          title: const Text('Set New Password', style: TextStyle(color: Colors.white)),
+          title: Text(context.tr('reset_password_title'), style: const TextStyle(color: Colors.white)),
           centerTitle: true,
-          leading: const SizedBox.shrink(), // Disable back button during reset flow
+          leading: IconButton(
+            icon: const Icon(Icons.close, color: Colors.white),
+            onPressed: _isLoading ? null : _cancel,
+          ),
         ),
         body: SafeArea(
           child: Center(
@@ -107,43 +124,43 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(
-                      Icons.lock_reset, 
+                      Icons.lock_reset,
                       size: 64,
                       color: Colors.white,
                     ),
-                    
+
                     const SizedBox(height: 32),
-                    
-                    const Text(
-                      'Create new password',
-                      style: TextStyle(
+
+                    Text(
+                      context.tr('reset_password_headline'),
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w500,
                         color: Colors.white,
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    
+
                     const SizedBox(height: 8),
-                    
+
                     Text(
-                      'Your new password must be different from previous used passwords.',
+                      context.tr('reset_password_sub'),
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[400],
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    
+
                     const SizedBox(height: 40),
-                    
+
                     // Password Field
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        labelText: 'New Password',
+                        labelText: context.tr('new_password_label'),
                         labelStyle: TextStyle(color: Colors.grey[400]),
                         filled: true,
                         fillColor: inputFillColor,
@@ -174,26 +191,19 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           },
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a password';
-                        }
-                        if (value.length < 6) {
-                          return 'Password must be at least 6 characters';
-                        }
-                        return null;
-                      },
+                      // Same rules as sign-up.
+                      validator: Validators.validatePassword,
                     ),
-                    
+
                     const SizedBox(height: 16),
-                    
+
                     // Confirm Password Field
                     TextFormField(
                       controller: _confirmPasswordController,
                       obscureText: _obscureConfirmPassword,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        labelText: 'Confirm Password',
+                        labelText: context.tr('confirm_password_label'),
                         labelStyle: TextStyle(color: Colors.grey[400]),
                         filled: true,
                         fillColor: inputFillColor,
@@ -226,14 +236,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       ),
                       validator: (value) {
                         if (value != _passwordController.text) {
-                          return 'Passwords do not match';
+                          return context.tr('passwords_do_not_match');
                         }
                         return null;
                       },
                     ),
-                    
+
                     const SizedBox(height: 32),
-                    
+
                     // Save Button
                     SizedBox(
                       width: double.infinity,
@@ -249,10 +259,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           elevation: 0,
                         ),
                         child: _isLoading
-                            ? CupertinoActivityIndicator(radius: 10, color: Colors.white)
-                            : const Text(
-                                'Reset Password',
-                                style: TextStyle(
+                            ? const CupertinoActivityIndicator(radius: 10, color: Colors.white)
+                            : Text(
+                                context.tr('reset_password_button'),
+                                style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),

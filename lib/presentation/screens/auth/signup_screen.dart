@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,7 +7,10 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/validators.dart';
 import 'package:shoply/core/widgets/paper/paper_widgets.dart';
 import 'package:shoply/data/services/supabase_service.dart';
-import 'package:shoply/data/services/fcm_service.dart';
+import 'package:shoply/presentation/screens/auth/auth_errors.dart';
+import 'package:shoply/presentation/screens/auth/social_auth.dart';
+import 'package:shoply/presentation/screens/auth/widgets/google_logo.dart';
+import 'package:shoply/presentation/screens/auth/widgets/otp_verification_view.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -54,39 +55,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  Future<void> _signUp() async {
-    if (!_formKey.currentState!.validate()) return;
+  void _showSnack(String message, {Color? color, SnackBarAction? action}) {
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color ?? AppColors.error,
+        duration: Duration(seconds: action != null ? 5 : 4),
+        action: action,
+      ),
+    );
+  }
 
-    if (_passwordController.text != _confirmPasswordController.text) {
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        const SnackBar(
-          content: Text('Passwords do not match'),
-          backgroundColor: AppColors.error,
-          duration: Duration(seconds: 3),
-        ),
-      );
-      return;
-    }
+  Future<void> _signUp() async {
+    // The confirm field's validator already checks that both passwords match.
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
       final email = _emailController.text.trim();
-      // Add timeout to prevent infinite loading
+      // Timeout so a stalled request can't leave the button spinning.
       await SupabaseService.instance
           .signUpWithEmail(
             email,
             _passwordController.text,
             emailRedirectTo: 'shoply://login',
           )
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception(
-                'Request timed out. Please check your internet connection and try again.',
-              );
-            },
-          );
+          .timeout(const Duration(seconds: 30));
 
       if (mounted) {
         setState(() {
@@ -96,62 +91,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
     } catch (e) {
       debugPrint('❌ [SIGNUP] Error: $e');
-      if (mounted) {
-        String errorMessage = 'Failed to create account';
-        SnackBarAction? action;
-        final errorString = e.toString().toLowerCase();
-
-        if (errorString.contains('user already registered') ||
-            errorString.contains('already exists')) {
-          errorMessage = 'An account with this email already exists.';
-          action = SnackBarAction(
-            label: 'Log In',
-            textColor: Colors.white,
-            onPressed: () => context.go('/welcome'),
-          );
-        } else if (errorString.contains('weak')) {
-          errorMessage =
-              'Password is too weak. Use at least 8 characters with uppercase and numbers.';
-        } else if (errorString.contains('too many requests') ||
-            errorString.contains('rate limit') ||
-            errorString.contains('429')) {
-          errorMessage =
-              'Too many attempts. Please wait a moment and try again.';
-        } else if (errorString.contains('network') ||
-            errorString.contains('socket') ||
-            errorString.contains('connection') ||
-            errorString.contains('timed out')) {
-          errorMessage =
-              'Network error. Please check your internet connection.';
-        } else if (errorString.contains('invalid email')) {
-          errorMessage = 'Please enter a valid email address.';
-        }
-
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 5),
-            action: action,
-          ),
-        );
-      }
+      if (mounted) _showSignUpError(e);
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showSignUpError(Object e) {
+    final s = e.toString().toLowerCase();
+    if (s.contains('user already registered') || s.contains('already exists')) {
+      _showSnack(
+        context.tr('auth_error_account_exists'),
+        action: SnackBarAction(
+          label: context.tr('log_in_paper'),
+          textColor: Colors.white,
+          onPressed: () => context.go('/login'),
+        ),
+      );
+    } else if (s.contains('weak')) {
+      _showSnack(context.tr('auth_error_weak_password'));
+    } else if (s.contains('invalid email')) {
+      _showSnack(context.tr('auth_error_invalid_email'));
+    } else {
+      _showSnack(
+        commonAuthError(context, e) ?? context.tr('auth_error_signup_failed'),
+      );
     }
   }
 
   Future<void> _verifyOtp() async {
     final otp = _otpController.text.trim();
-    if (otp.isEmpty || otp.length != 6) {
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        const SnackBar(
-          content: Text('Please enter the 6-digit code'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+    if (otp.length != 6) {
+      _showSnack(context.tr('otp_enter_code'));
       return;
     }
 
@@ -165,54 +136,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
     } catch (e) {
       debugPrint('❌ [VERIFY_OTP] Error: $e');
-      if (mounted) {
-        String errorMessage = 'Verification failed';
-        final errorString = e.toString().toLowerCase();
-
-        if (errorString.contains('invalid') ||
-            errorString.contains('expired')) {
-          errorMessage = 'Invalid or expired code. Please try again.';
-        } else if (errorString.contains('too many')) {
-          errorMessage = 'Too many attempts. Please request a new code.';
-        }
-
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+      if (mounted) _showSnack(otpErrorMessage(context, e));
       return;
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
 
     if (!mounted) return;
-
-    // Push-token sync is a post-login side effect and must not turn a
-    // successful OTP verification into a visible verification error.
-    if (Platform.isIOS || Platform.isAndroid) {
-      unawaited(
-        FCMService.instance.saveTokenForCurrentUser().catchError((
-          Object error,
-          StackTrace stackTrace,
-        ) {
-          debugPrint('⚠️ [VERIFY_OTP] FCM token save skipped: $error');
-        }),
-      );
-    }
-
-    _scaffoldMessengerKey.currentState?.showSnackBar(
-      const SnackBar(
-        content: Text('Email verified successfully!'),
-        backgroundColor: AppColors.success,
-      ),
-    );
-    if (!mounted) return;
-    // New accounts choose their display name on the dedicated name screen.
+    // Push-token sync happens in main.dart's signedIn listener. New accounts
+    // choose their display name on the dedicated name screen.
     context.go('/name-prompt?new=1');
   }
 
@@ -226,103 +158,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
         type: OtpType.signup,
         email: _pendingEmail!,
       );
-
       if (mounted) {
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          const SnackBar(
-            content: Text('New code sent! Please check your email.'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+        _showSnack(context.tr('otp_new_code_sent'), color: AppColors.success);
       }
     } catch (e) {
       debugPrint('❌ [RESEND_OTP] Error: $e');
       if (mounted) {
-        String errorMessage = 'Failed to resend code';
-        final errorString = e.toString().toLowerCase();
-
-        if (errorString.contains('too many') ||
-            errorString.contains('rate limit')) {
-          errorMessage = 'Please wait before requesting another code.';
-        }
-
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        _showSnack(commonAuthError(context, e) ?? context.tr('otp_resend_failed'));
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _signInWithGoogle() async {
     setState(() => _isGoogleLoading = true);
-
-    try {
-      // Use native Google Sign-In for better reliability on Android
-      final success = await SupabaseService.instance.signInWithGoogle();
-
-      if (success && mounted) {
-        // Save FCM token for push notifications
-        if (Platform.isIOS || Platform.isAndroid) {
-          await FCMService.instance.saveTokenForCurrentUser();
-        }
-        _routeAfterSocialSignIn();
-      }
-    } catch (e) {
-      debugPrint('❌ [GOOGLE_SIGNIN] Error: $e');
-      if (mounted) {
-        String errorMessage = 'Google Sign-In failed';
-        final errorString = e.toString().toLowerCase();
-
-        if (errorString.contains('nicht konfiguriert') ||
-            errorString.contains('not configured')) {
-          errorMessage =
-              'Google Sign-In is not available. Please use email/password.';
-        } else if (errorString.contains('timeout') ||
-            errorString.contains('timed out')) {
-          errorMessage = 'Connection timed out. Please try again.';
-        } else if (errorString.contains('network') ||
-            errorString.contains('connection')) {
-          errorMessage =
-              'Network error. Please check your internet connection.';
-        } else if (errorString.contains('cancelled') ||
-            errorString.contains('canceled')) {
-          // User cancelled - don't show error
-          return;
-        }
-
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isGoogleLoading = false);
-      }
-    }
-  }
-
-  void _routeAfterSocialSignIn() {
-    final user = SupabaseService.instance.currentUser;
-    final createdAt = user != null ? DateTime.tryParse(user.createdAt) : null;
-    final isNewAuthUser =
-        createdAt != null &&
-        DateTime.now().difference(createdAt.toLocal()).inMinutes < 3;
-
-    if (isNewAuthUser) {
-      context.go('/name-prompt?new=1');
-    } else {
-      context.go('/home');
-    }
+    await signInWithSocialProvider(
+      context,
+      SocialAuthProvider.google,
+      onError: _showSnack,
+    );
+    if (mounted) setState(() => _isGoogleLoading = false);
   }
 
   @override
@@ -343,7 +199,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.symmetric(horizontal: 26),
               child: _showOtpVerification
-                  ? _buildOtpVerificationView()
+                  ? OtpVerificationView(
+                      kicker: context.tr('otp_kicker_verify_email'),
+                      email: _pendingEmail,
+                      controller: _otpController,
+                      loading: _isLoading,
+                      onVerify: _verifyOtp,
+                      onResend: _resendOtp,
+                      onBack: () => setState(() {
+                        _showOtpVerification = false;
+                        _otpController.clear();
+                      }),
+                    )
                   : _buildSignUpForm(),
             ),
           ),
@@ -418,7 +285,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 return context.tr('required');
               }
               if (value != _passwordController.text) {
-                return 'Passwords do not match';
+                return context.tr('passwords_do_not_match');
               }
               return null;
             },
@@ -447,16 +314,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           PaperOutlineButton(
             label: context.tr('continue_with_google'),
             loading: _isGoogleLoading,
-            leading: Image.network(
-              'https://www.google.com/favicon.ico',
-              height: 18,
-              width: 18,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.g_mobiledata,
-                size: 22,
-                color: PaperColors.creamInk,
-              ),
-            ),
+            leading: const GoogleLogo(),
             onPressed: _signInWithGoogle,
           ),
           const SizedBox(height: 24),
@@ -486,83 +344,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
           const SizedBox(height: 24),
         ],
       ),
-    );
-  }
-
-  Widget _buildOtpVerificationView() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        IconButton(
-          padding: EdgeInsets.zero,
-          alignment: Alignment.centerLeft,
-          icon: const Icon(Icons.arrow_back, size: 22, color: PaperColors.ink),
-          onPressed: () {
-            setState(() {
-              _showOtpVerification = false;
-              _otpController.clear();
-            });
-          },
-        ),
-        const SizedBox(height: 20),
-        const PaperKicker('Verify email'),
-        const SizedBox(height: 10),
-        Text('Check your\ninbox.', style: PaperTextStyles.serif(27)),
-        const SizedBox(height: 14),
-        Text(
-          'We sent a 6-digit code to\n$_pendingEmail',
-          style: PaperTextStyles.body(color: PaperColors.muted),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Please also check your spam folder.',
-          style: PaperTextStyles.body(size: 12, color: PaperColors.faint),
-        ),
-        const SizedBox(height: 34),
-        PaperUnderlineField(
-          controller: _otpController,
-          label: 'Code',
-          hint: '000000',
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: PaperColors.ink,
-            fontSize: 24,
-            letterSpacing: 8,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 30),
-        PaperPrimaryButton(
-          label: 'Verify code',
-          loading: _isLoading,
-          onPressed: _verifyOtp,
-        ),
-        const SizedBox(height: 20),
-        Center(
-          child: GestureDetector(
-            onTap: _isLoading ? null : _resendOtp,
-            child: Text.rich(
-              TextSpan(
-                text: "Didn't receive the code? ",
-                style: const TextStyle(fontSize: 13, color: PaperColors.muted),
-                children: const [
-                  TextSpan(
-                    text: 'Resend',
-                    style: TextStyle(
-                      color: PaperColors.terracotta,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-      ],
     );
   }
 }
