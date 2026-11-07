@@ -154,12 +154,17 @@ serve(async (req: Request) => {
       return errorResponse("bad_request", 400, locale);
     }
     locale = typeof body.locale === "string" ? body.locale : locale;
-    imagePath = body.image_path;
+    const candidatePath: string = body.image_path;
 
     // 2. Path must live under the caller's own folder — no arbitrary reads.
-    if (!imagePath.startsWith(`${userId}/`) || imagePath.includes("..")) {
+    // `imagePath` is only set after this check so the `finally` cleanup can
+    // never delete another user's upload.
+    if (
+      !candidatePath.startsWith(`${userId}/`) || candidatePath.includes("..")
+    ) {
       return errorResponse("unauthorized", 403, locale);
     }
+    imagePath = candidatePath;
 
     // 3. Per-user rate limit.
     const limited = await isRateLimited(admin, userId);
