@@ -6,13 +6,11 @@ import 'package:shoply/data/models/recommendation_item.dart';
 class RecommendationCard extends StatelessWidget {
   final RecommendationItem recommendation;
   final VoidCallback onAdd;
-  final VoidCallback? onDismiss;
 
   const RecommendationCard({
     super.key,
     required this.recommendation,
     required this.onAdd,
-    this.onDismiss,
   });
 
   @override
