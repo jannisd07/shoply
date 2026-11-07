@@ -92,9 +92,6 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
       DeepLinkService.instance.onCreateListRequested = _handleSiriCreateList;
 
       await DeepLinkService.instance.initialize(router);
-
-      // Process any pending deep link that opened the app
-      DeepLinkService.instance.processPendingDeepLink();
     } catch (e) {
       debugPrint('⚠️ [APP] Failed to initialize deep links: $e');
     }
