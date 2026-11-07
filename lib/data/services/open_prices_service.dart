@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show visibleForTesting, debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/core/utils/request_throttle.dart';
 import 'package:shoply/data/models/shelf_price.dart';
 
 /// Regular shelf prices from Open Food Facts' **Open Prices** database.
@@ -36,7 +37,7 @@ class OpenPricesService {
 
   /// Open Food Facts asks every client to identify itself; anonymous or
   /// browser-spoofing agents get rate limited.
-  static const _userAgent = 'Shoply/1.1.4 (com.dominik.shoply)';
+  static const _userAgent = 'Shoply (com.dominik.shoply)';
 
   static const _cachePrefix = 'open_prices_v1_';
   static const _cacheTtl = Duration(days: 7);
@@ -49,12 +50,14 @@ class OpenPricesService {
   static const _maxAge = Duration(days: 365);
 
   final Map<String, ShelfPrice?> _memory = {};
-  DateTime _lastRequest = DateTime.fromMillisecondsSinceEpoch(0);
-  Future<void> _throttleQueue = Future.value();
+
+  /// Space out request starts; these are free, volunteer-run services.
+  final _throttle = RequestThrottle(const Duration(milliseconds: 400));
 
   /// Best-guess regular price for [name], or null when nothing usable was
-  /// found. Results are cached for [_cacheTtl] — shelf prices move slowly and
-  /// the upstream services are volunteer-funded.
+  /// found. Answers (including "no data") are cached for [_cacheTtl] — shelf
+  /// prices move slowly and the upstream services are volunteer-funded.
+  /// Failed requests (non-200, timeout) are not cached.
   Future<ShelfPrice?> lookupByName(String name) async {
     final query = name.trim().toLowerCase();
     if (query.length < 3) return null;
@@ -98,7 +101,7 @@ class OpenPricesService {
 
   /// Name → Open Food Facts product hits (barcodes plus their categories).
   Future<List<Map<String, dynamic>>> _searchHits(String query) async {
-    await _throttle();
+    await _throttle.wait();
     final uri = Uri.parse(_searchUrl).replace(queryParameters: {
       'q': query,
       'langs': 'de',
@@ -109,8 +112,7 @@ class OpenPricesService {
 
     final response = await _get(uri);
     if (response.statusCode != 200) {
-      debugPrint('❌ [OPENPRICES] Search ${response.statusCode} for "$query"');
-      return const [];
+      throw _RequestFailed('search ${response.statusCode}');
     }
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -189,7 +191,7 @@ class OpenPricesService {
     List<String>? productCodes,
     String? categoryTag,
   }) async {
-    await _throttle();
+    await _throttle.wait();
     final uri = Uri.parse(_pricesUrl).replace(queryParameters: {
       if (productCodes != null) 'product_code__in': productCodes.join(','),
       if (categoryTag != null) 'product__categories_tags__contains': categoryTag,
@@ -200,8 +202,7 @@ class OpenPricesService {
 
     final response = await _get(uri);
     if (response.statusCode != 200) {
-      debugPrint('❌ [OPENPRICES] Prices ${response.statusCode}');
-      return const [];
+      throw _RequestFailed('prices ${response.statusCode}');
     }
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -319,16 +320,13 @@ class OpenPricesService {
       'user-agent': _userAgent,
     }).timeout(const Duration(seconds: 15));
   }
+}
 
-  /// Space out request starts; these are free, volunteer-run services.
-  Future<void> _throttle() {
-    final turn = _throttleQueue.then((_) async {
-      const minGap = Duration(milliseconds: 400);
-      final elapsed = DateTime.now().difference(_lastRequest);
-      if (elapsed < minGap) await Future.delayed(minGap - elapsed);
-      _lastRequest = DateTime.now();
-    });
-    _throttleQueue = turn;
-    return turn;
-  }
+/// A non-200 answer; aborts the lookup without caching it.
+class _RequestFailed implements Exception {
+  _RequestFailed(this.message);
+  final String message;
+
+  @override
+  String toString() => 'OpenPrices request failed: $message';
 }
