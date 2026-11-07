@@ -50,7 +50,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: dart analyze --fatal-warnings --no-fatal-infos
+        run: dart analyze --fatal-warnings
 
       - name: Test
         run: flutter test
