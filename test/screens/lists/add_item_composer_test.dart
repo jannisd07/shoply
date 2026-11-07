@@ -1,6 +1,4 @@
-import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/presentation/screens/lists/widgets/add_item_composer.dart';
 import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
