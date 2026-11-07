@@ -7,8 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Service for requesting App Store/Play Store reviews using native APIs.
 /// Uses SKStoreReviewController on iOS (Apple's official API).
 /// 
-/// **AI: Critical Constraints**:
-/// - ⚠️ Apple limits review prompts to 3 per 365 days per user per app version
+/// Constraints:
+/// - ⚠️ Apple shows the review prompt at most 3 times per 365 days per user
 /// - ⚠️ Never show after negative experiences (errors, crashes, deleted items)
 /// - ⚠️ Only show after positive actions (completing lists, saving recipes)
 /// 
