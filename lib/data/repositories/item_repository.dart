@@ -3,20 +3,24 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/data/repositories/item_batch.dart';
 import 'package:shoply/data/services/gemini_categorization_service.dart';
 import 'package:shoply/data/services/language_detection_service.dart';
 import 'package:shoply/data/services/push_notification_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+export 'package:shoply/data/repositories/item_batch.dart';
+
 class ItemRepository {
   static final ItemRepository instance = ItemRepository();
   final SupabaseService _supabase;
-  final GeminiCategorizationService _geminiService = GeminiCategorizationService();
+  final GeminiCategorizationService _geminiService =
+      GeminiCategorizationService();
   final Map<String, RealtimeChannel> _channels = {};
 
   ItemRepository({SupabaseService? supabase})
-      : _supabase = supabase ?? SupabaseService.instance;
+    : _supabase = supabase ?? SupabaseService.instance;
 
   /// Get current user ID
   String? get currentUserId => _supabase.currentUser?.id;
@@ -118,7 +122,9 @@ class ItemRepository {
           parsedUnit = null;
         }
 
-        debugPrint('✅ [ITEM_REPO] Parsed "$name" → name="$parsedName", qty=$parsedQuantity, unit=$parsedUnit');
+        debugPrint(
+          '✅ [ITEM_REPO] Parsed "$name" → name="$parsedName", qty=$parsedQuantity, unit=$parsedUnit',
+        );
       } catch (e) {
         debugPrint('⚠️ [ITEM_REPO] Auto-parse failed, using original: $e');
       }
@@ -142,7 +148,9 @@ class ItemRepository {
         final existingItem = sameUnit.first;
         final newQuantity = existingItem.quantity + parsedQuantity;
 
-        debugPrint('🔄 [ITEM_REPO] Merging into "${existingItem.name}": ${existingItem.quantity} + $parsedQuantity = $newQuantity');
+        debugPrint(
+          '🔄 [ITEM_REPO] Merging into "${existingItem.name}": ${existingItem.quantity} + $parsedQuantity = $newQuantity',
+        );
 
         final updatedResponse = await _supabase
             .from('shopping_items')
@@ -150,8 +158,13 @@ class ItemRepository {
               'quantity': newQuantity,
               'updated_at': DateTime.now().toIso8601String(),
               if (price != null)
-                ..._priceFields(price, priceCurrency, priceRetailer,
-                    priceUnit, priceOldValue),
+                ..._priceFields(
+                  price,
+                  priceCurrency,
+                  priceRetailer,
+                  priceUnit,
+                  priceOldValue,
+                ),
             })
             .eq('id', existingItem.id)
             .select()
@@ -161,7 +174,9 @@ class ItemRepository {
         return ShoppingItemModel.fromJson(updatedResponse);
       }
     } catch (e) {
-      debugPrint('⚠️ [ITEM_REPO] Error checking for existing item: $e - will create new item');
+      debugPrint(
+        '⚠️ [ITEM_REPO] Error checking for existing item: $e - will create new item',
+      );
     }
 
     // Auto-categorize with Gemini if category is null (returns a
@@ -170,9 +185,13 @@ class ItemRepository {
     if (finalCategory == null) {
       try {
         finalCategory = await _geminiService.categorizeItem(parsedName);
-        debugPrint('✅ [ITEM_REPO] Auto-categorized "$parsedName" → $finalCategory');
+        debugPrint(
+          '✅ [ITEM_REPO] Auto-categorized "$parsedName" → $finalCategory',
+        );
       } catch (e) {
-        debugPrint('⚠️ [ITEM_REPO] Auto-categorization failed for "$parsedName": $e');
+        debugPrint(
+          '⚠️ [ITEM_REPO] Auto-categorization failed for "$parsedName": $e',
+        );
         finalCategory = 'other';
       }
     }
@@ -185,7 +204,8 @@ class ItemRepository {
             'name': parsedName,
             'quantity': parsedQuantity,
             'unit': parsedUnit,
-            'category': finalCategory, // Legacy field - kept for backward compatibility
+            'category':
+                finalCategory, // Legacy field - kept for backward compatibility
             'category_id': finalCategory,
             'language': LanguageDetectionService.detectLanguage(parsedName),
             'notes': notes,
@@ -193,8 +213,13 @@ class ItemRepository {
             'barcode': barcode,
             'added_by': userId,
             if (price != null)
-              ..._priceFields(price, priceCurrency, priceRetailer, priceUnit,
-                  priceOldValue),
+              ..._priceFields(
+                price,
+                priceCurrency,
+                priceRetailer,
+                priceUnit,
+                priceOldValue,
+              ),
           })
           .select()
           .single();
@@ -211,9 +236,133 @@ class ItemRepository {
     }
   }
 
+  /// Puts several items on [listId] at once, in one insert plus one update
+  /// per merged item (Wochenplan, "Zutaten auf die Liste", import).
+  ///
+  /// Items with the same name and unit as an unchecked item on the list are
+  /// merged into it; the batch itself is combined first. Missing categories
+  /// are set in the background, so the call returns as soon as the rows are
+  /// written. Keep the returned token to offer "Widerrufen".
+  Future<AddItemsResult> addItems(String listId, List<NewItem> items) async {
+    final userId = _supabase.currentUser?.id;
+    if (userId == null) throw Exception('User not authenticated');
+
+    final existing = await _supabase
+        .from('shopping_items')
+        .select()
+        .eq('list_id', listId)
+        .eq('is_checked', false);
+    final existingItems = (existing as List)
+        .map((json) => ShoppingItemModel.fromJson(json))
+        .toList();
+    final plan = AddItemsPlan.of(existingItems, items);
+
+    final changed = <ShoppingItemModel>[];
+    final previousQuantities = <String, double>{};
+    for (final entry in plan.merges.entries) {
+      final item = existingItems.firstWhere((i) => i.id == entry.key);
+      previousQuantities[item.id] = item.quantity;
+      final updated = await _supabase
+          .from('shopping_items')
+          .update({
+            'quantity': item.quantity + entry.value,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', item.id)
+          .select()
+          .single();
+      changed.add(ShoppingItemModel.fromJson(updated));
+    }
+
+    final insertedIds = <String>[];
+    if (plan.inserts.isNotEmpty) {
+      final rows = await _supabase.from('shopping_items').insert([
+        for (final item in plan.inserts)
+          {
+            'list_id': listId,
+            'name': item.name,
+            'quantity': item.quantity,
+            'unit': item.unit,
+            'category': item.category ?? 'other',
+            'category_id': item.category ?? 'other',
+            'language': LanguageDetectionService.detectLanguage(item.name),
+            'notes': item.notes,
+            'added_by': userId,
+          },
+      ]).select();
+      for (final json in rows as List) {
+        final model = ShoppingItemModel.fromJson(json);
+        insertedIds.add(model.id);
+        changed.add(model);
+      }
+    }
+    await _touchList(listId);
+
+    final token =
+        '${DateTime.now().microsecondsSinceEpoch}-${insertedIds.length}';
+    _batches[token] = _AddBatch(listId, insertedIds, previousQuantities);
+    while (_batches.length > _maxUndoBatches) {
+      _batches.remove(_batches.keys.first);
+    }
+
+    final uncategorized = [
+      for (final m in changed)
+        if (insertedIds.contains(m.id) &&
+            plan.inserts.any((i) => i.name == m.name && i.category == null))
+          m,
+    ];
+    if (uncategorized.isNotEmpty) {
+      unawaited(_categorizeInBackground(uncategorized));
+    }
+    return AddItemsResult(token: token, items: changed);
+  }
+
+  /// Takes back a batch from [addItems]: deletes its new rows and restores
+  /// merged quantities. Does nothing for an unknown or already used token.
+  Future<void> undoAddItems(String token) async {
+    final batch = _batches.remove(token);
+    if (batch == null) return;
+    if (batch.insertedIds.isNotEmpty) {
+      await _supabase
+          .from('shopping_items')
+          .delete()
+          .inFilter('id', batch.insertedIds);
+    }
+    for (final entry in batch.previousQuantities.entries) {
+      await _supabase
+          .from('shopping_items')
+          .update({
+            'quantity': entry.value,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', entry.key);
+    }
+    await _touchList(batch.listId);
+  }
+
+  static const _maxUndoBatches = 10;
+  static final Map<String, _AddBatch> _batches = {};
+
+  Future<void> _categorizeInBackground(List<ShoppingItemModel> items) async {
+    for (final item in items) {
+      try {
+        final category = await _geminiService.categorizeItem(item.name);
+        await _supabase
+            .from('shopping_items')
+            .update({'category': category, 'category_id': category})
+            .eq('id', item.id);
+      } catch (e) {
+        debugPrint(
+          '⚠️ [ITEM_REPO] Background category failed for "${item.name}": $e',
+        );
+      }
+    }
+  }
+
   static final _containsDigit = RegExp(r'\d');
 
-  static String _normalizeUnit(String? unit) => (unit ?? '').trim().toLowerCase();
+  static String _normalizeUnit(String? unit) =>
+      (unit ?? '').trim().toLowerCase();
 
   /// `ilike` treats `%` and `_` as wildcards; escape them so a name is
   /// matched literally (still case-insensitively).
@@ -226,15 +375,14 @@ class ItemRepository {
     String? retailer,
     String? unit,
     double? oldValue,
-  ) =>
-      {
-        'price': price,
-        'price_currency': currency ?? 'EUR',
-        'price_retailer': retailer,
-        'price_unit': unit,
-        'price_updated_at': DateTime.now().toIso8601String(),
-        'price_old_value': oldValue,
-      };
+  ) => {
+    'price': price,
+    'price_currency': currency ?? 'EUR',
+    'price_retailer': retailer,
+    'price_unit': unit,
+    'price_updated_at': DateTime.now().toIso8601String(),
+    'price_old_value': oldValue,
+  };
 
   /// Update an item
   Future<ShoppingItemModel> updateItem(
@@ -286,7 +434,8 @@ class ItemRepository {
         .eq('id', itemId)
         .select('list_id, name')
         .maybeSingle();
-    if (deleted == null) return; // Already gone (e.g. removed by another member).
+    if (deleted == null)
+      return; // Already gone (e.g. removed by another member).
 
     final listId = deleted['list_id'] as String;
     final itemName = deleted['name'] as String;
@@ -355,7 +504,9 @@ class ItemRepository {
     final channel = _channels.remove(listId);
     if (channel != null) {
       channel.unsubscribe();
-      debugPrint('🔵 [ITEM_REPO] Realtime subscription closed for list $listId');
+      debugPrint(
+        '🔵 [ITEM_REPO] Realtime subscription closed for list $listId',
+      );
     }
   }
 
@@ -386,8 +537,16 @@ class ItemRepository {
     unawaited(() async {
       try {
         final results = await Future.wait([
-          _supabase.from('shopping_lists').select('name').eq('id', listId).single(),
-          _supabase.from('users').select('display_name').eq('id', userId).maybeSingle(),
+          _supabase
+              .from('shopping_lists')
+              .select('name')
+              .eq('id', listId)
+              .single(),
+          _supabase
+              .from('users')
+              .select('display_name')
+              .eq('id', userId)
+              .maybeSingle(),
         ]);
         final listName = results[0]!['name'] as String;
         final actorName = results[1]?['display_name'] as String? ?? 'Someone';
@@ -404,4 +563,12 @@ class ItemRepository {
       }
     }());
   }
+}
+
+class _AddBatch {
+  _AddBatch(this.listId, this.insertedIds, this.previousQuantities);
+
+  final String listId;
+  final List<String> insertedIds;
+  final Map<String, double> previousQuantities;
 }
