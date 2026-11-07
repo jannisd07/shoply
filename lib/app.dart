@@ -147,16 +147,14 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
     }
   }
 
-  /// Opens [list] on top of the home tab (instead of replacing the whole
-  /// stack with the public `/list/:id` share route), so back/swipe-back
-  /// returns to home like every other list entry point.
+  /// Pushes [list] on top of the current stack (instead of replacing the
+  /// whole stack with `go`), so back/swipe-back works like every other list
+  /// entry point.
   void _openList(ShoppingListModel list) {
-    final router = ref.read(routerProvider);
-    router.go('/home');
-    router.push(
-      Uri(path: '/lists/${list.id}', queryParameters: {'name': list.name})
-          .toString(),
-    );
+    ref.read(routerProvider).push(
+          Uri(path: '/lists/${list.id}', queryParameters: {'name': list.name})
+              .toString(),
+        );
   }
 
   ShoppingListModel? _findListByName(List<ShoppingListModel> lists, String name) {
