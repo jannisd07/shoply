@@ -175,7 +175,10 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
       final result = await write();
       final current = state.valueOrNull;
       if (mounted) {
-        if (current == null) {
+        if (current == null || _lastSyncedAt == null) {
+          // Never synced with the server yet (the first load was superseded
+          // by this write, or the state is only the offline seed): fetch the
+          // real rows instead of patching possibly stale ones.
           await loadItems();
         } else {
           _commit(reconcile == null ? current : reconcile(current, result));
