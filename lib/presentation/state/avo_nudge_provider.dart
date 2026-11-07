@@ -17,7 +17,8 @@ final restockSuggestionsProvider =
 final offerNudgesProvider =
     FutureProvider.autoDispose<List<OfferNudge>>((ref) async {
   if (ref.watch(authUserIdProvider) == null) return const [];
-  return AvoNudgeService.instance.getOfferNudges(limit: 2);
+  final nudges = await _sharedOfferNudges();
+  return nudges.take(2).toList();
 });
 
 /// Everything you buy regularly that is on offer right now, grouped by shop —
@@ -29,9 +30,21 @@ final offerNudgesProvider =
 final personalFlyerProvider =
     FutureProvider.autoDispose<List<FlyerSection>>((ref) async {
   if (ref.watch(authUserIdProvider) == null) return const [];
-  final nudges = await AvoNudgeService.instance.getOfferNudges(limit: 12);
+  final nudges = await _sharedOfferNudges();
   return groupOffersByRetailer(nudges);
 });
+
+/// One offer-nudge computation for both home cards: they start together on
+/// first paint, and without sharing the in-flight future each ran the same
+/// stats query and sequential offer lookups on a cold cache. Cleared once
+/// done, so invalidating either provider still recomputes.
+Future<List<OfferNudge>>? _offerNudgesInFlight;
+
+Future<List<OfferNudge>> _sharedOfferNudges() {
+  return _offerNudgesInFlight ??= AvoNudgeService.instance
+      .getOfferNudges(limit: 12)
+      .whenComplete(() => _offerNudgesInFlight = null);
+}
 
 /// One shop's worth of the flyer.
 class FlyerSection {

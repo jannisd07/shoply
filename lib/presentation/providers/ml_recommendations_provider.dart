@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/recommendation_item.dart';
-import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/ml_recommendation_service.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 
@@ -15,16 +14,24 @@ final mlRecommendationsProvider = FutureProvider.autoDispose
   if (listId == null) return [];
 
   final service = ref.watch(mlRecommendationServiceProvider);
-  final currentItemsAsync = ref.watch(itemsNotifierProvider(listId));
 
-  // The service uses currentListItems to exclude items already on the list
-  // from its suggestions, so scoring before that data has arrived (loading
-  // or error) would exclude nothing and could recommend items the user
-  // already has. Wait for a real value instead of falling back to [].
-  final List<ShoppingItemModel>? currentItems = currentItemsAsync.valueOrNull;
-  if (currentItems == null) return [];
+  // The service scores against the names and categories already on the
+  // list, so only a change to those re-runs it — ticking an item off, a
+  // price or a reorder does not refetch stats and history. Null while the
+  // items are loading: scoring before they arrive would exclude nothing and
+  // could recommend items the user already has.
+  final itemsKey = ref.watch(itemsNotifierProvider(listId).select((s) {
+    final items = s.valueOrNull;
+    if (items == null) return null;
+    return ([
+      for (final i in items) '${i.name.trim().toLowerCase()}|${i.categoryId ?? i.category}',
+    ]..sort())
+        .join('\n');
+  }));
+  if (itemsKey == null) return [];
 
-  return await service.getRecommendations(
+  final currentItems = ref.read(itemsNotifierProvider(listId)).valueOrNull ?? const [];
+  return service.getRecommendations(
     currentListItems: currentItems,
     listId: listId,
     limit: 5,
