@@ -69,7 +69,7 @@ owner_of() {
       echo A ;;
     lib/presentation/screens/ai/*|lib/presentation/screens/avo/*|lib/presentation/screens/calories/*|\
     lib/presentation/screens/history/*|lib/presentation/screens/plan/*|lib/presentation/screens/offers/*|\
-    lib/presentation/screens/scanner/*)
+    lib/presentation/screens/scanner/*|lib/presentation/screens/system/*)
       echo B ;;
 
     # --- Gemeinsam genutzte Widgets ---
@@ -131,6 +131,10 @@ owner_of() {
       echo B ;;
     assets/*)
       echo A ;;
+
+    # --- KI-Evals (promptfoo, B) ---
+    evals/*)
+      echo B ;;
 
     # --- Doku und Tests ---
     docs/redesign/status-A.md)
