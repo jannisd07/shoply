@@ -39,9 +39,6 @@ dependencies:
   # Storage
   shared_preferences: ^2.2.2
   flutter_secure_storage: ^9.0.0
-  
-  # Video
-  video_player: ^2.8.2
 
   # Network & Images
   cached_network_image: ^3.3.1
