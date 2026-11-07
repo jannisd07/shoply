@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/data/models/recipe_draft.dart';
 
@@ -22,7 +23,7 @@ class RecipeDraftService {
           .toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)); // Most recent first
     } catch (e) {
-      print('❌ [DRAFT] Error loading drafts: $e');
+      debugPrint('❌ [DRAFT] Error loading drafts: $e');
       return [];
     }
   }
@@ -51,7 +52,7 @@ class RecipeDraftService {
     }
     
     await _saveDrafts(drafts);
-    print('✅ [DRAFT] Saved draft: ${updatedDraft.name}');
+    debugPrint('✅ [DRAFT] Saved draft: ${updatedDraft.name}');
     return updatedDraft;
   }
   
@@ -60,7 +61,7 @@ class RecipeDraftService {
     final drafts = await getDrafts();
     drafts.removeWhere((d) => d.id == id);
     await _saveDrafts(drafts);
-    print('✅ [DRAFT] Deleted draft: $id');
+    debugPrint('✅ [DRAFT] Deleted draft: $id');
   }
   
   /// Create a new empty draft

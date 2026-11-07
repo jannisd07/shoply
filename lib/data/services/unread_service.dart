@@ -11,7 +11,7 @@ class UnreadService {
     await prefs.setString('$_prefix$listId', now.toIso8601String());
     
     if (kDebugMode) {
-      print('🔵 [UnreadService] Mark as read: $listId at $now');
+      debugPrint('🔵 [UnreadService] Mark as read: $listId at $now');
     }
   }
 
@@ -29,7 +29,7 @@ class UnreadService {
     if (lastSeenStr == null) {
       // Wenn noch nie gesehen, ist sie "ungelesen" (oder neu)
       if (kDebugMode) {
-        print('🔵 [UnreadService] List $listId is NEW/UNREAD (never seen)');
+        debugPrint('🔵 [UnreadService] List $listId is NEW/UNREAD (never seen)');
       }
       return true;
     }
@@ -42,9 +42,9 @@ class UnreadService {
     // Debugging (nur wenn sich Status ändern könnte oder relevant ist)
     // Wir loggen nicht alles, um die Konsole nicht zu fluten, aber bei "true" ist es interessant.
     if (kDebugMode && isUnread) {
-       print('🔵 [UnreadService] List $listId is UNREAD!');
-       print('   Updated (UTC): $lastUpdatedUtc');
-       print('   Seen    (UTC): $lastSeen');
+       debugPrint('🔵 [UnreadService] List $listId is UNREAD!');
+       debugPrint('   Updated (UTC): $lastUpdatedUtc');
+       debugPrint('   Seen    (UTC): $lastSeen');
     }
 
     return isUnread;

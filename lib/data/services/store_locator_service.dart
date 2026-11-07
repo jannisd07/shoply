@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shoply/data/models/nearby_store.dart';
 
@@ -60,7 +61,7 @@ class StoreLocatorService {
             .timeout(const Duration(seconds: 18));
 
         if (response.statusCode != 200) {
-          print('⚠️ [STORE_LOCATOR] $endpoint returned ${response.statusCode}');
+          debugPrint('⚠️ [STORE_LOCATOR] $endpoint returned ${response.statusCode}');
           continue;
         }
 
@@ -74,14 +75,14 @@ class StoreLocatorService {
           ..sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
 
         _cache[cacheKey] = _CachedStores(DateTime.now(), stores);
-        print('✅ [STORE_LOCATOR] Found ${stores.length} branches within ${radiusMeters.round()}m');
+        debugPrint('✅ [STORE_LOCATOR] Found ${stores.length} branches within ${radiusMeters.round()}m');
         return stores;
       } catch (e) {
-        print('❌ [STORE_LOCATOR] $endpoint failed: $e');
+        debugPrint('❌ [STORE_LOCATOR] $endpoint failed: $e');
       }
     }
 
-    print('⚠️ [STORE_LOCATOR] All endpoints failed; no distance data this time');
+    debugPrint('⚠️ [STORE_LOCATOR] All endpoints failed; no distance data this time');
     return const [];
   }
 
