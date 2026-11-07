@@ -6,7 +6,10 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 07.11.2026: **S1 ist erreicht.** Übersetzungen und Router liegen in Bereichsdateien, das Modulsystem steht. B darf ab
 jetzt seine eigenen Übersetzungs- und Routendateien ändern und `moduleEnabledProvider` abfragen. Als Nächstes baut A das Fundament (A2: Tokens, Komponenten, D2-Tab-Bar,
-Prüfgerüst). A3 ist erledigt. Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`.
+Prüfgerüst). A3 ist erledigt. Aus A2 sind schon da und nutzbar: Tokens (`lib/core/design/design.dart`:
+`context.colors`, `context.text(AvoTextStyle.body)`, `AvoSpacing`, `AvoRadii`, `AvoMotion`, `AvoHaptics`) und das
+Prüfgerüst `test/layout/layout_matrix.dart` (`layoutMatrix('Name', (context) => Widget())`). Komponenten und Tab-Bar
+folgen mit S2. Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`.
 
 ## Meilensteine
 
@@ -120,7 +123,12 @@ Deep Links (`shoply://plan`, `…/calories/add`, `…/avo/voice` usw.) gehen heu
 
 ## Erledigte Anfragen von Teil B
 
-Noch keine.
+| Nr. (status-B) | Was | Commit |
+|---|---|---|
+| 1 | Paywall verspricht keine Angebote mehr, `premium_feat_deals` entfernt | siehe `git log --grep "B request 1"` |
+| 2 | `showAppBottomSheet` bleibt, bis B meldet, dass keine B-Datei es braucht | – (vorgemerkt) |
+| 3 | `owner.sh`: `lib/presentation/screens/system/*` und `evals/*` gehören B | siehe `git log --grep "B request 3"` |
+| 5 (Teil) | Remount-Schlüssel `ValueKey(themeMode-language)` in `app.dart` entfernt; synchroner Redirect folgt mit B3 | siehe `git log --grep "no app remount"` |
 
 ## Fragen an den Owner
 
