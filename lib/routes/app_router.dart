@@ -22,8 +22,6 @@ import 'package:shoply/presentation/screens/profile/settings/diet_preferences_sc
 import 'package:shoply/presentation/screens/profile/settings/app_priorities_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_detail_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_activities_screen.dart';
-import 'package:shoply/presentation/screens/lists/list_background_selection_screen.dart';
-import 'package:shoply/presentation/screens/lists/list_background_picker_screen.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart'
     show OnboardingScreen, hasCompletedOnboarding;
@@ -295,19 +293,6 @@ final routerProvider = Provider<GoRouter>((ref) {
               ? (state.extra as Map)['authorName'] as String?
               : null;
           return RecipeAuthorPage(authorId: authorId, authorName: authorName);
-        },
-      ),
-      GoRoute(
-        path: '/background-selection',
-        name: 'background-selection',
-        builder: (context, state) => const ListBackgroundSelectionScreen(),
-      ),
-      GoRoute(
-        path: '/background-picker/:listId',
-        name: 'background-picker',
-        builder: (context, state) {
-          final listId = state.pathParameters['listId']!;
-          return ListBackgroundPickerScreen(listId: listId);
         },
       ),
       GoRoute(
