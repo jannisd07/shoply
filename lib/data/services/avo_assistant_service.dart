@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,8 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/models/weekly_nutrition_summary.dart';
+import 'package:shoply/data/repositories/item_repository.dart';
+import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/services/avo_app_knowledge.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
@@ -25,6 +28,7 @@ import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/recipe_offer_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
+import 'package:shoply/data/services/unread_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/data/services/water_log_service.dart';
@@ -62,6 +66,20 @@ class AvoAssistantService {
   GenerativeModel? _model;
   ChatSession? _chatSession;
   final _supabase = Supabase.instance.client;
+
+  /// Number of user messages kept in the chat history. The SDK resends the
+  /// whole history every turn, so it is trimmed to bound latency and cost.
+  static const _maxHistoryUserTurns = 10;
+
+  /// Context string sent with the last message. Context is only resent when
+  /// it changed (or after the history was reset/trimmed).
+  String? _lastContextStr;
+
+  /// User the current chat session belongs to; a different user (sign-out,
+  /// account switch) gets a fresh session so no list names, items or
+  /// allergies leak between accounts.
+  String? _sessionUserId;
+  StreamSubscription<AuthState>? _authSubscription;
 
   bool get isInitialized => _model != null && _chatSession != null;
 
@@ -190,8 +208,7 @@ replies should not mention it at all.
   Future<void> initialize() async {
     final apiKey = Env.geminiApiKey;
     if (apiKey.isEmpty) {
-      // ignore: avoid_print
-      print('❌ [AVO] Gemini API key is empty');
+      debugPrint('❌ [AVO] Gemini API key is empty');
       return;
     }
     _model = GenerativeModel(
@@ -201,17 +218,48 @@ replies should not mention it at all.
       tools: _buildTools(),
     );
     _chatSession = _model!.startChat();
-    // ignore: avoid_print
-    print('✅ [AVO] Assistant initialized with function calling');
+    _sessionUserId = _supabase.auth.currentUser?.id;
+    _authSubscription ??= _supabase.auth.onAuthStateChange.listen((data) {
+      final userId = data.session?.user.id;
+      if (userId != _sessionUserId) {
+        _sessionUserId = userId;
+        resetChat();
+      }
+    });
+    debugPrint('✅ [AVO] Assistant initialized with function calling');
   }
 
   void resetChat() {
     if (_model != null) _chatSession = _model!.startChat();
+    _lastContextStr = null;
   }
 
   void dispose() {
+    _authSubscription?.cancel();
+    _authSubscription = null;
     _chatSession = null;
     _model = null;
+  }
+
+  /// Restarts the session with only the last [_maxHistoryUserTurns] user
+  /// messages (and everything after them). Cuts only at a plain user text
+  /// turn so function call/response pairs stay together.
+  void _trimHistory() {
+    final session = _chatSession;
+    final model = _model;
+    if (session == null || model == null) return;
+    final history = session.history.toList();
+    final userTurnStarts = <int>[
+      for (var i = 0; i < history.length; i++)
+        if (history[i].role == 'user' &&
+            history[i].parts.any((p) => p is TextPart))
+          i,
+    ];
+    if (userTurnStarts.length <= _maxHistoryUserTurns) return;
+    final cut = userTurnStarts[userTurnStarts.length - _maxHistoryUserTurns];
+    _chatSession = model.startChat(history: history.sublist(cut));
+    // The trimmed history may have lost the context; resend it next turn.
+    _lastContextStr = null;
   }
 
   // ── Tool declarations ────────────────────────────────────────────
@@ -643,10 +691,14 @@ replies should not mention it at all.
     }
 
     try {
+      // The context (lists, items, profile) is only sent when it changed:
+      // the chat history already carries the previous one.
       final contextStr = _buildContextString(context);
-      final fullMessage = contextStr.isNotEmpty
+      final sendContext = contextStr.isNotEmpty && contextStr != _lastContextStr;
+      final fullMessage = sendContext
           ? 'Context:\n$contextStr\n\nUser: $userMessage'
           : userMessage;
+      if (sendContext) _lastContextStr = contextStr;
 
       final payloads = <AvoWidgetPayload>[];
       var response = await _chatSession!.sendMessage(Content.text(fullMessage));
@@ -665,6 +717,8 @@ replies should not mention it at all.
             await _chatSession!.sendMessage(Content.functionResponses(responses));
       }
 
+      _trimHistory();
+
       final text = (response.text ?? '').trim();
       return AvoResponse(
         message: text,
@@ -672,8 +726,15 @@ replies should not mention it at all.
         expression: _inferExpression(text, payloads),
       );
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [AVO] Chat error: $e');
+      debugPrint('❌ [AVO] Chat error: $e');
+      // A turn that failed mid function-call leaves an unanswered call in the
+      // history, which would break every later message; start over then.
+      // Either way the next message carries the context again.
+      final lastTurn = _chatSession?.history.lastOrNull;
+      if (lastTurn != null && lastTurn.parts.any((p) => p is FunctionCall)) {
+        resetChat();
+      }
+      _lastContextStr = null;
       final err = e.toString().toLowerCase();
       if (err.contains('429') || err.contains('quota') || err.contains('resource_exhausted')) {
         return const AvoResponse(
@@ -710,7 +771,7 @@ replies should not mention it at all.
         case 'get_shopping_history':
           return await _toolShoppingHistory(args, payloads);
         case 'get_lists':
-          return await _toolGetLists(payloads);
+          return await _toolGetLists(ref, payloads);
         case 'get_list_contents':
           return await _toolGetListContents(args, context, payloads);
         case 'add_item_to_list':
@@ -845,9 +906,10 @@ replies should not mention it at all.
   /// lookup every recipe-scoped tool (nutrition, add-to-list) needs.
   Future<Recipe?> _resolveRecipe(String? id, String? name) async {
     if (id != null && id.isNotEmpty) {
-      final all = await RecipeService.instance.getRecipes();
-      for (final r in all) {
-        if (r.id == id) return r;
+      try {
+        return await RecipeService.instance.getRecipeById(id);
+      } catch (_) {
+        // Not found (or a hallucinated id) — fall back to the name search.
       }
     }
     if (name != null && name.isNotEmpty) {
@@ -1003,14 +1065,18 @@ replies should not mention it at all.
       debugPrint('⚠️ [AVO] add_recipe_to_list offer lookup failed: $e');
     }
 
-    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
+    // Write through the repository instead of ItemsNotifier.addItem, which
+    // reloads the whole list, marks it read and pushes to every member per
+    // item. Reload, mark-read and the push happen once at the end instead.
+    final repository = ref.read(itemRepositoryProvider);
     var added = 0;
     var addedWithOffer = 0;
     final failed = <String>[];
     for (final ingredient in ingredients) {
       final offer = ingredientOffers[ingredient.name.trim().toLowerCase()];
       try {
-        await notifier.addItem(
+        await repository.addItem(
+          listId: listId,
           name: ingredient.name,
           quantity: ingredient.amount,
           unit: ingredient.unit.isEmpty ? null : ingredient.unit,
@@ -1028,6 +1094,7 @@ replies should not mention it at all.
     }
     ref.invalidate(itemsNotifierProvider(listId));
     ref.invalidate(listsNotifierProvider);
+    await _afterBulkListChange(ref, listId, addedItemName: added > 0 ? recipe.name : null);
 
     return {
       'recipe': recipe.name,
@@ -1064,9 +1131,10 @@ replies should not mention it at all.
   }
 
   Future<Map<String, Object?>> _toolGetLists(
+    WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    final lists = await _fetchLists();
+    final lists = await _fetchLists(ref);
     if (lists.isNotEmpty) {
       payloads.add(AvoWidgetPayload.lists(lists));
     }
@@ -1089,7 +1157,7 @@ replies should not mention it at all.
       if (firstList == null) return {'error': 'No lists available'};
       listId = firstList.id;
     }
-    final items = await _fetchListItems(listId);
+    final items = await ItemRepository.instance.getListItems(listId);
     String name = 'Shopping list';
     if (context?.lists != null) {
       for (final l in context!.lists!) {
@@ -1164,10 +1232,11 @@ replies should not mention it at all.
     if (listId == null || itemIds.isEmpty) {
       return {'error': 'list_id and item_ids are required'};
     }
-    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
-    for (final id in itemIds) {
-      await notifier.toggleItemChecked(id, checked);
-    }
+    final repository = ref.read(itemRepositoryProvider);
+    await Future.wait(
+        itemIds.map((id) => repository.toggleItemChecked(id, checked)));
+    ref.invalidate(itemsNotifierProvider(listId));
+    await _afterBulkListChange(ref, listId);
     return {'updated': itemIds.length, 'checked': checked};
   }
 
@@ -1177,16 +1246,14 @@ replies should not mention it at all.
   ) async {
     final listId = args['list_id'] as String?;
     if (listId == null) return {'error': 'list_id is required'};
-    final items = await _fetchListItems(listId);
-    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
-    var count = 0;
-    for (final item in items) {
-      if (!item.isChecked) {
-        await notifier.toggleItemChecked(item.id, true);
-        count++;
-      }
-    }
-    return {'checked_count': count};
+    final repository = ref.read(itemRepositoryProvider);
+    final unchecked =
+        (await repository.getListItems(listId)).where((i) => !i.isChecked).toList();
+    await Future.wait(
+        unchecked.map((item) => repository.toggleItemChecked(item.id, true)));
+    ref.invalidate(itemsNotifierProvider(listId));
+    await _afterBulkListChange(ref, listId);
+    return {'checked_count': unchecked.length};
   }
 
   Future<Map<String, Object?>> _toolAddHistoryItems(
@@ -2298,8 +2365,7 @@ replies should not mention it at all.
       if (decoded['calories'] == null) return null;
       return decoded;
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [AVO] Food nutrition estimate failed: $e');
+      debugPrint('❌ [AVO] Food nutrition estimate failed: $e');
       return null;
     }
   }
@@ -2326,24 +2392,36 @@ replies should not mention it at all.
 
   // ── Data access helpers ──────────────────────────────────────────
 
-  Future<List<ShoppingListModel>> _fetchLists() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return [];
-    final response = await _supabase
-        .from('shopping_lists')
-        .select('*')
-        .eq('user_id', userId)
-        .order('updated_at', ascending: false);
-    return (response as List).map((j) => ShoppingListModel.fromJson(j)).toList();
+  /// Lists the user owns or is a member of, with item counts — the loaded
+  /// lists state when available, otherwise a fresh repository fetch.
+  Future<List<ShoppingListModel>> _fetchLists(WidgetRef ref) async {
+    final loaded = ref.read(listsNotifierProvider).valueOrNull;
+    if (loaded != null) return loaded;
+    if (_supabase.auth.currentUser == null) return [];
+    return ListRepository.instance.getUserLists();
   }
 
-  Future<List<ShoppingItemModel>> _fetchListItems(String listId) async {
-    final response = await _supabase
-        .from('shopping_items')
-        .select('*')
-        .eq('list_id', listId)
-        .order('created_at', ascending: false);
-    return (response as List).map((j) => ShoppingItemModel.fromJson(j)).toList();
+  /// Bookkeeping after a tool changed several items at once: mark the list
+  /// read (the user's own change must not show as unread) and, for adds,
+  /// send one push to the other members instead of one per item.
+  Future<void> _afterBulkListChange(
+    WidgetRef ref,
+    String listId, {
+    String? addedItemName,
+  }) async {
+    try {
+      await UnreadService().markAsRead(listId);
+      final userId = _supabase.auth.currentUser?.id;
+      if (addedItemName != null && userId != null) {
+        await ref.read(itemRepositoryProvider).sendItemAddedNotification(
+              listId: listId,
+              itemName: addedItemName,
+              addedByUserId: userId,
+            );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [AVO] Post-change bookkeeping failed: $e');
+    }
   }
 
   // ── Context builder ──────────────────────────────────────────────
