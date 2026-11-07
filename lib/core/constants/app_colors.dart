@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 /// Centralized color palette for consistent UI across the app
 /// Based on iOS design system with dark-first approach
+/// Legacy colour helpers. Since A2 (07.11.2026) every value follows the D2
+/// tokens in `lib/core/design/avo_colors.dart`, so screens that are not rebuilt
+/// yet already lose the Paper look. New code uses `context.colors` instead.
 class AppColors {
   // ============================================
   // DARK MODE COLORS (Primary Design)
@@ -26,10 +29,10 @@ class AppColors {
   static const Color darkTextPrimary = Color(0xFFFFFFFF);
   
   /// Secondary text - iOS system gray
-  static const Color darkTextSecondary = Color(0xFF8E8E93);
+  static const Color darkTextSecondary = Color(0xFFAEAEB2);
   
   /// Tertiary/hint text
-  static const Color darkTextTertiary = Color(0xFF636366);
+  static const Color darkTextTertiary = Color(0xFF8E8E93);
   
   // ============================================
   // LIGHT MODE COLORS
@@ -38,50 +41,50 @@ class AppColors {
   // "Paper" design language: warm editorial palette (see paper_colors.dart)
 
   /// Main screen background - warm paper
-  static const Color lightBackground = Color(0xFFF7F3EC);
+  static const Color lightBackground = Color(0xFFF2F2F7);
 
   /// Surface/Card background - brighter paper surface
-  static const Color lightSurface = Color(0xFFFFFDF8);
+  static const Color lightSurface = Color(0xFFFFFFFF);
 
   /// Input field fill color - soft cream
-  static const Color lightInputFill = Color(0xFFEFE8DA);
+  static const Color lightInputFill = Color(0xFFEFEFF0);
 
   /// Border color for inputs and cards - paper hairline
-  static const Color lightBorder = Color(0xFFE2D9C8);
+  static const Color lightBorder = Color(0xFFE5E5EA);
 
   /// Divider/separator color - soft paper hairline
-  static const Color lightDivider = Color(0xFFEAE3D6);
+  static const Color lightDivider = Color(0xFFE5E5EA);
 
   /// Primary text - warm ink
-  static const Color lightTextPrimary = Color(0xFF201D18);
+  static const Color lightTextPrimary = Color(0xFF1C1C1E);
 
   /// Secondary text - warm muted
-  static const Color lightTextSecondary = Color(0xFF8A8274);
+  static const Color lightTextSecondary = Color(0xFF6C6C70);
 
   /// Tertiary/hint text - warm faint
-  static const Color lightTextTertiary = Color(0xFFB5AB97);
+  static const Color lightTextTertiary = Color(0xFF6C6C70);
 
   // ============================================
   // ACCENT COLORS - Paper Terracotta Palette
   // ============================================
 
   /// Primary accent - terracotta (light mode)
-  static const Color accent = Color(0xFFC0502A);
+  static const Color accent = Color(0xFF1F7A3A);
 
   /// Primary accent for dark mode - brighter terracotta for contrast
-  static const Color accentDark = Color(0xFFD4693F);
+  static const Color accentDark = Color(0xFF4CC46E);
 
   /// Success - muted sage green
-  static const Color success = Color(0xFF5F7D52);
+  static const Color success = Color(0xFF1F7A3A);
 
   /// Warning - warm amber ink
-  static const Color warning = Color(0xFFBA7517);
+  static const Color warning = Color(0xFFB25000);
 
   /// Error/Destructive - paper danger red
-  static const Color error = Color(0xFFA33B2A);
+  static const Color error = Color(0xFFD70015);
 
   /// Info - Same as accent
-  static const Color info = Color(0xFFC0502A);
+  static const Color info = Color(0xFF1F7A3A);
   
   /// Accent color getter based on theme
   static Color accentColor(BuildContext context) {
@@ -98,11 +101,11 @@ class AppColors {
   static const Color freshGreen = Color(0xFF4CAF50);
   
   /// Cream/Warm white - cozy, homey feel
-  static const Color cream = Color(0xFFFFF8E1);
+  static const Color cream = Color(0xFFE7F3EA);
   
   /// Recipe/Food accent - paper terracotta
-  static const Color recipeAccent = Color(0xFFC0502A);
-  static const Color recipeAccentDark = Color(0xFFD4693F);
+  static const Color recipeAccent = Color(0xFF1F7A3A);
+  static const Color recipeAccentDark = Color(0xFF4CC46E);
   
   /// Get recipe accent based on theme
   static Color recipeAccentColor(BuildContext context) {
@@ -112,31 +115,31 @@ class AppColors {
   }
 
   /// Recipe-specific theme colors (dark mode)
-  static const Color recipeDarkBg = Color(0xFF0A120A);
-  static const Color recipeDarkSurface = Color(0xFF1A261A);
-  static const Color recipeDarkInput = Color(0xFF2A362A);
-  static const Color recipeDarkBorder = Color(0xFF3A4A3A);
+  static const Color recipeDarkBg = Color(0xFF000000);
+  static const Color recipeDarkSurface = Color(0xFF1C1C1E);
+  static const Color recipeDarkInput = Color(0xFF2C2C2E);
+  static const Color recipeDarkBorder = Color(0xFF38383A);
 
   /// Recipe-specific theme colors (light mode) - paper palette
-  static const Color recipeLightBg = Color(0xFFF7F3EC);
-  static const Color recipeLightSurface = Color(0xFFFFFDF8);
-  static const Color recipeLightBorder = Color(0xFFE2D9C8);
+  static const Color recipeLightBg = Color(0xFFFFFFFF);
+  static const Color recipeLightSurface = Color(0xFFFFFFFF);
+  static const Color recipeLightBorder = Color(0xFFE5E5EA);
 
   /// Recipe step number accent - terracotta
-  static const Color recipeStep = Color(0xFFC0502A);
+  static const Color recipeStep = Color(0xFF1F7A3A);
 
   /// Recipe star rating gold - warm amber ink
   static const Color recipeStarGold = Color(0xFFBA7517);
 
   /// Recipe text colors
-  static const Color recipeDarkTextPrimary = Color(0xFFE8F0E8);
-  static const Color recipeDarkTextSecondary = Color(0xFFA0B0A0);
-  static const Color recipeLightTextPrimary = Color(0xFF201D18);
+  static const Color recipeDarkTextPrimary = Color(0xFFFFFFFF);
+  static const Color recipeDarkTextSecondary = Color(0xFFAEAEB2);
+  static const Color recipeLightTextPrimary = Color(0xFF1C1C1E);
 
   /// Recipe green accent (for buttons, highlights) - muted sage
-  static const Color recipeGreen = Color(0xFF5F7D52);
-  static const Color recipeGreenDark = Color(0xFF7A986C);
-  static const Color recipeStepDark = Color(0xFFFF8A65);
+  static const Color recipeGreen = Color(0xFF1F7A3A);
+  static const Color recipeGreenDark = Color(0xFF4CC46E);
+  static const Color recipeStepDark = Color(0xFF4CC46E);
 
   /// Get recipe text primary color based on theme
   static Color recipeTextPrimary(BuildContext context) {

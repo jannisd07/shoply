@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 class AppTextStyles {
   // Font Family - Satoshi
-  static const String fontFamily = 'Satoshi';
-  static const String fontFamilyText = 'Satoshi';
+  /// Satoshi was never bundled; null means the system font (SF Pro).
+  static const String? fontFamily = null;
+  static const String? fontFamilyText = null;
   
   // Heading Styles - SF Pro Display für große Texte
 
