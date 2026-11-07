@@ -1,0 +1,56 @@
+name: Analyze and test
+
+# Runs the analyzer (0 errors / 0 warnings required; infos allowed) and the
+# unit tests on every push and pull request. Uses placeholder versions of the
+# gitignored config files, so no secrets are needed.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Write placeholder config files
+        run: |
+          cp lib/core/config/env.example.dart lib/core/config/env.dart
+          cat > lib/firebase_options.dart <<'EOF'
+          import 'package:firebase_core/firebase_core.dart';
+
+          class DefaultFirebaseOptions {
+            static FirebaseOptions get currentPlatform => const FirebaseOptions(
+                  apiKey: 'ci',
+                  appId: 'ci',
+                  messagingSenderId: 'ci',
+                  projectId: 'ci',
+                );
+          }
+          EOF
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: dart analyze --fatal-warnings --no-fatal-infos
+
+      - name: Test
+        run: flutter test
