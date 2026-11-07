@@ -299,13 +299,11 @@ class _ListActivitiesScreenState extends ConsumerState<ListActivitiesScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final activityDate = DateTime(timestamp.year, timestamp.month, timestamp.day);
-    
-    final isGerman = languageCode == 'de';
-    
+
     if (activityDate == today) {
-      return isGerman ? 'Heute' : 'Today';
+      return context.tr('today');
     } else if (activityDate == yesterday) {
-      return isGerman ? 'Gestern' : 'Yesterday';
+      return context.tr('yesterday');
     } else if (now.difference(activityDate).inDays < 7) {
       // Show weekday name
       return DateFormat.EEEE(languageCode).format(timestamp);
