@@ -4,9 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/utils/diet_checker.dart';
 import 'package:shoply/data/models/store_offer.dart';
+import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/zip_code_sheet.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/state/items_provider.dart';
 
 /// Height of one suggestion row. Fixed so the card shows exactly
 /// [_visibleRows] rows and scrolls the remainder internally, and so the
@@ -19,22 +24,46 @@ import 'package:shoply/presentation/screens/lists/widgets/zip_code_sheet.dart';
 const double _rowHeight = 72;
 const int _visibleRows = 3;
 
-/// Live offers for the text currently typed in the add bar.
+/// Live offers for the text currently typed in the add bar (contract 3.3).
 /// Paper card floating above the add bar; tap adds the product to the list.
 /// Also nudges the user to set a zip code when location isn't available yet,
 /// since offer lookups have no way to pick a region without one.
+///
+/// Renders nothing, and asks the offers source nothing, while offers are
+/// unavailable (module or kill switch) or hidden on [listId].
 class OfferSuggestionsBar extends ConsumerWidget {
+  /// The list the tapped offer goes to when [onSelect] is null, and whose
+  /// "hide offers" choice applies. Nullable only while Teil A's
+  /// `list_detail_screen.dart` still calls `OfferSuggestionsBar(query:,
+  /// onSelect:)`; becomes required once A switched.
+  final String? listId;
   final String query;
-  final void Function(StoreOffer offer) onSelect;
+
+  /// Called after the tapped offer was added to [listId], so the host can
+  /// clear its input field.
+  final VoidCallback? onAdded;
+
+  /// Old entry point of Teil A: called with the tapped offer instead of
+  /// adding it to [listId]. Goes away once A switched to [onAdded].
+  final void Function(StoreOffer offer)? onSelect;
 
   const OfferSuggestionsBar({
     super.key,
+    this.listId,
     required this.query,
-    required this.onSelect,
-  });
+    this.onAdded,
+    this.onSelect,
+  }) : assert(listId != null || onSelect != null,
+            'Without onSelect the bar needs a listId to add the offer to');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final listId = this.listId;
+    final visible = listId == null
+        ? ref.watch(offersAvailableProvider)
+        : ref.watch(offersVisibleForListProvider(listId));
+    if (!visible) return const SizedBox.shrink();
+
     final zipAsync = ref.watch(userZipCodeProvider);
     if (!zipAsync.hasValue) return const SizedBox.shrink();
     // No real zip: suggestions still work through the nationwide fallback
@@ -54,20 +83,6 @@ class OfferSuggestionsBar extends ConsumerWidget {
       }
       return const SizedBox.shrink();
     }
-
-    final allOffers =
-        ref.watch(offerSearchAllProvider(query)).valueOrNull ?? offers;
-    // Exclude broad-term matches from the savings comparison — they may be a
-    // different (if related) product, so "save up to X" shouldn't be based
-    // on comparing prices across two non-identical items.
-    final confidentOffers = allOffers.where((o) => !o.isBroadMatch).toList();
-    final maxPrice = confidentOffers.isEmpty
-        ? null
-        : confidentOffers.map((o) => o.price).reduce((a, b) => a > b ? a : b);
-    final savings = (maxPrice != null && !offers.first.isBroadMatch)
-        ? maxPrice - offers.first.price
-        : 0.0;
-    final showSavings = confidentOffers.length > 1 && savings >= 0.20;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -109,18 +124,6 @@ class OfferSuggestionsBar extends ConsumerWidget {
                     ),
                   ),
                 ),
-                if (showSavings)
-                  Text(
-                    context.tr(
-                      'cheapest_saves_up_to',
-                      params: {'amount': savings.toStringAsFixed(2)},
-                    ),
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.accentColor(context),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -146,7 +149,12 @@ class OfferSuggestionsBar extends ConsumerWidget {
                   showTopDivider: i > 0,
                   onTap: () {
                     HapticFeedback.lightImpact();
-                    onSelect(offers[i]);
+                    final select = onSelect;
+                    if (select != null) {
+                      select(offers[i]);
+                    } else if (listId != null) {
+                      _addToList(context, ref, listId, offers[i]);
+                    }
                   },
                 ),
               ),
@@ -196,6 +204,40 @@ class OfferSuggestionsBar extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Adds [offer] with its price to [listId], like the list screen does:
+  /// the offer already carries the real product name, so no parse pass.
+  Future<void> _addToList(
+    BuildContext context,
+    WidgetRef ref,
+    String listId,
+    StoreOffer offer,
+  ) async {
+    final user = ref.read(currentUserProvider).valueOrNull;
+    try {
+      await ref.read(itemsNotifierProvider(listId).notifier).addItem(
+            name: offer.productName,
+            isDietWarning: user != null &&
+                DietChecker.checkDietWarning(
+                  offer.productName,
+                  user.dietPreferences,
+                ),
+            price: offer.price,
+            priceCurrency: 'EUR',
+            priceRetailer: offer.retailerName,
+            priceUnit: offer.unitSizeLabel ?? offer.unitShortName,
+            priceOldValue: offer.regularPrice,
+            autoParse: false,
+          );
+      onAdded?.call();
+    } catch (e) {
+      debugPrint('❌ [OFFERS] Adding the offer to the list failed: $e');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('action_failed'))),
+      );
+    }
   }
 }
 

@@ -81,6 +81,9 @@ const Map<String, String> caloriesEn = {
   'log_recipe_servings': 'Servings',
   'log_recipe_save': 'Add to diary',
   'log_recipe_success': 'Logged {name} to your diary',
+  // P0.3 full-screen diary entry (Teil B)
+  'cal_servings_less': 'Half a serving less',
+  'cal_servings_more': 'Half a serving more',
   'weight_tracking_title': 'Weight',
   'weight_tracking_input_hint': 'Weight (kg)',
   'weight_tracking_error': 'Couldn\'t load weight history.',
@@ -224,6 +227,9 @@ const Map<String, String> caloriesDe = {
   'log_recipe_servings': 'Portionen',
   'log_recipe_save': 'Zum Tagebuch hinzufügen',
   'log_recipe_success': '{name} zum Tagebuch hinzugefügt',
+  // P0.3 full-screen diary entry (Teil B)
+  'cal_servings_less': 'Eine halbe Portion weniger',
+  'cal_servings_more': 'Eine halbe Portion mehr',
   'weight_tracking_title': 'Gewicht',
   'weight_tracking_input_hint': 'Gewicht (kg)',
   'weight_tracking_error': 'Gewichtsverlauf konnte nicht geladen werden.',

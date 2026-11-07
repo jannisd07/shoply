@@ -4,21 +4,39 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/app_text_styles.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
+import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/recipe_offers_provider.dart';
 
 /// "This recipe is cheaper this week" — current supermarket offers for the
-/// recipe's ingredients (Feature 8). Renders nothing while loading, on
-/// error, without a real zip code, or when no ingredient is on offer — the
-/// recipe page never shows an empty or fake offers section.
+/// recipe's ingredients (Feature 8, contract 3.3). Renders nothing while
+/// offers are unavailable (module or kill switch, then without asking the
+/// offers source), while loading, on error, without a real zip code, or when
+/// no ingredient is on offer — the recipe page never shows an empty or fake
+/// offers section.
 class RecipeOffersCard extends ConsumerWidget {
-  final RecipeOffersRequest request;
+  final RecipeOffersRequest? request;
+  final Recipe? recipe;
 
-  const RecipeOffersCard({super.key, required this.request});
+  /// `RecipeOffersCard(recipe: recipe)` (contract `b_slots.dart`). The old
+  /// `RecipeOffersCard(request: …)` of Teil A keeps working until A switched;
+  /// then [request] goes away.
+  const RecipeOffersCard({super.key, this.recipe, this.request})
+      : assert(recipe != null || request != null,
+            'RecipeOffersCard needs a recipe');
+
+  RecipeOffersRequest get _request =>
+      request ??
+      RecipeOffersRequest(
+        recipeId: recipe!.id,
+        ingredientNames: [for (final i in recipe!.ingredients) i.name],
+      );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final result = ref.watch(recipeOffersProvider(request)).valueOrNull;
+    if (!ref.watch(offersAvailableProvider)) return const SizedBox.shrink();
+    final result = ref.watch(recipeOffersProvider(_request)).valueOrNull;
     if (result == null || result.matches.isEmpty) {
       return const SizedBox.shrink();
     }

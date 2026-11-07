@@ -24,7 +24,6 @@ const Map<String, String> offersEn = {
   'matched_of_items': 'Based on {count} items on your list with current offers',
   'offers_source_note':
       'Offer prices only — regular shelf prices aren\'t publicly available.',
-  'cheapest_saves_up_to': 'Save up to {amount} €',
   'offer_ends_today': 'Offer ends today',
   'offer_ends_in_days': 'Offer ends in {days}d',
   'similar_product_match': 'Similar product',
@@ -95,7 +94,6 @@ const Map<String, String> offersDe = {
       'Basierend auf {count} Artikeln deiner Liste mit aktuellen Angeboten',
   'offers_source_note':
       'Nur Angebotspreise — reguläre Preise sind nicht öffentlich verfügbar.',
-  'cheapest_saves_up_to': 'Spare bis zu {amount} €',
   'offer_ends_today': 'Angebot endet heute',
   'offer_ends_in_days': 'Angebot endet in {days}T',
   'similar_product_match': 'Ähnliches Produkt',

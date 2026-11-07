@@ -1,0 +1,46 @@
+/// Everything Teil A places from Teil B, in one import
+/// (`docs/redesign/prompt-b-vorrang.md`).
+///
+/// Every widget renders nothing (or, for [ArticleImage], a neutral square of
+/// its final size) while its module is off, the offers kill switch is on,
+/// the list hides offers or there is no data, so hosts never reserve space
+/// for missing content. Signatures change only through a request in
+/// `docs/redesign/status-B.md`.
+library;
+
+// Lists, items, shopping mode.
+export 'package:shoply/data/models/store_info.dart' show StoreInfo;
+export 'package:shoply/presentation/providers/list_offer_prefs_provider.dart'
+    show offersHiddenForListProvider, setOffersHiddenForList;
+export 'package:shoply/presentation/providers/store_for_list_provider.dart'
+    show storeForListProvider;
+export 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart'
+    show openCheckoutFlow;
+export 'package:shoply/presentation/screens/lists/widgets/item_offer_badge.dart'
+    show ItemOfferBadge;
+export 'package:shoply/presentation/screens/lists/widgets/item_offer_card.dart'
+    show ItemOfferCard;
+export 'package:shoply/presentation/screens/lists/widgets/list_offer_count_badge.dart'
+    show ListOfferCountBadge;
+export 'package:shoply/presentation/screens/lists/widgets/list_offer_summary.dart'
+    show ListOfferSummary;
+export 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart'
+    show OfferSuggestionsBar;
+export 'package:shoply/presentation/screens/lists/widgets/store_chip.dart'
+    show StoreChip;
+export 'package:shoply/presentation/widgets/article_image.dart'
+    show ArticleImage;
+
+// Recipes.
+export 'package:shoply/presentation/screens/calories/log_recipe.dart'
+    show openLogRecipe;
+export 'package:shoply/presentation/screens/recipes/widgets/recipe_offers_card.dart'
+    show RecipeOffersCard;
+
+// Onboarding, settings, modules.
+export 'package:shoply/presentation/providers/app_flags_provider.dart'
+    show offersAvailableProvider, offersRemoteEnabledProvider;
+export 'package:shoply/presentation/state/calorie_tracking_provider.dart'
+    show calorieTrackingEnabledProvider;
+export 'package:shoply/presentation/widgets/deals/offers_setup_step.dart'
+    show OffersSetupStep;

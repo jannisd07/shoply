@@ -43,6 +43,9 @@ const Map<String, String> historyEn = {
   'purchased_items': 'Purchased Items',
   'delete_entry': 'Delete Entry',
   'delete_entry_confirm': 'Are you sure you want to delete this entry?',
+  // P0.3 checkout route (Teil B)
+  'hist_checkout_done_title': 'Trip saved',
+  'hist_checkout_done_body': 'Your checked items are now in your history.',
 };
 
 const Map<String, String> historyDe = {
@@ -87,4 +90,7 @@ const Map<String, String> historyDe = {
   'purchased_items': 'Gekaufte Artikel',
   'delete_entry': 'Eintrag löschen',
   'delete_entry_confirm': 'Möchtest du diesen Eintrag wirklich löschen?',
+  // P0.3 checkout route (Teil B)
+  'hist_checkout_done_title': 'Einkauf gespeichert',
+  'hist_checkout_done_body': 'Die abgehakten Artikel stehen jetzt in deinem Verlauf.',
 };
