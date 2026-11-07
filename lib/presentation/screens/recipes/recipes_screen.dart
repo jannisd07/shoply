@@ -1,29 +1,27 @@
-import 'dart:ui';
-import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/constants/recipe_categories.dart';
-import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/models/dietary_preference.dart';
-import 'package:shoply/data/services/offline_cache_service.dart';
-import 'package:shoply/data/services/recipe_service.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/recipe_image_card.dart';
-import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
-import 'package:shoply/data/services/recipe_features_service.dart';
-import 'package:shoply/data/services/ingredient_substitution_service.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/presentation/state/auth_provider.dart';
-import 'package:shoply/presentation/state/saved_recipes_provider.dart';
-import 'package:shoply/presentation/state/recipes_provider.dart';
-import 'package:shoply/data/services/dynamic_tutorial_service.dart';
+import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/contextual_prompt_service.dart';
-import 'package:shoply/presentation/screens/recipes/recipe_personalization.dart';
-// QuickFiltersRow removed - now using inline search
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shoply/data/services/dynamic_tutorial_service.dart';
+import 'package:shoply/data/services/offline_cache_service.dart';
+import 'package:shoply/data/services/recipe_features_service.dart';
+import 'package:shoply/data/services/recipe_service.dart';
+import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_home_widgets.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_search_results.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/state/recipes_provider.dart';
+import 'package:shoply/presentation/state/saved_recipes_provider.dart';
+import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
 
 class RecipesScreen extends ConsumerStatefulWidget {
   const RecipesScreen({super.key, this.initialQuery});
@@ -37,33 +35,25 @@ class RecipesScreen extends ConsumerStatefulWidget {
 }
 
 class _RecipesScreenState extends ConsumerState<RecipesScreen> {
-  final _recipeService = RecipeService();
+  static const _searchDebounce = Duration(milliseconds: 250);
+
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
-  
-  // ignore: unused_field - used for search/filter functionality
+  Timer? _searchTimer;
+
   List<Recipe> _allRecipes = [];
   List<Recipe> _popularRecipes = [];
   List<Recipe> _recentRecipes = [];
   Recipe? _recipeOfTheWeek;
-  List<Recipe> _forYouRecipes = []; // Personalized recommendations
-  List<Map<String, dynamic>> _topAuthors = [];
+  List<Recipe> _forYouRecipes = [];
+  List<RecipeAuthorSummary> _allAuthors = [];
   Map<String, int> _categoryCounts = {};
-  int _totalRecipes = 0;
-  int _totalCreators = 0;
   bool _isLoading = true;
   bool _isSearching = false;
   String _searchQuery = '';
   List<Recipe> _searchResults = [];
-  int _lastRefreshTrigger = 0;
 
-  @override
-  void dispose() {
-    _searchController.removeListener(_onSearchTextChanged);
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    super.dispose();
-  }
+  List<RecipeAuthorSummary> get _topAuthors => _allAuthors.take(8).toList();
 
   @override
   void initState() {
@@ -82,7 +72,16 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
       });
     }
   }
-  
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    _searchController.removeListener(_onSearchTextChanged);
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
   /// Show diet preferences prompt once on first visit
   Future<void> _maybeShowDietPrompt() async {
     // Delay to let the screen render first
@@ -94,233 +93,113 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     }
   }
 
-  /// Check if data needs to be refreshed (e.g., after rating change)
-  void _checkForRefresh() {
-    final currentTrigger = ref.read(recipeRefreshTriggerProvider);
-    if (currentTrigger != _lastRefreshTrigger) {
-      _lastRefreshTrigger = currentTrigger;
-      _loadAllData();
-    }
+  /// Paint the tab from the warmed offline cache before any network call, so
+  /// the first frame already shows recipes; the network result replaces them.
+  /// Runs synchronously in initState — no await, no empty frame.
+  void _seedFromCache() {
+    final cached = OfflineCacheService.instance.getCachedRecipesSync();
+    if (cached == null || cached.isEmpty) return;
+    _allRecipes = cached;
+    _popularRecipes = ([...cached]
+          ..sort((a, b) => b.averageRating.compareTo(a.averageRating)))
+        .take(8)
+        .toList();
+    _recentRecipes = recentRecipesFrom(cached);
+    _allAuthors = topAuthorsFrom(cached);
+    _categoryCounts = categoryCountsFrom(cached);
+    _isLoading = false;
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Reset search when navigating back to this screen via tab
-    final location = GoRouterState.of(context).matchedLocation;
-    if (location == '/recipes' && _isSearching) {
-      // Clear search when tab is clicked
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _isSearching) {
-          _clearSearch();
+  /// Loads the recipe list once (through [recipesProvider], which also
+  /// caches it offline) and derives every section from it in memory.
+  /// Only "popular this week" and "recipe of the week" need their own query.
+  Future<void> _loadAllData({bool forceRefresh = false}) async {
+    // Only block the UI when there is nothing cached to show yet; otherwise
+    // refresh silently underneath the already-rendered content.
+    if (_allRecipes.isEmpty) setState(() => _isLoading = true);
+    try {
+      final allRecipesFuture = forceRefresh
+          ? ref.refresh(recipesProvider.future)
+          : ref.read(recipesProvider.future);
+      final results = await Future.wait([
+        allRecipesFuture,
+        // Request 9 so we still have 8 after excluding recipe of the week
+        RecipeService.instance.getPopularRecipes(limit: 9, thisWeekOnly: true),
+        RecipeFeaturesService.instance.getRecipeOfTheWeek(),
+      ]);
+      if (!mounted) return;
+
+      final allRecipes = results[0] as List<Recipe>;
+      final weekRecipe = results[2] as Recipe?;
+      final weekId = weekRecipe?.id;
+
+      // Exclude recipe of the week from "Popular This Week"
+      final popular = (results[1] as List<Recipe>)
+          .where((r) => r.id != weekId)
+          .take(8)
+          .toList();
+
+      // Personalized "For You" (diet, allergies, priorities); excludes
+      // anything already shown in recipe of the week or popular.
+      final forYou = forYouRecipesFrom(
+        allRecipes,
+        user: ref.read(currentUserProvider).value,
+        excludeIds: {if (weekId != null) weekId, ...popular.map((r) => r.id)},
+      );
+
+      setState(() {
+        _allRecipes = allRecipes;
+        _popularRecipes = popular;
+        _recentRecipes = recentRecipesFrom(allRecipes);
+        _allAuthors = topAuthorsFrom(allRecipes);
+        _recipeOfTheWeek = weekRecipe;
+        _forYouRecipes = forYou;
+        _categoryCounts = categoryCountsFrom(allRecipes);
+        _isLoading = false;
+        if (_isSearching) {
+          _searchResults = searchRecipesLocally(allRecipes, _searchQuery);
         }
       });
+      DynamicTutorialService.instance.updateRecipesData(
+        hasRecipes: popular.isNotEmpty || _recentRecipes.isNotEmpty,
+      );
+    } catch (e) {
+      debugPrint('❌ [RECIPES] Failed to load recipes tab: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('error_loading_recipes'))),
+      );
     }
   }
 
   void _onSearchTextChanged() {
     final value = _searchController.text;
-    if (value != _searchQuery) {
-      _searchQuery = value;
-      if (value.length >= 1) {
-        _performSearch(value);
-      } else if (value.isEmpty && _isSearching) {
+    if (value == _searchQuery) return;
+    _searchQuery = value;
+    _searchTimer?.cancel();
+
+    if (value.trim().isEmpty) {
+      if (_isSearching) {
         setState(() {
           _isSearching = false;
           _searchResults = [];
         });
       }
-    }
-  }
-
-  /// Paint the tab from the warmed offline cache before any network call.
-  ///
-  /// [_loadAllData] awaits five requests via `Future.wait`, so the screen used
-  /// to stay on a spinner until the *slowest* of them returned. Seeding here
-  /// means the first frame already shows recipes; the network result then
-  /// replaces them. Runs synchronously in initState — no await, no empty frame.
-  void _seedFromCache() {
-    final cached = OfflineCacheService.instance.getCachedRecipesSync();
-    if (cached == null || cached.isEmpty) return;
-    _allRecipes = cached;
-    _popularRecipes = [...cached]
-      ..sort((a, b) => b.averageRating.compareTo(a.averageRating));
-    _popularRecipes = _popularRecipes.take(8).toList();
-    _recentRecipes = ([...cached]
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
-        .take(10)
-        .toList();
-    _totalRecipes = cached.length;
-    _isLoading = false;
-  }
-
-  Future<void> _loadAllData() async {
-    // Only block the UI when there is nothing cached to show yet; otherwise
-    // refresh silently underneath the already-rendered content.
-    if (_allRecipes.isEmpty) {
-      setState(() => _isLoading = true);
-    }
-    try {
-      final results = await Future.wait([
-        _recipeService.getRecipes(),
-        // Request 9 so we still have 8 after excluding recipe of the week
-        _recipeService.getPopularRecipes(limit: 9, thisWeekOnly: true),
-        _recipeService.getRecentRecipes(limit: 10),
-        _recipeService.getTopAuthors(limit: 8),
-        RecipeFeaturesService.instance.getRecipeOfTheWeek(),
-      ]);
-
-      final allRecipes = results[0] as List<Recipe>;
-      final popularRaw = results[1] as List<Recipe>;
-      final authors = results[3] as List<Map<String, dynamic>>;
-      final weekRecipe = results[4] as Recipe?;
-
-      // Exclude recipe of the week from "Popular This Week"
-      final weekId = weekRecipe?.id;
-      final popular = popularRaw
-          .where((r) => r.id != weekId)
-          .take(8)
-          .toList();
-
-      // IDs already shown (recipe of week + popular) → exclude from "For You"
-      final shownIds = <String>{
-        if (weekId != null) weekId,
-        ...popular.map((r) => r.id),
-      };
-
-      // Calculate category counts
-      final counts = <String, int>{};
-      for (final category in recipeCategories) {
-        counts[category.id] = allRecipes.where((r) =>
-          r.labels.any((l) => l.toLowerCase().contains(category.id.toLowerCase()))
-        ).length;
-      }
-
-      // Get personalized "For You" recipes based on user diet preferences,
-      // allergies, and Feature 7's "what brings you to Shoply?" priorities.
-      // Excludes anything already shown in recipe of week or popular sections
-      final candidateRecipes =
-          allRecipes.where((r) => !shownIds.contains(r.id)).toList();
-      final user = ref.read(currentUserProvider).value;
-      final appPriorities = user?.appPriorities.toSet() ?? const <String>{};
-      List<Recipe> forYou = [];
-      if (user != null &&
-          (user.dietPreferences.isNotEmpty ||
-              user.allergies.isNotEmpty ||
-              appPriorities.isNotEmpty)) {
-        // Score recipes based on preference matches, rating, engagement,
-        // and priorities (see recipe_personalization.dart for the pure,
-        // unit-tested scoring function).
-        final scoredRecipes = <Recipe, double>{};
-        for (final recipe in candidateRecipes) {
-          final score = scoreForYouRecipe(
-            recipe,
-            dietPreferences: user.dietPreferences,
-            allergies: user.allergies,
-            appPriorities: appPriorities,
-          );
-
-          if (score > 0) {
-            scoredRecipes[recipe] = score;
-          }
-        }
-
-        // Sort by score and take appropriate amount based on total recipes
-        final sorted = scoredRecipes.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value));
-        final forYouLimit = candidateRecipes.length <= 6
-            ? (candidateRecipes.length / 2).ceil().clamp(1, 3)
-            : 6;
-        forYou = sorted.take(forYouLimit).map((e) => e.key).toList();
-      }
-      // If no personalized matches, show top rated from candidates
-      if (forYou.isEmpty) {
-        forYou = List<Recipe>.from(candidateRecipes)
-          ..sort((a, b) {
-            final scoreA = a.averageRating * 2 + (a.ratingCount * 0.1) + (a.viewCount * 0.01);
-            final scoreB = b.averageRating * 2 + (b.ratingCount * 0.1) + (b.viewCount * 0.01);
-            return scoreB.compareTo(scoreA);
-          });
-        final forYouLimit = candidateRecipes.length <= 6
-            ? (candidateRecipes.length / 2).ceil().clamp(1, 3)
-            : 6;
-        forYou = forYou.take(forYouLimit).toList();
-      }
-
-      setState(() {
-        _allRecipes = allRecipes;
-        _popularRecipes = popular;
-        _recentRecipes = results[2] as List<Recipe>;
-        _topAuthors = authors;
-        _recipeOfTheWeek = weekRecipe;
-        _forYouRecipes = forYou;
-        _categoryCounts = counts;
-        _totalRecipes = allRecipes.length;
-        _totalCreators = authors.length;
-        _isLoading = false;
-      });
-      
-      // Load saved recipes
-      ref.read(savedRecipesProvider.notifier).loadSavedRecipes();
-    } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tr('error_loading_recipes_detail', params: {'error': e.toString()}))),
-        );
-      }
-    }
-  }
-
-  Future<void> _performSearch(String query) async {
-    if (query.isEmpty) {
-      setState(() {
-        _isSearching = false;
-        _searchQuery = '';
-        _searchResults = [];
-      });
       return;
     }
 
-    // Only update query, don't trigger full rebuild yet
-    _searchQuery = query;
-    
-    // Set searching to true only once and keep focus
-    final wasSearching = _isSearching;
-    if (!_isSearching) {
-      setState(() {
-        _isSearching = true;
-      });
-      // Request focus after view switch
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _searchFocusNode.requestFocus();
-        }
-      });
-    }
-
-    try {
-      final recipes = await _recipeService.searchRecipes(query);
-      if (mounted && _searchQuery == query) {
-        // Only update if query hasn't changed
-        setState(() {
-          _searchResults = recipes;
-        });
-        // Keep focus on search field
-        if (!wasSearching) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_searchFocusNode.hasFocus) {
-              _searchFocusNode.requestFocus();
-            }
-          });
-        }
-      }
-    } catch (e) {
-      // Handle error silently
-    }
+    if (!_isSearching) setState(() => _isSearching = true);
+    // Search is a local filter over the already-loaded recipes; the debounce
+    // only avoids re-filtering on every keystroke while typing fast.
+    _searchTimer = Timer(_searchDebounce, () {
+      if (!mounted) return;
+      setState(() => _searchResults = searchRecipesLocally(_allRecipes, _searchQuery));
+    });
   }
 
   void _clearSearch() {
+    _searchTimer?.cancel();
     _searchController.clear();
     _searchFocusNode.unfocus();
     setState(() {
@@ -330,18 +209,18 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     });
   }
 
+  void _openRecipe(Recipe recipe) => context.push('/recipes/${recipe.id}', extra: recipe);
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final savedState = ref.watch(savedRecipesProvider);
+    // Only the count is shown here; watching the whole saved-recipes state
+    // rebuilt the tab three times per bookmark toggle anywhere in the app.
+    final savedCount = ref.watch(savedRecipesProvider.select((s) => s.savedIds.length));
 
-    // Watch refresh trigger to reload data when ratings change
+    // Reload when ratings change. Deferred a microtask so the invalidation
+    // that follows the trigger bump in refreshRecipeData has happened.
     ref.listen(recipeRefreshTriggerProvider, (previous, next) {
-      if (previous != next) {
-        _loadAllData();
-      }
+      if (previous != next) Future.microtask(() => mounted ? _loadAllData() : null);
     });
 
     return Scaffold(
@@ -350,21 +229,25 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
           ? _buildLoadingState(context)
           : Column(
               children: [
-                // Fixed Search Header
-                _buildSearchHeader(context, textPrimary, textSecondary),
-                // Content area
+                _buildSearchHeader(context),
                 Expanded(
                   child: _isSearching
-                      ? _buildSearchResultsList(context)
-                      : _buildMainContent(context, savedState),
+                      ? RecipesSearchResults(
+                          query: _searchQuery,
+                          results: _searchResults,
+                          authors: _allAuthors,
+                          onRecipeTap: _openRecipe,
+                        )
+                      : _buildMainContent(context, savedCount),
                 ),
               ],
             ),
     );
   }
 
-  Widget _buildSearchHeader(BuildContext context, Color textPrimary, Color textSecondary) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildSearchHeader(BuildContext context) {
+    final textPrimary = AppColors.textPrimary(context);
+    final textSecondary = AppColors.textSecondary(context);
     return SafeArea(
       bottom: false,
       child: Padding(
@@ -398,8 +281,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                         child: AdaptiveGlass(
                           isCircle: true,
                           child: Center(
-                            child: Icon(Icons.add_rounded,
-                                color: textPrimary, size: 20),
+                            child: Icon(Icons.add_rounded, color: textPrimary, size: 20),
                           ),
                         ),
                       ),
@@ -409,30 +291,29 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            // Search Bar - ALWAYS the same TextField widget
+            // The same TextField in both modes, so focus survives the switch.
             SizedBox(
               height: 42,
               child: AdaptiveGlass(
                 isCircle: true,
                 opaqueColor: AppColors.surface(context),
                 child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                decoration: InputDecoration(
-                  hintText: context.tr('search_recipes_users'),
-                  hintStyle: TextStyle(color: textSecondary, fontSize: 14),
-                  prefixIcon: Icon(Icons.search_rounded, color: textSecondary, size: 20),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.close_rounded, color: textSecondary, size: 18),
-                          onPressed: _clearSearch,
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                ),
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  decoration: InputDecoration(
+                    hintText: context.tr('search_recipes_users'),
+                    hintStyle: TextStyle(color: textSecondary, fontSize: 14),
+                    prefixIcon: Icon(Icons.search_rounded, color: textSecondary, size: 20),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.close_rounded, color: textSecondary, size: 18),
+                            onPressed: _clearSearch,
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
                   style: TextStyle(color: textPrimary, fontSize: 14),
-                  // onChanged handled by controller listener
                 ),
               ),
             ),
@@ -442,32 +323,18 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
     );
   }
 
-  Widget _buildMainContent(BuildContext context, dynamic savedState) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Update tutorial with recipes data
-    DynamicTutorialService.instance.updateRecipesData(hasRecipes: _popularRecipes.isNotEmpty || _recentRecipes.isNotEmpty);
-    
-    return NotificationListener<ScrollNotification>(
+  Widget _buildMainContent(BuildContext context, int savedCount) {
+    return CustomScrollView(
       key: DynamicTutorialService.instance.recipesAreaKey,
-      onNotification: (notification) {
-        // Dismiss keyboard when user starts scrolling
-        if (notification is ScrollStartNotification) {
-          FocusScope.of(context).unfocus();
-        }
-        return false;
-      },
-      child: CustomScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        slivers: [
-        // Native iOS Pull-to-Refresh
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+      slivers: [
         CupertinoSliverRefreshControl(
-          onRefresh: _loadAllData,
+          onRefresh: () => _loadAllData(forceRefresh: true),
         ),
-        // Community Stats Banner - clean minimal look
-        if (_totalRecipes > 0)
+
+        // Community stats banner
+        if (_allRecipes.isNotEmpty)
           SliverToBoxAdapter(
             child: Container(
               margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -480,45 +347,39 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _StatItem(
-                    icon: Icons.restaurant_menu_rounded,
-                    value: _totalRecipes.toString(),
+                  RecipeStatItem(
+                    value: '${_allRecipes.length}',
                     label: context.tr('recipes'),
                   ),
-                  _StatItem(
-                    icon: Icons.people_rounded,
-                    value: _totalCreators.toString(),
+                  RecipeStatItem(
+                    value: '${_allAuthors.length}',
                     label: context.tr('creators'),
                   ),
-                  _StatItem(
-                    icon: Icons.bookmark_rounded,
-                    value: savedState.savedIds.length.toString(),
+                  RecipeStatItem(
+                    value: '$savedCount',
                     label: context.tr('saved_recipes'),
                   ),
                 ],
               ),
             ),
           ),
-        
-        // Featured Recipe of the Week
+
         if (_recipeOfTheWeek != null) ...[
-          _buildSectionHeader(
-            context,
-            context.tr('recipe_of_the_week'),
-            Icons.auto_awesome_rounded,
+          SliverToBoxAdapter(
+            child: RecipeSectionHeader(title: context.tr('recipe_of_the_week')),
           ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _FeaturedRecipeCard(
+              child: FeaturedRecipeCard(
                 recipe: _recipeOfTheWeek!,
-                onTap: () => context.push('/recipes/${_recipeOfTheWeek!.id}'),
+                onTap: () => _openRecipe(_recipeOfTheWeek!),
               ),
             ),
           ),
         ],
-        
-        // User Actions Row (My Recipes, Saved, Drafts, Browse Users)
+
+        // Shortcuts: My Recipes, Saved, Drafts, Creators
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -527,22 +388,18 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: _ActionCard(
+                      child: RecipeActionCard(
                         icon: Icons.restaurant_rounded,
                         label: context.tr('my_recipes'),
-                        color: isDark ? Colors.white70 : const Color(0xFF6B7280),
                         onTap: () => context.push('/recipes/my'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _ActionCard(
+                      child: RecipeActionCard(
                         icon: Icons.bookmark_rounded,
                         label: context.tr('saved_recipes'),
-                        color: isDark ? Colors.white70 : const Color(0xFF6B7280),
-                        badge: savedState.savedIds.isNotEmpty 
-                            ? savedState.savedIds.length.toString() 
-                            : null,
+                        badge: savedCount > 0 ? '$savedCount' : null,
                         onTap: () => context.push('/recipes/saved'),
                       ),
                     ),
@@ -552,19 +409,17 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: _ActionCard(
+                      child: RecipeActionCard(
                         icon: Icons.edit_note_rounded,
                         label: context.tr('my_drafts'),
-                        color: isDark ? Colors.white70 : const Color(0xFF6B7280),
                         onTap: () => context.push('/recipes/drafts'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: _ActionCard(
+                      child: RecipeActionCard(
                         icon: Icons.people_rounded,
                         label: context.tr('creators'),
-                        color: isDark ? Colors.white70 : const Color(0xFF6B7280),
                         onTap: () => context.push('/recipes/creators'),
                       ),
                     ),
@@ -574,62 +429,31 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
             ),
           ),
         ),
-        
-        // For You - Personalized Recommendations
+
         if (_forYouRecipes.isNotEmpty) ...[
-          _buildSectionHeader(
-            context, 
-            context.tr('recommended_for_you'), 
-            Icons.favorite_rounded,
-            iconColor: isDark ? Colors.white70 : const Color(0xFF6B7280),
+          SliverToBoxAdapter(
+            child: RecipeSectionHeader(title: context.tr('recommended_for_you')),
           ),
           SliverToBoxAdapter(
-            child: SizedBox(
-              height: 210,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _forYouRecipes.length,
-                itemBuilder: (context, index) {
-                  return _HorizontalRecipeCard(
-                    recipe: _forYouRecipes[index],
-                    onTap: () => context.push('/recipes/${_forYouRecipes[index].id}'),
-                  );
-                },
-              ),
-            ),
+            child: RecipeCarousel(recipes: _forYouRecipes, onTap: _openRecipe),
           ),
         ],
-        
-        // Popular This Week Section
+
         if (_popularRecipes.isNotEmpty) ...[
-          _buildSectionHeader(
-            context, 
-            context.tr('popular_this_week'), 
-            Icons.trending_up_rounded,
-            onSeeAll: () => context.push('/recipes/popular'),
-            iconColor: isDark ? Colors.white70 : const Color(0xFF6B7280),
-          ),
           SliverToBoxAdapter(
-            child: SizedBox(
-              height: 210,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _popularRecipes.length,
-                itemBuilder: (context, index) {
-                  return _HorizontalRecipeCard(
-                    recipe: _popularRecipes[index],
-                    onTap: () => context.push('/recipes/${_popularRecipes[index].id}'),
-                  );
-                },
-              ),
+            child: RecipeSectionHeader(
+              title: context.tr('popular_this_week'),
+              onSeeAll: () => context.push('/recipes/popular'),
             ),
           ),
+          SliverToBoxAdapter(
+            child: RecipeCarousel(recipes: _popularRecipes, onTap: _openRecipe),
+          ),
         ],
-        
-        // Categories Section
-        _buildSectionHeader(context, context.tr('browse_by_category'), Icons.category_rounded, iconColor: isDark ? Colors.white70 : const Color(0xFF6B7280)),
+
+        SliverToBoxAdapter(
+          child: RecipeSectionHeader(title: context.tr('browse_by_category')),
+        ),
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           sliver: SliverGrid(
@@ -642,7 +466,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final category = recipeCategories[index];
-                return _CategoryCard(
+                return RecipeCategoryCard(
                   category: category,
                   count: _categoryCounts[category.id] ?? 0,
                   onTap: () => context.push('/recipes/category/${category.id}'),
@@ -652,48 +476,43 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
             ),
           ),
         ),
-        
-        // Top Creators Section
-        if (_topAuthors.isNotEmpty) ...[
-          _buildSectionHeader(
-            context, 
-            context.tr('top_creators'), 
-            Icons.star_rounded,
-            onSeeAll: () => context.push('/recipes/creators'),
-            iconColor: isDark ? Colors.white70 : const Color(0xFF6B7280),
+
+        if (_allAuthors.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: RecipeSectionHeader(
+              title: context.tr('top_creators'),
+              onSeeAll: () => context.push('/recipes/creators'),
+            ),
           ),
           SliverToBoxAdapter(
             child: SizedBox(
               height: 110,
-              child: ListView.builder(
+              child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _topAuthors.length,
-                itemBuilder: (context, index) {
-                  final author = _topAuthors[index];
-                  return _CreatorCard(
-                    name: author['authorName'] as String,
-                    avatarUrl: author['authorAvatarUrl'] as String?,
-                    recipeCount: author['recipeCount'] as int,
-                    onTap: () => context.push(
-                      '/author/${author['authorId']}',
-                      extra: {'authorName': author['authorName']},
+                children: [
+                  for (final author in _topAuthors)
+                    CreatorAvatarCard(
+                      name: author.name,
+                      avatarUrl: author.avatarUrl,
+                      recipeCount: author.recipeCount,
+                      onTap: () => context.push(
+                        '/author/${author.id}',
+                        extra: {'authorName': author.name},
+                      ),
                     ),
-                  );
-                },
+                ],
               ),
             ),
           ),
         ],
-        
-        // Recent Recipes Section
+
         if (_recentRecipes.isNotEmpty) ...[
-          _buildSectionHeader(
-            context, 
-            context.tr('recently_added'), 
-            Icons.schedule_rounded,
-            onSeeAll: () => context.push('/recipes/all'),
-            iconColor: isDark ? Colors.white70 : const Color(0xFF6B7280),
+          SliverToBoxAdapter(
+            child: RecipeSectionHeader(
+              title: context.tr('recently_added'),
+              onSeeAll: () => context.push('/recipes/all'),
+            ),
           ),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -706,26 +525,20 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                 childAspectRatio: 0.82,
               ),
               delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  return _RecipeCard(
-                    recipe: _recentRecipes[index],
-                    onTap: () => context.push('/recipes/${_recentRecipes[index].id}'),
-                  );
-                },
+                (context, index) => DietAwareRecipeCard(
+                  recipe: _recentRecipes[index],
+                  onTap: () => _openRecipe(_recentRecipes[index]),
+                ),
                 childCount: _recentRecipes.length > 6 ? 6 : _recentRecipes.length,
               ),
             ),
           ),
         ],
-        
-        // Bottom Padding
+
         SliverPadding(
-          padding: EdgeInsets.only(
-            bottom: 120 + MediaQuery.of(context).padding.bottom,
-          ),
+          padding: EdgeInsets.only(bottom: 120 + MediaQuery.paddingOf(context).bottom),
         ),
       ],
-      ),
     );
   }
 
@@ -739,828 +552,6 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
           Text(context.tr('loading_recipes')),
         ],
       ),
-    );
-  }
-
-  Widget _buildSearchResultsList(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final queryLower = _searchQuery.toLowerCase();
-    
-    // Dismiss keyboard on scroll
-    return NotificationListener<ScrollStartNotification>(
-      onNotification: (notification) {
-        // Dismiss keyboard when user starts scrolling
-        FocusScope.of(context).unfocus();
-        return false;
-      },
-      child: _buildSearchResultsContent(context, textPrimary, textSecondary, queryLower),
-    );
-  }
-  
-  Widget _buildSearchResultsContent(BuildContext context, Color textPrimary, Color textSecondary, String queryLower) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Find matching categories
-    final matchingCategories = recipeCategories.where((cat) =>
-      cat.nameKey.toLowerCase().contains(queryLower) ||
-      cat.id.toLowerCase().contains(queryLower)
-    ).toList();
-    
-    // Find matching authors from top authors
-    final matchingAuthors = _topAuthors.where((author) =>
-      (author['author_name'] as String?)?.toLowerCase().contains(queryLower) == true
-    ).toList();
-    
-    // Preference keywords that users might search for.
-    // Note: 'dairy-free' is deliberately absent — RecipeLabelingService never
-    // generates that label (see its NOTE comment), so linking to
-    // /recipes/category/dairy-free would always land on a permanently empty
-    // results page.
-    final preferenceKeywords = {
-      'vegan': ['vegan', 'plant-based', 'pflanzlich'],
-      'vegetarian': ['vegetarian', 'vegetarisch', 'veggie'],
-      'quick': ['quick', 'schnell', 'fast', 'easy'],
-      'healthy': ['healthy', 'gesund', 'light', 'leicht'],
-      'gluten-free': ['gluten-free', 'glutenfrei', 'gluten free'],
-      'low-carb': ['low-carb', 'keto', 'low carb'],
-    };
-    
-    final matchingPreferences = <String>[];
-    for (final entry in preferenceKeywords.entries) {
-      if (entry.value.any((keyword) => keyword.contains(queryLower) || queryLower.contains(keyword))) {
-        matchingPreferences.add(entry.key);
-      }
-    }
-    
-    return CustomScrollView(
-      slivers: [
-        // Categories Section
-        if (matchingCategories.isNotEmpty && _searchQuery.length >= 1)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Categories',
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: matchingCategories.map((cat) => GestureDetector(
-                      onTap: () => context.push('/recipes/category/${cat.id}'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: cat.color.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(cat.icon, style: const TextStyle(fontSize: 16)),
-                            const SizedBox(width: 6),
-                            Text(
-                              context.tr(cat.nameKey),
-                              style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )).toList(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        
-        // Preferences Section
-        if (matchingPreferences.isNotEmpty && _searchQuery.length >= 1)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Dietary Preferences',
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: matchingPreferences.map((pref) => GestureDetector(
-                      onTap: () => context.push('/recipes/category/$pref'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check_circle_outline, size: 16, color: isDark ? Colors.white70 : const Color(0xFF6B7280)),
-                            const SizedBox(width: 6),
-                            Text(
-                              pref.replaceAll('-', ' ').split(' ').map((w) => w[0].toUpperCase() + w.substring(1)).join(' '),
-                              style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )).toList(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        
-        // Creators Section  
-        if (matchingAuthors.isNotEmpty && _searchQuery.length >= 1)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Creators',
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...matchingAuthors.take(3).map((author) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      backgroundColor: isDark ? Colors.white.withValues(alpha: 0.08) : PaperColors.cream,
-                      child: Text(
-                        (author['author_name'] as String? ?? 'U')[0].toUpperCase(),
-                        style: TextStyle(color: textPrimary),
-                      ),
-                    ),
-                    title: Text(
-                      author['author_name'] as String? ?? 'Unknown',
-                      style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
-                    ),
-                    subtitle: Text(
-                      '${author['recipe_count'] ?? 0} recipes',
-                      style: TextStyle(color: textSecondary, fontSize: 13),
-                    ),
-                    onTap: () => context.push(
-                      '/author/${author['author_id']}',
-                      extra: {'authorName': author['author_name']},
-                    ),
-                  )),
-                ],
-              ),
-            ),
-          ),
-        
-        // Recipes Section Header
-        if (_searchResults.isNotEmpty && _searchQuery.length >= 1)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Text(
-                'Recipes (${_searchResults.length})',
-                style: TextStyle(
-                  color: textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-        
-        // Recipe Results
-        if (_searchResults.isEmpty && matchingCategories.isEmpty && matchingAuthors.isEmpty && matchingPreferences.isEmpty && _searchQuery.length >= 1)
-          SliverFillRemaining(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.search_off_rounded, size: 64, color: textSecondary.withOpacity(0.5)),
-                  const SizedBox(height: 16),
-                  Text(
-                    context.tr('no_results'),
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textPrimary),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.tr('try_different_search'),
-                    style: TextStyle(color: textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else if (_searchResults.isNotEmpty)
-          SliverPadding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 8,
-              bottom: 100 + MediaQuery.of(context).padding.bottom,
-            ),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.82,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  return _RecipeCard(
-                    recipe: _searchResults[index],
-                    onTap: () => context.push('/recipes/${_searchResults[index].id}'),
-                  );
-                },
-                childCount: _searchResults.length,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  SliverToBoxAdapter _buildSectionHeader(
-    BuildContext context, 
-    String title,
-    IconData icon, {
-    VoidCallback? onSeeAll,
-    Color? iconColor,
-  }) {
-    // Paper kicker style section header
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 26, 16, 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  letterSpacing: 2,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary(context),
-                ),
-              ),
-            ),
-            if (onSeeAll != null)
-              GestureDetector(
-                onTap: onSeeAll,
-                child: Text(
-                  context.tr('see_all'),
-                  style: TextStyle(
-                    color: AppColors.accentColor(context),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-}
-
-// Stat Item Widget (for community stats banner)
-class _StatItem extends StatelessWidget {
-  final IconData icon;
-  final String value;
-  final String label;
-  final Color? iconColor;
-
-  const _StatItem({
-    required this.icon,
-    required this.value,
-    required this.label,
-    this.iconColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          style: PaperTextStyles.serif(
-            19,
-            color: AppColors.textPrimary(context),
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.textSecondary(context),
-            fontSize: 11,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// Featured Recipe Card Widget (Recipe of the Day)
-class _FeaturedRecipeCard extends ConsumerWidget {
-  final Recipe recipe;
-  final VoidCallback onTap;
-
-  const _FeaturedRecipeCard({
-    required this.recipe,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isSaved = ref.watch(isRecipeSavedProvider(recipe.id));
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final accent = AppColors.accentColor(context);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Image block with kicker + bookmark
-            SizedBox(
-              height: 150,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: recipe.imageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(
-                      color: const Color(0xFFB7C4A9),
-                      child: const Center(child: CupertinoActivityIndicator()),
-                    ),
-                    errorWidget: (_, __, ___) => Container(
-                      color: const Color(0xFFB7C4A9),
-                      child: const Icon(
-                        Icons.restaurant_rounded,
-                        size: 40,
-                        color: Color(0xFF42513A),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 12,
-                    bottom: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: PaperColors.paper.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        context.tr('recipe_of_the_week').toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          letterSpacing: 2,
-                          fontWeight: FontWeight.w600,
-                          color: PaperColors.creamInk,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: GestureDetector(
-                      onTap: () {
-                        ref
-                            .read(savedRecipesProvider.notifier)
-                            .toggleSave(recipe.id);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: PaperColors.paper.withValues(alpha: 0.92),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isSaved
-                              ? Icons.bookmark_rounded
-                              : Icons.bookmark_border_rounded,
-                          size: 18,
-                          color: isSaved ? accent : PaperColors.creamInk,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Paper content panel below the image
-            Container(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              decoration: BoxDecoration(
-                color: AppColors.surface(context),
-                border: Border(
-                  left: BorderSide(color: AppColors.border(context)),
-                  right: BorderSide(color: AppColors.border(context)),
-                  bottom: BorderSide(color: AppColors.border(context)),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    recipe.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: PaperTextStyles.serif(19, color: textPrimary),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${recipe.totalTimeMinutes} min · ${recipe.authorName}'
-                    '${recipe.averageRating > 0 ? ' · ★ ${recipe.averageRating.toStringAsFixed(1)}' : ''}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: textSecondary),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.shopping_cart_outlined,
-                        size: 13,
-                        color: accent,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.tr('add_to_list'),
-                        style: TextStyle(fontSize: 12, color: accent),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Action Card Widget (My Recipes, Saved, Creators) - with gradient background
-class _ActionCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String? badge;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ActionCard({
-    required this.icon,
-    required this.label,
-    this.badge,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      // Glass instead of a tinted box with a hairline border. 14 matches the
-      // radius the rest of the app's tappable surfaces use; the old 6 was a
-      // leftover and read as square next to everything else.
-      child: AdaptiveGlass(
-        cornerRadius: 14,
-        opaqueColor: AppColors.surface(context),
-        child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-        child: Column(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: AppColors.textSecondary(context),
-                ),
-                if (badge != null)
-                  Positioned(
-                    top: -6,
-                    right: -14,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentColor(context),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        badge!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        ),
-      ),
-    );
-  }
-}
-
-// Category Card Widget - clean, minimal design
-class _CategoryCard extends StatelessWidget {
-  final RecipeCategory category;
-  final int count;
-  final VoidCallback onTap;
-
-  const _CategoryCard({
-    required this.category,
-    required this.count,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final surface = AppColors.surface(context);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AdaptiveGlass(
-        cornerRadius: 14,
-        opaqueColor: surface,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(category.icon, style: const TextStyle(fontSize: 28)),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                context.tr(category.nameKey),
-                style: TextStyle(
-                  color: textPrimary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Opacity(
-              opacity: count > 0 ? 1.0 : 0.0,
-              child: Text(
-                count > 0 ? '$count' : '0',
-                style: TextStyle(
-                  color: textSecondary,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Creator Card Widget
-class _CreatorCard extends StatelessWidget {
-  final String name;
-  final String? avatarUrl;
-  final int recipeCount;
-  final VoidCallback onTap;
-
-  const _CreatorCard({
-    required this.name,
-    this.avatarUrl,
-    required this.recipeCount,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final cardColor = AppColors.surface(context);
-    final borderColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 80,
-        margin: const EdgeInsets.only(right: 12),
-        child: Column(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: cardColor,
-                border: Border.all(color: borderColor),
-              ),
-              child: avatarUrl != null
-                  ? ClipOval(
-                      child: CachedNetworkImage(
-                        imageUrl: avatarUrl!,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => Center(
-                          child: Text(
-                            name[0].toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: textSecondary,
-                            ),
-                          ),
-                        ),
-                        errorWidget: (_, __, ___) => Center(
-                          child: Text(
-                            name[0].toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: textSecondary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    )
-                  : Center(
-                      child: Text(
-                        name[0].toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: textSecondary,
-                        ),
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              name,
-              style: TextStyle(
-                color: textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              '$recipeCount recipes',
-              style: TextStyle(
-                color: textSecondary,
-                fontSize: 10,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Horizontal Recipe Card (for Popular section)
-/// Recipe tile for the horizontal carousels — Apple photo-card style:
-/// full-bleed image with the title laid over it. See [RecipeImageCard].
-class _HorizontalRecipeCard extends StatelessWidget {
-  final Recipe recipe;
-  final VoidCallback onTap;
-
-  const _HorizontalRecipeCard({
-    required this.recipe,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return RecipeImageCard(
-      recipe: recipe,
-      onTap: onTap,
-      width: 160,
-      height: 196,
-      margin: const EdgeInsets.only(right: 12, bottom: 6),
-    );
-  }
-}
-
-class _RecipeCard extends ConsumerWidget {
-  final Recipe recipe;
-  final VoidCallback onTap;
-
-  const _RecipeCard({
-    required this.recipe,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Diet compatibility must survive the move to a photo tile — a warning
-    // that quietly disappears because the layout got prettier is a
-    // regression, not a redesign. It rides along as a chip on the image.
-    final user = ref.watch(currentUserProvider).value;
-    RecipeCompatibility? compatibility;
-    if (user != null &&
-        (user.allergies.isNotEmpty || user.dietPreferences.isNotEmpty)) {
-      final allergies = user.allergies
-          .map((a) => AllergyType.values.firstWhere(
-                (type) => type.name == a,
-                orElse: () => AllergyType.gluten,
-              ))
-          .toList();
-      final diets = user.dietPreferences
-          .map((d) => DietType.values.firstWhere(
-                (type) => type.name == d,
-                orElse: () => DietType.none,
-              ))
-          .toList();
-      compatibility = IngredientSubstitutionService.checkRecipeCompatibility(
-        recipe: recipe,
-        allergies: allergies,
-        diets: diets,
-      );
-    }
-
-    Color? badgeColor;
-    if (compatibility != null) {
-      badgeColor = compatibility.isCompatible
-          ? (compatibility.needsModifications ? Colors.orange : Colors.green)
-          : Colors.red;
-    }
-
-    // Time and author on one line. The description is dropped: it does not
-    // fit a tile, and the detail screen shows it in full anyway.
-    final parts = <String>[
-      if (recipe.totalTimeMinutes > 0) '${recipe.totalTimeMinutes} min',
-      if (recipe.authorName.isNotEmpty) recipe.authorName,
-    ];
-
-    return RecipeImageCard(
-      recipe: recipe,
-      onTap: onTap,
-      badgeText: compatibility?.badgeText,
-      badgeColor: badgeColor,
-      metaLine: parts.join(' · '),
     );
   }
 }
