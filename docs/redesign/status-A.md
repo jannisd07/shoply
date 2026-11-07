@@ -9,7 +9,8 @@ jetzt seine eigenen Übersetzungs- und Routendateien ändern und `moduleEnabledP
 Prüfgerüst). A3 ist erledigt. Aus A2 sind schon da und nutzbar: Tokens (`lib/core/design/design.dart`:
 `context.colors`, `context.text(AvoTextStyle.body)`, `AvoSpacing`, `AvoRadii`, `AvoMotion`, `AvoHaptics`) und das
 Prüfgerüst `test/layout/layout_matrix.dart` (`layoutMatrix('Name', (context) => Widget())`). Komponenten und Tab-Bar
-folgen mit S2. Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`.
+folgen mit S2. Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`. **Vorrang-Aufgaben für B, damit niemand wartet:
+`docs/redesign/prompt-b-vorrang.md`.**
 
 ## Meilensteine
 
@@ -112,23 +113,32 @@ Deep Links (`shoply://plan`, `…/calories/add`, `…/avo/voice` usw.) gehen heu
 
 ## Anfragen an Teil B
 
-1. **Routine `claude/daily` pausieren.** Sie ist in Dominiks Account nicht auffindbar (weder Cloud-Routinen noch lokale
-   geplante Aufgaben) und läuft vermutlich über Jannis' Account. Bitte dort pausieren. Nach S6 wieder einschalten; A
-   erinnert daran (letzte Aufgabe im Plan).
-2. **Slot-Stubs früh pushen**, mit endgültiger Signatur und `SizedBox.shrink()` bzw. leerem Verhalten, damit A die neue
-   Liste dagegen bauen kann: `StoreChip(listId:)`, `OfferSuggestionsBar(listId:, query:)`,
-   `ItemOfferBadge(listId:, item:)`, `ListOfferSummary(listId:)`, `ArticleImage(item:)`,
-   `openCheckoutFlow(context, listId)`, `RecipeOffersCard(recipe:)` (heute `request:`; bitte den alten Konstruktor
-   behalten, bis A umgestellt hat), `openLogRecipe(context, recipe)`, `setOffersHiddenForList(listId, hidden)` und
-   `offersHiddenForListProvider(listId)`, `OffersSetupStep(onDone:)`.
-3. **`calorieTrackingEnabledProvider` zum Alias machen** auf `moduleEnabledProvider(AppModule.calories)` (lesen) und
-   `setEnabled` auf `appModulesProvider.notifier.setEnabled(AppModule.calories, …)`. A ersetzt die Aufrufe in seinen
-   Dateien (main_scaffold, profile, onboarding, recipe_detail) bei den Umbauten.
-4. **Kill-Switch lesbar machen:** ein Provider `offersRemoteEnabledProvider` (bool, aus dem Cache von `app_flags`). A
-   braucht ihn für eigene Flächen (Modul-Schalter in Onboarding und Einstellungen, Sektion „Sparen“, Paywall).
-5. **Hinweise auf Home ohne Springen:** Für die Regel „höchstens zwei Hinweise“ braucht A pro B-Hinweis vorab (synchron
-   aus dem Cache) die Info, ob er Inhalt hat. Vorschlag kommt mit dem A4-Plan; bitte bis dahin keine neue Home-Karte
-   fest einbauen.
+**Vorrang-Liste mit allen Signaturen: [`prompt-b-vorrang.md`](prompt-b-vorrang.md)** (Stufe 1: Slot-Hüllen und
+Provider in `lib/presentation/widgets/slots/b_slots.dart`; Stufe 2: Home-Abschnitte als Hüllen; Stufe 3: Avo im Tab).
+
+1. ~~Routine `claude/daily` pausieren~~: laut B gibt es sie in keinem Account, der Branch hat keine eigenen Commits.
+   Gegenstandslos, sofern der Owner nichts anderes weiß.
+2. Slot-Hüllen mit endgültiger Signatur → jetzt genau festgelegt in `prompt-b-vorrang.md` Stufe 1 (inkl.
+   `ItemOfferCard`, `ListOfferCountBadge`, `ArticleImage(size:, radius:)`, `storeForListProvider`,
+   `openCheckoutFlow` mit Rückgabe `bool`, `OfferSuggestionsBar(onAdded:)`).
+3. `calorieTrackingEnabledProvider` als Alias auf `moduleEnabledProvider(AppModule.calories)` (B: in Arbeit).
+4. `offersRemoteEnabledProvider` und `offersAvailableProvider` (B: in Arbeit).
+5. ~~Home-Hinweise ohne Springen~~ → ersetzt durch 6.
+6. **Home-Abschnitte als Hüllen** mit synchronem `…HasContentProvider`: `prompt-b-vorrang.md` Stufe 2.
+7. **Avo im Tab** ab S2a (kein `pop()` in der Tab-Wurzel, `/avo?q=` genau einmal, `avoScreenContextProvider` in einer
+   B-Datei): `prompt-b-vorrang.md` Stufe 3.
+
+## Antworten auf Anfragen von B (status-B 6–12)
+
+| Nr. | Antwort | Wann |
+|---|---|---|
+| 6 S2-Komponenten | kommt in zwei Teilen: **S2a** (Tab-Bar mit Avo-Tab, Toolbar, Buttons, Gruppen, Chips, Segment, Stepper, Ring, Status, Leer, Skelett, Toast, Erfolg, Dialoge, ProBadge, Icons) und **S2b** (Vollbild-Editor, Glas-Eingabefeld, Menüs, Zeilen/Karten, Charts, `ProGate.run`) – Liste in `prompt-b-vorrang.md` | S2a heute, S2b direkt danach |
+| 7 Avo-Kontext | `avoScreenContextProvider` legt B an (Signatur in `prompt-b-vorrang.md`), A setzt ihn; `openAppDestination` liefert A | mit S2b |
+| 8 Home-Hinweise | Vertrag = Home-Abschnitte mit `…HasContentProvider` (Stufe 2) | ab jetzt |
+| 9 `AppBrand`, `pro_features` | `AppBrand` (Name „Avo“) mit S2b; die Pro-Liste nach der Owner-Entscheidung in A9 | S2b / A9 |
+| 10 Deep Links + Fehlerseite | fertig gebaut und getestet, kommt mit S2a | S2a |
+| 11 `ShoppingItemModel.barcode` | gibt es schon (nullable) | erledigt |
+| 12 Übergänge `ListPriceSummaryBar`, `OfferSuggestionsBar(query:, onSelect:)` | A nutzt beim Listen-Umbau nur `ListOfferSummary(listId:)` und `OfferSuggestionsBar(listId:, query:, onAdded:)` | A5 |
 
 ## Hinweise für B
 
