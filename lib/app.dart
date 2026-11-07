@@ -15,6 +15,7 @@ import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/presentation/widgets/tutorial/tutorial_overlay.dart';
 import 'package:shoply/routes/app_router.dart';
 import 'package:shoply/data/services/deep_link_service.dart';
@@ -241,7 +242,9 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
             data: AppTheme.of(isDarkUi ? Brightness.dark : Brightness.light),
             child: AnnotatedRegion<SystemUiOverlayStyle>(
               value: overlayStyle,
-              child: ScaffoldMessenger(child: TutorialOverlay(child: child!)),
+              child: ScaffoldMessenger(
+                child: AvoToastHost(child: TutorialOverlay(child: child!)),
+              ),
             ),
           ),
         );

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/app_router.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -61,26 +62,40 @@ void main() {
       'settings': '/settings',
       'offers': '/offers',
       'history': '/history',
+      // New in A2: Listen tab root and the paywall path for Teil B.
+      'lists': '/lists',
+      'pro': '/pro',
     };
     expect(_collect(buildAppRoutes()), expected);
   });
 
-  test('tab order stays Home, Rezepte, Kalorien, Profil until S2', () {
+  test('D2 tabs: Home, Listen, Avo, Rezepte, Profil', () {
     final shell = buildAppRoutes().whereType<StatefulShellRoute>().single;
     final roots = [
       for (final b in shell.branches) (b.routes.first as GoRoute).path,
     ];
-    // Settings and the plan segment stay in their tabs.
-    final profile = shell.branches[3].routes.whereType<GoRoute>();
-    expect(profile.map((r) => r.path), contains(RoutePaths.settings));
-    final recipes = shell.branches[1].routes.whereType<GoRoute>();
-    expect(recipes.map((r) => r.path), contains(RoutePaths.plan));
     expect(roots, [
       RoutePaths.home,
+      RoutePaths.lists,
+      RoutePaths.avo,
       RoutePaths.recipes,
-      RoutePaths.calories,
       RoutePaths.profile,
     ]);
+    expect(shell.branches.length, AppBranch.values.length);
+  });
+
+  test('Kalorien pushes in Home, a list and Angebote/Verlauf in Listen, '
+      'settings in Profil, plan in Rezepte', () {
+    final shell = buildAppRoutes().whereType<StatefulShellRoute>().single;
+    Iterable<String> paths(AppBranch b) =>
+        shell.branches[b.index].routes.whereType<GoRoute>().map((r) => r.path);
+    expect(paths(AppBranch.home), contains(RoutePaths.calories));
+    expect(paths(AppBranch.lists),
+        containsAll([RoutePaths.lists, RoutePaths.offers, RoutePaths.history]));
+    expect(paths(AppBranch.profile), contains(RoutePaths.settings));
+    expect(paths(AppBranch.recipes), contains(RoutePaths.plan));
+    final lists = shell.branches[AppBranch.lists.index].routes.first as GoRoute;
+    expect((lists.routes.single as GoRoute).path, ':listId');
   });
 
   test('RoutePaths.list builds the same link as the old shared-list target',

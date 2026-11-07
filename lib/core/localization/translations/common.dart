@@ -345,6 +345,11 @@ const Map<String, String> commonEn = {
   'common_shopping_now': '{name} is shopping right now',
   'common_progress': '{done} of {total}',
   'common_readd': 'Add {name} again',
+  'common_module_offers': 'Prices & offers',
+  'common_module_meal_plan': 'Meal plan',
+  'common_module_calories': 'Calories & health',
+  'common_module_avo': 'Avo, your assistant',
+  'common_module_cost_split': 'Split costs',
 };
 
 const Map<String, String> commonDe = {
@@ -694,4 +699,9 @@ const Map<String, String> commonDe = {
   'common_shopping_now': '{name} kauft gerade ein',
   'common_progress': '{done} von {total}',
   'common_readd': '{name} wieder hinzufügen',
+  'common_module_offers': 'Preise & Angebote',
+  'common_module_meal_plan': 'Wochenplan',
+  'common_module_calories': 'Kalorien & Gesundheit',
+  'common_module_avo': 'Avo, dein Assistent',
+  'common_module_cost_split': 'Kosten teilen',
 };

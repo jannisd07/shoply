@@ -17,9 +17,14 @@ import 'package:shoply/routes/areas/history_routes.dart';
 import 'package:shoply/routes/areas/home_routes.dart';
 import 'package:shoply/routes/areas/lists_routes.dart';
 import 'package:shoply/routes/areas/offers_routes.dart';
+import 'package:shoply/routes/areas/paywall_routes.dart';
 import 'package:shoply/routes/areas/plan_routes.dart';
 import 'package:shoply/routes/areas/profile_routes.dart';
 import 'package:shoply/routes/areas/recipes_routes.dart';
+import 'package:shoply/core/modules/app_modules.dart';
+import 'package:shoply/routes/deep_links.dart';
+import 'package:shoply/routes/module_gate.dart';
+import 'package:shoply/routes/route_error_screen.dart';
 import 'package:shoply/routes/route_paths.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -96,22 +101,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     navigatorKey: rootNavigatorKey,
     initialLocation: supabase.currentUser != null ? '/home' : '/onboarding',
     refreshListenable: GoRouterRefreshStream(supabase.authStateChanges),
+    errorBuilder: (context, state) => const RouteErrorScreen(),
     observers: observers,
     routes: buildAppRoutes(),
     redirect: (context, state) async {
       final isLoggedIn = SupabaseService.instance.currentUser != null;
       final uri = state.uri;
 
-      // Convert shoply:// deep links to proper paths
-      if (uri.scheme == 'shoply') {
-        final host = uri.host; // e.g. 'recipe', 'list'
-        final segments = uri.pathSegments;
-        const hosts = {'recipe', 'list', 'invite', 'author'};
-        if (hosts.contains(host) && segments.isNotEmpty) {
-          return '/$host/${segments[0]}';
-        }
-        return '/home';
-      }
+      // Translate shoply:// links in one place (lib/routes/deep_links.dart).
+      if (uri.scheme == 'shoply') return mapCustomSchemeLink(uri);
 
       final location = state.matchedLocation;
       final isSharedListLink =
@@ -201,77 +199,95 @@ List<RouteBase> _bBranch(AppBranch branch) => [
 
 /// All routes of the app, assembled from the area files in `routes/areas/`.
 ///
-/// Tabs (StatefulShellRoute keeps each tab's state alive and lets us render a
-/// smooth horizontal slide between branches): Home, Rezepte, Kalorien (only
-/// shown when the user opted in; the branch always exists so the index
-/// mapping stays stable), Profil. Everything else opens full screen without
-/// the tab bar. From S2 on the tabs follow D2 (see [AppBranch]); until then
-/// routes for the Listen and Avo tabs open full screen.
+/// The five D2 tabs (see [AppBranch]): Home, Listen, Avo, Rezepte, Profil.
+/// StatefulShellRoute keeps each tab's state alive; [MainScaffold] shows the
+/// floating tab bar. Kalorien is a push screen in the Home tab, Angebote and
+/// Verlauf push in the Listen tab, the Wochenplan is a segment of Rezepte.
+/// Routes outside the shell open full screen above the tab bar.
 List<RouteBase> buildAppRoutes() => [
   ...authRoutes,
   StatefulShellRoute(
-    builder: (context, state, navigationShell) =>
-        MainScaffold(navigationShell: navigationShell),
+    builder: (context, state, navigationShell) => MainScaffold(
+      navigationShell: navigationShell,
+      location: state.fullPath ?? state.matchedLocation,
+    ),
     navigatorContainerBuilder: (context, navigationShell, children) =>
-        SlidingTabsContainer(
+        ShellBranchContainer(
           currentIndex: navigationShell.currentIndex,
           children: children,
         ),
     branches: [
-      // Branch 0: Home
-      StatefulShellBranch(
-        routes: [...homeBranchRoutes, ..._bBranch(AppBranch.home)],
-      ),
-      // Branch 1: Recipes + nested routes
-      StatefulShellBranch(
-        routes: [...recipesBranchRoutes, ..._bBranch(AppBranch.recipes)],
-      ),
-      // Branch 2: Calories (Teil B screen)
+      // 0 Home, with Kalorien as a push screen (Teil B, module "calories").
       StatefulShellBranch(
         routes: [
+          ...homeBranchRoutes,
           GoRoute(
             path: RoutePaths.calories,
             name: 'calories',
-            pageBuilder: (context, state) => NoTransitionPage(
-              key: state.pageKey,
+            builder: (context, state) => ModuleGate(
+              module: AppModule.calories,
               child: buildCaloriesRoot(context, state),
             ),
             routes: caloriesChildRoutes,
           ),
+          ..._bBranch(AppBranch.home),
         ],
       ),
-      // Branch 3: Profile
+      // 1 Listen: overview, a list, Angebote and Verlauf (Teil B).
+      StatefulShellBranch(
+        routes: [
+          ...listsBranchRoutes,
+          GoRoute(
+            path: RoutePaths.offers,
+            name: 'offers',
+            builder: (context, state) => ModuleGate(
+              module: AppModule.offers,
+              child: buildOffersRoot(context, state),
+            ),
+            routes: offersChildRoutes,
+          ),
+          GoRoute(
+            path: RoutePaths.history,
+            name: 'history',
+            builder: buildHistoryRoot,
+            routes: historyChildRoutes,
+          ),
+          ..._bBranch(AppBranch.lists),
+        ],
+      ),
+      // 2 Avo (Teil B, module "avo"; the tab disappears when it is off).
+      StatefulShellBranch(
+        routes: [
+          GoRoute(
+            path: RoutePaths.avo,
+            name: 'avo-chat',
+            pageBuilder: (context, state) => NoTransitionPage(
+              key: state.pageKey,
+              child: ModuleGate(
+                module: AppModule.avo,
+                child: buildAvoRoot(context, state),
+              ),
+            ),
+            routes: avoChildRoutes,
+          ),
+          ..._bBranch(AppBranch.avo),
+        ],
+      ),
+      // 3 Rezepte (+ Wochenplan segment).
+      StatefulShellBranch(
+        routes: [...recipesBranchRoutes, ..._bBranch(AppBranch.recipes)],
+      ),
+      // 4 Profil (+ /settings pages of both parts).
       StatefulShellBranch(
         routes: [...profileBranchRoutes, ..._bBranch(AppBranch.profile)],
       ),
     ],
   ),
-  // Separate routes outside the shell (no bottom nav)
-  GoRoute(
-    path: RoutePaths.avo,
-    name: 'avo-chat',
-    pageBuilder: (context, state) =>
-        CupertinoPage(key: state.pageKey, child: buildAvoRoot(context, state)),
-    routes: avoChildRoutes,
-  ),
+  // Full screen, above the tab bar.
   ...listsRoutes,
   ...recipesRoutes,
   ...profileRoutes,
-  GoRoute(
-    path: RoutePaths.offers,
-    name: 'offers',
-    builder: buildOffersRoot,
-    routes: offersChildRoutes,
-  ),
-  GoRoute(
-    path: RoutePaths.history,
-    name: 'history',
-    builder: buildHistoryRoot,
-    routes: historyChildRoutes,
-  ),
-  // No Listen and Avo tabs yet: their routes open full screen.
-  ..._bBranch(AppBranch.lists),
-  ..._bBranch(AppBranch.avo),
+  ...paywallRoutes,
   ...avoRootRoutes,
   ...caloriesRootRoutes,
   ...planRootRoutes,
