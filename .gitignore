@@ -62,6 +62,9 @@ lib/firebase_options.dart
 # Releases (APK files)
 /releases/
 
+# Supabase CLI cache (project ref, pooler URL; recreated by `supabase link`)
+supabase/.temp/
+
 # Agent/AI tooling (local state, never commit)
 .claude/worktrees/
 .claude/worktree-backups/
@@ -89,6 +92,7 @@ ios/Runner/Configuration.storekit
 
 # One-off outputs
 scripts/*.log
+ios/build_log.txt
 test_reports/
 flutter_*.log
 
