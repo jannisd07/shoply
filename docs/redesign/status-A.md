@@ -95,16 +95,20 @@ Deep Links (`shoply://plan`, `…/calories/add`, `…/avo/voice` usw.) gehen heu
 - `claude/daily`: während des Umbaus pausieren, danach wieder einschalten (siehe Anfrage 1).
 - **Paletten freigegeben** (hell = D2, dunkel und erhöhter Kontrast abgeleitet, alle Texte ≥ 4,5:1).
 - **Abhak-Ring dunkler als D2:** #8A8A8E (3,4:1 statt 1,7:1), damit Bedienelemente 3:1 erreichen.
-- **Home = D2 „Für dich“ wie im Artboard** (Owner 07.11.2026; ersetzt „Startseite = Liste von heute“ aus Plan 2).
-  Für B heißt das: Kalorien-Karte, „Heute kochen“, Für-dich-Kacheln, „Dein Monat“/Ausgaben und letzte Einkäufe
-  bleiben als Home-Abschnitte (je nach Modul); A baut die Hülle und ordnet an.
+- **Home = D2 „Für dich“ wie im Artboard** (Owner 07.11.2026, mit Screenshot bestätigt; ersetzt „Startseite = Liste
+  von heute“ aus Plan 2). Reihenfolge: Avo-Karte (Spar-Hinweis, „Angebote ansehen“, Feld „Frag Avo …“ → Avo-Tab,
+  Chips), Dein November, Ausgaben im Vergleich, Sparziel mit Avo, Kalorien heute, Für dich (Weiter einkaufen, Nochmal
+  kaufen, Angebote in der Nähe, Wasser heute), Top-Listen, Letzte Einkäufe, Heute kochen, Tipp von Avo. Für B heißt
+  das: Spar-Hinweis, Monat/Ausgaben, Sparziel, Kalorien, Angebote-/Wasser-Kachel, letzte Einkäufe und Heute kochen
+  (Wochenplan) kommen als B-Widgets; A baut die Hülle, die Reihenfolge und blendet nach Modul aus. Spar-Texte im
+  Pflicht-Wortlaut aus Plan 8 („in deiner Region“).
 - **Einkaufsmodus** startet über einen getönten Wagen-Knopf oben rechts in der Liste (nur mit offenen Artikeln) und
   über das Mehr-Menü.
 - **Summe „≈ 23,80 €“** nur mit Modul Angebote und mindestens einem gespeicherten Preis: Summe der gespeicherten
   Preise der offenen Artikel, nie ein Marktvergleich.
 - Von A entschieden (Konzept-Vorschläge): Teilen-Code künftig 6 Ziffern (alte Codes bleiben gültig), große Karte in
   der Listen-Übersicht = angeheftete bzw. zuletzt genutzte Liste mit Cover aus fester Fotoauswahl (sonst
-  Farbquadrat), Sparziel vorerst nicht (später ggf. B), Diktat erst mit B's Sprachdienst.
+  Farbquadrat), Diktat erst mit B's Sprachdienst.
 
 ## Anfragen an Teil B
 
