@@ -1,16 +1,19 @@
+import 'dart:ui';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 /// Manages the app's language selection.
 ///
 /// Supports 'system' mode (auto-detect) plus manual English/German.
 /// Persists manual language selection to SharedPreferences.
-
-import 'dart:ui';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 class LanguageNotifier extends StateNotifier<String> {
   static const supportedLanguages = ['en', 'de'];
 
-  LanguageNotifier() : super('en') {
+  /// Starts on the device language — what the default 'system' setting
+  /// resolves to — so most users see no language switch (and no app
+  /// remount) once the saved setting has loaded.
+  LanguageNotifier() : super(_resolveSystemLanguage()) {
     _loadLanguage();
   }
 
@@ -18,7 +21,7 @@ class LanguageNotifier extends StateNotifier<String> {
 
   String get savedSetting => _savedSetting;
 
-  String _resolveSystemLanguage() {
+  static String _resolveSystemLanguage() {
     final systemLocale = PlatformDispatcher.instance.locale.languageCode;
     return supportedLanguages.contains(systemLocale) ? systemLocale : 'en';
   }
@@ -27,10 +30,7 @@ class LanguageNotifier extends StateNotifier<String> {
     final prefs = await SharedPreferences.getInstance();
     final savedLanguage = prefs.getString('language');
 
-    if (savedLanguage == null || savedLanguage == 'system') {
-      _savedSetting = 'system';
-      state = _resolveSystemLanguage();
-    } else if (supportedLanguages.contains(savedLanguage)) {
+    if (savedLanguage != null && supportedLanguages.contains(savedLanguage)) {
       _savedSetting = savedLanguage;
       state = savedLanguage;
     } else {

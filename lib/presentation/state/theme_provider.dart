@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shoply/data/services/theme_service.dart';
 import 'package:shoply/data/models/user_preferences_model.dart';
+import 'package:shoply/data/services/theme_service.dart';
 
 // Theme Service Provider
 final themeServiceProvider = Provider<ThemeService>((ref) {
@@ -20,11 +20,6 @@ final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((r
   return ThemeModeNotifier(ref);
 });
 
-// Theme Variant Provider
-final themeVariantProvider = StateNotifierProvider<ThemeVariantNotifier, String>((ref) {
-  return ThemeVariantNotifier(ref);
-});
-
 // Accent Color Provider
 final accentColorProvider = StateNotifierProvider<AccentColorNotifier, Color>((ref) {
   return AccentColorNotifier(ref);
@@ -36,53 +31,49 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
 
   // Paper design is light-first; users can still switch in settings.
   ThemeModeNotifier(this._ref) : super(ThemeMode.light) {
-    _loadThemeMode();
-    _loadFromSupabase();
+    _load();
   }
 
-  Future<void> _loadThemeMode() async {
+  /// Set once the user picks a theme this session; the account copy loaded
+  /// afterwards must not overwrite that choice.
+  bool _changedThisSession = false;
+
+  /// Local preference first (offline-safe), then the account's saved theme
+  /// (sync across devices) — applied only when it differs, in that order,
+  /// so the app switches theme at most once per launch.
+  Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final themeModeString = prefs.getString(_themeModeKey);
-    
-    if (themeModeString != null) {
-      switch (themeModeString) {
-        case 'light':
-          state = ThemeMode.light;
-          break;
-        case 'dark':
-          state = ThemeMode.dark;
-          break;
-        case 'system':
-          state = ThemeMode.system;
-          break;
-      }
+    final local = _parse(prefs.getString(_themeModeKey));
+    if (local != null && mounted && !_changedThisSession) state = local;
+
+    final userPrefs = await _ref.read(userPreferencesProvider.future);
+    if (userPrefs == null || !mounted || _changedThisSession) return;
+    final remote = userPrefs.themeModeEnum;
+    if (remote != state) {
+      state = remote;
+      await prefs.setString(_themeModeKey, remote.name);
     }
   }
 
-  Future<void> _loadFromSupabase() async {
-    final userPrefs = await _ref.read(userPreferencesProvider.future);
-    if (userPrefs != null) {
-      state = userPrefs.themeModeEnum;
+  static ThemeMode? _parse(String? value) {
+    switch (value) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      case 'system':
+        return ThemeMode.system;
     }
+    return null;
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
+    _changedThisSession = true;
     state = mode;
-    
+    final modeString = mode.name; // 'light' | 'dark' | 'system'
+
     // Save to SharedPreferences (local)
     final prefs = await SharedPreferences.getInstance();
-    String modeString;
-    switch (mode) {
-      case ThemeMode.light:
-        modeString = 'light';
-        break;
-      case ThemeMode.dark:
-        modeString = 'dark';
-        break;
-      case ThemeMode.system:
-        modeString = 'system';
-        break;
-    }
     await prefs.setString(_themeModeKey, modeString);
 
     // Save to Supabase
@@ -91,50 +82,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
       await themeService.saveThemeMode(modeString);
       _ref.invalidate(userPreferencesProvider);
     } catch (e) {
-      print('Error saving theme mode to Supabase: $e');
-    }
-  }
-}
-
-class ThemeVariantNotifier extends StateNotifier<String> {
-  final Ref _ref;
-  static const String _themeVariantKey = 'theme_variant';
-
-  ThemeVariantNotifier(this._ref) : super('midnight') {
-    _loadThemeVariant();
-  }
-
-  Future<void> _loadThemeVariant() async {
-    // Try to load from Supabase first
-    final userPrefs = await _ref.read(userPreferencesProvider.future);
-    if (userPrefs != null) {
-      state = userPrefs.themeVariant;
-      // Also save to local storage
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_themeVariantKey, userPrefs.themeVariant);
-    } else {
-      // Fallback to local storage
-      final prefs = await SharedPreferences.getInstance();
-      state = prefs.getString(_themeVariantKey) ?? 'midnight';
-    }
-  }
-
-  Future<void> setThemeVariant(String variant) async {
-    // Update state immediately for responsive UI
-    state = variant;
-    
-    // Save to local storage first (always works)
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_themeVariantKey, variant);
-    
-    // Try to save to Supabase (optional, don't fail if it doesn't work)
-    try {
-      final themeService = _ref.read(themeServiceProvider);
-      await themeService.saveThemeVariant(variant);
-      _ref.invalidate(userPreferencesProvider);
-    } catch (e) {
-      // Silently fail - local storage is enough
-      debugPrint('Note: Could not sync theme to cloud: $e');
+      debugPrint('⚠️ [THEME] Error saving theme mode to Supabase: $e');
     }
   }
 }
@@ -173,13 +121,14 @@ class AccentColorNotifier extends StateNotifier<Color> {
   Future<void> setAccentColor(Color color) async {
     // Update state immediately for responsive UI
     state = color;
-    
-    final colorHex = '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
-    
+
+    final colorHex =
+        '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+
     // Save to local storage first (always works)
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_accentColorKey, colorHex);
-    
+
     // Try to save to Supabase (optional, don't fail if it doesn't work)
     try {
       final themeService = _ref.read(themeServiceProvider);
@@ -187,32 +136,7 @@ class AccentColorNotifier extends StateNotifier<Color> {
       _ref.invalidate(userPreferencesProvider);
     } catch (e) {
       // Silently fail - local storage is enough
-      debugPrint('Note: Could not sync accent color to cloud: $e');
+      debugPrint('⚠️ [THEME] Could not sync accent color to cloud: $e');
     }
   }
 }
-
-// Combined Theme Data Provider
-final customThemeDataProvider = Provider<ThemeData>((ref) {
-  final themeMode = ref.watch(themeModeProvider);
-  final themeVariant = ref.watch(themeVariantProvider);
-  final accentColor = ref.watch(accentColorProvider);
-  final themeService = ref.watch(themeServiceProvider);
-
-  // Get current brightness
-  Brightness brightness;
-  if (themeMode == ThemeMode.light) {
-    brightness = Brightness.light;
-  } else if (themeMode == ThemeMode.dark) {
-    brightness = Brightness.dark;
-  } else {
-    // System - would need BuildContext to determine, default to light
-    brightness = Brightness.light;
-  }
-
-  return themeService.generateTheme(
-    brightness: brightness,
-    variant: themeVariant,
-    accentColor: accentColor,
-  );
-});
