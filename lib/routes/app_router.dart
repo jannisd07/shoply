@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/presentation/screens/auth/welcome_screen.dart';
@@ -19,20 +18,14 @@ import 'package:shoply/presentation/screens/recipes/all_recipes_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_drafts_screen.dart';
 import 'package:shoply/presentation/screens/profile/profile_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/diet_preferences_screen.dart';
-import 'package:shoply/presentation/screens/profile/settings/app_priorities_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_detail_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_activities_screen.dart';
-import 'package:shoply/presentation/screens/lists/list_background_selection_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_background_picker_screen.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart'
     show OnboardingScreen, hasCompletedOnboarding;
-import 'package:shoply/presentation/screens/legal/privacy_policy_screen.dart';
-import 'package:shoply/presentation/screens/legal/terms_of_service_screen.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/analytics_service.dart';
-import 'package:shoply/data/services/connectivity_service.dart';
-import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io' show Platform;
 
@@ -41,14 +34,57 @@ import 'package:shoply/presentation/screens/auth/signup_screen.dart';
 import 'package:shoply/presentation/screens/auth/reset_password_screen.dart';
 import 'package:shoply/presentation/screens/auth/name_prompt_screen.dart';
 
-/// Helper class to refresh GoRouter when auth state changes
+/// Forwards navigation events to the Firebase Analytics observer.
+///
+/// The router is built on the first frame, but [AnalyticsService.initialize]
+/// (which creates the real observer) runs later in the background init. Reading
+/// the observer lazily on every event means screen views are tracked as soon
+/// as Firebase is ready instead of never.
+class _LazyAnalyticsObserver extends NavigatorObserver {
+  NavigatorObserver? get _target => AnalyticsService.instance.observer;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _target?.didPush(route, previousRoute);
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _target?.didPop(route, previousRoute);
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _target?.didRemove(route, previousRoute);
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) =>
+      _target?.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+}
+
+/// Onboarding completion, memoized once it is true (the flag is never reset),
+/// so the redirect stops hitting SharedPreferences on every navigation.
+bool _onboardingDone = false;
+
+/// A shared-list link opened while logged out. It is resumed the first time
+/// the user reaches /home after signing in.
+String? _pendingListLink;
+
+/// Helper class to refresh GoRouter when auth state changes. Only events
+/// that change whether a user is signed in re-run the redirect; the hourly
+/// tokenRefreshed and userUpdated events do not.
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<AuthState> stream) {
     notifyListeners();
-    _subscription = stream.asBroadcastStream().listen((AuthState _) {
-      notifyListeners();
+    _subscription = stream.asBroadcastStream().listen((AuthState state) {
+      if (_routingEvents.contains(state.event)) notifyListeners();
     });
   }
+
+  static const _routingEvents = {
+    AuthChangeEvent.initialSession,
+    AuthChangeEvent.signedIn,
+    AuthChangeEvent.signedOut,
+    AuthChangeEvent.passwordRecovery,
+  };
 
   late final StreamSubscription<AuthState> _subscription;
 
@@ -62,17 +98,13 @@ class GoRouterRefreshStream extends ChangeNotifier {
 final routerProvider = Provider<GoRouter>((ref) {
   final supabase = SupabaseService.instance;
 
-  // Get analytics observer if available (iOS/Android only)
-  final observers = <NavigatorObserver>[];
-  if (Platform.isIOS || Platform.isAndroid) {
-    final analyticsObserver = AnalyticsService.instance.observer;
-    if (analyticsObserver != null) {
-      observers.add(analyticsObserver);
-    }
-  }
+  // Analytics screen tracking (iOS/Android only)
+  final observers = <NavigatorObserver>[
+    if (Platform.isIOS || Platform.isAndroid) _LazyAnalyticsObserver(),
+  ];
 
   return GoRouter(
-    initialLocation: '/onboarding',
+    initialLocation: supabase.currentUser != null ? '/home' : '/onboarding',
     refreshListenable: GoRouterRefreshStream(supabase.authStateChanges),
     observers: observers,
     routes: [
@@ -298,11 +330,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/background-selection',
-        name: 'background-selection',
-        builder: (context, state) => const ListBackgroundSelectionScreen(),
-      ),
-      GoRoute(
         path: '/background-picker/:listId',
         name: 'background-picker',
         builder: (context, state) {
@@ -315,21 +342,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'diet-preferences',
         builder: (context, state) => const DietPreferencesScreen(),
       ),
-      GoRoute(
-        path: '/app-priorities',
-        name: 'app-priorities',
-        builder: (context, state) => const AppPrioritiesScreen(),
-      ),
-      GoRoute(
-        path: '/privacy-policy',
-        name: 'privacy-policy',
-        builder: (context, state) => const PrivacyPolicyScreen(),
-      ),
-      GoRoute(
-        path: '/terms-of-service',
-        name: 'terms-of-service',
-        builder: (context, state) => const TermsOfServiceScreen(),
-      ),
       // Deep link route for shared recipes (accessible without auth context)
       GoRoute(
         path: '/recipe/:recipeId',
@@ -339,24 +351,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           return RecipeDetailScreen(recipeId: recipeId);
         },
       ),
-      // Deep link route for shared lists (accessible without auth context)
+      // Shared-list and invite deep links are aliases of /lists/:listId.
+      // Logged-out users are sent to sign in first (top-level redirect).
       GoRoute(
         path: '/list/:listId',
         name: 'shared-list',
-        builder: (context, state) {
-          final listId = state.pathParameters['listId']!;
-          final listName = state.uri.queryParameters['name'] ?? 'Shared List';
-          return ListDetailScreen(listId: listId, listName: listName);
-        },
+        redirect: (context, state) => _sharedListTarget(state),
       ),
-      // Deep link route for list invites
       GoRoute(
         path: '/invite/:listId',
         name: 'list-invite',
-        builder: (context, state) {
-          final listId = state.pathParameters['listId']!;
-          return ListDetailScreen(listId: listId, listName: 'Shared List');
-        },
+        redirect: (context, state) => _sharedListTarget(state),
       ),
     ],
     redirect: (context, state) async {
@@ -367,18 +372,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (uri.scheme == 'shoply') {
         final host = uri.host; // e.g. 'recipe', 'list'
         final segments = uri.pathSegments;
-        if (host == 'recipe' && segments.isNotEmpty)
-          return '/recipe/${segments[0]}';
-        if (host == 'list' && segments.isNotEmpty)
-          return '/list/${segments[0]}';
-        if (host == 'invite' && segments.isNotEmpty)
-          return '/invite/${segments[0]}';
-        if (host == 'author' && segments.isNotEmpty)
-          return '/author/${segments[0]}';
+        const hosts = {'recipe', 'list', 'invite', 'author'};
+        if (hosts.contains(host) && segments.isNotEmpty) {
+          return '/$host/${segments[0]}';
+        }
         return '/home';
       }
 
       final location = state.matchedLocation;
+      final isSharedListLink =
+          location.startsWith('/list/') || location.startsWith('/invite/');
 
       // Public routes that don't require authentication
       final isPublicRoute =
@@ -387,25 +390,25 @@ final routerProvider = Provider<GoRouter>((ref) {
           location == '/login' ||
           location == '/signup' ||
           location == '/reset-password' ||
-          location == '/privacy-policy' ||
-          location == '/terms-of-service' ||
-          location.startsWith('/recipe/') ||
-          location.startsWith('/list/') ||
-          location.startsWith('/invite/');
+          location.startsWith('/recipe/');
 
       final isNamePrompt = location == '/name-prompt';
       final isNewNamePrompt = isNamePrompt && uri.queryParameters['new'] == '1';
       final isOnboarding = location == '/onboarding';
 
-      // Check if onboarding has been completed (cached after first check)
-      final onboardingDone = await hasCompletedOnboarding();
+      // A shared list needs an account (RLS returns nothing otherwise):
+      // remember the link and resume it after sign-in.
+      if (!isLoggedIn && isSharedListLink) {
+        _pendingListLink = _sharedListTarget(state);
+      }
+
+      if (!_onboardingDone) _onboardingDone = await hasCompletedOnboarding();
+      final onboardingDone = _onboardingDone;
 
       // First-time user: show onboarding unless on a public deep link
       if (!onboardingDone && !isOnboarding && !isLoggedIn) {
         // Allow deep links and auth sub-routes through
         if (location.startsWith('/recipe/') ||
-            location.startsWith('/list/') ||
-            location.startsWith('/invite/') ||
             location == '/login' ||
             location == '/signup' ||
             location == '/reset-password') {
@@ -433,63 +436,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isLoggedIn ? '/home' : '/welcome';
       }
 
-      // Logged in - check if name prompt or setup is needed.
-      // IMPORTANT: this must never block app entry when offline. We first try
-      // a cached profile snapshot, then – only if online – a short-timeout
-      // network query. If both fail we fall through and let the user into the
-      // app (they will land on /home as if fully set up).
       if (isLoggedIn) {
-        final user = SupabaseService.instance.currentUser;
-        if (user != null) {
-          bool gotProfile = false;
-
-          // 1. Offline-safe cached profile
-          final cached = await OfflineCacheService.instance
-              .getCachedUserProfile(user.id);
-          if (cached != null) {
-            gotProfile = true;
-          }
-
-          // 2. Live refresh only when online – bounded so a flaky network
-          //    can't hang the redirect.
-          if (ConnectivityService.instance.isOnline) {
-            try {
-              final response = await SupabaseService.instance
-                  .from('users')
-                  .select('display_name, onboarding_completed')
-                  .eq('id', user.id)
-                  .maybeSingle()
-                  .timeout(const Duration(milliseconds: 1500));
-
-              if (response != null) {
-                final liveDisplayName = response['display_name'] as String?;
-                gotProfile = true;
-                unawaited(
-                  OfflineCacheService.instance.cacheUserProfile(
-                    userId: user.id,
-                    displayName: liveDisplayName,
-                    onboardingCompleted:
-                        response['onboarding_completed'] as bool?,
-                  ),
-                );
-              }
-            } catch (_) {
-              // Network/timeout error – keep whatever we have from cache.
-            }
-          }
-
-          if (gotProfile) {
-            if (location == '/welcome' || isOnboarding) {
-              return '/home';
-            }
-          } else {
-            // No profile info at all: still bounce off passive entry screens.
-            // Login/signup complete their own async success routing, so forcing
-            // them here can race OTP verification and show a false error.
-            if (location == '/welcome' || isOnboarding) {
-              return '/home';
-            }
-          }
+        // Resume a shared-list link that was opened while logged out.
+        final pending = _pendingListLink;
+        if (pending != null && location == '/home') {
+          _pendingListLink = null;
+          return pending;
+        }
+        // Bounce off the passive entry screens. Login/signup complete their
+        // own async success routing, so forcing them here can race OTP
+        // verification and show a false error.
+        if (location == '/welcome' || isOnboarding) {
+          return '/home';
         }
       }
 
@@ -497,3 +455,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
   );
 });
+
+/// Maps `/list/:id` and `/invite/:id` onto the canonical `/lists/:id` route.
+String _sharedListTarget(GoRouterState state) {
+  final listId = state.pathParameters['listId'] ??
+      state.uri.pathSegments.last;
+  final listName = state.uri.queryParameters['name'] ?? 'Shared List';
+  return Uri(path: '/lists/$listId', queryParameters: {'name': listName})
+      .toString();
+}
