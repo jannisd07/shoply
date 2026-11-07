@@ -1,9 +1,8 @@
 name: iOS TestFlight Deploy
 
+# Manual only until the signing secrets (IOS_CERTIFICATE_P12, …) are set in the repo;
+# then add the push trigger back.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
