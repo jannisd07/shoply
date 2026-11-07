@@ -1,77 +1,96 @@
 name: iOS TestFlight Deploy
 
-# Manual only until the signing secrets (IOS_CERTIFICATE_P12, …) are set in the repo;
-# then add the push trigger back.
+# Manual only. Signing uses Xcode automatic signing with an App Store Connect
+# API key (role Admin, so Xcode may create/download cloud-managed distribution
+# certificates and profiles); no .p12 or provisioning-profile secrets needed.
+#
+# Required repository secrets:
+#   ENV_DART_BASE64                  base64 of lib/core/config/env.dart
+#   FIREBASE_OPTIONS_DART_BASE64     base64 of lib/firebase_options.dart
+#   GOOGLE_SERVICE_INFO_PLIST_BASE64 base64 of ios/Runner/GoogleService-Info.plist
+#   APP_STORE_CONNECT_API_KEY_ID     key ID (10 characters)
+#   APP_STORE_CONNECT_ISSUER_ID      issuer UUID
+#   APP_STORE_CONNECT_API_KEY        contents of AuthKey_<KEY_ID>.p8
 on:
   workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Build number override (default: the +N from pubspec version)'
+        required: false
+        default: ''
 
 jobs:
   deploy:
     runs-on: macos-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.38.x'
           channel: 'stable'
-      
-      - name: Install dependencies
-        run: flutter pub get
-      
-      - name: Install CocoaPods
+
+      - name: Write gitignored config files from secrets
+        env:
+          ENV_DART_BASE64: ${{ secrets.ENV_DART_BASE64 }}
+          FIREBASE_OPTIONS_DART_BASE64: ${{ secrets.FIREBASE_OPTIONS_DART_BASE64 }}
+          GOOGLE_SERVICE_INFO_PLIST_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
         run: |
-          cd ios
-          pod install
-          cd ..
-      
-      - name: Import Code Signing Certificates
-        uses: apple-actions/import-codesign-certs@v2
-        with:
-          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_P12 }}
-          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-      
-      - name: Download Provisioning Profile
+          echo "$ENV_DART_BASE64" | base64 --decode > lib/core/config/env.dart
+          echo "$FIREBASE_OPTIONS_DART_BASE64" | base64 --decode > lib/firebase_options.dart
+          echo "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode > ios/Runner/GoogleService-Info.plist
+
+      - name: Write App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
-      
-      - name: Increment Build Number
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s\n' "$APP_STORE_CONNECT_API_KEY" \
+            > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
+
+      - name: Install dependencies and configure Xcode project
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
         run: |
-          cd ios
-          agvtool next-version -all
-          cd ..
-      
-      - name: Build iOS Release
-        run: flutter build ios --release --no-codesign
-      
-      - name: Archive and Export
-        run: |
-          cd ios
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -sdk iphoneos \
-            -configuration Release \
-            -archivePath $PWD/build/Runner.xcarchive \
-            clean archive
-          
-          xcodebuild -exportArchive \
-            -archivePath $PWD/build/Runner.xcarchive \
-            -exportOptionsPlist exportOptions.plist \
-            -exportPath $PWD/build
-          cd ..
-      
-      - name: Upload to TestFlight
+          flutter pub get
+          if [ -n "$BUILD_NUMBER" ]; then
+            flutter build ios --release --config-only --build-number="$BUILD_NUMBER"
+          else
+            flutter build ios --release --config-only
+          fi
+
+      - name: Archive
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
-          xcrun altool --upload-app \
-            --type ios \
-            --file ios/build/Runner.ipa \
-            --apiKey $APP_STORE_CONNECT_API_KEY_ID \
-            --apiIssuer $APP_STORE_CONNECT_ISSUER_ID
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8 \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            archive
+
+      - name: Export and upload to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        # ios/exportOptions.plist has destination=upload, so -exportArchive
+        # uploads the build to App Store Connect directly.
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -exportOptionsPlist ios/exportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8 \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
