@@ -10,23 +10,31 @@ import 'package:shoply/data/models/store_offer.dart';
 ///
 /// marktguru aggregates the current Angebote of the big German grocery
 /// chains (REWE, Lidl, Kaufland, Netto, PENNY, Aldi, Edeka, …) per zip code.
-/// The API keys are public: they ship embedded in the marktguru web app and
-/// are re-extracted here at runtime (with a bundled fallback pair).
+/// The API keys ship embedded in the marktguru web app and are extracted here
+/// at runtime. There is no bundled fallback pair: without keys the lookup
+/// returns null and the offer widgets show nothing.
 ///
 /// Note: regular shelf prices are not publicly available for German
 /// supermarkets — price data therefore covers current offers only.
 class OfferPriceService {
-  OfferPriceService._();
-  static final OfferPriceService instance = OfferPriceService._();
+  OfferPriceService._(this._client);
+  static final OfferPriceService instance = OfferPriceService._(http.Client());
+
+  /// A fresh instance on a fake HTTP client, for tests.
+  @visibleForTesting
+  factory OfferPriceService.forTesting(http.Client client) =>
+      OfferPriceService._(client);
+
+  final http.Client _client;
 
   static const _baseUrl = 'https://api.marktguru.de/api/v1';
   static const _keysPrefsKey = 'marktguru_keys_v1';
   static const _keysMaxAge = Duration(days: 7);
 
-  // Fallback keys extracted from marktguru.de (2026-07); refreshed at runtime.
-  static const _fallbackApiKey = '8Kk+pmbf7TgJ9nVj2cXeA7P5zBGv8iuutVVMRfOfvNE=';
-  static const _fallbackClientKey =
-      'WU/RH+PMGDi+gkZer3WbMelt6zcYHSTytNB7VpTia90=';
+  /// After a failed extraction the homepage is not downloaded again for this
+  /// long, so typing in the add field never hammers marktguru.de.
+  static const _keysRetryCooldown = Duration(minutes: 30);
+  DateTime? _keysFailedAt;
 
   /// Grocery chains we surface; drugstores etc. are filtered out.
   static const Set<String> groceryRetailers = {
@@ -93,8 +101,12 @@ class OfferPriceService {
       return Future.value(cached.offers);
     }
 
+    // Block body on purpose: an arrow would return the removed future, which
+    // is this very future, and whenComplete would then wait on itself forever.
     return _inFlight[cacheKey] ??= _search(normalized, zipCode, limit)
-        .whenComplete(() => _inFlight.remove(cacheKey));
+        .whenComplete(() {
+      _inFlight.remove(cacheKey);
+    });
   }
 
   Future<List<StoreOffer>?> _search(
@@ -136,7 +148,7 @@ class OfferPriceService {
     required String zipCode,
     required int limit,
   }) async {
-    await _ensureKeys();
+    if (!await _ensureKeys()) return null;
     await _throttle.wait();
 
     final uri = Uri.parse('$_baseUrl/offers/search').replace(
@@ -153,7 +165,10 @@ class OfferPriceService {
       var response = await _get(uri);
       if (response.statusCode == 401 || response.statusCode == 403) {
         // Keys rotated — re-extract once and retry.
+        _apiKey = null;
+        _clientKey = null;
         await _refreshKeys();
+        if (!_hasKeys) return null;
         response = await _get(uri);
       }
       if (response.statusCode != 200) {
@@ -256,17 +271,21 @@ class OfferPriceService {
     return groceryRetailers.any((r) => name == r || name.startsWith('$r-'));
   }
 
+  bool get _hasKeys => _apiKey != null && _clientKey != null;
+
   Future<http.Response> _get(Uri uri) {
-    return http.get(uri, headers: {
-      'x-apikey': _apiKey ?? _fallbackApiKey,
-      'x-clientkey': _clientKey ?? _fallbackClientKey,
+    return _client.get(uri, headers: {
+      'x-apikey': _apiKey!,
+      'x-clientkey': _clientKey!,
       'accept': 'application/json',
       'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
     }).timeout(const Duration(seconds: 12));
   }
 
-  Future<void> _ensureKeys() async {
-    if (_apiKey != null && _clientKey != null) return;
+  /// True when a usable key pair is loaded (memory, prefs or a fresh
+  /// extraction). False while the retry cooldown runs.
+  Future<bool> _ensureKeys() async {
+    if (_hasKeys) return true;
 
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_keysPrefsKey);
@@ -278,12 +297,18 @@ class OfferPriceService {
             DateTime.now().difference(fetchedAt) < _keysMaxAge) {
           _apiKey = json['apiKey'] as String?;
           _clientKey = json['clientKey'] as String?;
-          if (_apiKey != null && _clientKey != null) return;
+          if (_hasKeys) return true;
         }
       } catch (_) {}
     }
 
+    final failedAt = _keysFailedAt;
+    if (failedAt != null &&
+        DateTime.now().difference(failedAt) < _keysRetryCooldown) {
+      return false;
+    }
     await _refreshKeys();
+    return _hasKeys;
   }
 
   /// Re-extract the public API keys from the marktguru web app config.
@@ -296,7 +321,7 @@ class OfferPriceService {
 
   Future<void> _downloadKeys() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('https://www.marktguru.de'),
         headers: {'user-agent': 'Mozilla/5.0'},
       ).timeout(const Duration(seconds: 12));
@@ -314,6 +339,7 @@ class OfferPriceService {
         if (apiKey != null && clientKey != null) {
           _apiKey = apiKey;
           _clientKey = clientKey;
+          _keysFailedAt = null;
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString(
             _keysPrefsKey,
@@ -327,12 +353,11 @@ class OfferPriceService {
           return;
         }
       }
-      debugPrint('⚠️ [OFFERS] Could not extract keys, using fallback');
+      debugPrint('⚠️ [OFFERS] Could not extract keys, offers paused');
     } catch (e) {
-      debugPrint('⚠️ [OFFERS] Key refresh failed ($e), using fallback');
+      debugPrint('⚠️ [OFFERS] Key refresh failed ($e), offers paused');
     }
-    _apiKey = _fallbackApiKey;
-    _clientKey = _fallbackClientKey;
+    _keysFailedAt = DateTime.now();
   }
 }
 
