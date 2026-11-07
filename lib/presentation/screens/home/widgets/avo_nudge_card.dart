@@ -154,8 +154,6 @@ class AvoNudgeCard extends ConsumerWidget {
             autoParse: false,
           );
 
-      ref.invalidate(listItemsProvider(target.id));
-      ref.invalidate(itemsByCategoryProvider(target.id));
       ref.invalidate(restockSuggestionsProvider);
       ref.invalidate(offerNudgesProvider);
 

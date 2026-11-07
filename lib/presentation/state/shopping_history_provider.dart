@@ -12,8 +12,7 @@ final shoppingHistoryServiceProvider = Provider<ShoppingHistoryService>((ref) {
 final shoppingHistoryProvider = FutureProvider<List<ShoppingHistory>>((
   ref,
 ) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return [];
+  if (ref.watch(authUserIdProvider) == null) return [];
 
   final service = ref.watch(shoppingHistoryServiceProvider);
   return service.getShoppingHistory();
@@ -23,22 +22,11 @@ final shoppingHistoryProvider = FutureProvider<List<ShoppingHistory>>((
 final recentHistoryProvider = FutureProvider<List<ShoppingHistory>>((
   ref,
 ) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return [];
+  if (ref.watch(authUserIdProvider) == null) return [];
 
   final service = ref.watch(shoppingHistoryServiceProvider);
   return service.getRecentHistory(limit: 5);
 });
-
-/// Provider for shopping history of a specific list
-final listHistoryProvider =
-    FutureProvider.family<List<ShoppingHistory>, String>((ref, listId) async {
-      final authUser = await ref.watch(authUserProvider.future);
-      if (authUser == null) return [];
-
-      final service = ref.watch(shoppingHistoryServiceProvider);
-      return service.getHistoryForList(listId);
-    });
 
 /// State notifier for managing shopping history with mutations
 class ShoppingHistoryNotifier
@@ -105,10 +93,10 @@ final shoppingHistoryNotifierProvider =
       ShoppingHistoryNotifier,
       AsyncValue<List<ShoppingHistory>>
     >((ref) {
-      final authUser = ref.watch(authUserProvider).valueOrNull;
+      final userId = ref.watch(authUserIdProvider);
       final service = ref.watch(shoppingHistoryServiceProvider);
       return ShoppingHistoryNotifier(
         service,
-        isAuthenticated: authUser != null,
+        isAuthenticated: userId != null,
       );
     });

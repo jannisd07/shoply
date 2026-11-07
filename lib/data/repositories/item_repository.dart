@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
-import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/gemini_categorization_service.dart';
 import 'package:shoply/data/services/language_detection_service.dart';
+import 'package:shoply/data/services/push_notification_service.dart';
+import 'package:shoply/data/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ItemRepository {
@@ -28,37 +31,48 @@ class ItemRepository {
           .single();
       return response['name'] as String?;
     } catch (e) {
-      debugPrint('⚠️ [ItemRepo] Failed to get list name: $e');
+      debugPrint('⚠️ [ITEM_REPO] Failed to get list name: $e');
       return null;
     }
   }
 
-  /// Get all items for a list
+  /// Get all items for a list: manually ordered items first (by
+  /// `order_index`), then never-ordered ones in creation order. Sorted in SQL
+  /// so the order is total and identical on every reload.
   Future<List<ShoppingItemModel>> getListItems(String listId) async {
     final response = await _supabase
         .from('shopping_items')
         .select()
         .eq('list_id', listId)
+        .order('order_index', ascending: true, nullsFirst: false)
         .order('created_at', ascending: true);
 
-    final items = (response as List)
+    return (response as List)
         .map((json) => ShoppingItemModel.fromJson(json))
         .toList();
-    
-    // Sort by order_index if available, otherwise keep created_at order
-    items.sort((a, b) {
-      final aOrder = a.orderIndex ?? 999999;
-      final bOrder = b.orderIndex ?? 999999;
-      return aOrder.compareTo(bOrder);
-    });
-    
-    return items;
   }
 
-  /// Add a new item to a list
-  /// Automatically merges with existing items if same name exists
-  /// Automatically categorizes with Gemini AI if category is null
-  /// Automatically parses amount and unit from text if not provided (e.g., "2 cups flour")
+  /// All items of several lists in one query (e.g. home-screen candidate
+  /// scans), instead of one [getListItems] round trip per list.
+  Future<List<ShoppingItemModel>> getItemsForLists(List<String> listIds) async {
+    if (listIds.isEmpty) return const [];
+    final response = await _supabase
+        .from('shopping_items')
+        .select()
+        .inFilter('list_id', listIds)
+        .order('order_index', ascending: true, nullsFirst: false)
+        .order('created_at', ascending: true);
+
+    return (response as List)
+        .map((json) => ShoppingItemModel.fromJson(json))
+        .toList();
+  }
+
+  /// Add a new item to a list.
+  ///
+  /// Merges into an existing unchecked item with the same name and unit,
+  /// auto-categorizes with Gemini when [category] is null, and parses amount
+  /// and unit out of the text (e.g. "2 cups flour") when none were given.
   Future<ShoppingItemModel> addItem({
     required String listId,
     required String name,
@@ -75,180 +89,152 @@ class ItemRepository {
     double? priceOldValue,
     bool autoParse = true,
   }) async {
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('🔵 [ITEM_REPO] addItem() METHOD ENTRY');
-    print('🔵 [ITEM_REPO] - name: "$name"');
-    print('🔵 [ITEM_REPO] - listId: $listId');
-    print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    
+    debugPrint('🔵 [ITEM_REPO] addItem "$name" → list $listId');
+
     final userId = _supabase.currentUser?.id;
     if (userId == null) {
-      print('❌ [ITEM_REPO] User not authenticated!');
+      debugPrint('❌ [ITEM_REPO] User not authenticated');
       throw Exception('User not authenticated');
     }
 
-    // 🧠 AUTO-PARSE: If quantity is default (1.0) and no unit provided,
-    // try to parse the input text for amount and unit (e.g., "2 cups flour")
+    // 🧠 AUTO-PARSE: only worth an LLM round trip when the text contains a
+    // number at all — a plain name like "Milch" has nothing to parse.
     String parsedName = name;
     double parsedQuantity = quantity;
     String? parsedUnit = unit;
-    
-    if (autoParse && quantity == 1.0 && unit == null && name.trim().isNotEmpty) {
+
+    if (autoParse &&
+        quantity == 1.0 &&
+        unit == null &&
+        _containsDigit.hasMatch(name)) {
       try {
-        if (kDebugMode) {
-          print('🧠 [ITEM_REPO] Auto-parsing ingredient: "$name"');
-        }
         final parsed = await _geminiService.parseIngredient(name);
         parsedName = parsed['name'] as String? ?? name;
         parsedQuantity = (parsed['amount'] as num?)?.toDouble() ?? 1.0;
         parsedUnit = parsed['unit'] as String?;
-        
+
         // Convert "pcs" to null for cleaner display
         if (parsedUnit == 'pcs' || parsedUnit == 'pc') {
           parsedUnit = null;
         }
-        
-        if (kDebugMode) {
-          print('✅ [ITEM_REPO] Parsed: "$name" → name="$parsedName", qty=$parsedQuantity, unit=$parsedUnit');
-        }
+
+        debugPrint('✅ [ITEM_REPO] Parsed "$name" → name="$parsedName", qty=$parsedQuantity, unit=$parsedUnit');
       } catch (e) {
-        if (kDebugMode) {
-          print('⚠️ [ITEM_REPO] Auto-parse failed, using original: $e');
-        }
+        debugPrint('⚠️ [ITEM_REPO] Auto-parse failed, using original: $e');
       }
     }
 
-    // 🔍 MERGE LOGIC: Check if item with same name already exists (unchecked only)
+    // 🔍 MERGE: an unchecked item with the same name AND unit absorbs the new
+    // quantity ("2 kg" + "500 g" must not become "502 kg").
     try {
       final existingItems = await _supabase
           .from('shopping_items')
           .select()
           .eq('list_id', listId)
           .eq('is_checked', false)
-          .ilike('name', parsedName.trim());
-      
-      if ((existingItems as List).isNotEmpty) {
-        // Item exists - update quantity instead of creating new
-        final existingItem = ShoppingItemModel.fromJson(existingItems.first);
-        final newQuantity = existingItem.quantity + parsedQuantity;
-        
-        print('🔄 [ITEM_REPO] Found existing item "${existingItem.name}" - merging quantities: ${existingItem.quantity} + $quantity = $newQuantity');
+          .ilike('name', _escapeLikePattern(parsedName.trim()));
 
-        final mergeUpdate = <String, dynamic>{
-          'quantity': newQuantity,
-          'updated_at': DateTime.now().toIso8601String(),
-        };
-        if (price != null) {
-          mergeUpdate['price'] = price;
-          mergeUpdate['price_currency'] = priceCurrency ?? 'EUR';
-          mergeUpdate['price_retailer'] = priceRetailer;
-          mergeUpdate['price_unit'] = priceUnit;
-          mergeUpdate['price_updated_at'] = DateTime.now().toIso8601String();
-          mergeUpdate['price_old_value'] = priceOldValue;
-        }
+      final sameUnit = (existingItems as List)
+          .map((json) => ShoppingItemModel.fromJson(json))
+          .where((i) => _normalizeUnit(i.unit) == _normalizeUnit(parsedUnit));
+
+      if (sameUnit.isNotEmpty) {
+        final existingItem = sameUnit.first;
+        final newQuantity = existingItem.quantity + parsedQuantity;
+
+        debugPrint('🔄 [ITEM_REPO] Merging into "${existingItem.name}": ${existingItem.quantity} + $parsedQuantity = $newQuantity');
 
         final updatedResponse = await _supabase
             .from('shopping_items')
-            .update(mergeUpdate)
+            .update({
+              'quantity': newQuantity,
+              'updated_at': DateTime.now().toIso8601String(),
+              if (price != null)
+                ..._priceFields(price, priceCurrency, priceRetailer,
+                    priceUnit, priceOldValue),
+            })
             .eq('id', existingItem.id)
             .select()
             .single();
-        
+
         await _touchList(listId);
-        print('✅ [ITEM_REPO] Merged item quantity to $newQuantity');
         return ShoppingItemModel.fromJson(updatedResponse);
       }
     } catch (e) {
-      print('⚠️ [ITEM_REPO] Error checking for existing item: $e - will create new item');
+      debugPrint('⚠️ [ITEM_REPO] Error checking for existing item: $e - will create new item');
     }
 
-    // Auto-categorize with Gemini if category is null
+    // Auto-categorize with Gemini if category is null (returns a
+    // language-agnostic category ID).
     String? finalCategory = category;
     if (finalCategory == null) {
       try {
-        if (kDebugMode) {
-          print('🔵 [ITEM_REPO] Starting Gemini categorization for "$parsedName"...');
-        }
-        final startTime = DateTime.now();
-        
-        // Returns category ID (language-agnostic)
         finalCategory = await _geminiService.categorizeItem(parsedName);
-        
-        final duration = DateTime.now().difference(startTime);
-        if (kDebugMode) {
-          print('✅ [ITEM_REPO] Auto-categorized "$name" → $finalCategory (took ${duration.inMilliseconds}ms)');
-        }
-      } catch (e, stackTrace) {
-        if (kDebugMode) {
-          print('⚠️ [ITEM_REPO] Auto-categorization failed for "$name": $e');
-          print('⚠️ [ITEM_REPO] StackTrace: $stackTrace');
-        }
-        finalCategory = 'other'; // Fallback to 'other' category ID
+        debugPrint('✅ [ITEM_REPO] Auto-categorized "$parsedName" → $finalCategory');
+      } catch (e) {
+        debugPrint('⚠️ [ITEM_REPO] Auto-categorization failed for "$parsedName": $e');
+        finalCategory = 'other';
       }
-    }
-
-    // Detect language from item name
-    final detectedLanguage = LanguageDetectionService.detectLanguage(parsedName);
-    if (kDebugMode) {
-      print('🔵 [ITEM_REPO] Detected language for "$parsedName": $detectedLanguage');
     }
 
     try {
-      if (kDebugMode) {
-        print('🔵 [ITEM_REPO] Inserting item "$parsedName" (qty: $parsedQuantity, unit: $parsedUnit) into database...');
-      }
-      
-      final insertData = <String, dynamic>{
-        'list_id': listId,
-        'name': parsedName,
-        'quantity': parsedQuantity,
-        'unit': parsedUnit,
-        'category': finalCategory, // Legacy field - keep for backward compatibility
-        'category_id': finalCategory, // New field - category ID
-        'language': detectedLanguage, // New field - detected language
-        'notes': notes,
-        'is_diet_warning': isDietWarning,
-        'barcode': barcode,
-        'added_by': userId,
-      };
-      if (price != null) {
-        insertData['price'] = price;
-        insertData['price_currency'] = priceCurrency ?? 'EUR';
-        insertData['price_retailer'] = priceRetailer;
-        insertData['price_unit'] = priceUnit;
-        insertData['price_updated_at'] = DateTime.now().toIso8601String();
-        insertData['price_old_value'] = priceOldValue;
-      }
-
       final response = await _supabase
           .from('shopping_items')
-          .insert(insertData)
+          .insert({
+            'list_id': listId,
+            'name': parsedName,
+            'quantity': parsedQuantity,
+            'unit': parsedUnit,
+            'category': finalCategory, // Legacy field - kept for backward compatibility
+            'category_id': finalCategory,
+            'language': LanguageDetectionService.detectLanguage(parsedName),
+            'notes': notes,
+            'is_diet_warning': isDietWarning,
+            'barcode': barcode,
+            'added_by': userId,
+            if (price != null)
+              ..._priceFields(price, priceCurrency, priceRetailer, priceUnit,
+                  priceOldValue),
+          })
           .select()
           .single();
 
-      if (kDebugMode) {
-        print('✅ [ITEM_REPO] Successfully added item "$name" with ID: ${response['id']}');
-      }
-
-      final item = ShoppingItemModel.fromJson(response);
-
-      // Update list timestamp
       await _touchList(listId);
 
-      // 🔔 Notification for this add is sent explicitly by the caller
-      // (ItemsNotifier.addItem in items_provider.dart calls
-      // sendItemAddedNotification after this returns) — not from here, to
-      // avoid duplicate notifications when other addItem() callers exist.
-
-      return item;
-    } catch (e, stackTrace) {
-      if (kDebugMode) {
-        print('❌ [ITEM_REPO] Database insert failed for "$name": $e');
-        print('❌ [ITEM_REPO] StackTrace: $stackTrace');
-      }
+      // 🔔 The "item added" notification is sent by the caller
+      // (ItemsNotifier.addItem → sendItemAddedNotification), not from here,
+      // to avoid duplicates when other addItem() callers exist.
+      return ShoppingItemModel.fromJson(response);
+    } catch (e) {
+      debugPrint('❌ [ITEM_REPO] Database insert failed for "$parsedName": $e');
       rethrow;
     }
   }
+
+  static final _containsDigit = RegExp(r'\d');
+
+  static String _normalizeUnit(String? unit) => (unit ?? '').trim().toLowerCase();
+
+  /// `ilike` treats `%` and `_` as wildcards; escape them so a name is
+  /// matched literally (still case-insensitively).
+  static String _escapeLikePattern(String value) =>
+      value.replaceAllMapped(RegExp(r'[\\%_]'), (m) => '\\${m[0]}');
+
+  static Map<String, dynamic> _priceFields(
+    double price,
+    String? currency,
+    String? retailer,
+    String? unit,
+    double? oldValue,
+  ) =>
+      {
+        'price': price,
+        'price_currency': currency ?? 'EUR',
+        'price_retailer': retailer,
+        'price_unit': unit,
+        'price_updated_at': DateTime.now().toIso8601String(),
+        'price_old_value': oldValue,
+      };
 
   /// Update an item
   Future<ShoppingItemModel> updateItem(
@@ -261,118 +247,75 @@ class ItemRepository {
         .eq('id', itemId)
         .select()
         .single();
-    
+
     final item = ShoppingItemModel.fromJson(response);
     await _touchList(item.listId);
-
     return item;
   }
 
-  /// Toggle item checked status
+  /// Toggle item checked status. Other list members are notified in the
+  /// background; the caller never waits on the push fan-out.
   Future<ShoppingItemModel> toggleItemChecked(
     String itemId,
     bool isChecked,
   ) async {
-    final updates = {
+    final updatedItem = await updateItem(itemId, {
       'is_checked': isChecked,
       'checked_at': isChecked ? DateTime.now().toIso8601String() : null,
-    };
+    });
 
-    final updatedItem = await updateItem(itemId, updates);
-    
-    // list updated_at is handled inside updateItem
-    
-    // 🔔 Send notification to list members about item toggle
-    if (Platform.isIOS || Platform.isAndroid) {
-      try {
-        final userId = _supabase.client.auth.currentUser?.id;
-        if (userId != null) {
-          if (kDebugMode) {
-            print('🔔 [ITEM_REPO] Sending toggle notification for "${updatedItem.name}"...');
-          }
-          await _sendItemToggleNotifications(
-            updatedItem.listId,
-            updatedItem.name,
-            isChecked,
-            userId,
-          );
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          print('⚠️ [ITEM_REPO] Failed to send toggle notification: $e');
-        }
-      }
-    }
-    
+    final action = isChecked ? 'checked off' : 'unchecked';
+    _notifyListMembers(
+      listId: updatedItem.listId,
+      body: (actor) => '$actor $action "${updatedItem.name}"',
+      data: {
+        'type': 'item_toggled',
+        'listId': updatedItem.listId,
+        'isChecked': isChecked,
+      },
+    );
     return updatedItem;
   }
 
-  /// Delete an item
+  /// Delete an item. One round trip returns the deleted row's list and name
+  /// for the list timestamp and the (background) member notification.
   Future<void> deleteItem(String itemId) async {
-    // 🔔 Get item details before deletion for notification
-    if (Platform.isIOS || Platform.isAndroid) {
-      try {
-        final itemResponse = await _supabase
+    final deleted = await _supabase
+        .from('shopping_items')
+        .delete()
+        .eq('id', itemId)
+        .select('list_id, name')
+        .maybeSingle();
+    if (deleted == null) return; // Already gone (e.g. removed by another member).
+
+    final listId = deleted['list_id'] as String;
+    final itemName = deleted['name'] as String;
+    await _touchList(listId);
+
+    _notifyListMembers(
+      listId: listId,
+      body: (actor) => '$actor removed "$itemName"',
+      data: {'type': 'item_deleted', 'listId': listId},
+    );
+  }
+
+  /// Persist new `order_index` values ({itemId: index}) concurrently, then
+  /// touch the list once. Callers pass only the rows whose index changed.
+  Future<void> updateOrderIndexes(
+    String listId,
+    Map<String, int> orderById,
+  ) async {
+    if (orderById.isEmpty) return;
+    await Future.wait([
+      for (final entry in orderById.entries)
+        _supabase
             .from('shopping_items')
-            .select('list_id, name, added_by')
-            .eq('id', itemId)
-            .single();
-        
-        final listId = itemResponse['list_id'] as String;
-        final itemName = itemResponse['name'] as String;
-        final userId = _supabase.client.auth.currentUser?.id;
-        
-        // Delete the item
-        await _supabase.from('shopping_items').delete().eq('id', itemId);
-        
-        // Update list timestamp
-        await _touchList(listId);
-        
-        // Send notification after successful deletion
-        if (userId != null) {
-          if (kDebugMode) {
-            print('🔔 [ITEM_REPO] Sending deletion notification for "$itemName"...');
-          }
-          await _sendItemDeletionNotifications(listId, itemName, userId);
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          print('⚠️ [ITEM_REPO] Failed to delete item or send notification: $e');
-        }
-        rethrow;
-      }
-    } else {
-      // Non-mobile platforms: just delete without notifications
-      // First get listId to touch it
-      try {
-        final item = await _supabase.from('shopping_items').select('list_id').eq('id', itemId).single();
-        await _supabase.from('shopping_items').delete().eq('id', itemId);
-        await _touchList(item['list_id'] as String);
-      } catch (_) {
-        await _supabase.from('shopping_items').delete().eq('id', itemId);
-      }
-    }
+            .update({'order_index': entry.value})
+            .eq('id', entry.key),
+    ]);
+    await _touchList(listId);
   }
 
-  /// Update sort order for items. Writes `order_index` – the column the read
-  /// path sorts on – so the new order is visible after a reload.
-  Future<void> updateSortOrder(List<String> itemIds) async {
-    if (itemIds.isEmpty) return;
-
-    for (var i = 0; i < itemIds.length; i++) {
-      await _supabase
-          .from('shopping_items')
-          .update({'order_index': i})
-          .eq('id', itemIds[i]);
-    }
-
-    // Touch list once (get listId from first item)
-    try {
-       final item = await _supabase.from('shopping_items').select('list_id').eq('id', itemIds[0]).single();
-       await _touchList(item['list_id'] as String);
-    } catch (_) {}
-  }
-  
   /// Updates the updated_at timestamp of the list
   Future<void> _touchList(String listId) async {
     try {
@@ -381,55 +324,16 @@ class ItemRepository {
           .update({'updated_at': DateTime.now().toUtc().toIso8601String()})
           .eq('id', listId);
     } catch (e) {
-      if (kDebugMode) {
-        print('⚠️ [ITEM_REPO] Failed to touch list: $e');
-      }
+      debugPrint('⚠️ [ITEM_REPO] Failed to touch list: $e');
     }
-  }
-
-  /// Get items by category
-  Future<Map<String, List<ShoppingItemModel>>> getItemsByCategory(
-    String listId,
-  ) async {
-    final items = await getListItems(listId);
-    final grouped = <String, List<ShoppingItemModel>>{};
-
-    for (final item in items) {
-      final category = item.category ?? 'other'; // Use category ID
-      grouped.putIfAbsent(category, () => []).add(item);
-    }
-
-    return grouped;
-  }
-
-  /// Search items
-  Future<List<ShoppingItemModel>> searchItems(
-    String listId,
-    String query,
-  ) async {
-    final response = await _supabase
-        .from('shopping_items')
-        .select()
-        .eq('list_id', listId)
-        .or('name.ilike.%$query%,category.ilike.%$query%,notes.ilike.%$query%');
-
-    return (response as List)
-        .map((json) => ShoppingItemModel.fromJson(json))
-        .toList();
   }
 
   /// Subscribe to item changes for a specific list
-  void subscribeToItemChanges(String listId, Function() onUpdate) {
-    print('🔵 [ITEM_REPO] subscribeToItemChanges called for list: $listId');
-    
+  void subscribeToItemChanges(String listId, void Function() onUpdate) {
     // Don't create duplicate subscriptions
-    if (_channels.containsKey(listId)) {
-      print('⚠️ [ITEM_REPO] Subscription already exists for list: $listId');
-      return;
-    }
+    if (_channels.containsKey(listId)) return;
 
-    print('🔵 [ITEM_REPO] Creating new subscription for list: $listId');
-    final channel = _supabase.client
+    _channels[listId] = _supabase.client
         .channel('shopping_items_$listId')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -440,304 +344,64 @@ class ItemRepository {
             column: 'list_id',
             value: listId,
           ),
-          callback: (payload) {
-            print('🔥🔥🔥 [ITEM_REPO] REALTIME CALLBACK FROM SUPABASE! Event: ${payload.eventType}');
-            print('🔥 Payload: ${payload.newRecord}');
-            onUpdate();
-          },
+          callback: (_) => onUpdate(),
         )
         .subscribe();
-    
-    _channels[listId] = channel;
-    print('✅ [ITEM_REPO] Subscription created and stored for list: $listId');
+    debugPrint('✅ [ITEM_REPO] Realtime subscription opened for list $listId');
   }
 
   /// Unsubscribe from item changes for a specific list
   void unsubscribeFromItemChanges(String listId) {
-    final channel = _channels[listId];
+    final channel = _channels.remove(listId);
     if (channel != null) {
       channel.unsubscribe();
-      _channels.remove(listId);
+      debugPrint('🔵 [ITEM_REPO] Realtime subscription closed for list $listId');
     }
   }
 
-  /// Send real-time notifications to all list members when item is added
-  Future<void> _sendListUpdateNotifications(
-    String listId,
-    String itemName,
-    String addedByUserId,
-  ) async {
-    print('📢 [ITEM_REPO] _sendListUpdateNotifications START');
-    try {
-      // Get list name, members, and adder info
-      print('📢 [ITEM_REPO] Fetching list info...');
-      final listResponse = await _supabase
-          .from('shopping_lists')
-          .select('name')
-          .eq('id', listId)
-          .single();
-
-      final listName = listResponse['name'] as String;
-      print('📢 [ITEM_REPO] List name: $listName');
-
-      print('📢 [ITEM_REPO] Fetching list members (excluding adder)...');
-      final membersResponse = await _supabase
-          .from('list_members')
-          .select('user_id')
-          .eq('list_id', listId)
-          .neq('user_id', addedByUserId);
-
-      print('📢 [ITEM_REPO] Found ${(membersResponse as List).length} members to notify');
-
-      print('📢 [ITEM_REPO] Fetching adder display name...');
-      final adderResponse = await _supabase
-          .from('users')
-          .select('display_name')
-          .eq('id', addedByUserId)
-          .single();
-
-      final adderName = adderResponse['display_name'] as String? ?? 'Someone';
-      print('📢 [ITEM_REPO] Adder name: $adderName');
-
-      // Send push notifications to other members
-      int notificationsSent = 0;
-      for (final member in membersResponse) {
-        final memberId = member['user_id'] as String;
-        print('📢 [ITEM_REPO] Processing member: $memberId');
-        
-        try {
-          final userResponse = await _supabase
-              .from('users')
-              .select('fcm_token, display_name')
-              .eq('id', memberId)
-              .single();
-          
-          final fcmToken = userResponse['fcm_token'] as String?;
-          final memberName = userResponse['display_name'] as String? ?? 'Unknown';
-          
-          print('📢 [ITEM_REPO] Member $memberName has FCM token: ${fcmToken != null && fcmToken.isNotEmpty}');
-          
-          if (fcmToken != null && fcmToken.isNotEmpty) {
-            print('📢 [ITEM_REPO] Sending FCM notification to $memberName...');
-
-            final response = await _supabase.client.functions.invoke(
-              'send-push-notification',
-              body: {
-                'token': fcmToken,
-                'notification': {
-                  'title': listName,
-                  'body': '$adderName added "$itemName"',
-                },
-                'data': {
-                  'type': 'list_update',
-                  'listId': listId,
-                },
-              },
-            );
-            
-            print('📨 [ITEM_REPO] Edge Function Response Status: ${response.status}');
-            final responseData = response.data;
-            if (responseData is Map && responseData['debug'] != null) {
-              print('📋 [ITEM_REPO] Edge Function Debug:');
-              for (final line in (responseData['debug'] as List)) {
-                print('   $line');
-              }
-            }
-            if (responseData is Map && responseData['error'] != null) {
-              print('❌ [ITEM_REPO] Edge Function Error: ${responseData['error']}');
-            }
-            
-            if (response.status == 200) {
-              notificationsSent++;
-              print('✅ [ITEM_REPO] FCM notification sent to $memberName');
-            } else {
-              print('⚠️ [ITEM_REPO] Notification failed for $memberName (status: ${response.status})');
-            }
-          } else {
-            print('⚠️ [ITEM_REPO] Member $memberName has no FCM token - skipping');
-          }
-        } catch (e) {
-          // Continue with other members if one fails
-          print('❌ [ITEM_REPO] Failed to send notification to member $memberId: $e');
-        }
-      }
-      print('✅ [ITEM_REPO] _sendListUpdateNotifications COMPLETE - sent $notificationsSent notifications');
-    } catch (e) {
-      print('❌ [ITEM_REPO] Failed to send list update notifications: $e');
-    }
-  }
-
-  /// Public method to send item added notification (for realtime updates)
-  Future<void> sendItemAddedNotification({
+  /// Notify the other list members that an item was added. Fire-and-forget.
+  void sendItemAddedNotification({
     required String listId,
     required String itemName,
-    required String addedByUserId,
-  }) async {
-    print('🚀 [ITEM_REPO] sendItemAddedNotification CALLED');
-    print('🚀 [ITEM_REPO] - listId: $listId');
-    print('🚀 [ITEM_REPO] - itemName: $itemName');
-    print('🚀 [ITEM_REPO] - addedByUserId: $addedByUserId');
-    await _sendListUpdateNotifications(listId, itemName, addedByUserId);
-    print('✅ [ITEM_REPO] sendItemAddedNotification COMPLETED');
+  }) {
+    _notifyListMembers(
+      listId: listId,
+      body: (actor) => '$actor added "$itemName"',
+      data: {'type': 'list_update', 'listId': listId},
+    );
   }
 
-  /// Send real-time notifications when item is deleted
-  Future<void> _sendItemDeletionNotifications(
-    String listId,
-    String itemName,
-    String deletedByUserId,
-  ) async {
-    try {
-      final listResponse = await _supabase
-          .from('shopping_lists')
-          .select('name')
-          .eq('id', listId)
-          .single();
-      
-      final listName = listResponse['name'] as String;
+  /// Push "[actor] did X" to every member of [listId] except the current
+  /// user, titled with the list name. Runs in the background and never
+  /// throws: a failed notification must not fail or delay the item write.
+  void _notifyListMembers({
+    required String listId,
+    required String Function(String actorName) body,
+    required Map<String, dynamic> data,
+  }) {
+    if (!(Platform.isIOS || Platform.isAndroid)) return;
+    final userId = currentUserId;
+    if (userId == null) return;
 
-      final membersResponse = await _supabase
-          .from('list_members')
-          .select('user_id')
-          .eq('list_id', listId)
-          .neq('user_id', deletedByUserId);
+    unawaited(() async {
+      try {
+        final results = await Future.wait([
+          _supabase.from('shopping_lists').select('name').eq('id', listId).single(),
+          _supabase.from('users').select('display_name').eq('id', userId).maybeSingle(),
+        ]);
+        final listName = results[0]!['name'] as String;
+        final actorName = results[1]?['display_name'] as String? ?? 'Someone';
 
-      final deleterResponse = await _supabase
-          .from('users')
-          .select('display_name')
-          .eq('id', deletedByUserId)
-          .single();
-      
-      final deleterName = deleterResponse['display_name'] as String? ?? 'Someone';
-
-      for (final member in membersResponse) {
-        final memberId = member['user_id'] as String;
-        
-        try {
-          final userResponse = await _supabase
-              .from('users')
-              .select('fcm_token, display_name')
-              .eq('id', memberId)
-              .single();
-          
-          final fcmToken = userResponse['fcm_token'] as String?;
-          final memberName = userResponse['display_name'] as String? ?? 'Unknown';
-          
-          if (fcmToken != null && fcmToken.isNotEmpty) {
-            print('📤 [ITEM_REPO] Sending delete notification to $memberName...');
-            
-            // Send via Supabase Edge Function
-            final response = await _supabase.client.functions.invoke(
-              'send-push-notification',
-              body: {
-                'token': fcmToken,
-                'notification': {
-                  'title': listName,
-                  'body': '$deleterName removed "$itemName"',
-                },
-                'data': {
-                  'type': 'item_deleted',
-                  'listId': listId,
-                },
-              },
-            );
-            
-            if (response.status == 200) {
-              print('✅ [ITEM_REPO] Delete notification sent to $memberName');
-            } else {
-              print('⚠️ [ITEM_REPO] Delete notification failed for $memberName: ${response.status}');
-            }
-          } else {
-            print('⚠️ [ITEM_REPO] Member $memberName has no FCM token');
-          }
-        } catch (e) {
-          print('❌ [ITEM_REPO] Failed to send delete notification to member $memberId: $e');
-        }
+        await PushNotificationService.instance.sendToListMembers(
+          listId: listId,
+          excludeUserId: userId,
+          title: listName,
+          body: body(actorName),
+          data: data,
+        );
+      } catch (e) {
+        debugPrint('❌ [ITEM_REPO] Failed to notify list members: $e');
       }
-    } catch (e) {
-      print('❌ [ITEM_REPO] Failed to send item deletion notifications: $e');
-    }
-  }
-
-  /// Send real-time notifications when item is toggled
-  Future<void> _sendItemToggleNotifications(
-    String listId,
-    String itemName,
-    bool isChecked,
-    String toggledByUserId,
-  ) async {
-    try {
-      final listResponse = await _supabase
-          .from('shopping_lists')
-          .select('name')
-          .eq('id', listId)
-          .single();
-      
-      final listName = listResponse['name'] as String;
-
-      final membersResponse = await _supabase
-          .from('list_members')
-          .select('user_id')
-          .eq('list_id', listId)
-          .neq('user_id', toggledByUserId);
-
-      final togglerResponse = await _supabase
-          .from('users')
-          .select('display_name')
-          .eq('id', toggledByUserId)
-          .single();
-      
-      final togglerName = togglerResponse['display_name'] as String? ?? 'Someone';
-
-      final action = isChecked ? 'checked off' : 'unchecked';
-
-      for (final member in membersResponse) {
-        final memberId = member['user_id'] as String;
-        
-        try {
-          final userResponse = await _supabase
-              .from('users')
-              .select('fcm_token, display_name')
-              .eq('id', memberId)
-              .single();
-          
-          final fcmToken = userResponse['fcm_token'] as String?;
-          final memberName = userResponse['display_name'] as String? ?? 'Unknown';
-          
-          if (fcmToken != null && fcmToken.isNotEmpty) {
-            print('📤 [ITEM_REPO] Sending toggle notification to $memberName...');
-            
-            // Send via Supabase Edge Function
-            final response = await _supabase.client.functions.invoke(
-              'send-push-notification',
-              body: {
-                'token': fcmToken,
-                'notification': {
-                  'title': listName,
-                  'body': '$togglerName $action "$itemName"',
-                },
-                'data': {
-                  'type': 'item_toggled',
-                  'listId': listId,
-                  'isChecked': isChecked,
-                },
-              },
-            );
-            
-            if (response.status == 200) {
-              print('✅ [ITEM_REPO] Toggle notification sent to $memberName');
-            } else {
-              print('⚠️ [ITEM_REPO] Toggle notification failed for $memberName: ${response.status}');
-            }
-          } else {
-            print('⚠️ [ITEM_REPO] Member $memberName has no FCM token');
-          }
-        } catch (e) {
-          print('❌ [ITEM_REPO] Failed to send toggle notification to member $memberId: $e');
-        }
-      }
-    } catch (e) {
-      print('❌ [ITEM_REPO] Failed to send item toggle notifications: $e');
-    }
+    }());
   }
 }

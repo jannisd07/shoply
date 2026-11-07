@@ -7,8 +7,7 @@ import 'package:shoply/presentation/state/auth_provider.dart';
 /// autoDispose so a fresh visit to home recomputes against current lists.
 final restockSuggestionsProvider =
     FutureProvider.autoDispose<List<RestockSuggestion>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return const [];
+  if (ref.watch(authUserIdProvider) == null) return const [];
   return AvoNudgeService.instance.getRestockSuggestions(limit: 3);
 });
 
@@ -17,9 +16,9 @@ final restockSuggestionsProvider =
 /// watching this does not hit the offers API on every home visit.
 final offerNudgesProvider =
     FutureProvider.autoDispose<List<OfferNudge>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return const [];
-  return AvoNudgeService.instance.getOfferNudges(limit: 2);
+  if (ref.watch(authUserIdProvider) == null) return const [];
+  final nudges = await _sharedOfferNudges();
+  return nudges.take(2).toList();
 });
 
 /// Everything you buy regularly that is on offer right now, grouped by shop —
@@ -30,11 +29,22 @@ final offerNudgesProvider =
 /// simply shows the top two of the same computation.
 final personalFlyerProvider =
     FutureProvider.autoDispose<List<FlyerSection>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return const [];
-  final nudges = await AvoNudgeService.instance.getOfferNudges(limit: 12);
+  if (ref.watch(authUserIdProvider) == null) return const [];
+  final nudges = await _sharedOfferNudges();
   return groupOffersByRetailer(nudges);
 });
+
+/// One offer-nudge computation for both home cards: they start together on
+/// first paint, and without sharing the in-flight future each ran the same
+/// stats query and sequential offer lookups on a cold cache. Cleared once
+/// done, so invalidating either provider still recomputes.
+Future<List<OfferNudge>>? _offerNudgesInFlight;
+
+Future<List<OfferNudge>> _sharedOfferNudges() {
+  return _offerNudgesInFlight ??= AvoNudgeService.instance
+      .getOfferNudges(limit: 12)
+      .whenComplete(() => _offerNudgesInFlight = null);
+}
 
 /// One shop's worth of the flyer.
 class FlyerSection {

@@ -1,74 +1,50 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 
-/// Provider for tracking the last accessed shopping list
-final lastAccessedListProvider = StateNotifierProvider<LastAccessedListNotifier, AsyncValue<String?>>((ref) {
-  return LastAccessedListNotifier();
+/// The shopping list the signed-in user opened last.
+///
+/// Stored per user on the device rather than on the shared `shopping_lists`
+/// row: "last opened" is personal (also for lists shared with you), and
+/// writing it to the list row on every open broadcast a realtime change to
+/// every member of that list.
+final lastAccessedListProvider =
+    StateNotifierProvider<LastAccessedListNotifier, AsyncValue<String?>>((ref) {
+  return LastAccessedListNotifier(ref.watch(authUserIdProvider));
 });
 
 class LastAccessedListNotifier extends StateNotifier<AsyncValue<String?>> {
-  LastAccessedListNotifier() : super(const AsyncValue.loading()) {
-    _loadLastAccessedList();
+  LastAccessedListNotifier(this._userId) : super(const AsyncValue.loading()) {
+    _load();
   }
 
-  final _supabase = Supabase.instance.client;
+  final String? _userId;
 
-  /// Load the last accessed list from database
-  Future<void> _loadLastAccessedList() async {
+  String get _key => 'last_accessed_list_$_userId';
+
+  Future<void> _load() async {
+    if (_userId == null) {
+      state = const AsyncValue.data(null);
+      return;
+    }
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) {
-        state = const AsyncValue.data(null);
-        return;
-      }
-
-      // Query for the most recently accessed list
-      final response = await _supabase
-          .from('shopping_lists')
-          .select('id')
-          .eq('user_id', userId)
-          .not('last_accessed_at', 'is', null)
-          .order('last_accessed_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
-
-      if (response != null) {
-        state = AsyncValue.data(response['id'] as String);
-      } else {
-        state = const AsyncValue.data(null);
-      }
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) state = AsyncValue.data(prefs.getString(_key));
     } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
+      if (mounted) state = AsyncValue.error(e, stack);
     }
   }
 
-  /// Update the last accessed list
+  /// Remember [listId] as the last opened list.
   Future<void> setLastAccessedList(String listId) async {
+    if (_userId == null) return;
+    state = AsyncValue.data(listId);
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
-
-      // Update the last_accessed_at timestamp
-      await _supabase
-          .from('shopping_lists')
-          .update({'last_accessed_at': DateTime.now().toIso8601String()})
-          .eq('id', listId)
-          .eq('user_id', userId);
-
-      // Update state
-      state = AsyncValue.data(listId);
-    } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key, listId);
+    } catch (e) {
+      debugPrint('⚠️ [LAST_LIST] Failed to persist last list: $e');
     }
-  }
-
-  /// Clear the last accessed list
-  void clearLastAccessedList() {
-    state = const AsyncValue.data(null);
-  }
-
-  /// Refresh the last accessed list
-  Future<void> refresh() async {
-    await _loadLastAccessedList();
   }
 }

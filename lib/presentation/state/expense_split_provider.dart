@@ -31,8 +31,7 @@ final splitCandidateMembersProvider =
 /// Trips the current user paid for that still have unpaid participants.
 final tripsAwaitingPaymentToMeProvider =
     FutureProvider.autoDispose<List<TripSplitSummary>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return const [];
+  if (ref.watch(authUserIdProvider) == null) return const [];
   final service = ref.watch(expenseSplitServiceProvider);
   return service.getTripsAwaitingPaymentToMe();
 });
@@ -40,8 +39,7 @@ final tripsAwaitingPaymentToMeProvider =
 /// Trips where the current user still owes their share to someone else.
 final tripsIOweProvider =
     FutureProvider.autoDispose<List<TripSplitSummary>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return const [];
+  if (ref.watch(authUserIdProvider) == null) return const [];
   final service = ref.watch(expenseSplitServiceProvider);
   return service.getTripsIOwe();
 });
@@ -51,8 +49,7 @@ final tripsIOweProvider =
 /// stale (>7 days old) — see `ExpenseSplitService.getUnsplitTripNudgeCandidate`.
 final unsplitTripNudgeProvider =
     FutureProvider.autoDispose<UnsplitTripCandidate?>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return null;
+  if (ref.watch(authUserIdProvider) == null) return null;
   final service = ref.watch(expenseSplitServiceProvider);
   final candidate = await service.getUnsplitTripNudgeCandidate();
   if (candidate == null) return null;

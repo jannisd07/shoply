@@ -38,7 +38,6 @@ import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
-import 'package:shoply/presentation/state/user_profile_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide FunctionResponse;
 
 // ════════════════════════════════════════════════════════════════════
@@ -1903,7 +1902,6 @@ replies should not mention it at all.
     }
     ref.invalidate(nutritionGoalProvider);
     ref.invalidate(currentUserProvider);
-    ref.invalidate(userProfileProvider);
     invalidateNutritionLog(ref);
     await MascotNotificationService.instance
         .rearmDinnerIdeasReminder(force: true);

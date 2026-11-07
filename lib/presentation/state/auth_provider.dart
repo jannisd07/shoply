@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
@@ -5,142 +8,111 @@ import 'package:shoply/data/services/onboarding_answers_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Provider for current auth user
+/// Provider for current auth user. Emits on every auth event, including the
+/// hourly token refresh — providers that only care about *who* is signed in
+/// should watch [authUserIdProvider] instead.
 final authUserProvider = StreamProvider<User?>((ref) {
   return SupabaseService.instance.authStateChanges.map((state) => state.session?.user);
 });
+
+/// The signed-in user's id, or null when signed out.
+///
+/// Only notifies dependents on sign-in, sign-out or an account switch (a
+/// `Provider` skips equal values), so token refreshes no longer re-run every
+/// account-scoped fetch. Before the first auth event it falls back to the
+/// session Supabase restored at startup.
+///
+/// When the account changes, the offline cache of the previous account is
+/// wiped so nothing of it leaks into the next session.
+final authUserIdProvider = Provider<String?>((ref) {
+  final auth = ref.watch(authUserProvider);
+  final userId = auth.hasValue
+      ? auth.value?.id
+      : SupabaseService.instance.currentUser?.id;
+
+  final previous = _lastSeenUserId;
+  _lastSeenUserId = userId;
+  if (previous != null && previous != userId) {
+    unawaited(OfflineCacheService.instance.clearCache());
+  }
+  return userId;
+});
+
+String? _lastSeenUserId;
 
 /// Provider for current user model. Caches the display_name/onboarding flag
 /// in [OfflineCacheService] on every successful fetch so the router can still
 /// make redirect decisions when the device is offline.
 final currentUserProvider = FutureProvider<UserModel?>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return null;
+  final userId = ref.watch(authUserIdProvider);
+  final authUser = SupabaseService.instance.currentUser;
+  if (userId == null || authUser == null) return null;
 
   try {
-    final response = await SupabaseService.instance
-        .from('users')
-        .select()
-        .eq('id', authUser.id)
-        .maybeSingle();
+    var row = await _fetchUserRow(userId) ?? await _createUserRow(authUser);
 
-    if (response == null) {
-      // Create user record if it doesn't exist
-      final newUser = {
-        'id': authUser.id,
-        'email': authUser.email,
-        'display_name': authUser.userMetadata?['display_name'] ?? authUser.email?.split('@')[0],
-        'auth_provider': authUser.appMetadata['provider'],
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-
-      var created = await SupabaseService.instance
-          .from('users')
-          .insert(newUser)
-          .select()
-          .single();
-
-      // Onboarding (diet preferences, calorie-tracking opt-in, goal
-      // answers) runs before an account exists, so it stashes its answers
-      // locally — this is the first point a real user id exists to apply
-      // them to. Runs at most once per device.
-      final applied = await OnboardingAnswersService.instance
-          .applyPendingAnswersToAccount(
-        authUser.id,
-        accountCreatedAt: DateTime.tryParse(created['created_at'] as String? ?? ''),
-      );
-      if (applied) {
-        created = await SupabaseService.instance
-            .from('users')
-            .select()
-            .eq('id', authUser.id)
-            .single();
-      }
-
-      final model = UserModel.fromJson(created);
-      await OfflineCacheService.instance.cacheUserProfile(
-        userId: authUser.id,
-        displayName: model.displayName,
-        onboardingCompleted: created['onboarding_completed'] as bool?,
-      );
-      return model;
-    }
-
+    // Onboarding (diet preferences, calorie-tracking opt-in, goal answers)
+    // runs before an account exists, so it stashes its answers locally —
+    // this is the first point a real user id exists to apply them to. Runs
+    // at most once per device.
     final applied = await OnboardingAnswersService.instance
         .applyPendingAnswersToAccount(
-      authUser.id,
-      accountCreatedAt: DateTime.tryParse(response['created_at'] as String? ?? ''),
+      userId,
+      accountCreatedAt: DateTime.tryParse(row['created_at'] as String? ?? ''),
     );
-    final freshRow = applied
-        ? await SupabaseService.instance
-            .from('users')
-            .select()
-            .eq('id', authUser.id)
-            .single()
-        : response;
+    if (applied) row = await _fetchUserRow(userId) ?? row;
 
-    final model = UserModel.fromJson(freshRow);
+    final model = UserModel.fromJson(row);
     await OfflineCacheService.instance.cacheUserProfile(
-      userId: authUser.id,
+      userId: userId,
       displayName: model.displayName,
-      onboardingCompleted: freshRow['onboarding_completed'] as bool?,
+      onboardingCompleted: row['onboarding_completed'] as bool?,
     );
     return model;
   } catch (e) {
     // Network/Supabase error: return null so existing consumers keep their
-    // current fallback behavior. The cached profile is still used directly by
-    // the router redirect – this provider is only for richer profile UI.
+    // current fallback behavior (the router uses the cached profile
+    // directly), and retry on our own instead of holding on to that null
+    // until the next sign-in.
+    debugPrint('⚠️ [AUTH] Loading user profile failed, retrying in 30s: $e');
+    final retry = Timer(const Duration(seconds: 30), ref.invalidateSelf);
+    ref.onDispose(retry.cancel);
     return null;
   }
 });
+
+Future<Map<String, dynamic>?> _fetchUserRow(String userId) {
+  return SupabaseService.instance
+      .from('users')
+      .select()
+      .eq('id', userId)
+      .maybeSingle();
+}
+
+/// First sign-in: create the `users` row from the auth account.
+Future<Map<String, dynamic>> _createUserRow(User authUser) {
+  final now = DateTime.now().toIso8601String();
+  return SupabaseService.instance
+      .from('users')
+      .insert({
+        'id': authUser.id,
+        'email': authUser.email,
+        'display_name': authUser.userMetadata?['display_name'] ??
+            authUser.email?.split('@')[0],
+        'auth_provider': authUser.appMetadata['provider'],
+        'created_at': now,
+        'updated_at': now,
+      })
+      .select()
+      .single();
+}
 
 /// Auth service provider
 class AuthService {
   final SupabaseService _supabase = SupabaseService.instance;
 
-  Future<void> signIn(String email, String password) async {
-    await _supabase.signInWithEmail(email, password);
-  }
-
-  Future<void> signUp(String email, String password, String displayName) async {
-    final response = await _supabase.signUpWithEmail(email, password);
-    
-    if (response.user != null) {
-      // Create user profile
-      await _supabase.from('users').insert({
-        'id': response.user!.id,
-        'email': email,
-        'display_name': displayName,
-        'auth_provider': 'email',
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-    }
-  }
-
-  Future<void> signOut() async {
-    await _supabase.signOut();
-  }
-
-  Future<void> resetPassword(String email) async {
-    await _supabase.resetPassword(email);
-  }
-
-  Future<void> updateDisplayName(String displayName) async {
-    try {
-      await _supabase.updateUserMetadata({'display_name': displayName});
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> updateDietPreferences(List<String> preferences) async {
-    try {
-      await _supabase.updateUserMetadata({'diet_preferences': preferences});
-    } catch (e) {
-      rethrow;
-    }
+  Future<void> updateDisplayName(String displayName) {
+    return _supabase.updateUserMetadata({'display_name': displayName});
   }
 }
 

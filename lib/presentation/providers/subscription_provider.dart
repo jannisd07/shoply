@@ -49,25 +49,10 @@ final subscriptionProductsProvider = StreamProvider<List<ProductDetails>>((
   }
 });
 
-/// Subscription loading state
-final subscriptionLoadingProvider = StateProvider<bool>((ref) => false);
-
 /// Subscription error provider
 final subscriptionErrorProvider = StreamProvider<String>((ref) {
   final service = ref.watch(subscriptionServiceProvider);
   return service.errorStream;
-});
-
-/// Monthly product provider
-final monthlyProductProvider = Provider<ProductDetails?>((ref) {
-  final service = ref.watch(subscriptionServiceProvider);
-  return service.monthlyProduct;
-});
-
-/// Yearly product provider
-final yearlyProductProvider = Provider<ProductDetails?>((ref) {
-  final service = ref.watch(subscriptionServiceProvider);
-  return service.yearlyProduct;
 });
 
 /// Subscription state notifier for managing purchases
@@ -90,23 +75,25 @@ class SubscriptionNotifier
     });
   }
 
-  /// Purchase a subscription
+  /// Starts a purchase; returns whether the store sheet opened. The state
+  /// keeps the current status meanwhile — the outcome arrives through
+  /// [SubscriptionService.statusStream], and a cancelled sheet emits nothing,
+  /// so switching to loading here would never be undone.
   Future<bool> purchase(ProductDetails product) async {
-    state = const AsyncValue.loading();
-
     try {
-      final success = await _service.purchaseSubscription(product);
-      return success;
+      return await _service.purchaseSubscription(product);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
       return false;
     }
   }
 
-  /// Restore purchases
+  /// Restore purchases, then publish the resulting status (the service only
+  /// emits one when the status actually changed).
   Future<void> restore() async {
     state = const AsyncValue.loading();
     await _service.restorePurchases();
+    if (mounted) state = AsyncValue.data(_service.status);
   }
 
   @override

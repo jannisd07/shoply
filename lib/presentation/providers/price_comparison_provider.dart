@@ -2,12 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/home_price_highlight.dart';
 import 'package:shoply/data/models/nearby_store.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
-import 'package:shoply/data/models/shelf_price.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/home_price_comparison_cache_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
-import 'package:shoply/data/services/open_prices_service.dart';
 import 'package:shoply/data/services/personalized_deals_service.dart';
 import 'package:shoply/data/services/store_locator_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
@@ -96,13 +95,13 @@ final basketComparisonProvider = FutureProvider.autoDispose
   final zipInfo = await ref.watch(effectiveZipProvider.future);
   final zip = zipInfo.zipCode;
 
-  final items = ref.watch(itemsNotifierProvider(listId)).valueOrNull ?? [];
-  final names = items
-      .where((i) => !i.isChecked)
-      .map((i) => i.name.trim())
-      .where((n) => n.length >= 2)
-      .take(25) // keep request volume sane for very long lists
-      .toList();
+  // Watch only the open names, so edits that do not change them (prices,
+  // notes, reorders) do not re-run the comparison.
+  final namesKey = ref.watch(itemsNotifierProvider(listId).select((s) => [
+        for (final i in s.valueOrNull ?? const <ShoppingItemModel>[])
+          if (!i.isChecked && i.name.trim().length >= 2) i.name.trim(),
+      ].take(25).join('\n'))); // keep request volume sane for very long lists
+  final names = namesKey.isEmpty ? const <String>[] : namesKey.split('\n');
 
   if (names.isEmpty) {
     return BasketComparison(
@@ -185,8 +184,8 @@ const _homeHighlightMinSavings = 1.5;
 
 /// "This list is €X cheaper at [store] than [store]" — Feature 8's home
 /// screen surface for Feature 1's price-comparison infra. Checks up to 5
-/// recently-updated lists cheaply (unchecked-item count, then real item
-/// names — both local reads), but only ever runs the expensive live
+/// recently-updated lists cheaply (open-item counts, then one query for
+/// their open items), but only ever runs the expensive live
 /// [basketComparisonProvider] computation for the first one that both
 /// qualifies and has no fresh cache entry — so a home-screen visit costs at
 /// most one basket comparison, not one per list. Cached per exact
@@ -199,24 +198,15 @@ final homePriceHighlightProvider =
   final zipInfo = await ref.watch(effectiveZipProvider.future);
   if (!zipInfo.isReal) return null;
 
-  final lists = ref.watch(listsNotifierProvider).valueOrNull ?? const [];
-  if (lists.isEmpty) return null;
-  final sorted = [...lists]
-    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  final candidates = _recentListsWithOpenItems(ref,
+          scanFirst: 5, minOpenItems: _homeHighlightMinItems)
+      .toList();
+  final itemsByList = await _openItemsByList(ref, candidates);
 
-  // Plain repository reads for the candidate scan (not `itemsNotifierProvider`
-  // — that creates a persistent StateNotifier with a realtime subscription,
-  // which would otherwise leak an open subscription for every candidate list
-  // this scans past, not just the one it ends up comparing).
-  final itemRepository = ref.watch(itemRepositoryProvider);
-
-  for (final list in sorted.take(5)) {
-    if ((list.uncheckedCount ?? 0) < _homeHighlightMinItems) continue;
-
-    final items = await itemRepository.getListItems(list.id);
+  for (final list in candidates) {
     final openNames = <String>{
-      for (final i in items)
-        if (!i.isChecked && i.name.trim().length >= 2) i.name.trim(),
+      for (final i in itemsByList[list.id] ?? const <ShoppingItemModel>[])
+        if (i.name.trim().length >= 2) i.name.trim(),
     }.toList()
       ..sort();
     if (openNames.length < _homeHighlightMinItems) continue;
@@ -309,22 +299,13 @@ const _dealsMaxListsScanned = 2;
 final personalizedDealsProvider =
     FutureProvider.autoDispose<List<RecipeIngredientOffer>>((ref) async {
   final zipInfo = await ref.watch(effectiveZipProvider.future);
-  final lists = ref.watch(listsNotifierProvider).valueOrNull ?? const [];
-  if (lists.isEmpty) return const [];
-
-  final sorted = [...lists]
-    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  final itemRepository = ref.watch(itemRepositoryProvider);
-
-  final pooled = <ShoppingItemModel>[];
-  var scannedLists = 0;
-  for (final list in sorted) {
-    if ((list.uncheckedCount ?? 0) < 1) continue;
-    final items = await itemRepository.getListItems(list.id);
-    pooled.addAll(items.where((i) => !i.isChecked));
-    scannedLists++;
-    if (scannedLists == _dealsMaxListsScanned) break;
-  }
+  final candidates = _recentListsWithOpenItems(ref, minOpenItems: 1)
+      .take(_dealsMaxListsScanned)
+      .toList();
+  final itemsByList = await _openItemsByList(ref, candidates);
+  final pooled = [
+    for (final list in candidates) ...?itemsByList[list.id],
+  ];
 
   final names = PersonalizedDealsService.selectCandidateNames(pooled);
   if (names.isEmpty) return const [];
@@ -333,69 +314,49 @@ final personalizedDealsProvider =
       .getMatches(names: names, zipCode: zipInfo.zipCode);
 });
 
-// ---------------------------------------------------------------------------
-// Combined pricing: regular shelf price + current offer
-// ---------------------------------------------------------------------------
 
-/// What a product normally costs, from Open Prices. Null when the crowdsourced
-/// database has nothing usable for this name — which is common, so callers
-/// must treat a missing shelf price as normal rather than as an error.
-final shelfPriceProvider = FutureProvider.autoDispose
-    .family<ShelfPrice?, String>((ref, productName) async {
-  if (productName.trim().length < 3) return null;
-  return OpenPricesService.instance.lookupByName(productName);
-});
-
-/// Everything known about what a product costs: the regular price and the
-/// best current offer, side by side.
+/// The user's lists, most recently updated first, cut to the first
+/// [scanFirst] (when given) and then to those with at least [minOpenItems]
+/// unchecked items.
 ///
-/// The two sources answer different questions and neither replaces the other —
-/// marktguru knows this week's Angebote but never the normal price, Open
-/// Prices knows roughly what it usually costs but lags behind promotions.
-class ProductPricing {
-  /// Regular price from Open Prices (ODbL — requires attribution wherever
-  /// it is displayed). Null when unknown.
-  final ShelfPrice? shelfPrice;
-
-  /// Cheapest current offer nearby, or null when nothing is on sale.
-  final StoreOffer? bestOffer;
-
-  const ProductPricing({this.shelfPrice, this.bestOffer});
-
-  bool get hasAny => shelfPrice != null || bestOffer != null;
-
-  /// Savings versus the regular price, in percent, when both are known and
-  /// the offer is actually cheaper. Null otherwise — an "offer" that costs
-  /// more than the shelf price should not be advertised as a saving.
-  int? get savingsPercent {
-    final shelf = shelfPrice?.price;
-    final offer = bestOffer?.price;
-    if (shelf == null || offer == null || offer >= shelf) return null;
-    final percent = ((1 - offer / shelf) * 100).round();
-    return percent >= 5 ? percent : null;
+/// Watches only that selection (ids and open counts), not the whole lists
+/// value, so a realtime reload that changes nothing relevant does not re-run
+/// the network-heavy home price surfaces.
+List<ShoppingListModel> _recentListsWithOpenItems(
+  Ref ref, {
+  int? scanFirst,
+  required int minOpenItems,
+}) {
+  List<ShoppingListModel> pick(List<ShoppingListModel>? lists) {
+    final sorted = [...?lists]
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return [
+      for (final list in scanFirst == null ? sorted : sorted.take(scanFirst))
+        if ((list.uncheckedCount ?? 0) >= minOpenItems) list,
+    ];
   }
+
+  final key = ref.watch(listsNotifierProvider.select((s) => pick(s.valueOrNull)
+      .map((l) => '${l.id}:${l.uncheckedCount}')
+      .join('|')));
+  if (key.isEmpty) return const [];
+  return pick(ref.read(listsNotifierProvider).valueOrNull);
 }
 
-/// Combined pricing for a single product name.
-final productPricingProvider = FutureProvider.autoDispose
-    .family<ProductPricing, String>((ref, productName) async {
-  final query = productName.trim();
-  if (query.length < 2) return const ProductPricing();
-
-  // Fetch both concurrently; a failure in either must not hide the other.
-  final shelfFuture = ref.watch(shelfPriceProvider(query).future);
-  final offersFuture = ref.watch(offerSearchAllProvider(query).future);
-
-  final results = await Future.wait<Object?>([
-    shelfFuture.catchError((_) => null),
-    offersFuture.catchError((_) => const <StoreOffer>[]),
-  ]);
-
-  final shelf = results[0] as ShelfPrice?;
-  final offers = (results[1] as List<StoreOffer>?) ?? const [];
-
-  return ProductPricing(
-    shelfPrice: shelf,
-    bestOffer: offers.isEmpty ? null : offers.first,
-  );
-});
+/// Unchecked items of [lists], grouped by list id, in one query. Plain
+/// repository reads, not `itemsNotifierProvider`, which would keep a
+/// notifier alive for every list scanned past.
+Future<Map<String, List<ShoppingItemModel>>> _openItemsByList(
+  Ref ref,
+  List<ShoppingListModel> lists,
+) async {
+  if (lists.isEmpty) return const {};
+  final items = await ref
+      .read(itemRepositoryProvider)
+      .getItemsForLists([for (final l in lists) l.id]);
+  final byList = <String, List<ShoppingItemModel>>{};
+  for (final item in items) {
+    if (!item.isChecked) byList.putIfAbsent(item.listId, () => []).add(item);
+  }
+  return byList;
+}

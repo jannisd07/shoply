@@ -10,16 +10,14 @@ final dietChallengeServiceProvider = Provider<DietChallengeService>((ref) {
 /// Currently active challenges (auto-closes any that just passed their
 /// fixed target end date — see [DietChallengeService.getActiveChallenges]).
 final activeChallengesProvider = FutureProvider.autoDispose<List<DietChallenge>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return [];
+  if (ref.watch(authUserIdProvider) == null) return [];
   final service = ref.watch(dietChallengeServiceProvider);
   return service.getActiveChallenges();
 });
 
 /// Completed/abandoned challenges, most recent first.
 final challengeHistoryProvider = FutureProvider.autoDispose<List<DietChallenge>>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return [];
+  if (ref.watch(authUserIdProvider) == null) return [];
   final service = ref.watch(dietChallengeServiceProvider);
   return service.getHistory();
 });

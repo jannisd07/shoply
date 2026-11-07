@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
@@ -8,39 +10,42 @@ import 'package:shoply/data/services/widget_service.dart';
 
 /// Item repository provider
 final itemRepositoryProvider = Provider<ItemRepository>((ref) {
-  return ItemRepository();
+  return ItemRepository.instance;
 });
 
-/// Provider for items in a specific list
-final listItemsProvider = FutureProvider.family<List<ShoppingItemModel>, String>((ref, listId) async {
-  final repository = ref.watch(itemRepositoryProvider);
-  return repository.getListItems(listId);
-});
-
-/// Provider for items grouped by category
-final itemsByCategoryProvider =
-    FutureProvider.family<Map<String, List<ShoppingItemModel>>, String>((ref, listId) async {
-  final repository = ref.watch(itemRepositoryProvider);
-  return repository.getItemsByCategory(listId);
-});
-
-/// State notifier for managing items in a list
+/// State notifier for managing items in a list.
+///
+/// Mutations are optimistic: the change is visible immediately, the server
+/// response then replaces the touched rows, and a failed write rolls back.
+/// Remote changes arrive through a realtime channel that is only open while
+/// something watches this list (see [itemsNotifierProvider]) and are
+/// debounced into one reload.
 class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
   final ItemRepository _repository;
   final String listId;
 
-  /// When true, incoming realtime events are ignored so an in-flight
-  /// reorder batch-write does not get overwritten mid-way.
-  bool _isReordering = false;
+  /// Bumped by every load and every mutation; a load whose number is no
+  /// longer current finished after newer data and is dropped.
+  int _generation = 0;
+
+  /// Writes in flight. Realtime echoes are held back until all of them
+  /// landed, so a reload never shows a half-written state.
+  int _pendingWrites = 0;
+  bool _reloadWanted = false;
+
+  bool _realtimeActive = false;
+  Timer? _realtimeDebounce;
+  DateTime? _lastSyncedAt;
+  String? _listName;
+
+  static const _realtimeDebounceDelay = Duration(milliseconds: 300);
 
   /// Seeds from the warmed in-memory cache when one exists, so the detail
   /// screen's very first frame is already populated instead of showing a
   /// spinner until Supabase answers (stale-while-revalidate). [loadItems]
   /// then reconciles with the server.
-  ItemsNotifier(this._repository, this.listId)
-      : super(_seed(listId)) {
+  ItemsNotifier(this._repository, this.listId) : super(_seed(listId)) {
     loadItems();
-    _setupRealtimeSubscription();
   }
 
   static AsyncValue<List<ShoppingItemModel>> _seed(String listId) {
@@ -49,74 +54,182 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     return AsyncValue.data(cached);
   }
 
-  void _setupRealtimeSubscription() {
-    _repository.subscribeToItemChanges(listId, () async {
-      if (_isReordering) return; // suppress reload while batch-writing
-      await _loadItemsAndCheckForNew();
-    });
-  }
+  // ---------------------------------------------------------------------------
+  // Realtime
+  // ---------------------------------------------------------------------------
 
-  Future<void> _loadItemsAndCheckForNew() async {
-    try {
-      final items = await _repository.getListItems(listId);
-      state = AsyncValue.data(items);
-    } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
+  /// Opens the realtime channel (idempotent). Catches up with a reload when
+  /// the data may have gone stale while nobody was listening.
+  void startRealtime() {
+    if (_realtimeActive || !mounted) return;
+    _realtimeActive = true;
+    _repository.subscribeToItemChanges(listId, _onRemoteChange);
+    final lastSync = _lastSyncedAt;
+    if (lastSync != null &&
+        DateTime.now().difference(lastSync) > const Duration(seconds: 2)) {
+      loadItems();
     }
   }
 
+  void stopRealtime() {
+    if (!_realtimeActive) return;
+    _realtimeActive = false;
+    _realtimeDebounce?.cancel();
+    _repository.unsubscribeFromItemChanges(listId);
+  }
+
+  void _onRemoteChange() {
+    if (_pendingWrites > 0) {
+      _reloadWanted = true;
+      return;
+    }
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = Timer(_realtimeDebounceDelay, () {
+      if (mounted) loadItems();
+    });
+  }
+
+  @override
+  void dispose() {
+    stopRealtime();
+    super.dispose();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Loading
+  // ---------------------------------------------------------------------------
+
   Future<void> loadItems() async {
+    final generation = ++_generation;
     if (state is! AsyncData) {
       state = const AsyncValue.loading();
     }
     try {
       final items = await _repository.getListItems(listId);
-      state = AsyncValue.data(items);
-
-      // Cache for offline use
-      OfflineCacheService.instance.cacheListItems(listId, items);
-
-      // Update home screen widget with latest items
-      _updateWidget(items);
+      if (!mounted || generation != _generation) return;
+      _lastSyncedAt = DateTime.now();
+      _commit(items);
     } catch (error, stackTrace) {
-      // Try offline cache
+      if (!mounted || generation != _generation) return;
+      debugPrint('⚠️ [ITEMS_PROVIDER] Reload failed, keeping current items: $error');
+      // Keep whatever is on screen; only an empty screen falls back to the
+      // offline cache or shows the error.
+      if (state is AsyncData) return;
       final cached = await OfflineCacheService.instance.getCachedListItems(listId);
-      if (cached != null && cached.isNotEmpty) {
-        state = AsyncValue.data(cached);
-      } else if (state is! AsyncData) {
-        state = AsyncValue.error(error, stackTrace);
-      }
+      if (!mounted) return;
+      state = cached != null && cached.isNotEmpty
+          ? AsyncValue.data(cached)
+          : AsyncValue.error(error, stackTrace);
     }
   }
-  
+
+  /// Publishes [items] and mirrors them to the offline cache and the home
+  /// screen widget.
+  void _commit(List<ShoppingItemModel> items) {
+    state = AsyncValue.data(items);
+    OfflineCacheService.instance.cacheListItems(listId, items);
+    unawaited(_updateWidget(items));
+  }
+
   /// Update the home screen widget with current list items
   Future<void> _updateWidget(List<ShoppingItemModel> items) async {
     try {
-      // Get list name
-      final listName = await _repository.getListName(listId);
-      
-      final widgetItems = items.map((item) => WidgetItem(
-        id: item.id,
-        name: item.name,
-        quantity: item.quantity.toInt(),
-        isChecked: item.isChecked,
-      )).toList();
-      
+      _listName ??= await _repository.getListName(listId);
       await WidgetService.updateShoppingListWidget(
         listId: listId,
-        listName: listName ?? 'Shopping List',
-        items: widgetItems,
+        listName: _listName ?? 'Shopping List',
+        items: [
+          for (final item in items)
+            WidgetItem(
+              id: item.id,
+              name: item.name,
+              quantity: item.quantity.toInt(),
+              isChecked: item.isChecked,
+            ),
+        ],
       );
     } catch (e) {
       debugPrint('⚠️ [Widget] Failed to update widget: $e');
     }
   }
-  
-  @override
-  void dispose() {
-    _repository.unsubscribeFromItemChanges(listId);
-    super.dispose();
+
+  // ---------------------------------------------------------------------------
+  // Mutations
+  // ---------------------------------------------------------------------------
+
+  /// Runs one optimistic mutation: applies [optimistic] to the current items
+  /// right away, awaits [write], then applies [reconcile] with the server
+  /// result. On failure the pre-mutation items come back, a reload
+  /// reconciles with the server and the error is rethrown.
+  Future<T> _mutate<T>({
+    required List<ShoppingItemModel> Function(List<ShoppingItemModel> items) optimistic,
+    required Future<T> Function() write,
+    List<ShoppingItemModel> Function(List<ShoppingItemModel> items, T result)? reconcile,
+  }) async {
+    final before = state.valueOrNull;
+    _generation++; // A load started before this change must not undo it.
+    if (before != null) state = AsyncValue.data(optimistic(before));
+
+    _pendingWrites++;
+    try {
+      final result = await write();
+      final current = state.valueOrNull;
+      if (mounted) {
+        if (current == null || _lastSyncedAt == null) {
+          // Never synced with the server yet (the first load was superseded
+          // by this write, or the state is only the offline seed): fetch the
+          // real rows instead of patching possibly stale ones.
+          await loadItems();
+        } else {
+          _commit(reconcile == null ? current : reconcile(current, result));
+        }
+      }
+      unawaited(UnreadService().markAsRead(listId));
+      return result;
+    } catch (error) {
+      debugPrint('❌ [ITEMS_PROVIDER] Write failed, rolling back: $error');
+      if (mounted) {
+        if (before != null) state = AsyncValue.data(before);
+        unawaited(loadItems());
+      }
+      rethrow;
+    } finally {
+      _pendingWrites--;
+      if (_pendingWrites == 0 && _reloadWanted && mounted) {
+        _reloadWanted = false;
+        _onRemoteChange();
+      }
+    }
   }
+
+  /// [item] with the column [updates] applied (same keys as the DB row).
+  static ShoppingItemModel _patched(
+    ShoppingItemModel item,
+    Map<String, dynamic> updates,
+  ) {
+    try {
+      return ShoppingItemModel.fromJson({...item.toJson(), ...updates});
+    } catch (_) {
+      return item; // Unusual value types: wait for the server row instead.
+    }
+  }
+
+  /// Replace the row with [updated]'s id, or drop it when it moved to
+  /// another list.
+  List<ShoppingItemModel> _replace(List<ShoppingItemModel> items, ShoppingItemModel updated) => [
+        for (final i in items)
+          if (i.id != updated.id)
+            i
+          else if (updated.listId == listId)
+            updated,
+      ];
+
+  /// [_replace] when [saved] is already listed, otherwise append it.
+  List<ShoppingItemModel> _upsert(
+    List<ShoppingItemModel> items,
+    ShoppingItemModel saved,
+  ) =>
+      items.any((i) => i.id == saved.id) ? _replace(items, saved) : [...items, saved];
 
   Future<void> addItem({
     required String name,
@@ -133,11 +246,29 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     double? priceOldValue,
     bool autoParse = true,
   }) async {
-    try {
-      debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      debugPrint('🛒 [ITEMS_PROVIDER] addItem called: "$name"');
+    final now = DateTime.now();
+    final pendingId = 'pending-${now.microsecondsSinceEpoch}';
 
-      await _repository.addItem(
+    await _mutate<ShoppingItemModel>(
+      optimistic: (items) => [
+        ...items,
+        ShoppingItemModel(
+          id: pendingId,
+          listId: listId,
+          name: name,
+          quantity: quantity,
+          unit: unit,
+          category: category,
+          categoryId: category,
+          notes: notes,
+          isDietWarning: isDietWarning,
+          barcode: barcode,
+          price: price,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+      write: () => _repository.addItem(
         listId: listId,
         name: name,
         quantity: quantity,
@@ -152,31 +283,14 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
         priceUnit: priceUnit,
         priceOldValue: priceOldValue,
         autoParse: autoParse,
-      );
-      debugPrint('✅ [ITEMS_PROVIDER] Item added to database');
-      
-      final currentUserId = _repository.currentUserId;
-      debugPrint('👤 [ITEMS_PROVIDER] Current user ID: $currentUserId');
-      
-      if (currentUserId != null) {
-        debugPrint('📤 [ITEMS_PROVIDER] Sending notification to list members...');
-        await _repository.sendItemAddedNotification(
-          listId: listId, 
-          itemName: name, 
-          addedByUserId: currentUserId
-        );
-        debugPrint('✅ [ITEMS_PROVIDER] Notification sent successfully');
-      } else {
-        debugPrint('⚠️ [ITEMS_PROVIDER] No user ID - skipping notification');
-      }
-      debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      ),
+      // The saved row replaces the placeholder (a merge returns an existing
+      // row instead, which is then updated in place).
+      reconcile: (items, saved) =>
+          _upsert(items.where((i) => i.id != pendingId).toList(), saved),
+    );
 
-      await loadItems();
-      await UnreadService().markAsRead(listId);
-    } catch (error) {
-      debugPrint('❌ [ITEMS_PROVIDER] Error in addItem: $error');
-      rethrow;
-    }
+    _repository.sendItemAddedNotification(listId: listId, itemName: name);
   }
 
   /// Batch-import extracted items (photo-import flow) with an optimistic
@@ -187,129 +301,112 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     List<({String name, double quantity, String? unit})> items,
   ) async {
     if (items.isEmpty) return;
-    final previous = state;
     final now = DateTime.now();
+    final pendingPrefix = 'pending-import-${now.microsecondsSinceEpoch}-';
 
-    final current = state.valueOrNull ?? const <ShoppingItemModel>[];
-    final optimistic = [
-      ...current,
-      for (var i = 0; i < items.length; i++)
-        ShoppingItemModel(
-          id: 'pending-import-$i-${now.microsecondsSinceEpoch}',
-          listId: listId,
-          name: items[i].name,
-          quantity: items[i].quantity,
-          unit: items[i].unit,
-          createdAt: now,
-          updatedAt: now,
-        ),
-    ];
-    state = AsyncValue.data(optimistic);
-
-    try {
-      for (final item in items) {
-        // autoParse off — quantity/unit were reviewed explicitly, don't let
-        // the name parser second-guess them.
-        await _repository.addItem(
-          listId: listId,
-          name: item.name,
-          quantity: item.quantity,
-          unit: item.unit,
-          autoParse: false,
-        );
-      }
-      await loadItems();
-      await UnreadService().markAsRead(listId);
-    } catch (error) {
-      state = previous;
-      rethrow;
-    }
+    await _mutate<List<ShoppingItemModel>>(
+      optimistic: (current) => [
+        ...current,
+        for (var i = 0; i < items.length; i++)
+          ShoppingItemModel(
+            id: '$pendingPrefix$i',
+            listId: listId,
+            name: items[i].name,
+            quantity: items[i].quantity,
+            unit: items[i].unit,
+            createdAt: now,
+            updatedAt: now,
+          ),
+      ],
+      // Sequential on purpose: each add may merge into a row an earlier one
+      // created. autoParse off — quantity/unit were reviewed explicitly.
+      write: () async => [
+        for (final item in items)
+          await _repository.addItem(
+            listId: listId,
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            autoParse: false,
+          ),
+      ],
+      reconcile: (current, saved) => saved.fold(
+        current.where((i) => !i.id.startsWith(pendingPrefix)).toList(),
+        _upsert,
+      ),
+    );
   }
 
-  Future<void> updateItem(String itemId, Map<String, dynamic> updates) async {
-    try {
-      await _repository.updateItem(itemId, updates);
-      await loadItems();
-      await UnreadService().markAsRead(listId);
-    } catch (error) {
-      rethrow;
-    }
+  /// Applies column [updates] to one row; a changed `list_id` (moving the
+  /// item to another list) removes it from this one.
+  Future<void> updateItem(String itemId, Map<String, dynamic> updates) {
+    return _mutate<ShoppingItemModel>(
+      optimistic: (items) => [
+        for (final i in items) i.id == itemId ? _patched(i, updates) : i,
+      ].where((i) => i.listId == listId).toList(),
+      write: () => _repository.updateItem(itemId, updates),
+      reconcile: _replace,
+    );
   }
 
-  Future<void> toggleItemChecked(String itemId, bool isChecked) async {
-    try {
-      await _repository.toggleItemChecked(itemId, isChecked);
-      await loadItems();
-      await UnreadService().markAsRead(listId);
-    } catch (error) {
-      rethrow;
-    }
+  Future<void> toggleItemChecked(String itemId, bool isChecked) {
+    final updates = {
+      'is_checked': isChecked,
+      'checked_at': isChecked ? DateTime.now().toIso8601String() : null,
+    };
+    return _mutate<ShoppingItemModel>(
+      optimistic: (items) => [
+        for (final i in items) i.id == itemId ? _patched(i, updates) : i,
+      ],
+      write: () => _repository.toggleItemChecked(itemId, isChecked),
+      reconcile: _replace,
+    );
   }
 
-  Future<void> deleteItem(String itemId) async {
-    try {
-      await _repository.deleteItem(itemId);
-      await loadItems();
-      await UnreadService().markAsRead(listId);
-    } catch (error) {
-      rethrow;
-    }
-  }
-
-  Future<void> updateSortOrder(List<String> itemIds) async {
-    try {
-      await _repository.updateSortOrder(itemIds);
-      await loadItems();
-    } catch (error) {
-      rethrow;
-    }
+  Future<void> deleteItem(String itemId) {
+    return _mutate<void>(
+      optimistic: (items) => items.where((i) => i.id != itemId).toList(),
+      write: () => _repository.deleteItem(itemId),
+    );
   }
 
   /// Core helper used by all reorder operations.
   ///
-  /// Stamps every item in [items] with its index as [orderIndex], pushes an
-  /// optimistic state update, then writes ALL positions to the DB.
+  /// Stamps every item in [reorderedItems] with its index as `orderIndex`,
+  /// shows that order immediately, then persists the indexes that changed.
   ///
-  /// Writing every item is important: items that have never been ordered
-  /// before carry a null orderIndex (≙ 999999 in sorts). If we only write
-  /// the moved items, unwritten neighbours stay at null and the next
-  /// loadItems() sorts them all to the end, causing the snap-back.
-  ///
-  /// We do NOT call loadItems() afterwards – the optimistic state is already
-  /// the correct target state. loadItems() would re-fetch and might briefly
-  /// show a loading flash. The realtime flag prevents race-condition reloads
-  /// during the write loop.
+  /// Every row gets an index (not just the moved one): never-ordered items
+  /// carry a null `order_index` and sort after all ordered ones, so leaving
+  /// them unwritten would snap them to the end on the next reload.
   Future<void> _applyReorder(List<ShoppingItemModel> reorderedItems) async {
-    // Stamp every item with its new position.
+    final previousIndex = {
+      for (final i in state.valueOrNull ?? const <ShoppingItemModel>[])
+        i.id: i.orderIndex,
+    };
     final stamped = [
       for (int i = 0; i < reorderedItems.length; i++)
         reorderedItems[i].copyWith(orderIndex: i),
     ];
+    final changed = {
+      for (final item in stamped)
+        if (previousIndex[item.id] != item.orderIndex) item.id: item.orderIndex!,
+    };
 
-    // Optimistic UI update – visible immediately, no flash.
-    state = AsyncValue.data(stamped);
-
-    // Suppress realtime reloads during the write burst.
-    _isReordering = true;
     try {
-      for (int i = 0; i < stamped.length; i++) {
-        await _repository.updateItem(stamped[i].id, {'order_index': i});
-      }
-    } catch (_) {
-      // On write failure roll back to a fresh DB load.
-      _isReordering = false;
-      await loadItems();
-      return;
+      await _mutate<void>(
+        optimistic: (_) => stamped,
+        write: () => _repository.updateOrderIndexes(listId, changed),
+      );
+    } catch (e) {
+      // Already rolled back and reloading; a failed reorder is not worth
+      // surfacing to the drag gesture.
+      debugPrint('⚠️ [ITEMS_PROVIDER] Reorder failed: $e');
     }
-    _isReordering = false;
-    // No loadItems() here – the stamped optimistic state IS correct.
   }
 
   /// Move [fromItemId] just before [toItemId] in the global list.
   Future<void> reorderItemToPosition(String fromItemId, String toItemId) async {
-    final currentState = state;
-    if (!currentState.hasValue) return;
-    final items = List<ShoppingItemModel>.from(currentState.value!);
+    final items = List<ShoppingItemModel>.of(state.valueOrNull ?? const []);
     final fromIndex = items.indexWhere((i) => i.id == fromItemId);
     var toIndex = items.indexWhere((i) => i.id == toItemId);
     if (fromIndex == -1 || toIndex == -1 || fromIndex == toIndex) return;
@@ -323,35 +420,32 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
 
   /// Move [fromItemId] right AFTER [afterItemId] in the global list.
   Future<void> reorderItemAfter(String fromItemId, String afterItemId) async {
-    final currentState = state;
-    if (!currentState.hasValue) return;
-    final items = List<ShoppingItemModel>.from(currentState.value!);
+    final items = List<ShoppingItemModel>.of(state.valueOrNull ?? const []);
     final fromIndex = items.indexWhere((i) => i.id == fromItemId);
     var afterIndex = items.indexWhere((i) => i.id == afterItemId);
     if (fromIndex == -1 || afterIndex == -1 || fromIndex == afterIndex) return;
 
     final item = items.removeAt(fromIndex);
     if (fromIndex < afterIndex) afterIndex -= 1;
-    final insertAt = (afterIndex + 1).clamp(0, items.length);
-    items.insert(insertAt, item);
+    items.insert((afterIndex + 1).clamp(0, items.length), item);
 
-    await _applyReorder(items);
-  }
-
-  Future<void> reorderItems(int oldIndex, int newIndex) async {
-    final currentState = state;
-    if (!currentState.hasValue) return;
-    final items = List<ShoppingItemModel>.from(currentState.value!);
-    if (oldIndex < newIndex) newIndex -= 1;
-    final item = items.removeAt(oldIndex);
-    items.insert(newIndex, item);
     await _applyReorder(items);
   }
 }
 
-/// Items state notifier provider factory
-final itemsNotifierProvider = StateNotifierProvider.family<ItemsNotifier,
-    AsyncValue<List<ShoppingItemModel>>, String>((ref, listId) {
-  final repository = ref.watch(itemRepositoryProvider);
-  return ItemsNotifier(repository, listId);
+/// Items state notifier provider factory.
+///
+/// Not autoDispose: Avo, Siri and the scanner borrow notifiers through
+/// `ref.read(...notifier)` and await long writes on them. Instead, the
+/// realtime channel is tied to listeners — open while something watches the
+/// items (the list screen, a dependent provider), closed when the last
+/// watcher leaves — so visiting many lists no longer keeps one live channel
+/// per list for the whole session.
+final itemsNotifierProvider =
+    StateNotifierProvider.family<ItemsNotifier, AsyncValue<List<ShoppingItemModel>>, String>(
+        (ref, listId) {
+  final notifier = ItemsNotifier(ref.watch(itemRepositoryProvider), listId);
+  ref.onAddListener(notifier.startRealtime);
+  ref.onCancel(notifier.stopRealtime);
+  return notifier;
 });

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Whether the user has opted into calorie tracking (Feature 7 preference).
@@ -10,8 +11,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// `nutrition_goals.calorie_tracking_enabled` (same row goal setup writes
 /// to) is the source of truth once logged in, so the preference survives a
 /// reinstall or a second device instead of silently resetting to off.
+/// Rebuilt per signed-in account, so it re-syncs from the server after a
+/// login (also when nobody was signed in at launch).
 final calorieTrackingEnabledProvider =
     StateNotifierProvider<CalorieTrackingNotifier, bool>((ref) {
+  ref.watch(authUserIdProvider);
   return CalorieTrackingNotifier();
 });
 

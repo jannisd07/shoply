@@ -16,56 +16,51 @@ class ListRepository {
   ListRepository({SupabaseService? supabase})
       : _supabase = supabase ?? SupabaseService.instance;
 
-  /// Get all lists for the current user
+  /// Get all lists the current user is a member of (owner included), with
+  /// their total and open item counts, in one round trip.
+  ///
+  /// The counts come from PostgREST count embeds: `items` (all rows) matches
+  /// what [ShoppingListModel.fromJson] already parses, and `open` (unchecked
+  /// rows only, filtered via `open.is_checked`) is mapped to
+  /// `unchecked_count`.
   Future<List<ShoppingListModel>> getUserLists() async {
     final userId = _supabase.currentUser?.id;
     if (userId == null) throw Exception('User not authenticated');
 
-    // Get all list IDs where user is a member (including as owner)
-    final memberResponse = await _supabase
-        .from('list_members')
-        .select('list_id')
-        .eq('user_id', userId);
-    
-    final memberListIds = (memberResponse as List)
-        .map((m) => m['list_id'] as String)
-        .toList();
+    final rows = await _supabase
+        .from('shopping_lists')
+        .select(
+          '*, me:list_members!inner(user_id), '
+          'items:shopping_items(count), open:shopping_items(count)',
+        )
+        .eq('me.user_id', userId)
+        .eq('open.is_checked', false)
+        .order('created_at', ascending: true);
 
-    if (memberListIds.isEmpty) {
-      return [];
-    }
+    final lists = [
+      for (final row in (rows as List).cast<Map<String, dynamic>>())
+        ShoppingListModel.fromJson({
+          ...row,
+          'item_count': _embeddedCount(row['items']),
+          'unchecked_count': _embeddedCount(row['open']),
+        }),
+    ];
 
-    // Get all lists where user is a member
-    final listsData = await _supabase.from('shopping_lists').select('''
-      *
-    ''').inFilter('id', memberListIds);
-
-    final lists = <ShoppingListModel>[];
-    
-    // For each list, fetch the REAL current item count from the database
-    for (final listJson in (listsData as List)) {
-      // Get actual count of ALL items for this list (both checked and unchecked)
-      final items = await _supabase
-          .from('shopping_items')
-          .select('id')
-          .eq('list_id', listJson['id']);
-      
-      final actualCount = (items as List).length;
-      
-      // Add the count to the JSON before creating the model
-      listJson['item_count'] = actualCount;
-      
-      lists.add(ShoppingListModel.fromJson(listJson));
-    }
-    
-    // Sort by order_index (nulls last)
+    // `shopping_lists.order_index` is not a DB column yet, so this only takes
+    // effect once it exists; createdAt keeps the order total (and stable).
     lists.sort((a, b) {
-      final aOrder = a.orderIndex ?? 999999;
-      final bOrder = b.orderIndex ?? 999999;
-      return aOrder.compareTo(bOrder);
+      final byOrder =
+          (a.orderIndex ?? 1 << 30).compareTo(b.orderIndex ?? 1 << 30);
+      return byOrder != 0 ? byOrder : a.createdAt.compareTo(b.createdAt);
     });
-    
     return lists;
+  }
+
+  static int _embeddedCount(Object? embed) {
+    if (embed is List && embed.isNotEmpty) {
+      return (embed.first as Map)['count'] as int? ?? 0;
+    }
+    return 0;
   }
 
   /// Get a single list by ID
@@ -128,28 +123,19 @@ class ListRepository {
     String? backgroundValue,
     String? imageUrl,
   ) async {
-    try {
-      final updates = <String, dynamic>{
-        'background_type': backgroundType,
-        'background_value': backgroundValue,
-      };
+    final updates = <String, dynamic>{
+      'background_type': backgroundType,
+      'background_value': backgroundValue,
+      // Only image backgrounds keep an image URL.
+      'background_image_url': backgroundType == 'image' ? imageUrl : null,
+    };
 
-      // Only set image URL if type is image
-      if (backgroundType == 'image') {
-        updates['background_image_url'] = imageUrl;
-      } else {
-        updates['background_image_url'] = null;
-      }
-
-      // Keep old background_gradient for backwards compatibility
-      if (backgroundType == 'gradient' && backgroundValue != null) {
-        updates['background_gradient'] = backgroundValue;
-      }
-
-      await _supabase.from('shopping_lists').update(updates).eq('id', listId);
-    } catch (e) {
-      rethrow;
+    // Keep old background_gradient for backwards compatibility
+    if (backgroundType == 'gradient' && backgroundValue != null) {
+      updates['background_gradient'] = backgroundValue;
     }
+
+    await _supabase.from('shopping_lists').update(updates).eq('id', listId);
   }
 
   /// Generate and set share code for a list
@@ -160,15 +146,11 @@ class ListRepository {
     // Generate share link
     final shareLink = AppConfig.generateShareLink(code);
 
-    try {
-      await _supabase.from('shopping_lists').update({
-        'share_code': code,
-        'share_link': shareLink,
-        'is_shared': true,
-      }).eq('id', listId);
-    } catch (e) {
-      rethrow;
-    }
+    await _supabase.from('shopping_lists').update({
+      'share_code': code,
+      'share_link': shareLink,
+      'is_shared': true,
+    }).eq('id', listId);
 
     return code;
   }
@@ -241,12 +223,10 @@ class ListRepository {
               'list_id': listResponse['id'],
             },
           );
-          print('✅ [LIST_REPO] Push notification sent to owner $ownerId');
+          debugPrint('✅ [LIST_REPO] Push notification sent to owner $ownerId');
         }
       } catch (e) {
-        if (kDebugMode) {
-          print('⚠️ [LIST_REPO] Failed to send invitation notification: $e');
-        }
+        debugPrint('⚠️ [LIST_REPO] Failed to send invitation notification: $e');
       }
     }
 

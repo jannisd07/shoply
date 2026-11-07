@@ -34,8 +34,7 @@ final openFoodFactsServiceProvider = Provider<OpenFoodFactsService>((ref) {
 /// The current user's saved goal/targets, or null if never configured.
 /// Invalidate after `saveGoal`/`setTrackingEnabled` to refresh dependents.
 final nutritionGoalProvider = FutureProvider.autoDispose<NutritionGoal?>((ref) async {
-  final authUser = await ref.watch(authUserProvider.future);
-  if (authUser == null) return null;
+  if (ref.watch(authUserIdProvider) == null) return null;
   final service = ref.watch(nutritionGoalServiceProvider);
   return service.getGoal();
 });
