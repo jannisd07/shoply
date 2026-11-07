@@ -484,6 +484,8 @@ class AppTranslations {
     'trial_footnote_monthly': 'Then {price}/month · cancel in your iPhone settings',
     'generic_error': 'Something went wrong. Please try again.',
     'personal_info_updated': 'Personal information updated',
+    'profile_default_name': 'User',
+    'premium_label': 'Premium',
     // (end screens cleanup)
     
     // AI Recommendations
@@ -1522,6 +1524,8 @@ class AppTranslations {
     'trial_footnote_monthly': 'Danach {price}/Monat · Kündigung in den iPhone-Einstellungen',
     'generic_error': 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
     'personal_info_updated': 'Persönliche Daten aktualisiert',
+    'profile_default_name': 'Nutzer',
+    'premium_label': 'Premium',
     // (end screens cleanup)
     
     // AI Recommendations

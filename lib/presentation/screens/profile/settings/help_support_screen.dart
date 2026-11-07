@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:in_app_review/in_app_review.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/constants/legal_links.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/data/services/app_review_service.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 
@@ -30,32 +33,28 @@ class HelpSupportScreen extends StatelessWidget {
         children: [
           // FAQ Section
           PaperSectionHeader(context.tr('faq')),
-          _buildFAQItem(
-            context: context,
+          _FAQExpandableItem(
             question: context.tr('faq_create_list'),
             answer: context.tr('faq_create_list_answer'),
             textPrimary: textPrimary,
             textSecondary: textSecondary,
           ),
           _buildDivider(separatorColor),
-          _buildFAQItem(
-            context: context,
+          _FAQExpandableItem(
             question: context.tr('faq_share_list'),
             answer: context.tr('faq_share_list_answer'),
             textPrimary: textPrimary,
             textSecondary: textSecondary,
           ),
           _buildDivider(separatorColor),
-          _buildFAQItem(
-            context: context,
+          _FAQExpandableItem(
             question: context.tr('faq_auto_categorization'),
             answer: context.tr('faq_auto_categorization_answer'),
             textPrimary: textPrimary,
             textSecondary: textSecondary,
           ),
           _buildDivider(separatorColor),
-          _buildFAQItem(
-            context: context,
+          _FAQExpandableItem(
             question: context.tr('faq_delete_history'),
             answer: context.tr('faq_delete_history_answer'),
             textPrimary: textPrimary,
@@ -68,10 +67,10 @@ class HelpSupportScreen extends StatelessWidget {
           PaperSectionHeader(context.tr('contact')),
           _buildTapItem(
             title: context.tr('email_support'),
-            subtitle: 'support@shoplyai.app',
+            subtitle: LegalLinks.supportEmail,
             textPrimary: textPrimary,
             textSecondary: textSecondary,
-            onTap: () => _launchEmail('support@shoplyai.app'),
+            onTap: () => _launchEmail(LegalLinks.supportEmail),
           ),
           _buildDivider(separatorColor),
           _buildTapItem(
@@ -98,21 +97,21 @@ class HelpSupportScreen extends StatelessWidget {
             title: context.tr('user_guide'),
             textPrimary: textPrimary,
             textSecondary: textSecondary,
-            onTap: () => _launchURL('https://shoplyai.app/guide'),
+            onTap: () => _launchURL(LegalLinks.userGuide),
           ),
           _buildDivider(separatorColor),
           _buildTapItem(
             title: context.tr('privacy'),
             textPrimary: textPrimary,
             textSecondary: textSecondary,
-            onTap: () => _launchURL('https://shoplyai.app/privacy'),
+            onTap: () => _launchURL(LegalLinks.privacy),
           ),
           _buildDivider(separatorColor),
           _buildTapItem(
             title: context.tr('terms'),
             textPrimary: textPrimary,
             textSecondary: textSecondary,
-            onTap: () => _launchURL('https://shoplyai.app/terms'),
+            onTap: () => _launchURL(LegalLinks.terms),
           ),
 
           const SizedBox(height: 40),
@@ -126,21 +125,6 @@ class HelpSupportScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildFAQItem({
-    required BuildContext context,
-    required String question,
-    required String answer,
-    required Color textPrimary,
-    required Color textSecondary,
-  }) {
-    return _FAQExpandableItem(
-      question: question,
-      answer: answer,
-      textPrimary: textPrimary,
-      textSecondary: textSecondary,
     );
   }
 
@@ -236,8 +220,13 @@ class HelpSupportScreen extends StatelessWidget {
       title: context.tr('rate_app'),
       body: context.tr('rate_app_dialog_desc'),
       actionLabel: context.tr('rate'),
-      onAction: () {
-        // TODO: Launch app store
+      onAction: () async {
+        // Native StoreKit review sheet; iOS decides whether it is shown.
+        final review = InAppReview.instance;
+        if (await review.isAvailable()) {
+          await review.requestReview();
+          await AppReviewService.instance.markAsRated();
+        }
       },
     );
   }
