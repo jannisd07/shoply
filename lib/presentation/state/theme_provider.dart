@@ -191,28 +191,3 @@ class AccentColorNotifier extends StateNotifier<Color> {
     }
   }
 }
-
-// Combined Theme Data Provider
-final customThemeDataProvider = Provider<ThemeData>((ref) {
-  final themeMode = ref.watch(themeModeProvider);
-  final themeVariant = ref.watch(themeVariantProvider);
-  final accentColor = ref.watch(accentColorProvider);
-  final themeService = ref.watch(themeServiceProvider);
-
-  // Get current brightness
-  Brightness brightness;
-  if (themeMode == ThemeMode.light) {
-    brightness = Brightness.light;
-  } else if (themeMode == ThemeMode.dark) {
-    brightness = Brightness.dark;
-  } else {
-    // System - would need BuildContext to determine, default to light
-    brightness = Brightness.light;
-  }
-
-  return themeService.generateTheme(
-    brightness: brightness,
-    variant: themeVariant,
-    accentColor: accentColor,
-  );
-});
