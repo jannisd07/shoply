@@ -7,8 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Service for requesting App Store/Play Store reviews using native APIs.
 /// Uses SKStoreReviewController on iOS (Apple's official API).
 /// 
-/// **AI: Critical Constraints**:
-/// - ⚠️ Apple limits review prompts to 3 per 365 days per user per app version
+/// Constraints:
+/// - ⚠️ Apple shows the review prompt at most 3 times per 365 days per user
 /// - ⚠️ Never show after negative experiences (errors, crashes, deleted items)
 /// - ⚠️ Only show after positive actions (completing lists, saving recipes)
 /// 
@@ -163,49 +163,16 @@ class AppReviewService {
       }
     }
 
-    // 5. Check total prompt count (Apple allows 3 per year per version)
+    // 5. Lifetime prompt cap (Apple shows the sheet at most 3 times a year anyway)
     final promptCount = prefs.getInt(_keyReviewPromptCount) ?? 0;
     if (promptCount >= 3) {
       return _ReviewConditions(
         shouldShow: false,
-        reason: 'Already prompted $promptCount times this version',
+        reason: 'Already prompted $promptCount times',
       );
     }
 
     return _ReviewConditions(shouldShow: true, reason: 'All conditions met!');
-  }
-
-  /// Mark that user indicated they rated (e.g., via "Don't show again" button)
-  Future<void> markAsRated() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyHasRated, true);
-    debugPrint('✅ [APP_REVIEW] User marked as having rated');
-  }
-
-  /// Reset review tracking (for debugging)
-  Future<void> resetTracking() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyAppOpenCount);
-    await prefs.remove(_keyPositiveActions);
-    await prefs.remove(_keyLastReviewPrompt);
-    await prefs.remove(_keyReviewPromptCount);
-    await prefs.remove(_keyFirstOpenDate);
-    await prefs.remove(_keyHasRated);
-    debugPrint('🔄 [APP_REVIEW] Tracking reset');
-  }
-
-  /// Get current review status (for debugging)
-  Future<Map<String, dynamic>> getStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    return {
-      'appOpens': prefs.getInt(_keyAppOpenCount) ?? 0,
-      'positiveActions': prefs.getInt(_keyPositiveActions) ?? 0,
-      'promptCount': prefs.getInt(_keyReviewPromptCount) ?? 0,
-      'hasRated': prefs.getBool(_keyHasRated) ?? false,
-      'firstOpen': prefs.getString(_keyFirstOpenDate),
-      'lastPrompt': prefs.getString(_keyLastReviewPrompt),
-      'isAvailable': await _inAppReview.isAvailable(),
-    };
   }
 }
 

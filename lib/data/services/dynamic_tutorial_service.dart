@@ -331,10 +331,4 @@ class DynamicTutorialService extends ChangeNotifier {
 
     notifyListeners();
   }
-
-  void startTutorial() {
-    _isActive = true;
-    _currentStepId = TutorialStepId.welcome;
-    notifyListeners();
-  }
 }

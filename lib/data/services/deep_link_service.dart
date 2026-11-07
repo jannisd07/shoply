@@ -19,8 +19,12 @@ class DeepLinkService {
   final _appLinks = AppLinks();
   GoRouter? _router;
   StreamSubscription<Uri>? _linkSubscription;
-  String? _pendingDeepLink;
   bool _isInitialized = false;
+
+  // Last handled link, used to drop a duplicate delivery of the same URI.
+  String? _lastLink;
+  DateTime? _lastLinkAt;
+  static const _duplicateWindow = Duration(seconds: 2);
 
   /// Handles `shoply://add-item?name=...&list=...&quantity=...` — fired by
   /// the Siri/Shortcuts "add item" App Intent (see `AppIntents.swift`). Set
@@ -33,73 +37,41 @@ class DeepLinkService {
   /// "create list" App Intent.
   Future<void> Function(String listName)? onCreateListRequested;
 
-  /// Initialize the deep link service with the app router
+  /// Initialize the deep link service with the app router.
+  ///
+  /// app_links (>= 6.0) delivers the initial link (app cold-started from a
+  /// link) on [AppLinks.uriLinkStream] too, so subscribing is enough; reading
+  /// `getInitialLink()` as well would handle that link twice.
   Future<void> initialize(GoRouter router) async {
     if (_isInitialized) return;
-    
+
     _router = router;
     _isInitialized = true;
-    
-    debugPrint('🔗 [DEEP_LINK] Initializing DeepLinkService...');
 
-    // Handle initial link (app opened from link while closed)
-    try {
-      final initialUri = await _appLinks.getInitialLink();
-      if (initialUri != null) {
-        debugPrint('🔗 [DEEP_LINK] Initial link: $initialUri');
-        _pendingDeepLink = initialUri.toString();
-      }
-    } catch (e) {
-      debugPrint('⚠️ [DEEP_LINK] Error getting initial link: $e');
-    }
-
-    // Listen for incoming links while app is running
-    _setupLinkStream();
-
-    debugPrint('✅ [DEEP_LINK] DeepLinkService initialized');
-  }
-
-  /// Setup stream listener for incoming links
-  void _setupLinkStream() {
     _linkSubscription = _appLinks.uriLinkStream.listen(
-      (Uri uri) {
-        debugPrint('🔗 [DEEP_LINK] Received link: $uri');
-        _handleDeepLink(uri.toString());
-      },
+      _handleDeepLink,
       onError: (error) {
         debugPrint('⚠️ [DEEP_LINK] Link stream error: $error');
       },
     );
-  }
 
-  /// Process any pending deep link (call after app is fully loaded)
-  void processPendingDeepLink() {
-    if (_pendingDeepLink != null) {
-      debugPrint('🔗 [DEEP_LINK] Processing pending link: $_pendingDeepLink');
-      _handleDeepLink(_pendingDeepLink!);
-      _pendingDeepLink = null;
-    }
+    debugPrint('✅ [DEEP_LINK] DeepLinkService initialized');
   }
 
   /// Handle incoming deep link
-  void _handleDeepLink(String link) {
-    if (_router == null) {
-      debugPrint('⚠️ [DEEP_LINK] Router not initialized, storing link');
-      _pendingDeepLink = link;
+  void _handleDeepLink(Uri uri) {
+    final link = uri.toString();
+    final now = DateTime.now();
+    if (link == _lastLink &&
+        _lastLinkAt != null &&
+        now.difference(_lastLinkAt!) < _duplicateWindow) {
+      debugPrint('⚠️ [DEEP_LINK] Ignoring duplicate link: $link');
       return;
     }
+    _lastLink = link;
+    _lastLinkAt = now;
 
-    final uri = Uri.tryParse(link);
-    if (uri == null) {
-      debugPrint('❌ [DEEP_LINK] Invalid URI: $link');
-      return;
-    }
-
-    debugPrint('🔗 [DEEP_LINK] Parsing URI: $uri');
-    debugPrint('   - Scheme: ${uri.scheme}');
-    debugPrint('   - Host: ${uri.host}');
-    debugPrint('   - Path: ${uri.path}');
-    debugPrint('   - Segments: ${uri.pathSegments}');
+    debugPrint('🔗 [DEEP_LINK] Received link: $uri');
 
     // Action-type links (Siri/Shortcuts) perform a data mutation instead of a
     // plain navigation — handle them before the path-based routing below.
@@ -279,16 +251,6 @@ class DeepLinkService {
   /// Generate a shareable web URL for an author profile
   static String getAuthorShareUrl(String authorId) {
     return '$webScheme://$webDomain/author/$authorId';
-  }
-
-  /// Generate a deep link (custom scheme) for a recipe
-  static String getRecipeDeepLink(String recipeId) {
-    return '$customScheme://recipe/$recipeId';
-  }
-
-  /// Generate a deep link (custom scheme) for a list
-  static String getListDeepLink(String listId) {
-    return '$customScheme://list/$listId';
   }
 
   /// Dispose of resources

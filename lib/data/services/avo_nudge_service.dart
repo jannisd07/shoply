@@ -181,6 +181,31 @@ class AvoNudgeService {
 
   final PurchaseTrackingService _trackingService = PurchaseTrackingService();
 
+  // In-flight fetches shared by concurrent callers (the restock and offer
+  // cards on Home load at the same time). Cleared on completion, so every
+  // later call reads fresh data.
+  Future<List<ItemPurchaseStats>>? _statsInFlight;
+  static Future<Set<String>>? _openItemsInFlight;
+
+  Future<List<ItemPurchaseStats>> _getStats() => _statsInFlight ??=
+      _trackingService.getAllStats().whenComplete(() => _statsInFlight = null);
+
+  /// Highest [suggestionPriority] first, with a stable name tie-break so the
+  /// cards do not reshuffle between rebuilds. Candidates must have a
+  /// non-null `averageDaysBetween`.
+  static void _sortByPriority(List<ItemPurchaseStats> candidates) {
+    double priority(ItemPurchaseStats s) => suggestionPriority(
+          purchaseCount: s.purchaseCount,
+          averageDaysBetween: s.averageDaysBetween!,
+          overdueRatio: s.daysSinceLastPurchase / s.averageDaysBetween!,
+        );
+    candidates.sort((a, b) {
+      final byPriority = priority(b).compareTo(priority(a));
+      if (byPriority != 0) return byPriority;
+      return a.itemName.compareTo(b.itemName);
+    });
+  }
+
   /// The weekday (DateTime.monday..sunday) most of [dates] fall on, when the
   /// pattern is strong enough to mention: at least 3 purchases on that
   /// weekday AND at least half of all purchases. Null otherwise.
@@ -262,7 +287,7 @@ class AvoNudgeService {
   /// Sundays").
   Future<List<RestockSuggestion>> getRestockSuggestions({int limit = 3}) async {
     try {
-      final stats = await _trackingService.getAllStats();
+      final stats = await _getStats();
       if (stats.isEmpty) return [];
 
       final snoozed = await _loadSnoozes(_snoozeKey);
@@ -287,27 +312,12 @@ class AvoNudgeService {
       if (candidates.isEmpty) return [];
 
       // Exclude items already sitting unchecked on one of the user's lists.
-      final openItemNames = await _getOpenItemNames();
+      final openItemNames = await openItemNamesLower();
       candidates.removeWhere(
           (s) => openItemNames.contains(s.itemName.trim().toLowerCase()));
       if (candidates.isEmpty) return [];
 
-      candidates.sort((a, b) {
-        final pa = suggestionPriority(
-          purchaseCount: a.purchaseCount,
-          averageDaysBetween: a.averageDaysBetween!,
-          overdueRatio: a.daysSinceLastPurchase / a.averageDaysBetween!,
-        );
-        final pb = suggestionPriority(
-          purchaseCount: b.purchaseCount,
-          averageDaysBetween: b.averageDaysBetween!,
-          overdueRatio: b.daysSinceLastPurchase / b.averageDaysBetween!,
-        );
-        final byPriority = pb.compareTo(pa);
-        if (byPriority != 0) return byPriority;
-        // Stable tie-break so the card does not reshuffle between rebuilds.
-        return a.itemName.compareTo(b.itemName);
-      });
+      _sortByPriority(candidates);
 
       return candidates.take(limit).map((s) {
         final avg = s.averageDaysBetween!;
@@ -343,7 +353,7 @@ class AvoNudgeService {
       final zipInfo = await UserLocationService.instance.getZipInfo();
       if (!zipInfo.isReal) return [];
 
-      final stats = await _trackingService.getAllStats();
+      final stats = await _getStats();
       if (stats.isEmpty) return [];
 
       final snoozed = await _loadSnoozes(_offerSnoozeKey);
@@ -361,27 +371,12 @@ class AvoNudgeService {
 
       // Items already on a list are covered by the per-item offer chips in
       // the list itself — don't double-nudge them on the home screen.
-      final openItemNames = await _getOpenItemNames();
+      final openItemNames = await openItemNamesLower();
       candidates.removeWhere(
           (s) => openItemNames.contains(s.itemName.trim().toLowerCase()));
       if (candidates.isEmpty) return [];
 
-      candidates.sort((a, b) {
-        final pa = suggestionPriority(
-          purchaseCount: a.purchaseCount,
-          averageDaysBetween: a.averageDaysBetween!,
-          overdueRatio: a.daysSinceLastPurchase / a.averageDaysBetween!,
-        );
-        final pb = suggestionPriority(
-          purchaseCount: b.purchaseCount,
-          averageDaysBetween: b.averageDaysBetween!,
-          overdueRatio: b.daysSinceLastPurchase / b.averageDaysBetween!,
-        );
-        final byPriority = pb.compareTo(pa);
-        if (byPriority != 0) return byPriority;
-        // Stable tie-break so the card does not reshuffle between rebuilds.
-        return a.itemName.compareTo(b.itemName);
-      });
+      _sortByPriority(candidates);
       final lookups = candidates.take(_maxOfferLookups).toList();
 
       final signature =
@@ -617,9 +612,13 @@ class AvoNudgeService {
     }
   }
 
-  /// Names (normalized) of all unchecked items on lists the user can see.
-  /// RLS scopes the query to the user's own/shared lists.
-  Future<Set<String>> _getOpenItemNames() async {
+  /// Names (trimmed, lowercase) of all unchecked items on lists the user can
+  /// see. RLS scopes the query to the user's own/shared lists. Throws on
+  /// failure so callers can decide whether to fail open or closed.
+  static Future<Set<String>> openItemNamesLower() => _openItemsInFlight ??=
+      _fetchOpenItemNames().whenComplete(() => _openItemsInFlight = null);
+
+  static Future<Set<String>> _fetchOpenItemNames() async {
     try {
       final rows = await Supabase.instance.client
           .from('shopping_items')
@@ -631,8 +630,8 @@ class AvoNudgeService {
           .toSet();
     } catch (e) {
       debugPrint('🥑 [AVO_NUDGE] Failed to load open items: $e');
-      // Fail closed: if we can't check, suggest nothing rather than
-      // suggesting an item that is already on a list.
+      // The nudges fail closed: if we can't check, suggest nothing rather
+      // than suggesting an item that is already on a list.
       rethrow;
     }
   }

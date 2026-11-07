@@ -8,20 +8,16 @@ import 'package:shoply/data/services/purchase_tracking_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/gemini_categorization_service.dart';
 
-/// 🧠 Advanced ML-based Recommendation Engine
-/// 
-/// Multi-factor scoring system analyzing:
-/// ✅ List-Context Awareness - items from THIS list's history (15%)
-/// ✅ Purchase Frequency & Recency (13% + 13%)
-/// ✅ Predictive Replenishment Pattern Recognition (17%)
-/// ✅ Sequential Shopping History - Last 10 Trips (12%)
-/// ✅ Item Association Mining (Co-occurrence) (12%)
-/// ✅ Gemini AI Complementary Items (6%)
-/// ✅ Day-of-Week Patterns (8%)
-/// ✅ Category Affinity (8%)
-/// 
-/// Returns TOP 5 most relevant recommendations
+/// Multi-factor recommendation engine: list context, purchase frequency,
+/// recency and replenishment rhythm, recent trips, co-occurrence, Gemini
+/// complementary items, day-of-week patterns and category affinity. The
+/// weights live next to each factor in [getRecommendations].
 class MLRecommendationService {
+  /// Gemini complementary suggestions per sorted item-name signature. The
+  /// provider recomputes on every list change (check toggles included), so
+  /// the LLM is only asked again when the set of item names changes.
+  static final Map<String, List<String>> _complementaryCache = {};
+
   final PurchaseTrackingService _trackingService;
   final ShoppingHistoryService _historyService;
   final GeminiCategorizationService _geminiService;
@@ -34,41 +30,27 @@ class MLRecommendationService {
         _historyService = historyService ?? ShoppingHistoryService(),
         _geminiService = geminiService ?? GeminiCategorizationService();
 
-  /// 🎯 Generate 1-3 ML-powered recommendations based on confidence scores
-  /// 
-  /// Returns ONLY highly confident recommendations:
-  /// - Score >= 75: EXCELLENT match (always include)
-  /// - Score >= 60: GOOD match (include up to 2)
-  /// - Score >= 45: DECENT match (include only 1 if nothing better)
-  /// - Score < 45: TOO LOW - don't show
+  /// Generate up to 5 recommendations, filtered by confidence
+  /// (see [_filterByConfidence]).
   Future<List<RecommendationItem>> getRecommendations({
     required List<ShoppingItemModel> currentListItems,
     String? listId,
     int limit = 5,
   }) async {
     try {
-      if (kDebugMode) {
-        print('🧠 [ML_RECOMMEND] Starting recommendation engine...');
-        print('📋 [ML_RECOMMEND] Current list has ${currentListItems.length} items');
-        if (listId != null) print('📋 [ML_RECOMMEND] List ID: $listId');
-      }
-
-      // Get all data
-      final allStats = await _trackingService.getAllStats();
-      final recentHistory = await _historyService.getRecentHistory(limit: 10);
-
-      // Get list-specific history if listId is provided
-      List<ShoppingHistory> listHistory = [];
-      if (listId != null) {
-        try {
-          listHistory = await _historyService.getHistoryForList(listId);
-          if (kDebugMode) {
-            print('📋 [ML_RECOMMEND] List history: ${listHistory.length} past trips for this list');
-          }
-        } catch (_) {
-          // List history not available, continue without it
-        }
-      }
+      // Fetch everything in parallel. The last 50 trips feed association
+      // mining; the newest 10 of them are the "recent history" factor.
+      // List-specific history is optional and must not fail the whole run.
+      final (allStats, history, listHistory) = await (
+        _trackingService.getAllStats(),
+        _historyService.getRecentHistory(limit: 50),
+        listId == null
+            ? Future.value(<ShoppingHistory>[])
+            : _historyService
+                .getHistoryForList(listId)
+                .catchError((_) => <ShoppingHistory>[]),
+      ).wait;
+      final recentHistory = history.take(10).toList();
 
       // Get current item names (lowercase for comparison)
       final currentItemNames = currentListItems
@@ -77,13 +59,7 @@ class MLRecommendationService {
 
       // If no data yet, return starter recommendations
       if (allStats.isEmpty && recentHistory.isEmpty) {
-        if (kDebugMode) print('⚠️ [ML_RECOMMEND] No data - returning starter items');
         return _getStarterRecommendations(currentItemNames);
-      }
-
-      if (kDebugMode) {
-        print('📊 [ML_RECOMMEND] Stats: ${allStats.length} items tracked');
-        print('🕒 [ML_RECOMMEND] History: ${recentHistory.length} recent trips');
       }
 
       // Calculate scores using advanced multi-factor analysis
@@ -106,7 +82,7 @@ class MLRecommendationService {
 
       // 1️⃣ Sequential/Personal History Score (12% weight, reduced from 15% to make room for list-context)
       final double historyWeight = listHistory.isNotEmpty ? 0.12 : 0.15;
-      final historyScores = await _calculateHistoryScore(recentHistory, currentItemNames);
+      final historyScores = _calculateHistoryScore(recentHistory, currentItemNames);
       for (final entry in historyScores.entries) {
         candidateScores[entry.key] = (candidateScores[entry.key] ?? 0) + entry.value * historyWeight;
         candidateFactors.putIfAbsent(entry.key, () => {})['history'] = entry.value * historyWeight;
@@ -117,7 +93,7 @@ class MLRecommendationService {
 
       // 2️⃣ Item Association Score (12% weight, reduced from 15%)
       final double associationWeight = listHistory.isNotEmpty ? 0.12 : 0.15;
-      final associationScores = await _calculateAssociationScore(currentListItems, currentItemNames);
+      final associationScores = _calculateAssociationScore(history, currentListItems, currentItemNames);
       for (final entry in associationScores.entries) {
         candidateScores[entry.key] = (candidateScores[entry.key] ?? 0) + entry.value * associationWeight;
         candidateFactors.putIfAbsent(entry.key, () => {})['association'] = entry.value * associationWeight;
@@ -182,7 +158,7 @@ class MLRecommendationService {
 
       // Build all recommendations with scores
       final allRecommendations = <RecommendationItem>[];
-      
+
       for (final entry in candidateScores.entries) {
         final itemName = _capitalizeItemName(entry.key);
         final score = entry.value * 100; // Scale to 0-100
@@ -201,57 +177,44 @@ class MLRecommendationService {
 
       // Sort by score (highest first)
       allRecommendations.sort((a, b) => b.score.compareTo(a.score));
-      
-      if (kDebugMode && allRecommendations.isNotEmpty) {
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        print('🏆 [ML_RECOMMEND] Top candidates:');
-        for (var i = 0; i < min(5, allRecommendations.length); i++) {
-          final rec = allRecommendations[i];
-          print('   ${i + 1}. ${rec.itemName}: ${rec.score.toStringAsFixed(1)} - ${rec.reason}');
-        }
-      }
 
-      // 🎯 SMART FILTERING: Return 1-3 based on confidence thresholds
       final filteredRecommendations = _filterByConfidence(allRecommendations);
-      
-      if (kDebugMode) {
-        print('✅ [ML_RECOMMEND] Returning ${filteredRecommendations.length} high-confidence recommendations');
-        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      }
+      debugPrint('✅ [ML_RECOMMEND] ${filteredRecommendations.length} of '
+          '${allRecommendations.length} candidates passed the confidence filter');
 
       // Ensure we have some recommendations
       if (filteredRecommendations.isEmpty) {
-        if (kDebugMode) print('⚠️ [ML_RECOMMEND] No confident matches - returning starter items');
         return _getStarterRecommendations(currentItemNames).take(1).toList();
       }
 
       return filteredRecommendations;
     } catch (e) {
+      debugPrint('❌ [ML_RECOMMEND] Failed, returning starter items: $e');
       return _getStarterRecommendations({});
     }
   }
 
   /// 1️⃣ Sequential/Personal History Score
   /// Analyzes last 3 shopping trips to find patterns
-  Future<Map<String, double>> _calculateHistoryScore(
+  Map<String, double> _calculateHistoryScore(
     List<ShoppingHistory> recentHistory,
     Set<String> excludeItems,
-  ) async {
+  ) {
     final scores = <String, double>{};
-    
+
     if (recentHistory.isEmpty) return scores;
 
     // Weight: More recent trips = higher weight
     final weights = [1.0, 0.7, 0.5]; // Last trip most important
-    
+
     for (var i = 0; i < recentHistory.length && i < 3; i++) {
       final trip = recentHistory[i];
       final items = trip.items;
-      
+
       for (final item in items) {
         final itemName = item.name.toLowerCase();
         if (excludeItems.contains(itemName)) continue;
-        
+
         // Boost score based on trip recency
         scores[itemName] = (scores[itemName] ?? 0) + weights[i];
       }
@@ -267,33 +230,31 @@ class MLRecommendationService {
   }
 
   /// 2️⃣ Item Association Score (Apriori-like)
-  /// Finds items frequently bought together
-  Future<Map<String, double>> _calculateAssociationScore(
+  /// Finds items frequently bought together in [allHistory]
+  Map<String, double> _calculateAssociationScore(
+    List<ShoppingHistory> allHistory,
     List<ShoppingItemModel> currentItems,
     Set<String> excludeItems,
-  ) async {
+  ) {
     final scores = <String, double>{};
-    
+
     if (currentItems.isEmpty) return scores;
 
-    // Get all shopping history to mine associations
-    final allHistory = await _historyService.getRecentHistory(limit: 50);
-    
     // Build co-occurrence matrix
     final coOccurrence = <String, Map<String, int>>{};
-    
+
     for (final trip in allHistory) {
       final items = trip.items;
       final itemNames = items.map((item) => item.name.toLowerCase()).toList();
-      
+
       // Count co-occurrences
       for (var i = 0; i < itemNames.length; i++) {
         for (var j = 0; j < itemNames.length; j++) {
           if (i == j) continue;
-          
+
           final item1 = itemNames[i];
           final item2 = itemNames[j];
-          
+
           coOccurrence.putIfAbsent(item1, () => {});
           coOccurrence[item1]![item2] = (coOccurrence[item1]![item2] ?? 0) + 1;
         }
@@ -303,17 +264,17 @@ class MLRecommendationService {
     // Calculate association scores for current items
     for (final currentItem in currentItems) {
       final currentName = currentItem.name.toLowerCase();
-      
+
       if (!coOccurrence.containsKey(currentName)) continue;
-      
+
       final associations = coOccurrence[currentName]!;
-      
+
       for (final entry in associations.entries) {
         final associatedItem = entry.key;
         final count = entry.value;
-        
+
         if (excludeItems.contains(associatedItem)) continue;
-        
+
         // Confidence: P(B|A) = count(A,B) / count(A)
         final confidence = count / currentItems.length;
         scores[associatedItem] = (scores[associatedItem] ?? 0) + confidence;
@@ -337,7 +298,7 @@ class MLRecommendationService {
 
     // Score decreases with time: 1.0 for today, 0.0 for 30+ days
     final score = 1.0 - (daysSinceLastPurchase / 30.0).clamp(0.0, 1.0);
-    
+
     return score;
   }
 
@@ -365,7 +326,7 @@ class MLRecommendationService {
     // Peak bei ratio = 1.0 (genau zur richtigen Zeit)
     // Fällt ab wenn zu früh oder zu spät
     double score;
-    
+
     if (ratio < 0.7) {
       // Zu früh - linear steigend von 0 bis 0.7
       score = ratio / 0.7 * 0.3;
@@ -386,12 +347,6 @@ class MLRecommendationService {
     score = (score + confidenceBoost).clamp(0.0, 1.0);
 
     return score;
-  }
-
-  /// Normalize value to 0-1 range
-  double _normalizeScore(double value, double min, double max) {
-    if (max == min) return 1.0;
-    return ((value - min) / (max - min)).clamp(0.0, 1.0);
   }
 
   /// 🎯 Smart Confidence Filtering
@@ -415,14 +370,6 @@ class MLRecommendationService {
     final decent = allRecommendations.where((r) => r.score >= 45 && r.score < 60).toList();
     final acceptable = allRecommendations.where((r) => r.score >= 35 && r.score < 45).toList();
 
-    if (kDebugMode) {
-      print('🎯 [ML_RECOMMEND] Confidence distribution:');
-      print('   Excellent (≥75): ${excellent.length}');
-      print('   Good (≥60): ${good.length}');
-      print('   Decent (≥45): ${decent.length}');
-      print('   Acceptable (≥35): ${acceptable.length}');
-    }
-
     // Strategy: Fill up to maxRecommendations, prioritizing higher tiers
     // Start with excellent items
     filtered.addAll(excellent.take(maxRecommendations));
@@ -443,10 +390,6 @@ class MLRecommendationService {
     if (filtered.length < 2 && acceptable.isNotEmpty) {
       final remaining = 2 - filtered.length;
       filtered.addAll(acceptable.take(remaining));
-    }
-
-    if (kDebugMode) {
-      print('   → Showing ${filtered.length} recommendations (max $maxRecommendations)');
     }
 
     return filtered;
@@ -476,11 +419,11 @@ class MLRecommendationService {
       // Check if current day is a strong pattern
       final currentDayCount = dayCount[currentDayOfWeek] ?? 0;
       final totalPurchases = stats.purchaseDates.length;
-      
+
       // Score based on how often this item is bought on this day
       // Example: If 5 out of 7 purchases were on Monday, and today is Monday → high score
       final dayRatio = currentDayCount / totalPurchases;
-      
+
       if (dayRatio >= 0.4) {
         // 40%+ of purchases on this day = strong pattern
         scores[itemName] = dayRatio;
@@ -509,7 +452,7 @@ class MLRecommendationService {
     Set<String> excludeItems,
   ) {
     final scores = <String, double>{};
-    
+
     if (currentListItems.isEmpty) return scores;
 
     // Get categories in current list
@@ -549,14 +492,14 @@ class MLRecommendationService {
   /// Considers purchase frequency with diminishing returns
   double _calculateFrequencyScore(ItemPurchaseStats stats) {
     final count = stats.purchaseCount;
-    
+
     // Logarithmic scale with diminishing returns
     // 1 purchase = 0.3
     // 3 purchases = 0.6
     // 5 purchases = 0.75
     // 10 purchases = 0.9
     // 20+ purchases = 1.0
-    
+
     if (count >= 20) return 1.0;
     if (count >= 10) return 0.9;
     if (count >= 7) return 0.8;
@@ -611,7 +554,11 @@ class MLRecommendationService {
 
     try {
       final itemNames = currentItems.map((item) => item.name).toList();
-      final suggestions = await _geminiService.getSmartRecommendations(itemNames);
+      final signature =
+          (itemNames.map((n) => n.trim().toLowerCase()).toSet().toList()..sort())
+              .join('|');
+      final suggestions = _complementaryCache[signature] ??=
+          await _geminiService.getSmartRecommendations(itemNames);
 
       if (suggestions.isEmpty) return scores;
 
@@ -625,25 +572,24 @@ class MLRecommendationService {
         scores[suggestion] = positionScore.clamp(0.3, 1.0);
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('⚠️ [ML_RECOMMEND] Complementary items failed: $e');
-      }
+      debugPrint('⚠️ [ML_RECOMMEND] Complementary items failed: $e');
     }
 
     return scores;
   }
 
-  /// Starter recommendations for new users
+  /// Starter recommendations for new users. Categories are the
+  /// language-agnostic ids from `core/constants/categories.dart`.
   List<RecommendationItem> _getStarterRecommendations(Set<String> excludeNames) {
     final commonItems = [
-      {'name': 'Milch', 'category': 'Milchprodukte', 'quantity': 1.0, 'score': 85.0},
-      {'name': 'Brot', 'category': 'Backwaren', 'quantity': 1.0, 'score': 80.0},
-      {'name': 'Eier', 'category': 'Eier & Milchprodukte', 'quantity': 6.0, 'score': 75.0},
-      {'name': 'Butter', 'category': 'Milchprodukte', 'quantity': 1.0, 'score': 70.0},
-      {'name': 'Käse', 'category': 'Milchprodukte', 'quantity': 200.0, 'score': 65.0},
-      {'name': 'Äpfel', 'category': 'Obst', 'quantity': 1.0, 'score': 60.0},
-      {'name': 'Bananen', 'category': 'Obst', 'quantity': 1.0, 'score': 55.0},
-      {'name': 'Tomaten', 'category': 'Gemüse', 'quantity': 500.0, 'score': 50.0},
+      {'name': 'Milch', 'category': 'dairy', 'quantity': 1.0, 'score': 85.0},
+      {'name': 'Brot', 'category': 'bakery', 'quantity': 1.0, 'score': 80.0},
+      {'name': 'Eier', 'category': 'dairy', 'quantity': 6.0, 'score': 75.0},
+      {'name': 'Butter', 'category': 'dairy', 'quantity': 1.0, 'score': 70.0},
+      {'name': 'Käse', 'category': 'dairy', 'quantity': 1.0, 'score': 65.0},
+      {'name': 'Äpfel', 'category': 'fruits_vegetables', 'quantity': 1.0, 'score': 60.0},
+      {'name': 'Bananen', 'category': 'fruits_vegetables', 'quantity': 1.0, 'score': 55.0},
+      {'name': 'Tomaten', 'category': 'fruits_vegetables', 'quantity': 1.0, 'score': 50.0},
     ];
 
     return commonItems

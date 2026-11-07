@@ -133,9 +133,8 @@ class ListImportService {
     required bool isPdf,
     required CancelToken cancelToken,
   }) async {
-    final session = _supabase.auth.currentSession;
     final userId = _supabase.auth.currentUser?.id;
-    if (session == null || userId == null) {
+    if (_supabase.auth.currentSession == null || userId == null) {
       throw const ListImportException('not_signed_in');
     }
 
@@ -178,7 +177,17 @@ class ListImportService {
       throw const ListImportException('cancelled');
     }
 
-    // 3. Call the Edge Function.
+    // 3. Call the Edge Function. Dio bypasses supabase-flutter's automatic
+    // token refresh, and PDF render + compress + upload can take a while, so
+    // fetch a fresh token right before the request.
+    final String accessToken;
+    try {
+      accessToken = await _freshAccessToken();
+    } on ListImportException {
+      _deleteUpload(imagePath);
+      rethrow;
+    }
+
     try {
       final locale = _supabase.auth.currentUser?.userMetadata?['locale']
               as String? ??
@@ -188,7 +197,7 @@ class ListImportService {
         data: {'image_path': imagePath, 'locale': locale},
         options: Options(
           headers: {
-            'Authorization': 'Bearer ${session.accessToken}',
+            'Authorization': 'Bearer $accessToken',
             'apikey': Env.supabaseAnonKey,
             'Content-Type': 'application/json',
           },
@@ -212,6 +221,8 @@ class ListImportService {
         return ListImportResult(items: items, unparsedLines: unparsed);
       }
 
+      // The function failed before (or without) cleaning up after itself.
+      _deleteUpload(imagePath);
       final code = body?['code'] as String?;
       throw ListImportException(_isKnownCode(code) ? code! : 'provider_error');
     } on DioException catch (e) {
@@ -227,6 +238,26 @@ class ListImportService {
           throw const ListImportException('network_error');
       }
     }
+  }
+
+  /// Current access token, refreshed first when it expires within a minute.
+  Future<String> _freshAccessToken() async {
+    var session = _supabase.auth.currentSession;
+    if (session == null) throw const ListImportException('not_signed_in');
+
+    final expiresAt = session.expiresAt;
+    final expiresSoon = expiresAt != null &&
+        DateTime.fromMillisecondsSinceEpoch(expiresAt * 1000)
+            .isBefore(DateTime.now().add(const Duration(minutes: 1)));
+    if (expiresSoon) {
+      try {
+        session = (await _supabase.auth.refreshSession()).session ?? session;
+      } catch (e) {
+        debugPrint('❌ [LIST_IMPORT] Token refresh failed: $e');
+        throw const ListImportException('network_error');
+      }
+    }
+    return session.accessToken;
   }
 
   static bool _isKnownCode(String? code) => const {

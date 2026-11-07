@@ -2,10 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// A candidate dinner idea plus *why* it was suggested: which of its
 /// ingredients are already sitting unchecked on one of the user's shopping
@@ -144,22 +144,14 @@ class CalorieRecipeNudgeService {
   }
 
   /// Unchecked item names (lowercased) across every shopping list the
-  /// current user can see, via the same RLS-scoped pattern
-  /// `AvoNudgeService._getOpenItemNames` uses. Fails open to an empty set —
+  /// current user can see, via the shared
+  /// `AvoNudgeService.openItemNamesLower` query. Fails open to an empty set —
   /// this is only a ranking bonus, so a lookup failure should never block
   /// calorie-fit suggestions from showing.
   Future<Set<String>> _getOpenListItemNamesLower() async {
     try {
-      final rows = await Supabase.instance.client
-          .from('shopping_items')
-          .select('name')
-          .eq('is_checked', false);
-      return (rows as List)
-          .map((r) => (r['name'] as String? ?? '').trim().toLowerCase())
-          .where((n) => n.isNotEmpty)
-          .toSet();
-    } catch (e) {
-      debugPrint('🥑 [CALORIE_NUDGE] Failed to load open list items: $e');
+      return await AvoNudgeService.openItemNamesLower();
+    } catch (_) {
       return {};
     }
   }

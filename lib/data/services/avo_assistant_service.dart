@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -10,13 +11,17 @@ import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/shopping_history.dart';
-import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/models/weekly_nutrition_summary.dart';
+import 'package:shoply/data/repositories/item_repository.dart';
+import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/services/avo_app_knowledge.dart';
+import 'package:shoply/data/services/avo_assistant_models.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
+import 'package:shoply/data/services/avo_system_prompt.dart';
+import 'package:shoply/data/services/avo_tool_declarations.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
@@ -25,6 +30,7 @@ import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/recipe_offer_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
+import 'package:shoply/data/services/unread_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/data/services/water_log_service.dart';
@@ -39,6 +45,8 @@ import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide FunctionResponse;
+
+export 'package:shoply/data/services/avo_assistant_models.dart';
 
 // ════════════════════════════════════════════════════════════════════
 // Avo Assistant — Gemini with function calling
@@ -62,567 +70,80 @@ class AvoAssistantService {
   ChatSession? _chatSession;
   final _supabase = Supabase.instance.client;
 
+  /// Number of user messages kept in the chat history. The SDK resends the
+  /// whole history every turn, so it is trimmed to bound latency and cost.
+  static const _maxHistoryUserTurns = 10;
+
+  /// Context string sent with the last message. Context is only resent when
+  /// it changed (or after the history was reset/trimmed).
+  String? _lastContextStr;
+
+  /// User the current chat session belongs to; a different user (sign-out,
+  /// account switch) gets a fresh session so no list names, items or
+  /// allergies leak between accounts.
+  String? _sessionUserId;
+  StreamSubscription<AuthState>? _authSubscription;
+
   bool get isInitialized => _model != null && _chatSession != null;
-
-  // ── System prompt ────────────────────────────────────────────────
-
-  static final String _systemPrompt = '''
-You are Avo, the friendly avocado mascot for the Shoply shopping list app.
-
-Personality: warm, concise, helpful. Occasionally use a light food pun.
-Keep text replies to 1-2 sentences — the UI renders rich cards, so let
-the widgets speak for themselves.
-
-TOOLS — You have real tools to search data and change the app. Always
-PREFER calling a tool over guessing. Never make up recipes, list items,
-or prices.
-
-When the user asks to:
-• see/find recipes → call search_recipes (pass dietary_filters and
-  exclude_allergens from the user profile if set)
-• know calories/nutrition → call get_recipe_nutrition
-• see their shopping history → call get_shopping_history
-• add past items to a list → call add_history_items_to_list
-• add all of a recipe's ingredients to a list ("add ingredients for
-  carbonara to Friday's list") → call add_recipe_to_list. Resolve the
-  recipe first (search_recipes/get_saved_recipes if you don't already
-  have its id) and the target list_id (get_lists if it's unclear which
-  list they mean).
-• see a list's contents → call get_list_contents
-• check / mark items → call check_items
-• finish shopping for a list → call complete_list
-• add an item to a list → call add_item_to_list (if multiple lists
-  exist and they didn't specify, call ask_pick_list instead)
-• edit an item ("make it 2 liters", "rename the milk", "add a note")
-  → call update_item with ONLY the fields that change. Resolve the
-  item_id via get_list_contents first if you don't have it yet.
-• move items to a different list → call move_items (resolve item_ids
-  via get_list_contents and the destination list via get_lists first)
-• create a new shopping list ("make me a list for the party") → call
-  create_list, then add any requested items to the returned list_id
-  via add_item_to_list
-• rename a list → call rename_list
-• change ANY setting (theme, language, name, diet, allergies,
-  calorie tracking on/off, etc.) → call update_setting
-• find prices, deals, offers, or "which store is cheapest" for a
-  single product → call search_offers
-• compare a WHOLE list's total cost across stores, or ask "which store
-  is cheapest for my list" / "how much would I save at X vs Y" → call
-  compare_list_prices (not search_offers, which is per-product only)
-• ask "what deals do I have?" / "anything on offer for my list?" /
-  "what's cheap right now" → call get_personalized_deals. Different
-  from search_offers (one product) and compare_list_prices (whole-list
-  cost total) — this surfaces live offers on items already sitting on
-  the user's shopping lists.
-• know what they might need to buy / what's running low / restock
-  ideas → call get_restock_suggestions (based on their real purchase
-  rhythm), then offer to add the items via add_item_to_list
-• split / share the cost of a past shopping trip with other people
-  ("split yesterday's Lidl trip with Max and Jonas") → first call
-  get_shopping_history to find the right history_id, then call
-  split_trip_cost
-• remove/delete an item or a whole list → call delete_item /
-  delete_list WITHOUT confirm first. It will NOT delete anything and
-  instead returns a confirmation question — ask the user that question
-  verbatim and wait for their reply. Only call the same tool again with
-  confirm=true if they clearly say yes. Never skip this step.
-• ask how many calories/macros they have left, what they ate today, or
-  their water intake → call get_nutrition_status
-• say they ate or drank something ("I just ate a banana", "log 200g
-  chicken for lunch") → call log_food. Pass portion/meal_type when the
-  user gives them. Only pass calories/protein_g/carbs_g/fat_g if the
-  USER stated the numbers — otherwise leave them out and the tool
-  estimates them (then mention it's an estimate).
-• log water ("I drank a glass of water") → call log_water
-• tell you their current body weight → call log_weight
-• remove a food diary entry → call delete_food_log (same confirm flow
-  as delete_item; get entry_id from get_nutrition_status first)
-• ask "what can I still eat today?" or want meal ideas for their
-  remaining calories → call get_nutrition_status first, then
-  search_recipes, and prefer recipes whose calories_per_serving fits
-  the remaining calories — say how many kcal each suggestion has.
-• ask "how was my week?" / "how am I doing?" / want a weekly nutrition
-  recap → call get_weekly_nutrition_summary
-• ask about a diet challenge ("how's my fasting streak?", "am I still
-  on track with no sugar?") → call get_challenge_status. If none is
-  active and they want to start one, tell them to open the Challenges
-  screen from the calorie dashboard — you cannot start one for them.
-• ask "how much have I saved?" / "how much money has Shoply saved me?" /
-  "how much did I save this month?" → call get_savings_summary, which
-  returns both a lifetime figure and this month's (vs. last month's), only
-  from items bought at a live offer/deal price — explain that if it's low
-  or zero for an otherwise active user.
-If a nutrition tool reports tracking is disabled, offer to enable it
-(update_setting key "calorie_tracking" value "true") — ask first,
-never enable it without the user agreeing.
-• ask about their current settings, preferences, or profile ("what is
-  my diet set to?", "is calorie tracking on?", "what are my goals?")
-  → call get_user_profile
-• want a calorie/nutrition goal set up or changed ("help me set up my
-  calorie goal", "I want to lose 5 kg") → call get_user_profile first,
-  then setup_nutrition_goal with everything already known. If it
-  returns missing fields, ask the user for JUST those — at most two
-  questions per message, conversationally, never as a form. If it
-  returns requires_confirmation, ask that question and only re-call
-  with confirm_replace=true after a clear yes. When it succeeds,
-  present the calculated daily calories and macros.
-• know ANYTHING about Shoply itself (premium, pricing, features,
-  how-tos, privacy) → call get_app_info with the topic
-
-Available get_app_info topics: ${AvoAppKnowledge.topicsSummary}.
-
-After a tool returns, write a short natural-language confirmation
-(1 sentence) and do not repeat the data the widget already shows.
-
-PERSONALIZATION — the context may include "What this user said matters to
-them" (from an onboarding/profile question, e.g. saving money, eating
-healthier, staying organized). When it's present and genuinely relevant,
-let it quietly tilt which tool you reach for or which detail you lead with
-(e.g. mention a cheaper store to a money-saver, or a lighter option to
-someone eating healthier) — but never quote it back, never say "since you
-told us X", and never force it into a reply where it doesn't fit. Most
-replies should not mention it at all.
-''';
 
   // ── Lifecycle ────────────────────────────────────────────────────
 
   Future<void> initialize() async {
     final apiKey = Env.geminiApiKey;
     if (apiKey.isEmpty) {
-      // ignore: avoid_print
-      print('❌ [AVO] Gemini API key is empty');
+      debugPrint('❌ [AVO] Gemini API key is empty');
       return;
     }
     _model = GenerativeModel(
       model: 'gemini-2.0-flash-lite',
       apiKey: apiKey,
-      systemInstruction: Content.text(_systemPrompt),
-      tools: _buildTools(),
+      systemInstruction: Content.text(avoSystemPrompt),
+      tools: buildAvoTools(),
     );
     _chatSession = _model!.startChat();
-    // ignore: avoid_print
-    print('✅ [AVO] Assistant initialized with function calling');
+    _sessionUserId = _supabase.auth.currentUser?.id;
+    _authSubscription ??= _supabase.auth.onAuthStateChange.listen((data) {
+      final userId = data.session?.user.id;
+      if (userId != _sessionUserId) {
+        _sessionUserId = userId;
+        resetChat();
+      }
+    });
+    debugPrint('✅ [AVO] Assistant initialized with function calling');
   }
 
   void resetChat() {
     if (_model != null) _chatSession = _model!.startChat();
+    _lastContextStr = null;
   }
 
   void dispose() {
+    _authSubscription?.cancel();
+    _authSubscription = null;
     _chatSession = null;
     _model = null;
   }
 
-  // ── Tool declarations ────────────────────────────────────────────
-
-  List<Tool> _buildTools() => [
-        Tool(functionDeclarations: [
-          FunctionDeclaration(
-            'search_recipes',
-            'Search the Shoply recipe library and display matching recipes as cards. '
-                'Pass dietary_filters (e.g. ["vegan", "gluten-free"]) and/or '
-                'exclude_allergens (e.g. ["nuts", "eggs"]) based on the user profile.',
-            Schema.object(properties: {
-              'query': Schema.string(description: 'Search terms — ingredients, cuisine, or meal type'),
-              'dietary_filters': Schema.array(
-                description: 'Dietary tags that recipes MUST match (vegan, vegetarian, keto, etc.)',
-                items: Schema.string(),
-              ),
-              'exclude_allergens': Schema.array(
-                description: 'Allergen ingredients to avoid (e.g. nuts, gluten, dairy)',
-                items: Schema.string(),
-              ),
-              'max_results': Schema.integer(description: 'Maximum recipes to return (default 5)'),
-            }, requiredProperties: ['query']),
-          ),
-          FunctionDeclaration(
-            'get_saved_recipes',
-            'Display the user\'s bookmarked recipes as cards.',
-            Schema.object(properties: {}),
-          ),
-          FunctionDeclaration(
-            'get_recipe_nutrition',
-            'Return calories and macros for a recipe. If the recipe already '
-                'stores nutrition, returns it directly; otherwise ESTIMATES from ingredients. '
-                'Pass either recipe_id or a free-text recipe_name.',
-            Schema.object(properties: {
-              'recipe_id': Schema.string(description: 'Recipe ID from search_recipes'),
-              'recipe_name': Schema.string(description: 'Recipe name to look up by name'),
-            }),
-          ),
-          FunctionDeclaration(
-            'add_recipe_to_list',
-            'Add every ingredient of a recipe to a shopping list in one go — e.g. '
-                '"add ingredients for carbonara to Friday\'s list". Resolve the recipe '
-                'via recipe_id (from search_recipes/get_saved_recipes) or recipe_name, '
-                'and list_id via get_lists (match by the list name the user mentioned, '
-                'or ask which list if it is unclear). Optionally scale the recipe to a '
-                'different serving count than its default. Automatically attaches '
-                'current offer prices to any matched ingredient — if the response '
-                'includes added_with_offer_price, mention how many items are on offer.',
-            Schema.object(properties: {
-              'recipe_id': Schema.string(description: 'Recipe ID from search_recipes/get_saved_recipes'),
-              'recipe_name': Schema.string(description: 'Recipe name to look up by name'),
-              'list_id': Schema.string(description: 'Target list ID, from get_lists'),
-              'servings': Schema.integer(
-                  description: 'Scale ingredient amounts to this many servings — '
-                      'omit to use the recipe\'s own default servings'),
-            }, requiredProperties: ['list_id']),
-          ),
-          FunctionDeclaration(
-            'get_shopping_history',
-            'Display recent shopping history cards. Each card has "Add all" and per-item add buttons.',
-            Schema.object(properties: {
-              'limit': Schema.integer(description: 'Max history entries (default 5)'),
-            }),
-          ),
-          FunctionDeclaration(
-            'get_lists',
-            'Display all of the user\'s shopping lists as cards.',
-            Schema.object(properties: {}),
-          ),
-          FunctionDeclaration(
-            'get_list_contents',
-            'Display items inside a specific shopping list. Omit list_id to use the first list.',
-            Schema.object(properties: {
-              'list_id': Schema.string(description: 'ID of the list'),
-            }),
-          ),
-          FunctionDeclaration(
-            'add_item_to_list',
-            'Add a single item to a shopping list.',
-            Schema.object(properties: {
-              'list_id': Schema.string(description: 'Target list ID'),
-              'name': Schema.string(description: 'Item name'),
-              'quantity': Schema.number(description: 'Quantity (default 1)'),
-              'unit': Schema.string(description: 'Unit (g, ml, pcs, etc.)'),
-            }, requiredProperties: ['list_id', 'name']),
-          ),
-          FunctionDeclaration(
-            'ask_pick_list',
-            'Show a picker so the user can choose which list to add an item to. '
-                'Use this when the user said "add X" but has multiple lists.',
-            Schema.object(properties: {
-              'name': Schema.string(description: 'Item name'),
-              'quantity': Schema.number(description: 'Quantity (default 1)'),
-              'unit': Schema.string(description: 'Unit'),
-            }, requiredProperties: ['name']),
-          ),
-          FunctionDeclaration(
-            'check_items',
-            'Mark one or many items as checked (or unchecked) in a list.',
-            Schema.object(properties: {
-              'list_id': Schema.string(),
-              'item_ids': Schema.array(items: Schema.string()),
-              'checked': Schema.boolean(description: 'True to check, false to uncheck'),
-            }, requiredProperties: ['list_id', 'item_ids']),
-          ),
-          FunctionDeclaration(
-            'complete_list',
-            'Mark every unchecked item in a list as checked — "finish shopping" for that list.',
-            Schema.object(properties: {
-              'list_id': Schema.string(),
-            }, requiredProperties: ['list_id']),
-          ),
-          FunctionDeclaration(
-            'add_history_items_to_list',
-            'Add items from a past shopping history entry into a target list. '
-                'If item_names is omitted, adds ALL items from the history entry.',
-            Schema.object(properties: {
-              'history_id': Schema.string(description: 'Shopping history entry ID'),
-              'list_id': Schema.string(description: 'Target list ID'),
-              'item_names': Schema.array(
-                description: 'Specific item names to add; omit for all',
-                items: Schema.string(),
-              ),
-            }, requiredProperties: ['history_id', 'list_id']),
-          ),
-          FunctionDeclaration(
-            'update_setting',
-            'Change any user setting. Supported keys: theme_mode (light/dark/system), '
-                'accent_color (hex), language (en/de/system), notifications (true/false), '
-                'display_name, diet_preferences (array), allergies (array), age, gender, '
-                'height, calorie_tracking (true/false — shows/hides the calorie tab), '
-                'zip_code (4-5 digit PLZ for local offer search; empty clears it).',
-            Schema.object(properties: {
-              'key': Schema.string(description: 'Setting key'),
-              'value': Schema.string(
-                description:
-                    'New value as a string. For arrays, pass comma-separated values.',
-              ),
-            }, requiredProperties: ['key', 'value']),
-          ),
-          FunctionDeclaration(
-            'get_app_info',
-            'Look up factual information about Shoply itself (pricing, premium, '
-                'features, how-tos, privacy). ALWAYS use this instead of guessing.',
-            Schema.object(properties: {
-              'topic': Schema.string(
-                description:
-                    'Topic keyword, e.g. "premium", "pricing", "share", "recipes", "widgets"',
-              ),
-            }, requiredProperties: ['topic']),
-          ),
-          FunctionDeclaration(
-            'search_offers',
-            'Search LIVE current supermarket offers (Angebote) for a product near the '
-                'user, sorted cheapest first, across German grocery chains. Use this for '
-                '"how much does X cost", "find X on offer", or "which store is cheapest '
-                'for X". Only covers active promotional offers, not regular shelf prices — '
-                'say so if nothing is found.',
-            Schema.object(properties: {
-              'query': Schema.string(description: 'Product to search for, e.g. "milk"'),
-            }, requiredProperties: ['query']),
-          ),
-          FunctionDeclaration(
-            'compare_list_prices',
-            'Compare the TOTAL cost of everything on a shopping list across nearby '
-                'supermarkets and say which store is cheapest overall — e.g. "which '
-                'store is cheapest for my list?" or "how much would I save at Aldi '
-                'vs Rewe?". Different from search_offers, which only looks up ONE '
-                'product. Only covers list items currently matched to a live '
-                'promotional offer, not full regular-shelf pricing — say so if '
-                'coverage is partial. Requires the user\'s zip code (PLZ).',
-            Schema.object(properties: {
-              'list_id': Schema.string(
-                  description: 'List to compare — omit to use the first/most recent list'),
-            }),
-          ),
-          FunctionDeclaration(
-            'get_personalized_deals',
-            'Show LIVE current supermarket offers (Angebote) that match items already '
-                'sitting on the user\'s shopping lists — e.g. "what deals do I have?" or '
-                '"anything on offer for my list?". Different from search_offers (looks up '
-                'ONE named product) and compare_list_prices (whole-list total cost). '
-                'Requires the user\'s zip code (PLZ).',
-            Schema.object(properties: {
-              'limit': Schema.integer(description: 'Max deals to return (default 5)'),
-            }),
-          ),
-          FunctionDeclaration(
-            'split_trip_cost',
-            'Split a completed shopping trip\'s cost between the current user and named '
-                'participants (equal split). ALWAYS call get_shopping_history first to '
-                'resolve history_id from a hint like "yesterday\'s Lidl trip". If the trip '
-                'has no known total_cost yet, you must ask the user for it and pass it.',
-            Schema.object(properties: {
-              'history_id': Schema.string(description: 'Shopping history entry ID to split'),
-              'participant_names': Schema.array(
-                description: 'Names of the other people to split with (not including the current user)',
-                items: Schema.string(),
-              ),
-              'total_cost': Schema.number(
-                description: 'Total trip cost in EUR, only if not already known',
-              ),
-            }, requiredProperties: ['history_id', 'participant_names']),
-          ),
-          FunctionDeclaration(
-            'get_restock_suggestions',
-            'Items the user is probably running low on, based on their own '
-                'purchase rhythm (how often they historically re-buy each item). '
-                'Excludes items already on an open list. Use when the user asks '
-                'what they might need, what to buy, or restock ideas.',
-            Schema.object(properties: {
-              'limit': Schema.integer(
-                  description: 'Max suggestions to return (default 5)'),
-            }),
-          ),
-          FunctionDeclaration(
-            'delete_item',
-            'Delete an item from a shopping list. SAFETY: call this WITHOUT confirm '
-                'first — it returns a confirmation question instead of deleting. Only '
-                'call again with confirm=true after the user explicitly agrees.',
-            Schema.object(properties: {
-              'list_id': Schema.string(),
-              'item_id': Schema.string(),
-              'item_name': Schema.string(description: 'Item name, for the confirmation question'),
-              'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
-            }, requiredProperties: ['list_id', 'item_id', 'item_name']),
-          ),
-          FunctionDeclaration(
-            'delete_list',
-            'Permanently delete a whole shopping list. SAFETY: call this WITHOUT '
-                'confirm first — it returns a confirmation question instead of deleting. '
-                'Only call again with confirm=true after the user explicitly agrees.',
-            Schema.object(properties: {
-              'list_id': Schema.string(),
-              'list_name': Schema.string(description: 'List name, for the confirmation question'),
-              'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
-            }, requiredProperties: ['list_id', 'list_name']),
-          ),
-          FunctionDeclaration(
-            'update_item',
-            'Edit an existing shopping list item: rename it and/or change its '
-                'quantity, unit, or note. Pass ONLY the fields that should change. '
-                'Get item_id from get_list_contents first.',
-            Schema.object(properties: {
-              'list_id': Schema.string(description: 'List the item is on'),
-              'item_id': Schema.string(description: 'Item ID from get_list_contents'),
-              'new_name': Schema.string(description: 'New item name — only when renaming'),
-              'quantity': Schema.number(description: 'New quantity — only when changing it'),
-              'unit': Schema.string(
-                  description: 'New unit (g, ml, pcs, …) — only when changing it. '
-                      'Pass an empty string to clear the unit.'),
-              'notes': Schema.string(
-                  description: 'New note — only when changing it. Pass an empty '
-                      'string to remove the note.'),
-            }, requiredProperties: ['list_id', 'item_id']),
-          ),
-          FunctionDeclaration(
-            'move_items',
-            'Move one or more items from one shopping list to another. Items keep '
-                'their checked state, category, and price. Get item_ids from '
-                'get_list_contents and the destination list_id from get_lists.',
-            Schema.object(properties: {
-              'from_list_id': Schema.string(description: 'List the items are on now'),
-              'to_list_id': Schema.string(description: 'Destination list ID'),
-              'item_ids': Schema.array(items: Schema.string()),
-            }, requiredProperties: ['from_list_id', 'to_list_id', 'item_ids']),
-          ),
-          FunctionDeclaration(
-            'create_list',
-            'Create a new, empty shopping list. Returns its list_id so items can '
-                'be added to it right away with add_item_to_list.',
-            Schema.object(properties: {
-              'name': Schema.string(description: 'Name of the new list'),
-            }, requiredProperties: ['name']),
-          ),
-          FunctionDeclaration(
-            'rename_list',
-            'Rename an existing shopping list.',
-            Schema.object(properties: {
-              'list_id': Schema.string(),
-              'new_name': Schema.string(description: 'The new list name'),
-            }, requiredProperties: ['list_id', 'new_name']),
-          ),
-          FunctionDeclaration(
-            'get_user_profile',
-            'Read the user\'s current profile and settings: name, age, gender, '
-                'height, diet preferences, allergies, language, theme, notifications, '
-                'calorie tracking on/off, zip code, and the calorie goal summary if one '
-                'is configured. Call this BEFORE guiding the user through settings or '
-                'goal setup, so you never re-ask something already known.',
-            Schema.object(properties: {}),
-          ),
-          FunctionDeclaration(
-            'setup_nutrition_goal',
-            'Set up (or replace) the user\'s calorie/macro goal — the same '
-                'questionnaire as the goal-setup screen, done conversationally. Pass '
-                'whatever is already known (from get_user_profile and the chat); the '
-                'tool prefills the rest from the profile and returns missing fields '
-                'to ask about. It calculates daily calorie + macro targets and saves '
-                'them. If a configured goal already exists, it returns a confirmation '
-                'question first — only pass confirm_replace=true after the user '
-                'clearly agrees.',
-            Schema.object(properties: {
-              'goal_type': Schema.string(
-                  description:
-                      'One of: lose_weight, gain_muscle, maintain, custom'),
-              'activity_level': Schema.string(
-                  description:
-                      'One of: sedentary, light, moderate, active, very_active'),
-              'age': Schema.integer(description: 'Age in years'),
-              'gender': Schema.string(
-                  description: 'male or female (used for the BMR formula)'),
-              'height_cm': Schema.number(description: 'Height in cm'),
-              'current_weight_kg': Schema.number(description: 'Current weight in kg'),
-              'target_weight_kg': Schema.number(
-                  description: 'Target weight in kg — only for lose_weight/gain_muscle'),
-              'timeline_weeks': Schema.integer(
-                  description:
-                      'Weeks to reach the target (default 12) — only for lose_weight/gain_muscle'),
-              'confirm_replace': Schema.boolean(
-                  description:
-                      'Set true only after the user agreed to replace their existing goal'),
-            }),
-          ),
-          FunctionDeclaration(
-            'get_nutrition_status',
-            'Today\'s calorie tracking status: calories/protein/carbs/fat consumed '
-                'and remaining vs. the user\'s targets, water intake, and every food '
-                'diary entry logged today (with entry ids). Use for "how many calories '
-                'do I have left", "what did I eat today", or before suggesting meals '
-                'that fit the remaining budget.',
-            Schema.object(properties: {}),
-          ),
-          FunctionDeclaration(
-            'log_food',
-            'Log a food the user ate into today\'s food diary. Only pass '
-                'calories/protein_g/carbs_g/fat_g if the user explicitly stated them; '
-                'when omitted, the tool AI-estimates nutrition from food_name + portion '
-                'and reports estimated=true.',
-            Schema.object(properties: {
-              'food_name': Schema.string(description: 'What was eaten, e.g. "banana", "Spaghetti Bolognese"'),
-              'portion': Schema.string(
-                  description: 'Amount as the user said it, e.g. "200 g", "1 slice", "a large bowl"'),
-              'meal_type': Schema.string(
-                  description: 'One of: breakfast, lunch, dinner, snack. Omit to infer from the time of day.'),
-              'calories': Schema.integer(description: 'ONLY if the user stated the calories'),
-              'protein_g': Schema.number(description: 'ONLY if the user stated it'),
-              'carbs_g': Schema.number(description: 'ONLY if the user stated it'),
-              'fat_g': Schema.number(description: 'ONLY if the user stated it'),
-            }, requiredProperties: ['food_name']),
-          ),
-          FunctionDeclaration(
-            'log_water',
-            'Log drinking water. A glass is ~250 ml, a small bottle 500 ml, a large '
-                'bottle 1000 ml.',
-            Schema.object(properties: {
-              'amount_ml': Schema.integer(description: 'Amount in ml (default 250)'),
-            }),
-          ),
-          FunctionDeclaration(
-            'log_weight',
-            'Log the user\'s current body weight for today (overwrites today\'s '
-                'earlier entry if any). Use when the user tells you what they weigh.',
-            Schema.object(properties: {
-              'weight_kg': Schema.number(description: 'Weight in kilograms'),
-            }, requiredProperties: ['weight_kg']),
-          ),
-          FunctionDeclaration(
-            'delete_food_log',
-            'Delete one entry from today\'s food diary. SAFETY: call WITHOUT confirm '
-                'first — it returns a confirmation question instead of deleting. Only '
-                'call again with confirm=true after the user explicitly agrees. Get the '
-                'entry_id from get_nutrition_status.',
-            Schema.object(properties: {
-              'entry_id': Schema.string(description: 'Diary entry id from get_nutrition_status'),
-              'food_name': Schema.string(description: 'Food name, for the confirmation question'),
-              'confirm': Schema.boolean(description: 'Set true only after the user said yes'),
-            }, requiredProperties: ['entry_id', 'food_name']),
-          ),
-          FunctionDeclaration(
-            'get_weekly_nutrition_summary',
-            'A 7-day nutrition recap: average calories/protein/carbs/fat vs. targets, '
-                'days logged, days within calorie budget, water, logging streak, cooked '
-                'meals (incl. high-protein ones), and weight change if two weigh-ins '
-                'exist this week. Use for "how was my week?" or a nutrition check-in.',
-            Schema.object(properties: {}),
-          ),
-          FunctionDeclaration(
-            'get_challenge_status',
-            'Status of the user\'s active diet challenge(s) (16:8 intermittent fasting, '
-                '30-day no sugar): current streak, whether they checked in today, '
-                'adherence rate, and days remaining for fixed-length challenges. Use for '
-                '"how\'s my fasting streak?" or "am I still on track with no sugar?". '
-                'This tool is read-only — it cannot start, check in to, or end a '
-                'challenge; that only happens in the app\'s Challenges screen.',
-            Schema.object(properties: {}),
-          ),
-          FunctionDeclaration(
-            'get_savings_summary',
-            'The user\'s total savings (in EUR) from buying items at a live '
-                'offer/deal price instead of the regular shelf price, both lifetime and '
-                'for the current calendar month (with a comparison to last month). Use '
-                'for "how much have I saved?", "has Shoply saved me money?", or "how '
-                'much did I save this month?". Only counts items where both the paid '
-                'price and the offer\'s regular price were known at the time. This '
-                'mirrors the Shopping History screen exactly, so your answer and that '
-                'screen always agree.',
-            Schema.object(properties: {}),
-          ),
-        ]),
-      ];
+  /// Restarts the session with only the last [_maxHistoryUserTurns] user
+  /// messages (and everything after them). Cuts only at a plain user text
+  /// turn so function call/response pairs stay together.
+  void _trimHistory() {
+    final session = _chatSession;
+    final model = _model;
+    if (session == null || model == null) return;
+    final history = session.history.toList();
+    final userTurnStarts = <int>[
+      for (var i = 0; i < history.length; i++)
+        if (history[i].role == 'user' &&
+            history[i].parts.any((p) => p is TextPart))
+          i,
+    ];
+    if (userTurnStarts.length <= _maxHistoryUserTurns) return;
+    final cut = userTurnStarts[userTurnStarts.length - _maxHistoryUserTurns];
+    _chatSession = model.startChat(history: history.sublist(cut));
+    // The trimmed history may have lost the context; resend it next turn.
+    _lastContextStr = null;
+  }
 
   // ── Chat entry point ─────────────────────────────────────────────
 
@@ -642,10 +163,14 @@ replies should not mention it at all.
     }
 
     try {
+      // The context (lists, items, profile) is only sent when it changed:
+      // the chat history already carries the previous one.
       final contextStr = _buildContextString(context);
-      final fullMessage = contextStr.isNotEmpty
+      final sendContext = contextStr.isNotEmpty && contextStr != _lastContextStr;
+      final fullMessage = sendContext
           ? 'Context:\n$contextStr\n\nUser: $userMessage'
           : userMessage;
+      if (sendContext) _lastContextStr = contextStr;
 
       final payloads = <AvoWidgetPayload>[];
       var response = await _chatSession!.sendMessage(Content.text(fullMessage));
@@ -664,6 +189,8 @@ replies should not mention it at all.
             await _chatSession!.sendMessage(Content.functionResponses(responses));
       }
 
+      _trimHistory();
+
       final text = (response.text ?? '').trim();
       return AvoResponse(
         message: text,
@@ -671,8 +198,15 @@ replies should not mention it at all.
         expression: _inferExpression(text, payloads),
       );
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [AVO] Chat error: $e');
+      debugPrint('❌ [AVO] Chat error: $e');
+      // A turn that failed mid function-call leaves an unanswered call in the
+      // history, which would break every later message; start over then.
+      // Either way the next message carries the context again.
+      final lastTurn = _chatSession?.history.lastOrNull;
+      if (lastTurn != null && lastTurn.parts.any((p) => p is FunctionCall)) {
+        resetChat();
+      }
+      _lastContextStr = null;
       final err = e.toString().toLowerCase();
       if (err.contains('429') || err.contains('quota') || err.contains('resource_exhausted')) {
         return const AvoResponse(
@@ -709,7 +243,7 @@ replies should not mention it at all.
         case 'get_shopping_history':
           return await _toolShoppingHistory(args, payloads);
         case 'get_lists':
-          return await _toolGetLists(payloads);
+          return await _toolGetLists(ref, payloads);
         case 'get_list_contents':
           return await _toolGetListContents(args, context, payloads);
         case 'add_item_to_list':
@@ -844,9 +378,10 @@ replies should not mention it at all.
   /// lookup every recipe-scoped tool (nutrition, add-to-list) needs.
   Future<Recipe?> _resolveRecipe(String? id, String? name) async {
     if (id != null && id.isNotEmpty) {
-      final all = await RecipeService.instance.getRecipes();
-      for (final r in all) {
-        if (r.id == id) return r;
+      try {
+        return await RecipeService.instance.getRecipeById(id);
+      } catch (_) {
+        // Not found (or a hallucinated id) — fall back to the name search.
       }
     }
     if (name != null && name.isNotEmpty) {
@@ -1002,14 +537,18 @@ replies should not mention it at all.
       debugPrint('⚠️ [AVO] add_recipe_to_list offer lookup failed: $e');
     }
 
-    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
+    // Write through the repository instead of ItemsNotifier.addItem, which
+    // reloads the whole list, marks it read and pushes to every member per
+    // item. Reload, mark-read and the push happen once at the end instead.
+    final repository = ref.read(itemRepositoryProvider);
     var added = 0;
     var addedWithOffer = 0;
     final failed = <String>[];
     for (final ingredient in ingredients) {
       final offer = ingredientOffers[ingredient.name.trim().toLowerCase()];
       try {
-        await notifier.addItem(
+        await repository.addItem(
+          listId: listId,
           name: ingredient.name,
           quantity: ingredient.amount,
           unit: ingredient.unit.isEmpty ? null : ingredient.unit,
@@ -1027,6 +566,7 @@ replies should not mention it at all.
     }
     ref.invalidate(itemsNotifierProvider(listId));
     ref.invalidate(listsNotifierProvider);
+    await _afterBulkListChange(ref, listId, addedItemName: added > 0 ? recipe.name : null);
 
     return {
       'recipe': recipe.name,
@@ -1063,9 +603,10 @@ replies should not mention it at all.
   }
 
   Future<Map<String, Object?>> _toolGetLists(
+    WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    final lists = await _fetchLists();
+    final lists = await _fetchLists(ref);
     if (lists.isNotEmpty) {
       payloads.add(AvoWidgetPayload.lists(lists));
     }
@@ -1088,7 +629,7 @@ replies should not mention it at all.
       if (firstList == null) return {'error': 'No lists available'};
       listId = firstList.id;
     }
-    final items = await _fetchListItems(listId);
+    final items = await ItemRepository.instance.getListItems(listId);
     String name = 'Shopping list';
     if (context?.lists != null) {
       for (final l in context!.lists!) {
@@ -1163,10 +704,11 @@ replies should not mention it at all.
     if (listId == null || itemIds.isEmpty) {
       return {'error': 'list_id and item_ids are required'};
     }
-    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
-    for (final id in itemIds) {
-      await notifier.toggleItemChecked(id, checked);
-    }
+    final repository = ref.read(itemRepositoryProvider);
+    await Future.wait(
+        itemIds.map((id) => repository.toggleItemChecked(id, checked)));
+    ref.invalidate(itemsNotifierProvider(listId));
+    await _afterBulkListChange(ref, listId);
     return {'updated': itemIds.length, 'checked': checked};
   }
 
@@ -1176,16 +718,14 @@ replies should not mention it at all.
   ) async {
     final listId = args['list_id'] as String?;
     if (listId == null) return {'error': 'list_id is required'};
-    final items = await _fetchListItems(listId);
-    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
-    var count = 0;
-    for (final item in items) {
-      if (!item.isChecked) {
-        await notifier.toggleItemChecked(item.id, true);
-        count++;
-      }
-    }
-    return {'checked_count': count};
+    final repository = ref.read(itemRepositoryProvider);
+    final unchecked =
+        (await repository.getListItems(listId)).where((i) => !i.isChecked).toList();
+    await Future.wait(
+        unchecked.map((item) => repository.toggleItemChecked(item.id, true)));
+    ref.invalidate(itemsNotifierProvider(listId));
+    await _afterBulkListChange(ref, listId);
+    return {'checked_count': unchecked.length};
   }
 
   Future<Map<String, Object?>> _toolAddHistoryItems(
@@ -2296,8 +1836,7 @@ replies should not mention it at all.
       if (decoded['calories'] == null) return null;
       return decoded;
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ [AVO] Food nutrition estimate failed: $e');
+      debugPrint('❌ [AVO] Food nutrition estimate failed: $e');
       return null;
     }
   }
@@ -2324,24 +1863,36 @@ replies should not mention it at all.
 
   // ── Data access helpers ──────────────────────────────────────────
 
-  Future<List<ShoppingListModel>> _fetchLists() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return [];
-    final response = await _supabase
-        .from('shopping_lists')
-        .select('*')
-        .eq('user_id', userId)
-        .order('updated_at', ascending: false);
-    return (response as List).map((j) => ShoppingListModel.fromJson(j)).toList();
+  /// Lists the user owns or is a member of, with item counts — the loaded
+  /// lists state when available, otherwise a fresh repository fetch.
+  Future<List<ShoppingListModel>> _fetchLists(WidgetRef ref) async {
+    final loaded = ref.read(listsNotifierProvider).valueOrNull;
+    if (loaded != null) return loaded;
+    if (_supabase.auth.currentUser == null) return [];
+    return ListRepository.instance.getUserLists();
   }
 
-  Future<List<ShoppingItemModel>> _fetchListItems(String listId) async {
-    final response = await _supabase
-        .from('shopping_items')
-        .select('*')
-        .eq('list_id', listId)
-        .order('created_at', ascending: false);
-    return (response as List).map((j) => ShoppingItemModel.fromJson(j)).toList();
+  /// Bookkeeping after a tool changed several items at once: mark the list
+  /// read (the user's own change must not show as unread) and, for adds,
+  /// send one push to the other members instead of one per item.
+  Future<void> _afterBulkListChange(
+    WidgetRef ref,
+    String listId, {
+    String? addedItemName,
+  }) async {
+    try {
+      await UnreadService().markAsRead(listId);
+      final userId = _supabase.auth.currentUser?.id;
+      if (addedItemName != null && userId != null) {
+        await ref.read(itemRepositoryProvider).sendItemAddedNotification(
+              listId: listId,
+              itemName: addedItemName,
+              addedByUserId: userId,
+            );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [AVO] Post-change bookkeeping failed: $e');
+    }
   }
 
   // ── Context builder ──────────────────────────────────────────────
@@ -2446,183 +1997,3 @@ replies should not mention it at all.
     }
   }
 }
-
-// ════════════════════════════════════════════════════════════════════
-// RESPONSE / PAYLOAD MODELS
-// ════════════════════════════════════════════════════════════════════
-
-class AvoResponse {
-  final String message;
-  final List<AvoWidgetPayload> payloads;
-  final AvoExpressionType expression;
-
-  const AvoResponse({
-    required this.message,
-    this.payloads = const [],
-    this.expression = AvoExpressionType.happy,
-  });
-}
-
-enum AvoExpressionType { happy, excited, thinking, confused, celebrating, waving }
-
-/// Rich content the assistant wants rendered in the chat bubble.
-/// The chat screen inspects [kind] and reads the matching fields.
-enum AvoPayloadKind {
-  recipes,
-  listItems,
-  lists,
-  history,
-  pickList,
-  nutrition,
-  settingChange,
-  appInfo,
-}
-
-class AvoWidgetPayload {
-  final AvoPayloadKind kind;
-  final List<Recipe>? recipes;
-  final List<ShoppingItemModel>? items;
-  final String? listId;
-  final String? listName;
-  final List<ShoppingListModel>? lists;
-  final List<ShoppingHistory>? history;
-  final AvoPickListData? pickListData;
-  final AvoNutritionData? nutrition;
-  final SettingChangeResult? settingChange;
-  final AvoAppInfoData? appInfo;
-
-  const AvoWidgetPayload._({
-    required this.kind,
-    this.recipes,
-    this.items,
-    this.listId,
-    this.listName,
-    this.lists,
-    this.history,
-    this.pickListData,
-    this.nutrition,
-    this.settingChange,
-    this.appInfo,
-  });
-
-  factory AvoWidgetPayload.recipes(List<Recipe> recipes) =>
-      AvoWidgetPayload._(kind: AvoPayloadKind.recipes, recipes: recipes);
-
-  factory AvoWidgetPayload.listItems({
-    required String listId,
-    required String listName,
-    required List<ShoppingItemModel> items,
-  }) =>
-      AvoWidgetPayload._(
-        kind: AvoPayloadKind.listItems,
-        listId: listId,
-        listName: listName,
-        items: items,
-      );
-
-  factory AvoWidgetPayload.lists(List<ShoppingListModel> lists) =>
-      AvoWidgetPayload._(kind: AvoPayloadKind.lists, lists: lists);
-
-  factory AvoWidgetPayload.history(List<ShoppingHistory> history) =>
-      AvoWidgetPayload._(kind: AvoPayloadKind.history, history: history);
-
-  factory AvoWidgetPayload.pickList({
-    required String itemName,
-    required double quantity,
-    String? unit,
-  }) =>
-      AvoWidgetPayload._(
-        kind: AvoPayloadKind.pickList,
-        pickListData: AvoPickListData(itemName: itemName, quantity: quantity, unit: unit),
-      );
-
-  factory AvoWidgetPayload.nutrition({
-    required String recipeName,
-    required int servings,
-    int? calories,
-    double? proteinG,
-    double? carbsG,
-    double? fatG,
-    bool estimated = false,
-  }) =>
-      AvoWidgetPayload._(
-        kind: AvoPayloadKind.nutrition,
-        nutrition: AvoNutritionData(
-          recipeName: recipeName,
-          servings: servings,
-          calories: calories,
-          proteinG: proteinG,
-          carbsG: carbsG,
-          fatG: fatG,
-          estimated: estimated,
-        ),
-      );
-
-  factory AvoWidgetPayload.settingChange(SettingChangeResult result) =>
-      AvoWidgetPayload._(kind: AvoPayloadKind.settingChange, settingChange: result);
-
-  factory AvoWidgetPayload.appInfo({required String topic, required String answer}) =>
-      AvoWidgetPayload._(
-        kind: AvoPayloadKind.appInfo,
-        appInfo: AvoAppInfoData(topic: topic, answer: answer),
-      );
-}
-
-class AvoPickListData {
-  final String itemName;
-  final double quantity;
-  final String? unit;
-  const AvoPickListData({required this.itemName, this.quantity = 1, this.unit});
-}
-
-class AvoNutritionData {
-  final String recipeName;
-  final int servings;
-  final int? calories;
-  final double? proteinG;
-  final double? carbsG;
-  final double? fatG;
-  final bool estimated;
-  const AvoNutritionData({
-    required this.recipeName,
-    required this.servings,
-    this.calories,
-    this.proteinG,
-    this.carbsG,
-    this.fatG,
-    this.estimated = false,
-  });
-}
-
-class AvoAppInfoData {
-  final String topic;
-  final String answer;
-  const AvoAppInfoData({required this.topic, required this.answer});
-}
-
-class AvoContext {
-  final List<ShoppingListModel>? lists;
-  final List<ShoppingItemModel>? currentListItems;
-  final String? currentListId;
-  final List<Recipe>? recentRecipes;
-  final List<String>? recentHistoryItems;
-  final Map<String, List<ShoppingItemModel>>? allListItems;
-  final List<String>? dietPreferences;
-  final List<String>? allergies;
-  final String? userName;
-  final List<String>? appPriorities;
-
-  AvoContext({
-    this.lists,
-    this.currentListItems,
-    this.currentListId,
-    this.recentRecipes,
-    this.recentHistoryItems,
-    this.allListItems,
-    this.dietPreferences,
-    this.allergies,
-    this.userName,
-    this.appPriorities,
-  });
-}
-
