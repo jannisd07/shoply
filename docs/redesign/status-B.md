@@ -46,6 +46,14 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
     `lists/<id>?focus=add`, `avo/voice`, `plan?day=`, `calories/water?ml=`.
 11. ~~Prio 4 – `ShoppingItemModel.barcode`~~ gibt es schon (laut A), erledigt.
 
+13. **Nach den Angebots-Slots (d5aff5a):** A-C1 `ItemRow` übernimmt eine Custom Action aus dem Trailing-Slot
+    („Angebot ansehen“) in die Zeilen-Semantik, plus Kontextmenü im Einkaufsmodus; A-C3 `ListOfferSummary(listId:,
+    shoppingMode:)` oder Provider „Einkaufsmodus aktiv“ + Session-Start (bis dahin erkennt B `ShoppingModeHeader` als
+    Vorfahre); Listen-Screen: einklappende Polsterung um `ListOfferSummary` (heute 24 pt Lücke ohne Inhalt); A-C8
+    Menü-Titelzeile mit Glyphe; A-C10 Icons `storefront`, `questionmarkCircle`; A-T2 `ContentGlass` ≥ 92 % für
+    Text-Pillen; A-L1 Listen-Info „Markt“ → `openStorePicker(…, from: StorePickerOrigin.info)`; A-D1
+    Preis-Schnittstelle in `ItemRepository`; A-Q1 `owner.sh`: `test/layout/screens/b/*` gehört B.
+
 Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
 5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald
 `categorizeLocal` gepusht ist). Danke auch für `addItems`/`undoAddItems` und `parseItemInput`: Der Wochenplan und Avo
