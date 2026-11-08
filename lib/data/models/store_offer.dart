@@ -107,12 +107,6 @@ class StoreOffer {
     return !_nonFoodCategories.any((c) => cat.contains(c));
   }
 
-  /// Retailer images are not licensed (Kap. 12, rule 7): always empty, so
-  /// no image is ever loaded from the offers source. Kept only for
-  /// `weekly_deals_screen.dart` until it shows the category symbol.
-  @Deprecated('Retailer images are not licensed; show the category symbol')
-  String get imageUrl => '';
-
   /// "statt" prices the retailer states itself. A UVP is the manufacturer's
   /// recommendation, not the retailer's former price, so it never counts.
   static final _regularPricePattern = RegExp(

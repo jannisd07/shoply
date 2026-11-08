@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
 import 'package:shoply/core/design/design.dart';
-import 'package:shoply/presentation/screens/offers/widgets/offer_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 // D2 offer pill (D2-Komponenten, D2-Liste, X-Einkaufsmodus `.offer`).
@@ -90,7 +89,7 @@ class OfferPriceTag extends StatelessWidget {
       children: [
         if (uncertain) ...[
           AvoIcon(
-            OfferIcons.questionmarkCircle,
+            AvoIcons.questionmarkCircle,
             size: large
                 ? context.typography.sizeOf(AvoTextStyle.title1)
                 : MediaQuery.textScalerOf(context).scale(_kSmallIcon),

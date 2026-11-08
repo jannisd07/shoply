@@ -252,17 +252,19 @@ class ListOfferSync {
 
   /// The snapshot of [listId] at [chainId] around [zip] for [itemNames];
   /// fetched only when there is none for that market and region or it is
-  /// older than [maxAge].
+  /// older than [maxAge]. [force] fetches anyway (pull to refresh, "Erneut
+  /// versuchen": a person's action, never a background one).
   Future<ListOfferSnapshot> sync({
     required String listId,
     required String chainId,
     required String zip,
     required List<String> itemNames,
+    bool force = false,
   }) async {
     final cached = _memory.remove(listId) ?? await _load(listId);
     if (cached != null) {
       _remember(listId, cached);
-      if (_isCurrent(cached, chainId, zip)) return cached;
+      if (!force && _isCurrent(cached, chainId, zip)) return cached;
     }
     final key = '$listId|$chainId|$zip';
     // Block body: an arrow would return the removed future, i.e. this very
@@ -271,6 +273,29 @@ class ListOfferSync {
         _fetch(listId, chainId, zip, itemNames).whenComplete(() {
       _inFlight.remove(key);
     });
+  }
+
+  /// Counts [offer] for an item called [name] that the person just put on
+  /// [listId] from an offer ("oft gekauft" in S9): it joins the list's
+  /// snapshot at [chainId] without a request, so the line and the pill
+  /// count it at once. Nothing without a snapshot of that market.
+  Future<void> attach({
+    required String listId,
+    required String chainId,
+    required String name,
+    required StoreOffer offer,
+  }) async {
+    final known = _memory[listId] ?? await _load(listId);
+    if (known == null || known.chainId != chainId) return;
+    final next = ListOfferSnapshot(
+      chainId: known.chainId,
+      zip: known.zip,
+      fetchedAt: known.fetchedAt,
+      offersByName: {...known.offersByName, offerNameKey(name): offer},
+      complete: known.complete,
+    );
+    _remember(listId, next);
+    if (next.complete) await _save(listId, next);
   }
 
   /// The snapshot of [listId] already in memory, without any wait.
@@ -389,6 +414,28 @@ final listOfferSnapshotProvider =
     );
   },
 );
+
+/// Fetches the offers of [listId] again (pull to refresh, "Erneut
+/// versuchen" in S9) and shows them: the one place a person's action renews
+/// a snapshot before its 6 h are over. Nothing without a market, a region
+/// or open items, or while offers may not show on the list.
+Future<void> refreshListOffers(WidgetRef ref, String listId) async {
+  final region = ref.read(regionProvider);
+  final chainId = ref.read(storeForListProvider(listId))?.id;
+  final names = _openNamesKey(ref.read(offerListItemsProvider(listId)));
+  if (region == null || chainId == null || names.isEmpty) return;
+  if (!ref.read(offersVisibleForListProvider(listId))) return;
+  await ref
+      .read(listOfferSyncProvider)
+      .sync(
+        listId: listId,
+        chainId: chainId,
+        zip: region.zip,
+        itemNames: names.split('\n'),
+        force: true,
+      );
+  ref.invalidate(listOfferSnapshotProvider(listId));
+}
 
 String _openNamesKey(List<ShoppingItemModel> items) => [
       for (final item in items)

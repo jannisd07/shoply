@@ -29,8 +29,9 @@ class RecipeOfferService {
   static const maxCheckedIngredients = 10;
   static const _maxCachedRecipes = 12;
 
-  /// Pantry staples nobody buys because of a single recipe — skipped so the
-  /// card never leads with "Salz ist im Angebot".
+  /// Pantry staples nobody buys because of a single recipe (salt, pepper,
+  /// water, oil, sugar; `angebote.md` S15) — skipped so the row never leads
+  /// with "Salz ist im Angebot".
   static const Set<String> _staples = {
     'wasser',
     'water',
@@ -42,6 +43,17 @@ class RecipeOfferService {
     'salz & pfeffer',
     'salt and pepper',
     'salt & pepper',
+    'öl',
+    'oel',
+    'oil',
+    'olivenöl',
+    'olive oil',
+    'pflanzenöl',
+    'sonnenblumenöl',
+    'rapsöl',
+    'vegetable oil',
+    'zucker',
+    'sugar',
   };
 
   /// Offers for [ingredientNames] around [zipCode], via the persistent cache
@@ -74,6 +86,22 @@ class RecipeOfferService {
     // Don't pin a transient API failure (empty result) for [cacheTtl].
     if (fetched.complete) await _saveCached(result);
     return result;
+  }
+
+  /// What an earlier [getOffers] for exactly this recipe, region, market and
+  /// ingredients left on the device (at most [cacheTtl] old), without any
+  /// request; null when nothing is cached.
+  Future<RecipeOffersResult?> cachedOffers({
+    required String recipeId,
+    required List<String> ingredientNames,
+    required String zipCode,
+    String? chainId,
+  }) {
+    final names = eligibleIngredientNames(ingredientNames);
+    return _loadCached(
+      recipeId,
+      '$recipeId|$zipCode|${chainId ?? ''}|${names.join(',')}',
+    );
   }
 
   /// The relevant current offer for each of [names] around [zipCode], in
@@ -114,7 +142,6 @@ class RecipeOfferService {
   /// de-duplicated case-insensitively (keeping first spelling and order),
   /// capped at [maxCheckedIngredients] to bound API cost for very long
   /// ingredient lists.
-  @visibleForTesting
   static List<String> eligibleIngredientNames(List<String> raw) {
     final seen = <String>{};
     final result = <String>[];

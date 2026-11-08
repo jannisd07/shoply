@@ -6,7 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 
 export 'package:shoply/data/services/user_location_service.dart'
-    show Region, RegionSource, isValidZip;
+    show
+        LocateOutcome,
+        LocateResult,
+        Region,
+        RegionSource,
+        isKnownZip,
+        isValidZip;
 
 /// Where the region comes from; override in tests.
 final regionLookupProvider =
@@ -73,12 +79,28 @@ class RegionController extends StateNotifier<RegionState> {
     return true;
   }
 
-  /// "Region entfernen": the typed zip code goes; a known location stays.
-  Future<void> clearManualZip() => _lookup.setManualZipCode('');
+  /// "Standort verwenden" (S11, S14): the one place that may show the
+  /// system location prompt (after the screen explained why). Finds the zip
+  /// code without saving it; [saveRegion] keeps it.
+  Future<LocateResult> locate() => _lookup.locate();
 
-  /// "Standort verwenden": the one place that may show the system location
-  /// prompt (after the screen explained why).
-  Future<void> useLocation() => _load(allowPermissionPrompt: true);
+  /// Keeps [region]: a typed one as the typed zip code, a located one as
+  /// the location. Shows at once.
+  Future<void> saveRegion(Region region) async {
+    if (region.source == RegionSource.manual) {
+      await setManualZip(region.zip);
+    } else {
+      await _lookup.saveLocatedRegion(region);
+    }
+    if (mounted) state = RegionState(loaded: true, region: region);
+  }
+
+  /// "Region entfernen": no region until the person sets one again. Shows
+  /// at once.
+  Future<void> remove() async {
+    if (mounted) state = const RegionState(loaded: true);
+    await _lookup.removeRegion();
+  }
 
   @override
   void dispose() {

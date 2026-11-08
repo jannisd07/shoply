@@ -4,26 +4,49 @@ import 'package:go_router/go_router.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/modules/app_modules.dart';
+import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
-import 'package:shoply/presentation/screens/home/weekly_deals_screen.dart';
+import 'package:shoply/presentation/screens/offers/favorite_markets_screen.dart';
+import 'package:shoply/presentation/screens/offers/list_offers_screen.dart';
 import 'package:shoply/presentation/screens/offers/offer_detail_screen.dart';
 import 'package:shoply/presentation/screens/offers/offer_paths.dart';
+import 'package:shoply/presentation/screens/offers/recipe_offers_screen.dart';
+import 'package:shoply/presentation/screens/offers/region_screen.dart';
 import 'package:shoply/presentation/screens/offers/store_picker_screen.dart';
+import 'package:shoply/presentation/screens/offers/weekly_offers_screen.dart';
+import 'package:shoply/presentation/screens/profile/settings/offers_settings_screen.dart';
 import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/module_gate.dart';
 import 'package:shoply/routes/route_error_screen.dart';
 
 // Angebote (Teil B). Same contract as avo_routes.dart.
 
-/// The screen at RoutePaths.offers ("Angebote der Woche"; full screen until
-/// S2, then in the Listen tab).
-Widget buildOffersRoot(BuildContext context, GoRouterState state) =>
-    const WeeklyDealsScreen();
+/// The screen at RoutePaths.offers ("Angebote der Woche", S10, pushed in
+/// the Listen tab): `filter=regulars` opens "Oft gekauft", `q=` fills the
+/// search. A's module gate wraps it; the kill switch shows the error page.
+Widget buildOffersRoot(BuildContext context, GoRouterState state) {
+  final query = state.uri.queryParameters;
+  return _OffersGate(
+    child: WeeklyOffersScreen(
+      regulars: query['filter'] == 'regulars',
+      query: query['q'],
+    ),
+  );
+}
 
 /// Children of the area root, with paths relative to it. They open in the
 /// root's navigator; add `parentNavigatorKey: rootNavigatorKey` to open one
 /// full screen above the tab bar.
-final List<RouteBase> offersChildRoutes = [];
+final List<RouteBase> offersChildRoutes = [
+  // "Angebote bei {Markt}" (S9), in the Listen tab; back leads to where it
+  // was pushed from (the list), not to `/offers`.
+  GoRoute(
+    path: offerListChildPattern,
+    builder: (context, state) => _OffersGate(
+      child: ListOffersScreen(listId: state.pathParameters['listId'] ?? ''),
+    ),
+  ),
+];
 
 /// Further roots inside a tab, with absolute paths (see RoutePaths for the
 /// prefixes reserved for Teil B). Teil A places them in that tab's branch.
@@ -53,8 +76,30 @@ final List<RouteBase> offersRootRoutes = [
       );
     },
   ),
+  // "Angebote für {Rezept}" (S15); the recipe detail hands the recipe over.
+  GoRoute(
+    path: offerRecipePattern,
+    builder: (context, state) {
+      final query = state.uri.queryParameters;
+      final listId = query['list'];
+      if (listId == null || listId.isEmpty) return const RouteErrorScreen();
+      final extra = state.extra;
+      return _OffersGate(
+        child: RecipeOffersScreen(
+          recipeId: state.pathParameters['recipeId'] ?? '',
+          listId: listId,
+          recipe: extra is Recipe ? extra : null,
+          servings: int.tryParse(query['servings'] ?? ''),
+        ),
+      );
+    },
+  ),
   // Core ("Markt pro Liste"): open with the module off and the kill switch
   // on too.
+  GoRoute(
+    path: storeRegionPath,
+    builder: (context, state) => const RegionScreen(fullScreen: true),
+  ),
   GoRoute(
     path: storePickerPath,
     builder: (context, state) {
@@ -71,8 +116,25 @@ final List<RouteBase> offersRootRoutes = [
 ];
 
 /// Settings pages, with paths relative to RoutePaths.settings (e.g. 'offers').
-/// They open in the Profil tab.
-final List<RouteBase> offersSettingsRoutes = [];
+/// They open in the Profil tab. Not gated: "Preise & Angebote" changes its
+/// content with the module and the kill switch (S12), region and favourite
+/// markets are core.
+final List<RouteBase> offersSettingsRoutes = [
+  GoRoute(
+    path: 'offers',
+    builder: (context, state) => const OffersSettingsScreen(),
+    routes: [
+      GoRoute(
+        path: 'region',
+        builder: (context, state) => const RegionScreen(),
+      ),
+      GoRoute(
+        path: 'markets',
+        builder: (context, state) => const FavoriteMarketsScreen(),
+      ),
+    ],
+  ),
+];
 
 /// The guard of an offers route (`angebote.md` 1.3).
 ///

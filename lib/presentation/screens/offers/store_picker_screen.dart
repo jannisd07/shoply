@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/store_chain_directory.dart';
+import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
 import 'package:shoply/presentation/providers/store_choice_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/offers/offer_paths.dart';
@@ -70,24 +71,7 @@ class _StorePickerScreenState extends ConsumerState<StorePickerScreen> {
     context.pop(choice);
   }
 
-  bool _matches(String chainId) {
-    final q = _query.trim();
-    if (q.isEmpty) return true;
-    final chain = StoreChainDirectory.byId(chainId);
-    if (chain == null) return false;
-    final needle = _fold(q);
-    final names = [chain.displayName, chain.id, ...chain.aliases];
-    if (names.any((n) => _fold(n).contains(needle))) return true;
-    return matchChain(q) == chainId;
-  }
-
-  static String _fold(String text) => text
-      .toLowerCase()
-      .replaceAll('ä', 'ae')
-      .replaceAll('ö', 'oe')
-      .replaceAll('ü', 'ue')
-      .replaceAll('ß', 'ss')
-      .replaceAll(RegExp('[^a-z0-9]'), '');
+  bool _matches(String chainId) => storeMatchesQuery(chainId, _query);
 
   @override
   Widget build(BuildContext context) {
@@ -104,11 +88,12 @@ class _StorePickerScreenState extends ConsumerState<StorePickerScreen> {
     final nearby =
         ref.watch(nearbyStoreOptionsProvider).valueOrNull ?? const [];
 
-    final yours = <String>[
+    final favorites = ref.watch(favoriteStoresProvider);
+    final yours = <String>{
       if (current != null) current,
-      for (final id in history)
-        if (id != current && StoreChainDirectory.byId(id) != null) id,
-    ].where(_matches).toList();
+      for (final id in [...favorites, ...history])
+        if (StoreChainDirectory.byId(id) != null) id,
+    }.where(_matches).toList();
     final near = nearby.where((n) => _matches(n.chainId)).toList();
     final all =
         [
@@ -322,6 +307,7 @@ class _StoreRowState extends State<_StoreRow> {
     // "Lidl, ausgewählt": VoiceOver adds the state from [selected].
     final label = widget.semanticLabel ?? widget.title;
     return Semantics(
+      container: true,
       button: true,
       selected: widget.checked,
       label: label,

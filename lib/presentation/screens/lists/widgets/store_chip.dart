@@ -10,7 +10,6 @@ import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart'
 import 'package:shoply/presentation/providers/store_choice_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/offers/store_menu.dart';
-import 'package:shoply/presentation/screens/offers/widgets/offer_icons.dart';
 import 'package:shoply/presentation/screens/offers/widgets/store_mark.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
@@ -66,10 +65,14 @@ class StoreChip extends ConsumerWidget {
 
     final known =
         guess != null && StoreChainDirectory.byId(guess.chainId) != null;
+    final detect = ref.watch(storeDetectionOnProvider);
     final state = !known
         ? _ChipState.none
         : guess.confirmed
         ? _ChipState.store
+        // "Markt automatisch erkennen" off (S12): no suggestions.
+        : !detect
+        ? _ChipState.none
         // "Nicht fragen" is only read for a suggestion.
         : ref.watch(
                 offerDisplayPrefsProvider.select(
@@ -101,7 +104,7 @@ class StoreChip extends ConsumerWidget {
         );
       case _ChipState.none:
         lead = AvoIcon(
-          OfferIcons.storefront,
+          AvoIcons.storefront,
           size: MediaQuery.textScalerOf(context).scale(_kStorefront),
           color: colors.secondaryLabel,
         );

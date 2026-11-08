@@ -41,6 +41,45 @@ class Region {
 /// Whether [zip] is a German zip code: exactly five digits.
 bool isValidZip(String zip) => RegExp(r'^\d{5}$').hasMatch(zip);
 
+/// Whether [zip] can be a German zip code at all: five digits from 01001 to
+/// 99998 (no zone "00"). Without a zip table (Lücke L10) this is the only
+/// check "Diese Postleitzahl kennen wir nicht." can make.
+bool isKnownZip(String zip) {
+  if (!isValidZip(zip)) return false;
+  final n = int.parse(zip);
+  return n >= 1001 && n <= 99998;
+}
+
+/// What "Standort verwenden" found out (S11, S14).
+enum LocateOutcome {
+  /// A German zip code (and town, when known).
+  found,
+
+  /// The person declined location access (or declined it before).
+  denied,
+
+  /// No fix in time, location services off, or no address for it.
+  unavailable,
+
+  /// The location is outside Germany: there are no offers there.
+  abroad,
+}
+
+/// The answer of [RegionLookup.locate]. Nothing of it is saved yet.
+@immutable
+class LocateResult {
+  const LocateResult(this.outcome, {this.region, this.coordinates});
+
+  final LocateOutcome outcome;
+
+  /// Set for [LocateOutcome.found].
+  final Region? region;
+
+  /// The fix itself, in memory only (distances to nearby markets in S14);
+  /// never stored ("Gespeichert wird nur die Postleitzahl").
+  final UserCoordinates? coordinates;
+}
+
 /// What the region provider reads and writes; [UserLocationService] in the
 /// app, a fake in tests.
 abstract interface class RegionLookup {
@@ -53,6 +92,19 @@ abstract interface class RegionLookup {
 
   /// Saves a typed zip code; an empty string removes it.
   Future<void> setManualZipCode(String zip);
+
+  /// "Standort verwenden": asks for permission when needed (the screen has
+  /// explained why), takes one fix within 3 s and resolves its zip code.
+  /// Saves nothing.
+  Future<LocateResult> locate();
+
+  /// Keeps [region] (found by [locate]) as the person's region: it replaces
+  /// a typed zip code.
+  Future<void> saveLocatedRegion(Region region);
+
+  /// "Region entfernen": no typed zip code, no remembered location, and no
+  /// new one from the background either, until the person sets one again.
+  Future<void> removeRegion();
 
   /// Fires after every change of the region, from whichever screen.
   Stream<void> get changes;
@@ -84,6 +136,13 @@ class UserLocationService implements RegionLookup {
   static const _manualZipKey = 'offers_zip_manual';
   static const _cacheMaxAge = Duration(hours: 24);
 
+  /// Set by "Region entfernen": the background never finds a region again
+  /// until the person types a zip code or uses the location.
+  static const _removedKey = 'offers_region_removed_v1';
+
+  /// "Standort verwenden" waits at most this long for a fix (S11).
+  static const _locateTimeLimit = Duration(seconds: 3);
+
   static const _latKey = 'offers_lat_v1';
   static const _lonKey = 'offers_lon_v1';
   static const _coordsTimeKey = 'offers_coords_fetched_at_v1';
@@ -112,6 +171,7 @@ class UserLocationService implements RegionLookup {
     if (manual != null && manual.isNotEmpty) {
       return Region(zip: manual, source: RegionSource.manual);
     }
+    if (prefs.getBool(_removedKey) ?? false) return null;
 
     Region? cachedGps() {
       final zip = prefs.getString(_zipKey);
@@ -176,7 +236,94 @@ class UserLocationService implements RegionLookup {
       await prefs.remove(_manualZipKey);
     } else {
       await prefs.setString(_manualZipKey, trimmed);
+      await prefs.remove(_removedKey);
     }
+    _changes.add(null);
+  }
+
+  @override
+  Future<LocateResult> locate() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return const LocateResult(LocateOutcome.unavailable);
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return const LocateResult(LocateOutcome.denied);
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+          timeLimit: _locateTimeLimit,
+        ),
+      );
+      final coordinates = UserCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      var foreign = false;
+      for (final p in placemarks) {
+        final country = p.isoCountryCode?.toUpperCase();
+        final isGerman =
+            country == 'DE' ||
+            p.country == 'Deutschland' ||
+            p.country == 'Germany';
+        final zip = p.postalCode;
+        if (isGerman && zip != null && isValidZip(zip)) {
+          final city = p.locality?.trim();
+          return LocateResult(
+            LocateOutcome.found,
+            region: Region(
+              zip: zip,
+              city: city == null || city.isEmpty ? null : city,
+              source: RegionSource.gps,
+            ),
+            coordinates: coordinates,
+          );
+        }
+        if (country != null && country != 'DE') foreign = true;
+      }
+      return LocateResult(
+        foreign ? LocateOutcome.abroad : LocateOutcome.unavailable,
+        coordinates: coordinates,
+      );
+    } catch (e) {
+      debugPrint('⚠️ [LOCATION] No location for the region: $e');
+      return const LocateResult(LocateOutcome.unavailable);
+    }
+  }
+
+  @override
+  Future<void> saveLocatedRegion(Region region) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_manualZipKey);
+    await prefs.remove(_removedKey);
+    await prefs.setString(_zipKey, region.zip);
+    await prefs.setString(_zipTimeKey, DateTime.now().toIso8601String());
+    final city = region.city;
+    if (city == null) {
+      await prefs.remove(_cityKey);
+    } else {
+      await prefs.setString(_cityKey, city);
+    }
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> removeRegion() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in [_manualZipKey, _zipKey, _zipTimeKey, _cityKey]) {
+      await prefs.remove(key);
+    }
+    await prefs.setBool(_removedKey, true);
     _changes.add(null);
   }
 

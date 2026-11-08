@@ -1038,11 +1038,10 @@ class AvoAssistantService {
     };
   }
 
-  /// Chat-facing version of the home screen's "Angebote" strip
-  /// (`PersonalizedDealsService`/`personalizedDealsProvider`, Feature 8's
-  /// eleventh session) — reuses the exact same provider the home screen
-  /// strip and `WeeklyDealsScreen` already read from, rather than re-pooling
-  /// list items itself, so a chat answer and the home screen never disagree.
+  /// Chat-facing version of the offers on the person's lists
+  /// (`personalizedDealsProvider`): it shares the 6-h list snapshots with
+  /// the list screen and "Angebote der Woche", rather than re-pooling list
+  /// items itself, so a chat answer and the screens never disagree.
   Future<Map<String, Object?>> _toolGetPersonalizedDeals(
     Map<String, Object?> args,
     WidgetRef ref,

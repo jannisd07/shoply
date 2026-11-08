@@ -23,6 +23,9 @@ import 'package:shoply/presentation/screens/offers/offer_text.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 
+/// How long an add waits for the items of a list that is not open yet.
+const Duration _itemsWait = Duration(seconds: 3);
+
 /// How long "Nicht dieses Angebot" holds for an offer without an end date.
 const Duration _declineWithoutEnd = Duration(days: 7);
 
@@ -198,7 +201,10 @@ Future<void> declineOffer(
 /// new item with [quantity] and [unit] and the offer's price is added.
 ///
 /// [listName] set: toast "Milch auf Wocheneinkauf · Widerrufen" for a new
-/// item; an attached offer always says "Angebot an Milch angehängt". Once
+/// item; an attached offer says "Angebot an Milch angehängt", or with
+/// [otherList] (put on from outside the list, S10) "Angebot an Milch auf
+/// Wocheneinkauf angehängt". A list that is not open yet is read first, so
+/// an open "Milch" is never added a second time. Once
 /// saved, VoiceOver hears "Milch hinzugefügt, im Angebot" or "Angebot an
 /// Milch angehängt". Returns false when the write failed (the toast then
 /// says "Nicht hinzugefügt" or "Preis nicht gespeichert"), so the caller
@@ -211,6 +217,7 @@ Future<bool> addOfferToList(
   double quantity = 1,
   String? unit,
   String? listName,
+  bool otherList = false,
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final notifier = container.read(itemsNotifierProvider(listId).notifier);
@@ -218,17 +225,19 @@ Future<bool> addOfferToList(
   final direction = Directionality.of(context);
   final trimmed = name.trim();
   final key = trimmed.toLowerCase();
-  final items =
-      container.read(itemsNotifierProvider(listId)).valueOrNull ?? const [];
+  final items = await _itemsOf(container, listId);
+  if (!toastContext.mounted) return false;
   final open = items
       .where((i) => !i.isChecked && i.name.trim().toLowerCase() == key)
       .firstOrNull;
 
   if (open != null) {
-    final attached = toastContext.tr(
-      'offer_toast_attached',
-      params: {'item': open.name},
-    );
+    final attached = otherList && listName != null
+        ? toastContext.tr(
+            'offer_toast_attached_list',
+            params: {'item': open.name, 'list': listName},
+          )
+        : toastContext.tr('offer_toast_attached', params: {'item': open.name});
     final saved = await _writePrice(
       toastContext,
       listId: listId,
@@ -276,6 +285,7 @@ Future<bool> addOfferToList(
               quantity: quantity,
               unit: unit,
               listName: listName,
+              otherList: otherList,
             ),
           );
         },
@@ -312,6 +322,112 @@ Future<bool> addOfferToList(
           : () => unawaited(_quietly(notifier.deleteItem(added.id))),
     );
   }
+  return true;
+}
+
+/// The items of [listId]. A list that is open (its items are watched) is
+/// read as it is; one that was not open yet is loaded first, waiting up to
+/// [_itemsWait] (empty when it does not load).
+Future<List<ShoppingItemModel>> _itemsOf(
+  ProviderContainer container,
+  String listId,
+) async {
+  final provider = itemsNotifierProvider(listId);
+  final open = container.exists(provider);
+  final now = container.read(provider);
+  if (now.hasValue || open) return now.valueOrNull ?? const [];
+  final notifier = container.read(provider.notifier);
+  try {
+    final loaded = await notifier.stream
+        .firstWhere((s) => s.hasValue || s.hasError)
+        .timeout(_itemsWait);
+    return loaded.valueOrNull ?? const [];
+  } catch (_) {
+    return container.read(provider).valueOrNull ?? const [];
+  }
+}
+
+/// Puts [name] on [listId] without the offer, because [offer] does not
+/// apply at that list's market (S10 "Angebot gilt dort nicht"): an open
+/// item of that name stays as it is; toast "Haferflocken auf Wocheneinkauf
+/// · Angebot gilt nur bei Lidl · Widerrufen".
+Future<bool> addWithoutOffer(
+  BuildContext context, {
+  required String listId,
+  required String listName,
+  required String name,
+  required StoreOffer offer,
+  double quantity = 1,
+}) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final notifier = container.read(itemsNotifierProvider(listId).notifier);
+  final toastContext = _toastContext(context);
+  final direction = Directionality.of(context);
+  final trimmed = name.trim();
+  final key = trimmed.toLowerCase();
+  final items = await _itemsOf(container, listId);
+  final message = toastContext.mounted
+      ? toastContext.tr(
+          'offer_toast_added_no_offer',
+          params: {
+            'item': trimmed,
+            'list': listName,
+            'store': offerStoreName(offer),
+          },
+        )
+      : '';
+  if (items.any((i) => !i.isChecked && i.name.trim().toLowerCase() == key)) {
+    if (toastContext.mounted) AvoToast.show(toastContext, message: message);
+    return true;
+  }
+  final started = DateTime.now();
+  try {
+    await notifier.addItem(name: trimmed, quantity: quantity, autoParse: false);
+  } catch (e) {
+    debugPrint('❌ [OFFERS] Item not put on the list: $e');
+    unawaited(AvoHaptics.error());
+    if (toastContext.mounted) {
+      AvoToast.show(
+        toastContext,
+        message: toastContext.tr('offer_toast_add_failed'),
+        actionLabel: toastContext.tr('common_try_again'),
+        onAction: () {
+          if (!toastContext.mounted) return;
+          unawaited(
+            addWithoutOffer(
+              toastContext,
+              listId: listId,
+              listName: listName,
+              name: name,
+              offer: offer,
+              quantity: quantity,
+            ),
+          );
+        },
+      );
+    }
+    return false;
+  }
+  if (!toastContext.mounted) return true;
+  _announce(toastContext, message, direction);
+  final added =
+      (container.read(itemsNotifierProvider(listId)).valueOrNull ??
+              const <ShoppingItemModel>[])
+          .where(
+            (i) =>
+                i.name.trim().toLowerCase() == key &&
+                !i.id.startsWith('pending-') &&
+                !i.createdAt.isBefore(started.subtract(_addedWindow)),
+          )
+          .lastOrNull;
+  AvoToast.show(
+    toastContext,
+    message: message,
+    actionLabel: added == null ? null : toastContext.tr('common_undo'),
+    onAction: added == null
+        ? null
+        : () => unawaited(_quietly(notifier.deleteItem(added.id))),
+  );
   return true;
 }
 

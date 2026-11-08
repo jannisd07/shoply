@@ -49,3 +49,56 @@ String offerDetailLocation(
     if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
   },
 ).toString();
+
+/// "Angebote der Woche" (S10), the root in the Listen tab. [regulars] opens
+/// the segment "Oft gekauft" (`filter=regulars`), [query] fills the search
+/// (`q=`, from Avo).
+String weeklyOffersLocation({bool regulars = false, String? query}) => Uri(
+  path: RoutePaths.offers,
+  queryParameters: {
+    if (regulars) 'filter': 'regulars',
+    if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+  },
+).toString().replaceFirst(RegExp(r'\?$'), '');
+
+/// "Angebote bei {Markt}" (S9), a child of `/offers` in the Listen tab.
+const String offerListChildPattern = 'list/:listId';
+
+/// `/offers/list/:listId`.
+String offerListLocation(String listId) =>
+    '${RoutePaths.offers}/list/${Uri.encodeComponent(listId)}';
+
+/// "Angebote für {Rezept}" (S15), full screen above the tab bar.
+const String offerRecipePattern = '${RoutePaths.offers}/recipe/:recipeId';
+
+/// `/offers/recipe/:recipeId?list=…&servings=…`.
+String offerRecipeLocation(
+  String recipeId, {
+  required String listId,
+  int? servings,
+}) => Uri(
+  path: '${RoutePaths.offers}/recipe/${Uri.encodeComponent(recipeId)}',
+  queryParameters: {
+    'list': listId,
+    if (servings != null) 'servings': '$servings',
+  },
+).toString();
+
+/// Region (S11) full screen above the tab bar (core).
+const String storeRegionPath = '${RoutePaths.stores}/region';
+
+/// Where the region screen was opened from (`from=`).
+enum RegionOrigin { list, offers, panel, avo }
+
+/// `/stores/region?from=…`; returns `true` when a region was saved.
+String storeRegionLocation({RegionOrigin from = RegionOrigin.list}) =>
+    '$storeRegionPath?from=${from.name}';
+
+/// "Preise & Angebote" (S12) in the Profil tab.
+const String offersSettingsPath = '${RoutePaths.settings}/offers';
+
+/// Region (S11) inside the Profil tab.
+const String offersSettingsRegionPath = '$offersSettingsPath/region';
+
+/// "Lieblingsmärkte" (S13) inside the Profil tab.
+const String offersSettingsMarketsPath = '$offersSettingsPath/markets';

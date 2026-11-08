@@ -18,13 +18,35 @@ import 'package:shoply/presentation/providers/region_provider.dart';
 import 'package:shoply/presentation/providers/store_choice_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/offers/offer_paths.dart';
-import 'package:shoply/presentation/screens/offers/widgets/offer_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 
 /// Display name of a directory chain ("REWE"), else the id.
 String storeNameOf(String chainId) =>
     StoreChainDirectory.byId(chainId)?.displayName ?? chainId;
+
+/// Whether the directory chain [chainId] matches a market search: its
+/// name, id or an alias contains [query] (umlauts folded), or [query] is a
+/// typo of it ("lidel" finds Lidl). An empty query matches everything.
+bool storeMatchesQuery(String chainId, String query) {
+  final q = query.trim();
+  if (q.isEmpty) return true;
+  final chain = StoreChainDirectory.byId(chainId);
+  if (chain == null) return false;
+  final needle = _fold(q);
+  final names = [chain.displayName, chain.id, ...chain.aliases];
+  if (names.any((n) => _fold(n).contains(needle))) return true;
+  return matchChain(q) == chainId;
+}
+
+String _fold(String text) => text
+    .toLowerCase()
+    .replaceAll('ä', 'ae')
+    .replaceAll('ö', 'oe')
+    .replaceAll('ü', 'ue')
+    .replaceAll('ß', 'ss')
+    .replaceAll(RegExp('[^a-z0-9]'), '');
 
 /// Opens "Markt wählen" and returns what was picked (null when closed).
 Future<StoreChoice?> openStorePicker(
@@ -113,6 +135,7 @@ List<AvoMenuEntry> storeMenuEntries(
   final suggested =
       guess != null &&
           !guess.confirmed &&
+          ref.read(storeDetectionOnProvider) &&
           dontAsk != guess.chainId &&
           StoreChainDirectory.byId(guess.chainId) != null
       ? guess.chainId
@@ -123,7 +146,7 @@ List<AvoMenuEntry> storeMenuEntries(
 
   final other = AvoMenuItem(
     label: context.tr('offer_store_other'),
-    icon: OfferIcons.storefront,
+    icon: AvoIcons.storefront,
     onSelected: () => unawaited(openStorePicker(context, listId: listId)),
   );
 
@@ -147,14 +170,17 @@ List<AvoMenuEntry> storeMenuEntries(
   final current = ref.read(storeForListProvider(listId))?.id;
   final history =
       ref.read(listStoreHistoryProvider(listId)).valueOrNull ?? const [];
-  final chains = <String>[
-    if (current != null) current,
-    for (final id
-        in history.isEmpty
-            ? popularChainIds(ref.read(regionProvider)?.zip)
-            : history)
-      if (id != current && StoreChainDirectory.byId(id) != null) id,
-  ];
+  final favorites = ref.read(favoriteStoresProvider);
+  // Favourites in their order, then this list's other markets (at most
+  // three); without either the common chains (S1).
+  final ordered = favorites.isEmpty && history.isEmpty
+      ? popularChainIds(ref.read(regionProvider)?.zip)
+      : [...favorites, ...history.where((id) => !favorites.contains(id))];
+  final chains = <String>{
+    if (current != null && !favorites.contains(current)) current,
+    for (final id in ordered)
+      if (StoreChainDirectory.byId(id) != null) id,
+  }.toList();
   return [
     for (final id in chains)
       AvoMenuItem(
@@ -175,7 +201,8 @@ List<AvoMenuEntry> storeMenuEntries(
 /// Opens the market menu of [listId] out of the widget of [context].
 Future<void> showStoreMenu(BuildContext context, WidgetRef ref, String listId) {
   final guess = ref.read(storeGuessForListProvider(listId)).valueOrNull;
-  final title = guess != null && !guess.confirmed
+  final title =
+      guess != null && !guess.confirmed && ref.read(storeDetectionOnProvider)
       ? context.tr(
           'offer_store_confirm_title',
           params: {'store': storeNameOf(guess.chainId)},

@@ -14,10 +14,10 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
+import 'package:shoply/presentation/screens/offers/list_target_menu.dart';
 import 'package:shoply/presentation/screens/offers/offer_actions.dart';
 import 'package:shoply/presentation/screens/offers/offer_paths.dart';
 import 'package:shoply/presentation/screens/offers/offer_text.dart';
-import 'package:shoply/presentation/screens/offers/widgets/offer_icons.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_price_tag.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_row.dart';
 import 'package:shoply/presentation/screens/offers/widgets/store_mark.dart';
@@ -302,7 +302,7 @@ class OfferSimilarNote extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 AvoIcon(
-                  OfferIcons.questionmarkCircle,
+                  AvoIcons.questionmarkCircle,
                   size: MediaQuery.textScalerOf(context).scale(_kSimilarIcon),
                   color: colors.secondaryLabel,
                 ),
@@ -395,8 +395,8 @@ class OfferMoreSection extends StatelessWidget {
 enum OfferDetailAction { none, ended, take, remove, add }
 
 /// The main action for [offer] in [mode]: ended offers disable it, a taken
-/// price can be removed, "Auf die Liste" needs a list (without one the menu
-/// "Auf welche Liste?" of S10 is still missing).
+/// price can be removed; "Auf die Liste" without a list opens "Auf welche
+/// Liste?" (S10) out of the button.
 OfferDetailAction offerDetailActionFor({
   required StoreOffer offer,
   required OfferDetailMode mode,
@@ -404,7 +404,7 @@ OfferDetailAction offerDetailActionFor({
   required String? listId,
 }) {
   if (offerHasEnded(offer)) return OfferDetailAction.ended;
-  if (listId == null) return OfferDetailAction.none;
+  if (listId == null) return OfferDetailAction.add;
   if (mode == OfferDetailMode.take && item != null) {
     return isOfferPriceTaken(item, offer)
         ? OfferDetailAction.remove
@@ -478,7 +478,26 @@ class OfferDetailButton extends ConsumerWidget {
           },
         );
       case OfferDetailAction.add:
-        final listName = ref.watch(offerListNameProvider(list!));
+        if (list == null) {
+          return Builder(
+            builder: (anchor) => AppButton.primary(
+              label: context.tr('offer_detail_add_to_list'),
+              size: AppButtonSize.large,
+              expand: true,
+              floating: true,
+              onPressed: () => unawaited(
+                showListTargetMenu(
+                  anchor,
+                  ref,
+                  offer: offer,
+                  name: itemName,
+                  onPicked: onDone,
+                ),
+              ),
+            ),
+          );
+        }
+        final listName = ref.watch(offerListNameProvider(list));
         return AppButton.primary(
           label: context.tr('offer_detail_add_to_list'),
           size: AppButtonSize.large,

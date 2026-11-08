@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -12,10 +13,11 @@ import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_header.dart'
     show ShoppingModeHeader;
+import 'package:shoply/presentation/screens/offers/offer_paths.dart';
 import 'package:shoply/presentation/screens/offers/offer_text.dart';
 import 'package:shoply/presentation/screens/offers/store_menu.dart';
-import 'package:shoply/presentation/screens/offers/widgets/offer_icons.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_summary_card.dart';
+import 'package:shoply/presentation/screens/offers/widgets/postcode_hint.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/hint_row.dart';
@@ -27,7 +29,8 @@ const double _kHintIcon = 18; // D2 like the savings card's tag
 /// `b_slots.dart`): the savings card at the end of the list and under the
 /// shopping-mode header, in the mandatory wording of `offer_savings.dart`.
 ///
-/// - In the list the card offers "Diese Woche ausblenden" (close button,
+/// - In the list the whole card opens "Angebote bei {Markt}" (S9) and
+///   offers "Diese Woche ausblenden" (close button,
 ///   swipe left, long press, VoiceOver) and "Nicht mehr zeigen"; a list
 ///   without a market shows "Für welchen Markt ist …? · Markt wählen"
 ///   instead, at most in one opening a week and not for 7 days after it
@@ -38,8 +41,10 @@ const double _kHintIcon = 18; // D2 like the savings card's tag
 /// Whether the card shows is decided when the list opens (`angebote.md`
 /// 3.2): offers found later appear the next time, so nothing jumps while
 /// reading; choosing a market on the screen is the one exception. Renders
-/// nothing, and asks nothing, while offers are off, hidden on the list,
-/// without a real region or with "Ersparnis in der Liste" off.
+/// nothing, and asks nothing, while offers are off, hidden on the list or
+/// with "Ersparnis in der Liste" off; without a real region the list shows
+/// "Für Angebote in deiner Region: Postleitzahl festlegen" instead (closed:
+/// 7 days quiet).
 class ListOfferSummary extends ConsumerStatefulWidget {
   const ListOfferSummary({super.key, required this.listId});
 
@@ -91,7 +96,17 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
         listId: listId,
       )),
     );
-    if (!visible) return const SizedBox.shrink();
+    if (!visible) {
+      // Without a real region (list only): "Postleitzahl festlegen".
+      if (shopping) return const SizedBox.shrink();
+      final hint = ref.watch(
+        offerPostcodeHintProvider((
+          surface: OfferSurface.listSavings,
+          listId: listId,
+        )),
+      );
+      return hint ? const OfferPostcodeHint() : const SizedBox.shrink();
+    }
     final prefs = ref.watch(offerDisplayPrefsProvider);
     final now = ref.watch(offerClockProvider)();
     if (prefs?.summaryHiddenWeek[listId] == weekKey(now)) {
@@ -158,6 +173,7 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
       head: text.head,
       detail: text.detail,
       semanticLabel: label,
+      onTap: () => unawaited(context.push(offerListLocation(listId))),
       onHideWeek: () => _hideWeek(context),
       onNever: () => _never(context),
       onMenu: _openMenu,
@@ -192,7 +208,7 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
     return Builder(
       builder: (context) => HintRow(
         leading: AvoIcon(
-          OfferIcons.storefront,
+          AvoIcons.storefront,
           size: MediaQuery.textScalerOf(context).scale(_kHintIcon),
           color: colors.secondaryLabel,
         ),

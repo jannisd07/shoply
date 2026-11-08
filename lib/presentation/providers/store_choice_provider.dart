@@ -100,34 +100,56 @@ final nearbyStoreOptionsProvider =
           allowPermissionPrompt: false,
         );
         if (position == null) return const [];
-        final stores = await StoreLocatorService.instance.findNearbyStores(
-          latitude: position.latitude,
-          longitude: position.longitude,
-          radiusMeters: nearbyStoresRadiusMeters,
-        );
-        final options = <NearbyStoreOption>[];
-        for (final store in stores) {
-          final unique = store.retailerUniqueName;
-          final chainId =
-              unique != null && StoreChainDirectory.byId(unique) != null
-              ? unique
-              : matchChain(store.displayName);
-          if (chainId == null) continue;
-          options.add(
-            NearbyStoreOption(
-              chainId: chainId,
-              distanceMeters: store.distanceMeters,
-              street: store.street,
-            ),
-          );
-          if (options.length == nearbyStoresMax) break;
-        }
-        return options;
+        return await _nearbyChains(position.latitude, position.longitude);
       } catch (e) {
         debugPrint('⚠️ [STORE] Stores nearby not found: $e');
         return const [];
       }
     });
+
+/// Where [nearbyStoresAtProvider] looks.
+typedef StorePosition = ({double latitude, double longitude});
+
+/// Known chains within 2 km of a fix the person just allowed ("Standort
+/// verwenden" in S14), closest first, at most five; the fix is not stored.
+/// Empty offline or when Overpass does not answer. Override in tests.
+final nearbyStoresAtProvider = FutureProvider.autoDispose
+    .family<List<NearbyStoreOption>, StorePosition>((ref, at) async {
+      try {
+        return await _nearbyChains(at.latitude, at.longitude);
+      } catch (e) {
+        debugPrint('⚠️ [STORE] Stores nearby not found: $e');
+        return const [];
+      }
+    });
+
+Future<List<NearbyStoreOption>> _nearbyChains(
+  double latitude,
+  double longitude,
+) async {
+  final stores = await StoreLocatorService.instance.findNearbyStores(
+    latitude: latitude,
+    longitude: longitude,
+    radiusMeters: nearbyStoresRadiusMeters,
+  );
+  final options = <NearbyStoreOption>[];
+  for (final store in stores) {
+    final unique = store.retailerUniqueName;
+    final chainId = unique != null && StoreChainDirectory.byId(unique) != null
+        ? unique
+        : matchChain(store.displayName);
+    if (chainId == null) continue;
+    options.add(
+      NearbyStoreOption(
+        chainId: chainId,
+        distanceMeters: store.distanceMeters,
+        street: store.street,
+      ),
+    );
+    if (options.length == nearbyStoresMax) break;
+  }
+  return options;
+}
 
 /// The common chains for the market menu when a list has no history:
 /// Lidl, the Aldi of the region, REWE, Edeka, Kaufland, Netto.

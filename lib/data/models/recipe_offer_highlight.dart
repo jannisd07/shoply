@@ -21,6 +21,10 @@ class RecipeIngredientOffer {
   /// excluded from the savings sum.
   final bool isBroadMatch;
 
+  /// The full offer it was made from, when known (the offer detail opens
+  /// with it); kept in the cache too.
+  final StoreOffer? source;
+
   const RecipeIngredientOffer({
     required this.ingredientName,
     required this.offerId,
@@ -32,6 +36,7 @@ class RecipeIngredientOffer {
     this.unitPriceLabel,
     this.validTo,
     this.isBroadMatch = false,
+    this.source,
   });
 
   factory RecipeIngredientOffer.fromStoreOffer(
@@ -49,13 +54,31 @@ class RecipeIngredientOffer {
       unitPriceLabel: offer.unitPriceLabel,
       validTo: offer.validTo,
       isBroadMatch: offer.isBroadMatch,
+      source: offer,
     );
   }
 
-  /// Retailer images are not licensed (Kap. 12, rule 7): always empty. Kept
-  /// only for `weekly_deals_screen.dart` until it shows the category symbol.
-  @Deprecated('Retailer images are not licensed; show the category symbol')
-  String get imageUrl => '';
+  /// The offer as the detail screen needs it: [source], or, for an entry
+  /// cached before it was kept, the fields this snapshot has.
+  StoreOffer get storeOffer {
+    final full = source;
+    if (full != null) return full;
+    final offer = StoreOffer(
+      id: offerId,
+      productName: productName,
+      brandName: null,
+      description: '',
+      price: price,
+      oldPrice: regularPrice,
+      unitShortName: null,
+      retailerName: retailerName,
+      retailerUniqueName: retailerName.toLowerCase(),
+      categoryName: null,
+      validFrom: null,
+      validTo: validTo,
+    );
+    return isBroadMatch ? offer.asBroadMatch() : offer;
+  }
 
   /// Whether the offer's validity window is still open. Cached results can
   /// outlive an offer's end date (weekly Angebote vs. a 6h cache read hours
@@ -76,6 +99,7 @@ class RecipeIngredientOffer {
         'unitPriceLabel': unitPriceLabel,
         'validTo': validTo?.toIso8601String(),
         'isBroadMatch': isBroadMatch,
+        if (source case final offer?) 'offer': offer.toJson(),
       };
 
   static RecipeIngredientOffer? fromJson(Map<String, dynamic> json) {
@@ -100,6 +124,7 @@ class RecipeIngredientOffer {
       unitPriceLabel: json['unitPriceLabel'] as String?,
       validTo: DateTime.tryParse(json['validTo'] as String? ?? ''),
       isBroadMatch: (json['isBroadMatch'] as bool?) ?? false,
+      source: _source(json['offer'], (json['isBroadMatch'] as bool?) ?? false),
     );
   }
 }
@@ -166,4 +191,11 @@ class RecipeOffersResult {
       signature: signature,
     );
   }
+}
+
+StoreOffer? _source(Object? json, bool broad) {
+  if (json is! Map<String, dynamic>) return null;
+  final offer = StoreOffer.fromJson(json);
+  if (offer == null) return null;
+  return broad ? offer.asBroadMatch() : offer;
 }

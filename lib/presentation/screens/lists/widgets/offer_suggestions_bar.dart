@@ -16,6 +16,8 @@ import 'package:shoply/presentation/screens/offers/offer_actions.dart';
 import 'package:shoply/presentation/screens/offers/offer_paths.dart';
 import 'package:shoply/presentation/screens/offers/offer_text.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_row.dart';
+import 'package:shoply/presentation/screens/offers/widgets/postcode_hint.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 /// At most this many offers above the add field (S6).
 const int _kMaxRows = 3; // D2 at most three rows (angebote.md S6)
@@ -78,10 +80,20 @@ class OfferSuggestionsBar extends ConsumerWidget {
         listId: listId,
       )),
     );
-    if (!visible) return const SizedBox.shrink();
     final lang = offerLanguageOf(context);
     final parsed = parseSingleItem(query, lang: lang);
     final name = (parsed?.name ?? query).trim();
+    if (!visible) {
+      // Without a region: once a session "Postleitzahl festlegen".
+      final hint = ref.watch(
+        offerPostcodeHintProvider((
+          surface: OfferSurface.typingSuggestions,
+          listId: listId,
+        )),
+      );
+      if (!hint || name.length < 2) return const SizedBox.shrink();
+      return const _PostcodeHintRow();
+    }
     if (name.length < 2) return const SizedBox.shrink();
 
     final offers =
@@ -235,3 +247,88 @@ class OfferSuggestionsBar extends ConsumerWidget {
     );
   }
 }
+
+/// Whether the add field showed "Postleitzahl festlegen" in this session.
+final _postcodeHintShownProvider = StateProvider<bool>((ref) => false);
+
+/// "Für Angebote in deiner Region: Postleitzahl festlegen" as a row of the
+/// suggestions panel (S6, at most once a session): opens the region screen
+/// (the keyboard closes; A puts the focus back into the field).
+class _PostcodeHintRow extends ConsumerStatefulWidget {
+  const _PostcodeHintRow();
+
+  @override
+  ConsumerState<_PostcodeHintRow> createState() => _PostcodeHintRowState();
+}
+
+class _PostcodeHintRowState extends ConsumerState<_PostcodeHintRow> {
+  /// Decided once: the row shows for as long as this panel is up.
+  late final bool _shows = !ref.read(_postcodeHintShownProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_shows) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.read(_postcodeHintShownProvider.notifier).state = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_shows) return const SizedBox.shrink();
+    final colors = context.colors;
+    final text = context.tr('offer_hint_set_postcode');
+    void open() {
+      FocusManager.instance.primaryFocus?.unfocus();
+      unawaited(openRegionFromList(context, from: RegionOrigin.panel));
+    }
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AvoRadii.card),
+      ),
+      child: Semantics(
+        container: true,
+        button: true,
+        label: text,
+        onTap: open,
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: open,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: _kHintRowMin),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AvoSpacing.l,
+                vertical: AvoSpacing.s,
+              ),
+              child: Row(
+                children: [
+                  AvoIcon(
+                    AvoIcons.location,
+                    size: _kHintIcon,
+                    color: colors.secondaryLabel,
+                  ),
+                  const SizedBox(width: AvoSpacing.m),
+                  Expanded(
+                    child: Text(
+                      text,
+                      style: context.text(AvoTextStyle.subhead),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const double _kHintRowMin = 52; // D2 one line
+const double _kHintIcon = 18; // D2 like the savings card's tag

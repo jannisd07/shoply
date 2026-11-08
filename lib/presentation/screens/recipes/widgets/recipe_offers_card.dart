@@ -1,221 +1,241 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_text_styles.dart';
-import 'package:shoply/core/constants/paper_colors.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
 import 'package:shoply/presentation/providers/recipe_offers_provider.dart';
+import 'package:shoply/presentation/screens/offers/offer_paths.dart';
+import 'package:shoply/presentation/screens/offers/offer_text.dart';
+import 'package:shoply/presentation/screens/offers/store_menu.dart';
+import 'package:shoply/presentation/screens/offers/widgets/offer_price_tag.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_data.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/inset_section.dart';
 
-/// "This recipe is cheaper this week" — current supermarket offers for the
-/// recipe's ingredients (Feature 8, contract 3.3). Renders nothing while
-/// offers are unavailable (module or kill switch, then without asking the
-/// offers source), while loading, on error, without a real zip code, or when
-/// no ingredient is on offer — the recipe page never shows an empty or fake
-/// offers section.
+const double _kRowMin = 52; // D2 one line
+const double _kRowVertical = AvoSpacing.s; // D2
+const double _kTag = 17; // D2 tag glyph in the row
+const double _kChevron = 14; // D2 disclosure chevron
+
+/// "3 Zutaten diese Woche bei Lidl im Angebot · für Wocheneinkauf, in
+/// deiner Region" (S15) for the recipe detail where it sits today: the row
+/// of [RecipeOfferSummary] in a group of its own, for the recipe's target
+/// list (the list last chosen in "Zutaten auf die Liste", else the list of
+/// today, else the one changed last). Renders nothing in all the cases
+/// [RecipeOfferSummary] does, and without any list.
 class RecipeOffersCard extends ConsumerWidget {
-  final RecipeOffersRequest? request;
-  final Recipe? recipe;
+  const RecipeOffersCard({super.key, required this.recipe, this.listId});
 
-  /// `RecipeOffersCard(recipe: recipe)` (contract `b_slots.dart`). The old
-  /// `RecipeOffersCard(request: …)` of Teil A keeps working until A switched;
-  /// then [request] goes away.
-  const RecipeOffersCard({super.key, this.recipe, this.request})
-      : assert(recipe != null || request != null,
-            'RecipeOffersCard needs a recipe');
+  final Recipe recipe;
 
-  RecipeOffersRequest get _request =>
-      request ??
-      RecipeOffersRequest(
-        recipeId: recipe!.id,
-        ingredientNames: [for (final i in recipe!.ingredients) i.name],
-      );
+  /// The target list; null takes the recipe's target list.
+  final String? listId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(offersAvailableProvider)) return const SizedBox.shrink();
-    final result = ref.watch(recipeOffersProvider(_request)).valueOrNull;
-    if (result == null || result.matches.isEmpty) {
+    // Offers first: while they are unavailable nothing else is read.
+    if (!ref.watch(offersRemoteEnabledProvider) ||
+        !ref.watch(offersAvailableProvider)) {
       return const SizedBox.shrink();
     }
+    final target = listId ?? ref.watch(recipeTargetListProvider(recipe.id))?.id;
+    if (target == null) return const SizedBox.shrink();
+    return _CollapsingGroup(
+      child: RecipeOfferSummary(recipe: recipe, listId: target),
+    );
+  }
+}
 
-    final textColor = AppColors.textPrimary(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textSecondary =
-        isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
+/// An [InsetSection] around a row that may render nothing: then the group
+/// renders nothing either (no empty white box).
+class _CollapsingGroup extends StatelessWidget {
+  const _CollapsingGroup({required this.child});
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.border(context)),
+  final RecipeOfferSummary child;
+
+  @override
+  Widget build(BuildContext context) => _SummaryVisibility(
+    summary: child,
+    builder: (row) => InsetSection(children: [row]),
+  );
+}
+
+/// Builds [builder] around the summary row only while it shows.
+class _SummaryVisibility extends ConsumerWidget {
+  const _SummaryVisibility({required this.summary, required this.builder});
+
+  final RecipeOfferSummary summary;
+  final Widget Function(Widget row) builder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final offers = summary._offers(ref);
+    if (offers == null) return const SizedBox.shrink();
+    return builder(summary);
+  }
+}
+
+/// The last row of the group "Zutaten" in the recipe detail (S15, slot
+/// `RecipeOfferSummary(recipe:, listId:)`): `tag`, "3 Zutaten diese Woche
+/// bei Lidl im Angebot · für Wocheneinkauf, in deiner Region", chevron; the
+/// whole row opens "Angebote für {Rezept}".
+///
+/// Only the market of [listId] counts; pantry staples never do. The row
+/// shows only what the device had when the detail opened, so it never
+/// pushes the instructions down: on a miss the offers are looked up in the
+/// background for the next opening. Renders nothing, and asks nothing,
+/// while offers may not show on the list (kill switch, module, hidden list,
+/// no real region, "Angebote an Artikeln" off), when the list has no market
+/// (no "Markt wählen" here; that belongs to the list) or nothing is on
+/// offer. Never Pro.
+class RecipeOfferSummary extends ConsumerWidget {
+  const RecipeOfferSummary({
+    super.key,
+    required this.recipe,
+    required this.listId,
+  });
+
+  final Recipe recipe;
+  final String listId;
+
+  RecipeOfferKey get _key => recipeOfferKey(recipe.id, [
+    for (final i in recipe.ingredients) i.name,
+  ], listId);
+
+  /// What the row shows, or null when it renders nothing.
+  RecipeListOffers? _offers(WidgetRef ref) {
+    final offers = ref.watch(recipeOffersCachedProvider(_key)).valueOrNull;
+    if (offers == null || offers.matches.isEmpty) return null;
+    final name = ref.watch(offerListNameProvider(listId));
+    if (name == null || name.isEmpty) return null;
+    return offers;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(recipeOffersCachedProvider(_key), (_, next) {
+      final offers = next.valueOrNull;
+      if (offers != null) {
+        ref
+            .read(recipeIngredientOffersProvider.notifier)
+            .remember(listId, offers);
+      }
+    });
+    final offers = _offers(ref);
+    if (offers == null) return const SizedBox.shrink();
+    final listName = ref.watch(offerListNameProvider(listId))!;
+    final colors = context.colors;
+    final n = offers.matches.length;
+    final text = n == 1
+        ? context.tr(
+            'offer_recipe_row_one',
+            params: {'store': storeNameOf(offers.chainId), 'list': listName},
+          )
+        : context.tr(
+            'offer_recipe_row_other',
+            params: {
+              'n': '$n',
+              'store': storeNameOf(offers.chainId),
+              'list': listName,
+            },
+          );
+    void open() => unawaited(
+      context.push(
+        offerRecipeLocation(
+          recipe.id,
+          listId: listId,
+          servings: ref.read(recipeServingsProvider(recipe.id)),
+        ),
+        extra: recipe,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.local_offer_outlined, size: 18, color: textSecondary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  context.tr('recipe_offers_title'),
-                  style: AppTextStyles.h3.copyWith(color: textColor),
+    );
+    final ax = context.isAccessibilityText;
+    final scale = MediaQuery.textScalerOf(context);
+    return Semantics(
+      container: true,
+      button: true,
+      label: text,
+      hint: context.tr('offer_recipe_row_hint_a11y'),
+      onTap: open,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: open,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: _kRowMin),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AvoSpacing.l,
+              vertical: _kRowVertical,
+            ),
+            child: Row(
+              crossAxisAlignment: ax
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.center,
+              children: [
+                AvoIcon(
+                  AvoIcons.tag,
+                  size: scale.scale(_kTag),
+                  color: colors.secondaryLabel,
                 ),
-              ),
-            ],
+                const SizedBox(width: AvoSpacing.m),
+                Expanded(
+                  child: Text(text, style: context.text(AvoTextStyle.subhead)),
+                ),
+                const SizedBox(width: AvoSpacing.m),
+                AvoIcon(
+                  AvoIcons.chevronRight,
+                  size: _kChevron,
+                  color: colors.secondaryLabel,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            context.tr('recipe_offers_subtitle', params: {
-              'count': '${result.matches.length}',
-              'total': '${result.checkedIngredientCount}',
-            }),
-            style: TextStyle(fontSize: 12, color: textSecondary),
-          ),
-          const SizedBox(height: 10),
-          for (var i = 0; i < result.matches.length; i++) ...[
-            if (i > 0)
-              Container(
-                height: 0.5,
-                margin: const EdgeInsets.symmetric(vertical: 2),
-                color: AppColors.divider(context),
-              ),
-            _IngredientOfferRow(match: result.matches[i]),
-          ],
-        ],
+        ),
       ),
     );
   }
 }
 
-class _IngredientOfferRow extends StatelessWidget {
-  final RecipeIngredientOffer match;
+/// The offer pill at an ingredient row of the recipe detail (S15, slot
+/// `IngredientOfferBadge(listId:, ingredient:)`), like the item pill (S3):
+/// "0,99 €", a question mark for a similar product. Shows the offers the
+/// recipe row found for the market of [listId]; renders nothing otherwise
+/// and while offers may not show on the list. Not tappable (the row opens
+/// "Angebote für {Rezept}"); its sentence joins the ingredient row's label.
+class IngredientOfferBadge extends ConsumerWidget {
+  const IngredientOfferBadge({
+    super.key,
+    required this.listId,
+    required this.ingredient,
+  });
 
-  const _IngredientOfferRow({required this.match});
+  final String listId;
+  final Ingredient ingredient;
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textSecondary =
-        isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
-
-    final detailParts = <String>[
-      match.productName,
-      match.retailerName,
-      if (match.unitSizeLabel != null) match.unitSizeLabel!,
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(9),
-            child: Image.network(
-              match.imageUrl,
-              width: 38,
-              height: 38,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                width: 38,
-                height: 38,
-                color: isDark ? const Color(0xFF2C2C2E) : PaperColors.cream,
-                child: Icon(
-                  Icons.shopping_basket_outlined,
-                  size: 17,
-                  color: isDark ? textSecondary : PaperColors.creamInk,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  match.ingredientName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary(context),
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  detailParts.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: textSecondary),
-                ),
-                if (match.isBroadMatch) ...[
-                  const SizedBox(height: 1),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.info_outline_rounded,
-                          size: 9.5, color: AppColors.textTertiary(context)),
-                      const SizedBox(width: 3),
-                      Text(
-                        context.tr('similar_product_match'),
-                        maxLines: 1,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textTertiary(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${match.price.toStringAsFixed(2)} €',
-                    style: PaperTextStyles.serif(
-                      15,
-                      color: AppColors.textPrimary(context),
-                    ),
-                  ),
-                ],
-              ),
-              if (match.regularPrice != null)
-                Text(
-                  context.tr(
-                    'instead_of_price',
-                    params: {'price': match.regularPrice!.toStringAsFixed(2)},
-                  ),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: AppColors.textTertiary(context),
-                  ),
-                ),
-              if (match.unitPriceLabel != null)
-                Text(
-                  match.unitPriceLabel!,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    color: AppColors.textTertiary(context),
-                  ),
-                ),
-            ],
-          ),
-        ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final offer = ref.watch(
+      recipeIngredientOfferProvider((listId: listId, name: ingredient.name)),
+    );
+    if (offer == null) return const SizedBox.shrink();
+    final lang = offerLanguageOf(context);
+    return Semantics(
+      label: context.tr(
+        offer.isBroadMatch ? 'offer_badge_similar_a11y' : 'offer_badge_a11y',
+        params: {'price': spokenEuro(offer.price, lang)},
+      ),
+      child: ExcludeSemantics(
+        child: OfferPriceTag(
+          price: formatEuro(offer.price, lang),
+          uncertain: offer.isBroadMatch,
+        ),
       ),
     );
   }

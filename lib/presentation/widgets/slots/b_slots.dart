@@ -14,6 +14,10 @@ export 'package:shoply/data/services/avo_nudge_service.dart'
     show RestockSuggestion;
 export 'package:shoply/presentation/providers/list_offer_prefs_provider.dart'
     show offersHiddenForListProvider, setOffersHiddenForList;
+// The favourite markets in their order (Profil row "Preise & Angebote ·
+// Lidl, REWE").
+export 'package:shoply/presentation/providers/offer_display_prefs_provider.dart'
+    show favoriteStoresProvider;
 export 'package:shoply/presentation/providers/store_choice_provider.dart'
     show ChainStoreChoice, CustomStoreChoice, NoStoreChoice, StoreChoice;
 export 'package:shoply/presentation/providers/store_for_list_provider.dart'
@@ -32,9 +36,15 @@ export 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.
     show OfferSuggestionsBar;
 export 'package:shoply/presentation/screens/lists/widgets/store_chip.dart'
     show StoreChip;
-// "Markt wählen" (S2) for the list info row "Markt" and "Neue Liste".
+// "Markt wählen" (S2) for the list info row "Markt" and "Neue Liste"; the
+// offer screens for the list menu ("Angebote dieser Liste", S9), the
+// overview ("Angebote der Woche", S10) and the Profil row (S12).
 export 'package:shoply/presentation/screens/offers/offer_paths.dart'
-    show StorePickerOrigin;
+    show
+        StorePickerOrigin,
+        offerListLocation,
+        offersSettingsPath,
+        weeklyOffersLocation;
 export 'package:shoply/presentation/screens/offers/store_menu.dart'
     show openStorePicker;
 export 'package:shoply/presentation/state/avo_nudge_provider.dart'
@@ -46,7 +56,7 @@ export 'package:shoply/presentation/widgets/article_image.dart'
 export 'package:shoply/presentation/screens/calories/log_recipe.dart'
     show openLogRecipe;
 export 'package:shoply/presentation/screens/recipes/widgets/recipe_offers_card.dart'
-    show RecipeOffersCard;
+    show IngredientOfferBadge, RecipeOfferSummary, RecipeOffersCard;
 
 // Home "Für dich" sections (Stufe 2).
 export 'package:shoply/presentation/widgets/home_sections/home_sections.dart'

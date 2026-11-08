@@ -71,6 +71,27 @@ String? formatPack(StoreOffer offer, String lang) {
   return size;
 }
 
+/// "1 Liter", "6 × 1,5 Liter" / "1 litre" for VoiceOver; null without pack
+/// data.
+String? spokenPack(StoreOffer offer, String lang) {
+  final shown = formatPack(offer, lang);
+  if (shown == null) return null;
+  final unit = offer.unitShortName!;
+  final spoken = _spokenUnit(unit, lang);
+  if (spoken == null) return shown;
+  final size = '${_decimal(offer.volume!, lang, trim: true)} $spoken';
+  final packs = offer.packQuantity;
+  if (packs != null && packs > 1) {
+    return '${_decimal(packs, lang, trim: true)} × $size';
+  }
+  return size;
+}
+
+/// [text] as VoiceOver should read it: "3,5 %" becomes "3,5 Prozent".
+String spokenText(String text, String lang) => text
+    .replaceAll('%', lang == 'de' ? ' Prozent' : ' percent')
+    .replaceAll(RegExp(r'\s{2,}'), ' ');
+
 /// The spoken name of a base unit; null for one VoiceOver reads well.
 String? _spokenUnit(String unit, String lang) => switch (unit.toLowerCase()) {
   'l' || 'liter' => _t('offer_unit_l', lang),
@@ -203,6 +224,29 @@ String spokenOfferDate(DateTime date, String lang) {
     return '${_deWeekday[d.weekday - 1]}, ${d.day}. ${_deMonth[d.month - 1]}';
   }
   return '${_enWeekday[d.weekday - 1]}, ${_enMonth[d.month - 1]} ${d.day}';
+}
+
+/// "Sa., 14. Nov., 9:30" / "Sat, Nov 14, 9:30 AM": when the offers on the
+/// device were fetched ("Angebote vom Stand …").
+String formatOfferDateTime(DateTime date, String lang) {
+  final d = date.toLocal();
+  final minutes = d.minute.toString().padLeft(2, '0');
+  final time = lang == 'de'
+      ? '${d.hour}:$minutes'
+      : '${d.hour % 12 == 0 ? 12 : d.hour % 12}:$minutes '
+            '${d.hour < 12 ? 'AM' : 'PM'}';
+  return _t('offer_datetime', lang, {
+    'date': formatOfferDate(d, lang),
+    'time': time,
+  });
+}
+
+/// "bis Samstag, 14. November" / "until Saturday, November 14" for
+/// VoiceOver; null without an end date.
+String? spokenValidUntil(StoreOffer offer, String lang) {
+  final to = offer.validTo;
+  if (to == null) return null;
+  return _t('offer_valid_until', lang, {'date': spokenOfferDate(to, lang)});
 }
 
 /// "bis Sa., 14. Nov." / "until Sat, Nov 14"; null without an end date.
