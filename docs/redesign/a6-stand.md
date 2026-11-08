@@ -23,9 +23,9 @@ Errors/Warnings). Im Simulator (iPhone 17) angesehen: Tab, Detail, Kochmodus.
 
 ## Komponenten (A)
 
-- `AvoColors.warning` fehlt (Allergie-Hinweise nutzen `destructive`).
+- Allergie-Hinweise nutzen noch `destructive`; `context.colors.warning` gibt es seit `d1b9eea`.
 - `AvoSearchField`: Mikrofon (`onDictate`) und D2-Kapselform (40 pt); `AppFilterChip`: Symbol vor dem Text.
-- `AvoToast` mit Ziel („Zur Liste“, E-16); `AvatarSize` 36/64 mit Foto; `AvoIcons` personBadgePlus, bookmarkSlash.
+- `AvoToast` mit Ziel („Zur Liste“, E-16); `AvatarSize` 36/64 mit Foto (`AvoIcons` personBadgePlus, bookmarkSlash gibt es seit `54a2ee5`).
 - `showAvoMenu`/`showAvoConfirm` nehmen das App-Thema, im (immer dunklen) Kochmodus erscheinen sie hell.
 - Zwei Allergie-Logiken: `RecipeDietProfile` in `recipes_home_data.dart` (browse) und
   `widgets/recipe_detail_adaptation.dart` (detail); zusammenführen zu `lib/data/services/recipe_adaptation.dart`.

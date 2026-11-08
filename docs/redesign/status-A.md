@@ -167,6 +167,21 @@ Provider in `lib/presentation/widgets/slots/b_slots.dart`; Stufe 2: Home-Abschni
 | 11 `ShoppingItemModel.barcode` | gibt es schon (nullable) | erledigt |
 | 12 Übergänge `ListPriceSummaryBar`, `OfferSuggestionsBar(query:, onSelect:)` | A nutzt beim Listen-Umbau nur `ListOfferSummary(listId:)` und `OfferSuggestionsBar(listId:, query:, onAdded:)` | A5 |
 
+## Anfragen von B aus den Angebots-Slots (`b-screens/angebote.md` §6, status-B 13)
+
+| Nr. | Stand | Wann |
+|---|---|---|
+| A-T1 Warnfarbe | **erledigt**: `context.colors.warning` (hell #A8521A, 4,5:1 in allen Paletten) | `d1b9eea` |
+| A-T2, A-T3 Glas mit Text | **erledigt**: `ContentGlass` hell 92 %, getöntes Glas hell 96 % | `be2971f` |
+| A-C10 Symbole | **erledigt**: location, storefront, eyeSlash, plusCircle, questionmarkCircle, exclamationmarkCircle, exclamationmarkTriangleFill, line3Horizontal, checkmarkCircleFill (dazu eye, circle, lightbulb, envelope, personBadgePlus, bookmarkSlash) | `54a2ee5` |
+| A-Q1 Layout-Tests | **erledigt**: `test/layout/screens/b/*` gehört B | `ac3fb9a` |
+| A-O1 Region im Onboarding | **festgelegt wie vorgeschlagen**: B zeichnet Inhalt und „Weiter“ und ruft `onDone`; A zeichnet Rahmen, Titel, Satz, Fortschritt, Zurück, „Überspringen“ (`OnboardingStepPage` ohne eigene Hauptaktion) | mit A7 |
+| A-C1, A-C2, A-C3, A-C5, A-C7, A-C8, A-C9, A-D1 | angenommen; Komponenten und `ItemRepository` | direkt nach A7 |
+| A-C4, A-L1–A-L4, Polsterung um `ListOfferSummary` | angenommen; Listen-Screens (A7-Teil „Tipps“ hat `list_detail_screen.dart` gerade in Arbeit, die Polsterung ist ihm mitgegeben) | nach A7 |
+| A-R1–A-R3 | angenommen; Router (A7-Teil „Ablauf“ hat `app_router.dart` gerade in Arbeit) | nach A7 |
+| A-P1 | angenommen; Profil | A8 |
+| `openAvoWithQuestion` | `home_avo_card.dart` stellt A auf den b_slots-Helfer um und löscht die eigene Funktion, sobald B ihn liefert | wenn B meldet |
+
 ## Hinweise für B
 
 - `item_merge_service.dart` gibt es nicht. **Geliefert (A5, vorgezogen):**
