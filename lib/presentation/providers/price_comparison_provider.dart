@@ -34,21 +34,22 @@ import 'package:shoply/presentation/state/lists_provider.dart';
 const Duration offerSearchDebounce = Duration(milliseconds: 300);
 
 /// The offers source; override in tests.
-final offerPriceServiceProvider = Provider<OfferPriceService>(
-  (ref) => OfferPriceService.instance,
-);
+final offerPriceServiceProvider =
+    Provider<OfferPriceService>((ref) => OfferPriceService.instance);
 
-/// The 6-h offer snapshots of the lists; override in tests (clock).
-final listOfferSyncProvider = Provider<ListOfferSync>(
-  (ref) => ListOfferSync(ref.watch(offerPriceServiceProvider)),
-);
+/// The 6-h offer snapshots of the lists; override in tests (clock). Its
+/// memory starts empty again for another account.
+final listOfferSyncProvider = Provider<ListOfferSync>((ref) {
+  ref.watch(offerAccountIdProvider);
+  return ListOfferSync(ref.watch(offerPriceServiceProvider));
+});
 
 /// The items of a list as the offer providers see them; override in tests.
-final offerListItemsProvider = Provider.autoDispose
-    .family<List<ShoppingItemModel>, String>(
-      (ref, listId) =>
-          ref.watch(itemsNotifierProvider(listId)).valueOrNull ?? const [],
-    );
+final offerListItemsProvider =
+    Provider.autoDispose.family<List<ShoppingItemModel>, String>(
+  (ref, listId) =>
+      ref.watch(itemsNotifierProvider(listId)).valueOrNull ?? const [],
+);
 
 // ---------------------------------------------------------------------------
 // Typed search
@@ -58,17 +59,17 @@ final offerListItemsProvider = Provider.autoDispose
 /// (relevance), for the weekly offers search, which groups them by market
 /// and never sorts by price. From 2 characters, after [offerSearchDebounce];
 /// nothing is asked when the search was left (typed on) meanwhile.
-final offerSearchAllProvider = FutureProvider.autoDispose
-    .family<List<StoreOffer>, String>((ref, query) async {
-      final service = ref.watch(offerPriceServiceProvider);
-      final region = ref.watch(regionProvider);
-      final left = _watchLeft(ref);
-      if (!ref.watch(offersAvailableProvider) || region == null) {
-        return const [];
-      }
-      if (!await _debounce(query, left)) return const [];
-      return service.searchOffers(query, zipCode: region.zip);
-    });
+final offerSearchAllProvider =
+    FutureProvider.autoDispose.family<List<StoreOffer>, String>(
+  (ref, query) async {
+    final service = ref.watch(offerPriceServiceProvider);
+    final region = ref.watch(regionProvider);
+    final left = _watchLeft(ref);
+    if (!ref.watch(offersAvailableProvider) || region == null) return const [];
+    if (!await _debounce(query, left)) return const [];
+    return service.searchOffers(query, zipCode: region.zip);
+  },
+);
 
 /// What [offerSuggestionsProvider] is asked for.
 typedef OfferSuggestionsRequest = ({String listId, String query});
@@ -79,21 +80,21 @@ typedef OfferSuggestionsRequest = ({String listId, String query});
 /// without a region, or while offers are off or hidden on the list.
 final offerSuggestionsProvider = FutureProvider.autoDispose
     .family<List<StoreOffer>, OfferSuggestionsRequest>((ref, request) async {
-      final listId = request.listId;
-      final service = ref.watch(offerPriceServiceProvider);
-      final region = ref.watch(regionProvider);
-      final chainId = ref.watch(storeForListProvider(listId))?.id;
-      final left = _watchLeft(ref);
-      final visible = _watchVisibleOn(ref, listId);
-      if (region == null || chainId == null) return const [];
-      if (!await visible) return const [];
-      if (!await _debounce(request.query, left)) return const [];
-      return service.searchOffers(
-        request.query,
-        zipCode: region.zip,
-        chainId: chainId,
-      );
-    });
+  final listId = request.listId;
+  final service = ref.watch(offerPriceServiceProvider);
+  final region = ref.watch(regionProvider);
+  final chainId = ref.watch(storeForListProvider(listId))?.id;
+  final left = _watchLeft(ref);
+  final visible = _watchVisibleOn(ref, listId);
+  if (region == null || chainId == null) return const [];
+  if (!await visible) return const [];
+  if (!await _debounce(request.query, left)) return const [];
+  return service.searchOffers(
+    request.query,
+    zipCode: region.zip,
+    chainId: chainId,
+  );
+});
 
 /// True once every listener left the provider (the person typed on).
 ValueGetter<bool> _watchLeft(Ref ref) {
@@ -167,17 +168,17 @@ class ListOfferSnapshot {
   StoreOffer? offerFor(String name) => offersByName[offerNameKey(name)];
 
   Map<String, Object?> toJson() => {
-    'chainId': chainId,
-    'zip': zip,
-    'fetchedAt': fetchedAt.toIso8601String(),
-    'offers': {
-      for (final entry in offersByName.entries)
-        entry.key: {
-          'offer': entry.value.toJson(),
-          'broad': entry.value.isBroadMatch,
+        'chainId': chainId,
+        'zip': zip,
+        'fetchedAt': fetchedAt.toIso8601String(),
+        'offers': {
+          for (final entry in offersByName.entries)
+            entry.key: {
+              'offer': entry.value.toJson(),
+              'broad': entry.value.isBroadMatch,
+            },
         },
-    },
-  };
+      };
 
   static ListOfferSnapshot? fromJson(Map<String, dynamic> json) {
     final chainId = json['chainId'] as String?;
@@ -190,7 +191,8 @@ class ListOfferSnapshot {
     final byName = <String, StoreOffer>{};
     for (final entry in offers.entries) {
       final value = entry.value as Map<String, dynamic>;
-      final offer = StoreOffer.fromJson(value['offer'] as Map<String, dynamic>);
+      final offer =
+          StoreOffer.fromJson(value['offer'] as Map<String, dynamic>);
       if (offer == null) continue;
       byName[entry.key] = value['broad'] == true ? offer.asBroadMatch() : offer;
     }
@@ -212,7 +214,7 @@ String offerNameKey(String name) => name.trim().toLowerCase();
 /// adding items count locally from the snapshot, without a request.
 class ListOfferSync {
   ListOfferSync(this._service, {DateTime Function() now = DateTime.now})
-    : _now = now;
+      : _now = now;
 
   final OfferPriceService _service;
   final DateTime Function() _now;
@@ -265,10 +267,10 @@ class ListOfferSync {
     final key = '$listId|$chainId|$zip';
     // Block body: an arrow would return the removed future, i.e. this very
     // future, and whenComplete would wait on itself forever.
-    return _inFlight[key] ??= _fetch(listId, chainId, zip, itemNames)
-        .whenComplete(() {
-          _inFlight.remove(key);
-        });
+    return _inFlight[key] ??=
+        _fetch(listId, chainId, zip, itemNames).whenComplete(() {
+      _inFlight.remove(key);
+    });
   }
 
   /// The snapshot of [listId] already in memory, without any wait.
@@ -301,22 +303,17 @@ class ListOfferSync {
   ) async {
     final names = namesToCheck(itemNames);
     var complete = true;
-    final found = await Future.wait(
-      names.map((name) async {
-        final offers = await _service.trySearchOffers(
-          name,
-          zipCode: zip,
-          chainId: chainId,
-        );
-        if (offers == null) complete = false;
-        final offer = RecipeOfferService.pickRelevantOffer(
-          name,
-          offers ?? const [],
-          chainId: chainId,
-        );
-        return MapEntry(offerNameKey(name), offer);
-      }),
-    );
+    final found = await Future.wait(names.map((name) async {
+      final offers =
+          await _service.trySearchOffers(name, zipCode: zip, chainId: chainId);
+      if (offers == null) complete = false;
+      final offer = RecipeOfferService.pickRelevantOffer(
+        name,
+        offers ?? const [],
+        chainId: chainId,
+      );
+      return MapEntry(offerNameKey(name), offer);
+    }));
     final snapshot = ListOfferSnapshot(
       chainId: chainId,
       zip: zip,
@@ -327,10 +324,8 @@ class ListOfferSync {
       },
       complete: complete,
     );
-    debugPrint(
-      '✅ [OFFERS] List offers: ${snapshot.offersByName.length}/'
-      '${names.length} items on offer at $chainId',
-    );
+    debugPrint('✅ [OFFERS] List offers: ${snapshot.offersByName.length}/'
+        '${names.length} items on offer at $chainId');
     _remember(listId, snapshot);
     if (complete) await _save(listId, snapshot);
     return snapshot;
@@ -349,9 +344,7 @@ class ListOfferSync {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('$_prefsPrefix$listId');
       if (raw == null) return null;
-      return ListOfferSnapshot.fromJson(
-        jsonDecode(raw) as Map<String, dynamic>,
-      );
+      return ListOfferSnapshot.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (e) {
       debugPrint('⚠️ [OFFERS] List offers not read: $e');
       return null;
@@ -376,85 +369,85 @@ class ListOfferSync {
 /// list. Follows item changes without a request while the snapshot is
 /// current: new offers come with the next sync, when the list is opened
 /// again (K12-02).
-final listOfferSnapshotProvider = FutureProvider.autoDispose
-    .family<ListOfferSnapshot?, String>((ref, listId) async {
-      final sync = ref.watch(listOfferSyncProvider);
-      final region = ref.watch(regionProvider);
-      final chainId = ref.watch(storeForListProvider(listId))?.id;
-      final namesKey = ref.watch(
-        offerListItemsProvider(listId).select(_openNamesKey),
-      );
-      final visible = _watchVisibleOn(ref, listId);
-      if (region == null || chainId == null || namesKey.isEmpty) return null;
-      if (!await visible) return null;
-      return sync.sync(
-        listId: listId,
-        chainId: chainId,
-        zip: region.zip,
-        itemNames: namesKey.split('\n'),
-      );
-    });
+final listOfferSnapshotProvider =
+    FutureProvider.autoDispose.family<ListOfferSnapshot?, String>(
+  (ref, listId) async {
+    final sync = ref.watch(listOfferSyncProvider);
+    final region = ref.watch(regionProvider);
+    final chainId = ref.watch(storeForListProvider(listId))?.id;
+    final namesKey = ref.watch(
+      offerListItemsProvider(listId).select(_openNamesKey),
+    );
+    final visible = _watchVisibleOn(ref, listId);
+    if (region == null || chainId == null || namesKey.isEmpty) return null;
+    if (!await visible) return null;
+    return sync.sync(
+      listId: listId,
+      chainId: chainId,
+      zip: region.zip,
+      itemNames: namesKey.split('\n'),
+    );
+  },
+);
 
 String _openNamesKey(List<ShoppingItemModel> items) => [
-  for (final item in items)
-    if (!item.isChecked && item.name.trim().length >= 2) item.name.trim(),
-].join('\n');
+      for (final item in items)
+        if (!item.isChecked && item.name.trim().length >= 2) item.name.trim(),
+    ].join('\n');
 
 /// The current offer of the list's market per open item id of [listId];
 /// empty while offers may not show there. An offer the person hid for an
 /// item ("Nicht dieses Angebot") is left out until it ends.
-final listItemOffersProvider = Provider.autoDispose
-    .family<Map<String, StoreOffer>, String>((ref, listId) {
-      final snapshot = ref.watch(listOfferSnapshotProvider(listId)).valueOrNull;
-      final chainId = ref.watch(storeForListProvider(listId))?.id;
-      if (!ref.watch(offersVisibleForListProvider(listId)) ||
-          ref.watch(regionProvider) == null ||
-          snapshot == null ||
-          snapshot.chainId != chainId) {
-        return const {};
-      }
-      final items = ref.watch(offerListItemsProvider(listId));
-      final prefs = ref.watch(offerDisplayPrefsProvider);
-      final now = ref.watch(offerClockProvider)();
-      return {
-        for (final item in items)
-          if (!item.isChecked)
-            if (snapshot.offerFor(item.name) case final offer?)
-              if (offer.isValidNow &&
-                  !(prefs?.isDeclined(item.id, offer.id, now) ?? false))
-                item.id: offer,
-      };
-    });
+final listItemOffersProvider =
+    Provider.autoDispose.family<Map<String, StoreOffer>, String>((ref, listId) {
+  final snapshot = ref.watch(listOfferSnapshotProvider(listId)).valueOrNull;
+  final chainId = ref.watch(storeForListProvider(listId))?.id;
+  if (!ref.watch(offersVisibleForListProvider(listId)) ||
+      ref.watch(regionProvider) == null ||
+      snapshot == null ||
+      snapshot.chainId != chainId) {
+    return const {};
+  }
+  final items = ref.watch(offerListItemsProvider(listId));
+  final prefs = ref.watch(offerDisplayPrefsProvider);
+  final now = ref.watch(offerClockProvider)();
+  return {
+    for (final item in items)
+      if (!item.isChecked)
+        if (snapshot.offerFor(item.name) case final offer?)
+          if (offer.isValidNow &&
+              !(prefs?.isDeclined(item.id, offer.id, now) ?? false))
+            item.id: offer,
+  };
+});
 
 /// The key of [itemOfferProvider].
 typedef ItemOfferKey = ({String listId, String itemId});
 
 /// The current offer of the list's market for one item (`ItemOfferBadge`,
 /// `ItemOfferCard`); null for a checked item or without one.
-final itemOfferProvider = Provider.autoDispose
-    .family<StoreOffer?, ItemOfferKey>(
-      (ref, key) => ref.watch(
-        listItemOffersProvider(
-          key.listId,
-        ).select((offers) => offers[key.itemId]),
-      ),
-    );
+final itemOfferProvider =
+    Provider.autoDispose.family<StoreOffer?, ItemOfferKey>(
+  (ref, key) => ref.watch(
+    listItemOffersProvider(key.listId).select((offers) => offers[key.itemId]),
+  ),
+);
 
 /// "4 von 11 Artikeln diese Woche bei Lidl im Angebot, ca. 3,20 € gespart,
 /// in deiner Region" for [listId] (`ListOfferSummary`); null when nothing
 /// is on offer or offers may not show.
-final listOfferSummaryProvider = Provider.autoDispose
-    .family<OfferSummary?, String>((ref, listId) {
-      final offers = ref.watch(listItemOffersProvider(listId));
-      final store = ref.watch(storeForListProvider(listId));
-      if (offers.isEmpty || store == null) return null;
-      return summarizeListOffers(
-        chainId: store.id,
-        openItems: ref.watch(offerListItemsProvider(listId)),
-        offersByItemId: offers,
-        realRegion: ref.watch(regionProvider) != null,
-      );
-    });
+final listOfferSummaryProvider =
+    Provider.autoDispose.family<OfferSummary?, String>((ref, listId) {
+  final offers = ref.watch(listItemOffersProvider(listId));
+  final store = ref.watch(storeForListProvider(listId));
+  if (offers.isEmpty || store == null) return null;
+  return summarizeListOffers(
+    chainId: store.id,
+    openItems: ref.watch(offerListItemsProvider(listId)),
+    offersByItemId: offers,
+    realRegion: ref.watch(regionProvider) != null,
+  );
+});
 
 /// "2 Angebote" on the cover of a list card (`ListOfferCountBadge`).
 final listOfferCountProvider = Provider.autoDispose.family<int, String>(
@@ -473,10 +466,8 @@ const _dealsMaxLists = 2;
 /// items; override in tests.
 final offerDealListIdsProvider = Provider.autoDispose<List<String>>(
   (ref) => [
-    for (final list in _recentListsWithOpenItems(
-      ref,
-      minOpenItems: 1,
-    ).take(_dealsMaxLists))
+    for (final list in _recentListsWithOpenItems(ref, minOpenItems: 1)
+        .take(_dealsMaxLists))
       list.id,
   ],
 );
@@ -484,16 +475,18 @@ final offerDealListIdsProvider = Provider.autoDispose<List<String>>(
 /// The open items of the lists in [listIds] ('|'-joined), in one query;
 /// override in tests. Plain repository reads, not `itemsNotifierProvider`,
 /// which would keep a realtime subscription alive per list scanned.
-final offerDealItemsProvider = FutureProvider.autoDispose
-    .family<List<ShoppingItemModel>, String>((ref, listIds) async {
-      final items = await ref
-          .read(itemRepositoryProvider)
-          .getItemsForLists(listIds.split('|'));
-      return [
-        for (final item in items)
-          if (!item.isChecked) item,
-      ];
-    });
+final offerDealItemsProvider =
+    FutureProvider.autoDispose.family<List<ShoppingItemModel>, String>(
+  (ref, listIds) async {
+    final items = await ref
+        .read(itemRepositoryProvider)
+        .getItemsForLists(listIds.split('|'));
+    return [
+      for (final item in items)
+        if (!item.isChecked) item,
+    ];
+  },
+);
 
 /// Offers on items of the user's lists, each from its list's market, in the
 /// order of the lists and their items (never by discount or price). Shares
@@ -502,50 +495,45 @@ final offerDealItemsProvider = FutureProvider.autoDispose
 /// offers.
 final personalizedDealsProvider =
     FutureProvider.autoDispose<List<RecipeIngredientOffer>>((ref) async {
-      final sync = ref.watch(listOfferSyncProvider);
-      final region = ref.watch(regionProvider);
-      if (!ref.watch(offersAvailableProvider) || region == null) {
-        return const [];
-      }
-      final markets = <String, String>{
-        for (final listId in ref.watch(offerDealListIdsProvider))
-          if (ref.watch(storeForListProvider(listId))?.id case final chainId?)
-            listId: chainId,
-      };
-      if (markets.isEmpty) return const [];
-      final hiddenLists = _followHiddenLists(ref);
-      final itemsOfLists = ref.watch(
-        offerDealItemsProvider(markets.keys.join('|')).future,
-      );
-      final hidden = await hiddenLists;
-      final items = await itemsOfLists;
+  final sync = ref.watch(listOfferSyncProvider);
+  final region = ref.watch(regionProvider);
+  if (!ref.watch(offersAvailableProvider) || region == null) return const [];
+  final markets = <String, String>{
+    for (final listId in ref.watch(offerDealListIdsProvider))
+      if (ref.watch(storeForListProvider(listId))?.id case final chainId?)
+        listId: chainId,
+  };
+  if (markets.isEmpty) return const [];
+  final hiddenLists = _followHiddenLists(ref);
+  final itemsOfLists =
+      ref.watch(offerDealItemsProvider(markets.keys.join('|')).future);
+  final hidden = await hiddenLists;
+  final items = await itemsOfLists;
 
-      final deals = <RecipeIngredientOffer>[];
-      final seen = <String>{};
-      for (final MapEntry(key: listId, value: chainId) in markets.entries) {
-        if (hidden.contains(listId)) continue;
-        final openItems = [
-          for (final item in items)
-            if (item.listId == listId) item,
-        ];
-        if (openItems.isEmpty) continue;
-        final snapshot = await sync.sync(
-          listId: listId,
-          chainId: chainId,
-          zip: region.zip,
-          itemNames: [for (final item in openItems) item.name],
-        );
-        for (final item in openItems) {
-          final offer = snapshot.offerFor(item.name);
-          if (offer == null || !offer.isValidNow) continue;
-          if (!seen.add(offerNameKey(item.name))) continue;
-          deals.add(
-            RecipeIngredientOffer.fromStoreOffer(item.name.trim(), offer),
-          );
-        }
-      }
-      return deals;
-    });
+  final deals = <RecipeIngredientOffer>[];
+  final seen = <String>{};
+  for (final MapEntry(key: listId, value: chainId) in markets.entries) {
+    if (hidden.contains(listId)) continue;
+    final openItems = [
+      for (final item in items)
+        if (item.listId == listId) item,
+    ];
+    if (openItems.isEmpty) continue;
+    final snapshot = await sync.sync(
+      listId: listId,
+      chainId: chainId,
+      zip: region.zip,
+      itemNames: [for (final item in openItems) item.name],
+    );
+    for (final item in openItems) {
+      final offer = snapshot.offerFor(item.name);
+      if (offer == null || !offer.isValidNow) continue;
+      if (!seen.add(offerNameKey(item.name))) continue;
+      deals.add(RecipeIngredientOffer.fromStoreOffer(item.name.trim(), offer));
+    }
+  }
+  return deals;
+});
 
 /// The user's lists, most recently updated first, with at least
 /// [minOpenItems] unchecked items.
@@ -566,13 +554,9 @@ List<ShoppingListModel> _recentListsWithOpenItems(
     ];
   }
 
-  final key = ref.watch(
-    listsNotifierProvider.select(
-      (s) => pick(
-        s.valueOrNull,
-      ).map((l) => '${l.id}:${l.uncheckedCount}').join('|'),
-    ),
-  );
+  final key = ref.watch(listsNotifierProvider.select((s) => pick(s.valueOrNull)
+      .map((l) => '${l.id}:${l.uncheckedCount}')
+      .join('|')));
   if (key.isEmpty) return const [];
   return pick(ref.read(listsNotifierProvider).valueOrNull);
 }
@@ -585,15 +569,15 @@ List<ShoppingListModel> _recentListsWithOpenItems(
 /// `list_category_section.dart` (Teil A) until they use `ItemOfferBadge`.
 /// There is no basket comparison any more.
 @Deprecated('Use ItemOfferBadge or itemOfferProvider')
-final basketComparisonProvider = FutureProvider.autoDispose
-    .family<ListMarketOffers, String>((ref, listId) {
-      final offers = ref.watch(listItemOffersProvider(listId));
-      final items = ref.watch(offerListItemsProvider(listId));
-      return ListMarketOffers._({
-        for (final item in items)
-          if (offers[item.id] case final offer?) item.name.trim(): offer,
-      });
-    });
+final basketComparisonProvider =
+    FutureProvider.autoDispose.family<ListMarketOffers, String>((ref, listId) {
+  final offers = ref.watch(listItemOffersProvider(listId));
+  final items = ref.watch(offerListItemsProvider(listId));
+  return ListMarketOffers._({
+    for (final item in items)
+      if (offers[item.id] case final offer?) item.name.trim(): offer,
+  });
+});
 
 /// See [basketComparisonProvider].
 @Deprecated('Use ItemOfferBadge or itemOfferProvider')

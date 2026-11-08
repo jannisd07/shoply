@@ -74,8 +74,8 @@ OfferSummary? summarizeListOffers({
     final offer = offersByItemId[item.id];
     if (offer == null || !offer.isFromChain(chainId)) continue;
     matched++;
-    savings +=
-        offerSavingsCents(offer, quantity: item.quantity, unit: item.unit) ?? 0;
+    savings += offerSavingsCents(offer, quantity: item.quantity, unit: item.unit) ??
+        0;
   }
   if (matched == 0) return null;
   return OfferSummary(
@@ -135,16 +135,7 @@ double packCount(double quantity, String? unit) {
 }
 
 const Set<String> _pieceUnits = {
-  'x',
-  'stk',
-  'stk.',
-  'st',
-  'st.',
-  'pcs',
-  'pc',
-  'piece',
-  'pieces',
-  'stück',
+  'x', 'stk', 'stk.', 'st', 'st.', 'pcs', 'pc', 'piece', 'pieces', 'stück',
 };
 
 /// The mandatory sentence of [OfferSummary] in its three shapes (Kap. 12
