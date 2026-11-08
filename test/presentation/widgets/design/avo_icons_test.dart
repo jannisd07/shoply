@@ -645,4 +645,44 @@ void main() {
       ),
     );
   });
+
+  testWidgets('icons take colour and size from IconStyleScope', (tester) async {
+    const red = Color(0xFFFF0000);
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: IconStyleScope(
+          color: red,
+          size: 30,
+          child: Row(
+            children: [
+              AvoIcon(AvoIcons.cart, key: Key('scoped')),
+              AvoIcon(AvoIcons.cart, key: Key('own'), size: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(tester.getSize(find.byKey(const Key('scoped'))), const Size(30, 30));
+    expect(tester.getSize(find.byKey(const Key('own'))), const Size(12, 12));
+    final theme = tester.widget<AvoIconTheme>(find.byType(AvoIconTheme));
+    expect(theme.color, red);
+    expect(
+      IconTheme.of(tester.element(find.byKey(const Key('scoped')))).size,
+      30,
+    );
+  });
+
+  testWidgets('without a scope icons keep the default size', (tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(child: AvoIcon(AvoIcons.cart)),
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(AvoIcon)),
+      const Size.square(AvoIcon.defaultSize),
+    );
+  });
 }

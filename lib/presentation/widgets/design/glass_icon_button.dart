@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/glass_surface.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 const double _iconSize = 22; // D2 toolbar icons (chevron, share, more)
 const double _disabledOpacity = 0.4; // Konzept 00 §12.20
@@ -51,11 +52,9 @@ class GlassIconButton extends StatelessWidget {
     final face = SizedBox.square(
       dimension: AvoSizes.toolbarButton,
       child: Center(
-        child: IconTheme.merge(
-          data: IconThemeData(
-            size: _iconSize,
-            color: tinted ? colors.onTint : colors.label,
-          ),
+        child: IconStyleScope(
+          size: _iconSize,
+          color: tinted ? colors.onTint : colors.label,
           child: icon,
         ),
       ),
@@ -141,8 +140,9 @@ class _GroupButton extends StatelessWidget {
     Widget face = SizedBox.square(
       dimension: AvoSizes.hitTarget,
       child: Center(
-        child: IconTheme.merge(
-          data: IconThemeData(size: _iconSize, color: context.colors.label),
+        child: IconStyleScope(
+          size: _iconSize,
+          color: context.colors.label,
           child: item.icon,
         ),
       ),

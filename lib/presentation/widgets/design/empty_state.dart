@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 /// Figure size in empty states (A2 task: 96 pt).
 const double _kFigureSize = 96;
@@ -66,8 +67,9 @@ class EmptyState extends StatelessWidget {
       art = AvoFigure(pose: figurePose, size: _kFigureSize);
     } else if (symbol != null) {
       art = ExcludeSemantics(
-        child: IconTheme.merge(
-          data: IconThemeData(color: colors.secondaryLabel, size: _kIconSize),
+        child: IconStyleScope(
+          color: colors.secondaryLabel,
+          size: _kIconSize,
           child: symbol,
         ),
       );

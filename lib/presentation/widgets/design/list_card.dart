@@ -513,8 +513,9 @@ class _ListRowState extends State<ListRow> with SingleTickerProviderStateMixin {
           child: w.glyph == null
               ? null
               : Center(
-                  child: IconTheme.merge(
-                    data: IconThemeData(size: _glyphSize, color: colors.onTint),
+                  child: IconStyleScope(
+                    size: _glyphSize,
+                    color: colors.onTint,
                     child: SizedBox.square(
                       dimension: _glyphSize,
                       child: FittedBox(child: w.glyph),

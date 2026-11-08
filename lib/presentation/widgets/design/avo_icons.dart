@@ -431,20 +431,25 @@ class AvoIcon extends StatelessWidget {
   const AvoIcon(
     this.icon, {
     super.key,
-    this.size = 22,
+    this.size,
     this.color,
     this.filled = false,
     this.strokeWidth,
     this.semanticLabel,
   });
 
+  /// Default side when neither [size] nor an [AvoIconTheme] sets one.
+  static const double defaultSize = 22;
+
   /// The glyph.
   final AvoIconData icon;
 
-  /// Side of the square in logical points.
-  final double size;
+  /// Side of the square in logical points; defaults to the nearest
+  /// [AvoIconTheme], then [defaultSize].
+  final double? size;
 
-  /// Fill and stroke colour; defaults to `context.colors.label`.
+  /// Fill and stroke colour; defaults to the nearest [AvoIconTheme], then
+  /// `context.colors.label`.
   final Color? color;
 
   /// Draw the filled variant if the icon has one (active tab, saved).
@@ -462,13 +467,14 @@ class AvoIcon extends StatelessWidget {
     final flip =
         icon.matchTextDirection &&
         Directionality.maybeOf(context) == TextDirection.rtl;
+    final scope = AvoIconTheme.maybeOf(context);
     final painted = ExcludeSemantics(
       child: SizedBox.square(
-        dimension: size,
+        dimension: size ?? scope?.size ?? defaultSize,
         child: CustomPaint(
           painter: _AvoIconPainter(
             icon: icon,
-            color: color ?? context.colors.label,
+            color: color ?? scope?.color ?? context.colors.label,
             filled: filled,
             strokeWidth: strokeWidth ?? icon.strokeWidth,
             flip: flip,
@@ -480,6 +486,38 @@ class AvoIcon extends StatelessWidget {
     if (label == null) return painted;
     return Semantics(label: label, child: painted);
   }
+}
+
+/// Colour and size for the [AvoIcon]s below that set none themselves.
+/// Buttons and containers set it through [IconStyleScope].
+class AvoIconTheme extends InheritedWidget {
+  const AvoIconTheme({super.key, this.color, this.size, required super.child});
+
+  final Color? color;
+  final double? size;
+
+  static AvoIconTheme? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AvoIconTheme>();
+
+  @override
+  bool updateShouldNotify(AvoIconTheme oldWidget) =>
+      color != oldWidget.color || size != oldWidget.size;
+}
+
+/// Gives the icons below a colour and size: Flutter's [IconTheme] for
+/// [Icon]s and the [AvoIconTheme] for [AvoIcon]s.
+class IconStyleScope extends StatelessWidget {
+  const IconStyleScope({super.key, this.color, this.size, required this.child});
+
+  final Color? color;
+  final double? size;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => IconTheme.merge(
+    data: IconThemeData(size: size, color: color),
+    child: AvoIconTheme(color: color, size: size, child: child),
+  );
 }
 
 class _AvoIconPainter extends CustomPainter {

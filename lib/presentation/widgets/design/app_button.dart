@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/physics.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/glass_surface.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 // Konzept 00 §12.20.
 const double _pressedOpacity = 0.9;
@@ -289,8 +290,9 @@ class AppButton extends StatelessWidget {
           : SizedBox.square(
               dimension: iconSize,
               child: Center(
-                child: IconTheme.merge(
-                  data: IconThemeData(size: iconSize, color: foreground),
+                child: IconStyleScope(
+                  size: iconSize,
+                  color: foreground,
                   child: icon!,
                 ),
               ),
