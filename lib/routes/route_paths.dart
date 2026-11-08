@@ -77,4 +77,10 @@ abstract final class RoutePaths {
   static const splits = '/splits';
   static const stores = '/stores';
   static const checkout = '/checkout';
+
+  // --- Debug ------------------------------------------------------------------
+  /// Component gallery (`ComponentGallery`): every design component in light,
+  /// dark, AX5 and Increase Contrast, to compare with D2. Registered in debug
+  /// builds only (`kDebugMode`); release builds show the error page.
+  static const debugComponents = '/debug/components';
 }

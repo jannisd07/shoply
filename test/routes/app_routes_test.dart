@@ -65,6 +65,8 @@ void main() {
       // New in A2: Listen tab root and the paywall path for Teil B.
       'lists': '/lists',
       'pro': '/pro',
+      // Debug builds only (tests run in debug): the component gallery.
+      'debug-components': '/debug/components',
     };
     expect(_collect(buildAppRoutes()), expected);
   });

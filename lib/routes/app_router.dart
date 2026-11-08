@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/data/services/analytics_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
+import 'package:shoply/presentation/widgets/design/gallery/component_gallery.dart';
 import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart'
     show hasCompletedOnboarding;
 import 'package:shoply/routes/app_branch.dart';
@@ -293,4 +295,11 @@ List<RouteBase> buildAppRoutes() => [
   ...planRootRoutes,
   ...offersRootRoutes,
   ...historyRootRoutes,
+  // Component gallery for comparing with D2; never in release builds.
+  if (kDebugMode)
+    GoRoute(
+      path: RoutePaths.debugComponents,
+      name: 'debug-components',
+      builder: (context, state) => const ComponentGallery(),
+    ),
 ];
