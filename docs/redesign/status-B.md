@@ -4,11 +4,12 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 
 ## Stand
 
-2026-11-08 spät: **Gemini ist raus.** Avo läuft über Claude (`0b91307`), Kalorien-Daten und Foto-Client sind auf
-`main` (`437fc58`), das Gemini-Paket ist entfernt (`7f422f2`). Lokal und noch nicht committet: die Swift-Seite der
-nativen Kanäle (Health, Scanner, Stimme, Reduce Transparency) samt `AppDelegate`/`Info.plist`. Sie folgt nach einem
-iOS-Build nach dem Neustart des Macs. Danach: B-Screens auf S2a/S2b, Widgets/Siri, Evals, Prüfmatrix.
-**Für S3 fehlen nur Owner-Schritte** (Secret, Migrationen, Deploy), siehe `docs/OPEN-ISSUES.md` ganz oben.
+2026-11-08 abends: **S3 erreicht, Claude ist live.** Secret gesetzt (Owner), alle sechs B-Migrationen angewendet
+(App-Flags, KI-Kontingent, private Essensfotos, Markt pro Liste, Kalorien v2, Wochenplan), `ai` und
+`extract-shopping-list` deployt; beide antworten ohne Anmeldung mit 401. Neue Tabellen für A: `list_store_assignments_b`,
+`user_food`, `workout_log`, `challenge_checkins`, `meal_plans`, `meal_plan_entries`, `meal_plan_settings`, RPC
+`log_water`. Als Nächstes: Swift-Seite der nativen Kanäle committen (iOS-Build grün), dann B-Screens auf S2a/S2b,
+Widgets/Siri, Evals, Prüfmatrix.
 
 ## Meilensteine
 
@@ -17,7 +18,7 @@ iOS-Build nach dem Neustart des Macs. Danach: B-Screens auf S2a/S2b, Widgets/Sir
 | S0 Aufräumen gemergt (A) | erledigt (laut status-A) | 07.11.2026 | `950921d` |
 | S1 Struktur (A) | erledigt (laut status-A) | 07.11.2026 | `ab83f21`…`6112576` |
 | S2 Fundament (A) | S2a erreicht (laut status-A) | 08.11.2026 | `f16e071` |
-| S3 Claude live (B) | Code auf main, wartet auf Secret + Deploy + Migration | 08.11.2026 | `0721f38` |
+| S3 Claude live (B) | erreicht: Secret, 6 Migrationen, Deploy `ai` + `extract-shopping-list` | 08.11.2026 | `0721f38` |
 | S4 Angebote abgesichert (B) | Logik fertig (`26677f3`): keine Ersatz-Keys, Kill-Switch, Wortlaut, nur Listen-Markt; Slots noch Hüllen bis zum Zeichnen mit S2b | 08.11.2026 | `26677f3` |
 | S5 Bereiche fertig (B) | offen | | |
 | S6 Gegenprüfung (B prüft A) | offen | | |
@@ -96,9 +97,9 @@ Entschieden am 07.11.2026:
   am Ende Simulator-Durchgang mit Screenshots aller Screens und Überarbeitung von allem, was nicht perfekt aussieht.
 
 Offen:
-- **S3:** Supabase-Secret `ANTHROPIC_API_KEY` setzen (Owner selbst), Deploy der Edge Function `ai` (und
-  `extract-shopping-list` als Hülle) und die Migrationen `20261108000000_b_app_flags`, `…000100_b_ai_usage`,
-  `…000200_b_meal_photos_private`, `…000300_b_list_store`, `…002000_b_meal_plan` – Teil B fragt jeden Schritt einzeln.
+- **Abo-RPCs ohne Anmeldung aufrufbar** (Advisor, alt): `activate_subscription` setzt jede Person ohne Beleg auf Pro
+  und hebt damit die KI-Limits auf. Sofort-Migration vorbereitet, wartet auf dein Ja (`docs/OPEN-ISSUES.md` oben).
+- Gemini-Key widerrufen und Monatsgrenze in der Claude Console setzen (Owner).
 - Kontakt-E-Mail für den Open-Food-Facts-User-Agent (`Avo/<version> (<E-Mail>)`).
 - Berechtigungstexte (Mikrofon, Spracherkennung, Kamera, Health) und HealthKit-Capability im Developer-Portal.
 - Welche B-Funktionen Pro werden (Angebote nie). Kommt mit der A9-Analyse.

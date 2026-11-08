@@ -6,15 +6,17 @@ Stand: 2026-11-08.
 
 ## 1. Dringend: Dinge, die gerade kaputt sind
 
-- **Claude live schalten (Teil B, S3).** Bis dahin fällt die Kategorisierung auf die lokale Erkennung zurück, Avo,
-  Essensfoto und Zettel-Import antworten mit einem Fehler. Reihenfolge, jeder Schritt einzeln freigeben:
-  1. Secret setzen: `supabase secrets set ANTHROPIC_API_KEY=…` (nur der Owner; API-Credits aus der Claude Console).
-  2. Migrationen anwenden: `20261108000000_b_app_flags`, `20261108000100_b_ai_usage`,
-     `20261108000200_b_meal_photos_private`, `20261108000300_b_list_store`, `20261108001000_b_calories`,
-     `20261108002000_b_meal_plan` (alle in `supabase/migrations/`).
-  3. Deploy: `supabase functions deploy ai` und `supabase functions deploy extract-shopping-list` (Hülle für alte Builds).
-  4. Danach den alten Gemini-Key in Google AI Studio widerrufen; er steckt in ausgelieferten Builds.
-  5. In der Claude Console eine harte Monatsgrenze setzen.
+- **Claude ist live (S3, 08.11.2026):** Secret gesetzt, alle sechs B-Migrationen angewendet, `ai` und
+  `extract-shopping-list` deployt. Es bleiben zwei Schritte für den Owner:
+  1. Den alten Gemini-Key in Google AI Studio widerrufen; er steckt in ausgelieferten Builds.
+  2. In der Claude Console eine harte Monatsgrenze setzen.
+- **Abo-RPCs sind ohne Anmeldung aufrufbar, das kostet jetzt KI-Geld.** `activate_subscription(user_uuid, …)` ist
+  `security definer`, prüft weder `auth.uid()` noch einen Beleg und darf von der Rolle `anon` ausgeführt werden: Jeder mit
+  dem öffentlichen Anon-Key kann sich (oder jede andere Person) dauerhaft auf Pro setzen und bekommt damit die
+  Pro-KI-Limits. Gleiches für `activate_trial` und `expire_subscriptions`; `get_recommended_items` liefert die
+  Kaufstatistik jeder Person. Sofortmaßnahme liegt bereit, nicht angewendet:
+  `supabase/migrations/20261108003000_b_lock_subscription_rpcs.sql` (nur noch das eigene Konto, kein `anon`,
+  Cron-Funktionen nur `service_role`). Die richtige Lösung steht unter 2. (Belegprüfung).
 - **Firebase-Konfiguration auf Jannis' Mac (`~/Apps/shoply-neu`) ist veraltet.** Richtig ist das Projekt
   `shoply-92f28` (CLAUDE.md, Edge Function `send-push-notification`). Dort ist aber `lib/firebase_options.dart`
   ein Platzhalter und `ios/Runner/GoogleService-Info.plist` gehört zum alten Projekt `shoplyai-1554e`. Folge:
@@ -31,8 +33,11 @@ Stand: 2026-11-08.
 
 - **Abo-Status ist vom Client schreibbar.** Server-seitige Belegprüfung bauen (Edge Function, die bei Apple prüft
   und `users.subscription_*` schreibt) und Client-Updates dieser Spalten per RLS/Column-Grant sperren.
-- Prüfen, dass die RPCs `activate_subscription` und `increment_recipe_view_count` in Produktion existieren. Die
-  Client-Fallbacks dafür sind entfernt.
+- `activate_subscription` existiert in Produktion (geprüft 08.11.); `increment_recipe_view_count` ebenfalls.
+- Weitere Hinweise des Supabase-Advisors (alt, nicht von Teil B): `update_expense_splits_updated_at` ohne festen
+  `search_path`, `pg_trgm` im Schema `public`, Leaked-Password-Schutz aus.
+- Wochenplan live zwischen Geräten: `meal_plan_entries` und `meal_plans` zur Publication `supabase_realtime`
+  hinzufügen (bis dahin lädt die App beim Öffnen neu).
 
 ## 3. CI und Release
 
