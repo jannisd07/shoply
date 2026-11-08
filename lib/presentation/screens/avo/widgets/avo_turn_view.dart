@@ -7,6 +7,7 @@ import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
+import 'package:shoply/presentation/screens/avo/avo_done_note.dart';
 import 'package:shoply/presentation/screens/avo/avo_suggestions.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_message_text.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_payload_sections.dart';
@@ -109,12 +110,11 @@ class AvoTurnView extends ConsumerWidget {
 
     final sections = avoSectionsFor(context, scope);
     if (turn.phase == AvoTurnPhase.failed && turn.errorCode != null) {
-      final done = avoDoneChanges(context, scope);
       sections.add(
         AvoErrorSection(
           code: turn.errorCode!,
           retryAt: turn.retryAt,
-          partlyDone: done.isNotEmpty,
+          partlyDone: turn.payloads.any((p) => p.isDoneChange),
           // Asked again as a new round: the retry is that round now.
           onRetry: turn.retried
               ? null
@@ -122,12 +122,8 @@ class AvoTurnView extends ConsumerWidget {
                   turn,
                   offline: offline,
                   proHintAllowed: proHintAllowed,
-                  doneNote: done.isEmpty
-                      ? null
-                      : context.tr(
-                          'avo_retry_done_note',
-                          params: {'changes': done},
-                        ),
+                  // All done changes of this question, earlier rounds too.
+                  doneNote: avoDoneNote(context, chat, turn.doneChanges),
                 ),
           onSignIn: () => context.push(RoutePaths.login),
         ),

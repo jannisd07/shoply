@@ -1,5 +1,6 @@
-// Stufe 3 (prompt-b-vorrang.md): Avo is the root of its tab. A question
-// handed over with /avo?q= is sent exactly once, the header has no back
+// Stufe 3 (prompt-b-vorrang.md): Avo is the root of its tab. A text from
+// the URL (/avo?q= or ?prompt=) fills the composer once and is never sent
+// (sending at once only through openAvoWithQuestion), the header has no back
 // button, and Teil A can tell Avo where the person is.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +16,7 @@ import '../screens/avo/avo_fakes.dart';
 
 void main() {
   group('AvoInitialQuestion', () {
-    test('sends a handed-over question once, not on rebuilds', () {
+    test('fills in a URL text once, not on rebuilds', () {
       final gate = AvoInitialQuestion();
       expect(
         gate.take('Was ist bei Lidl im Angebot?'),
@@ -31,7 +32,7 @@ void main() {
       expect(gate.take('Milch auf die Liste'), 'Milch auf die Liste');
     });
 
-    test('no or blank question sends nothing and resets', () {
+    test('no or blank text fills nothing and resets', () {
       final gate = AvoInitialQuestion();
       expect(gate.take(null), isNull);
       expect(gate.take('   '), isNull);

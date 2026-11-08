@@ -171,6 +171,9 @@ const Map<String, String> avoEn = {
   'avo_retry_done_note': "Already done, don't do it again: {changes}",
   'avo_toast_added': '{n} items added to {list}',
   'avo_toast_added_one': '{item} added to {list}',
+  'avo_note_a_list': 'a list',
+  'avo_note_updated': '1 item changed',
+  'avo_note_moved': '{n} moved',
 };
 
 const Map<String, String> avoDe = {
@@ -342,4 +345,7 @@ const Map<String, String> avoDe = {
   'avo_retry_done_note': 'Schon erledigt, bitte nicht noch einmal: {changes}',
   'avo_toast_added': '{n} Artikel zu {list} hinzugefügt',
   'avo_toast_added_one': '{item} zu {list} hinzugefügt',
+  'avo_note_a_list': 'eine Liste',
+  'avo_note_updated': '1 Artikel geändert',
+  'avo_note_moved': '{n} verschoben',
 };

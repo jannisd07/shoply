@@ -23,12 +23,6 @@ export 'package:shoply/presentation/screens/avo/avo_turn.dart';
 
 part 'avo_chat_cards.dart';
 
-/// An answer whose first word or tool takes longer than this counts as a
-/// weak connection; one faster than [_fastFirstEvent] clears it (Kap. 3.3,
-/// "Verbindung schlecht", until Kap. 20's connection state exists).
-const Duration _slowFirstEvent = Duration(seconds: 4);
-const Duration _fastFirstEvent = Duration(seconds: 2);
-
 /// The conversation of the Avo tab: the questions, their answers and the
 /// state of every card. Lives as long as the account (a new account gets a
 /// new one), so leaving the tab mid-answer lets the answer finish.
@@ -95,7 +89,9 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
   @override
   AvoTurn? get latest => _turns.isEmpty ? null : _turns.last;
 
-  /// The last answers came slowly ("Verbindung schlecht").
+  /// The last answer hit transport trouble (timeout, broken stream) and
+  /// nothing has arrived since ("Verbindung schlecht", Kap. 3.3, until Kap.
+  /// 20's connection state exists).
   bool get slowConnection => _slow;
 
   /// The screen context the last question was asked in (the context chip
@@ -118,6 +114,7 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     bool offline = false,
     bool proHintAllowed = false,
     String? sentText,
+    List<AvoWidgetPayload> carried = const [],
   }) {
     final text = question.trim();
     if (text.isEmpty || _ref == null) return null;
@@ -127,18 +124,21 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
       _resetPending = true;
     }
     _askedContext = _readContext();
-    final turn = AvoTurn(_nextId++, text, _now(), sentText: sentText);
+    final turn = AvoTurn(
+      _nextId++,
+      text,
+      _now(),
+      sentText: sentText,
+      carried: carried,
+      proHintAllowed: proHintAllowed,
+    );
     _turns.add(turn);
     _lastActivity = _now();
-    _start(turn, offline: offline, proHintAllowed: proHintAllowed);
+    _start(turn, offline: offline);
     return turn;
   }
 
-  void _start(
-    AvoTurn turn, {
-    required bool offline,
-    required bool proHintAllowed,
-  }) {
+  void _start(AvoTurn turn, {required bool offline}) {
     if (offline) {
       turn.phase = AvoTurnPhase.notSent;
       notifyListeners();
@@ -146,14 +146,17 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
       turn.phase = AvoTurnPhase.queued;
       notifyListeners();
     } else {
-      unawaited(_run(turn, proHintAllowed: proHintAllowed));
+      unawaited(_run(turn));
     }
   }
 
-  /// "Erneut senden" / "Erneut versuchen" on [turn]. Without done changes the
-  /// round starts over in place. With done changes they keep their cards and
-  /// "Widerrufen", and the question goes out as a new round together with
-  /// [doneNote] (what is already done), so nothing is done twice.
+  /// "Erneut senden" / "Erneut versuchen" on [turn]. Without done changes of
+  /// its own the round starts over in place (keeping a note it already
+  /// carries). With done changes (any write: list changes, settings, recipes
+  /// to a list, logs, modules) they keep their cards and "Widerrufen", and
+  /// the question goes out as a new round with [doneNote], which must cover
+  /// [AvoTurn.doneChanges] (this round's and every earlier one's), so
+  /// nothing is done twice.
   void retry(
     AvoTurn turn, {
     bool offline = false,
@@ -161,16 +164,14 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     String? doneNote,
   }) {
     if (!_turns.contains(turn) || identical(turn, _active)) return;
-    final changed = turn.payloads.any(
-      (p) => p.kind == AvoPayloadKind.listChange,
-    );
-    if (changed) {
+    if (turn.payloads.any((p) => p.isDoneChange)) {
       turn.retried = true;
       final note = doneNote?.trim();
       send(
         turn.question,
         offline: offline,
         proHintAllowed: proHintAllowed,
+        carried: turn.doneChanges,
         sentText: note == null || note.isEmpty
             ? null
             : '${turn.question}\n\n$note',
@@ -178,7 +179,7 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
       return;
     }
     turn.restart();
-    _start(turn, offline: offline, proHintAllowed: proHintAllowed);
+    _start(turn, offline: offline);
   }
 
   /// "Stopp" / "Antwort anhalten": done changes stay with "Widerrufen".
@@ -188,7 +189,7 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     _backend.stop();
   }
 
-  Future<void> _run(AvoTurn turn, {required bool proHintAllowed}) async {
+  Future<void> _run(AvoTurn turn) async {
     final ref = _ref;
     if (ref == null) return;
     if (_resetPending) {
@@ -201,14 +202,11 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     turn.phase = AvoTurnPhase.working;
     notifyListeners();
 
-    final started = _now();
-    var heard = false;
+    // Anything arriving from Avo means the connection carries again.
     void firstEvent() {
-      if (heard) return;
-      heard = true;
-      final wait = _now().difference(started);
-      if (wait > _slowFirstEvent) _slow = true;
-      if (wait < _fastFirstEvent) _slow = false;
+      if (!_slow) return;
+      _slow = false;
+      notifyListeners();
     }
 
     AvoResponse? response;
@@ -245,10 +243,15 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
       debugPrint('❌ [AVO_TAB] Answer failed: $e');
     }
     if (_disposed) return;
-    // An answer without streamed words counts by when it arrived.
-    if (response != null && response.errorCode == null) firstEvent();
-    if (response?.errorCode == 'timeout') _slow = true;
-    await _finish(turn, response, proHintAllowed: proHintAllowed);
+    // "Verbindung schlecht" only for transport trouble (no event in time, a
+    // broken stream), never for a slow but working answer.
+    final code = response?.errorCode;
+    if (code == 'timeout' || code == 'network_error') {
+      _slow = true;
+    } else if (response != null && code == null) {
+      _slow = false;
+    }
+    await _finish(turn, response, proHintAllowed: turn.proHintAllowed);
     _active = null;
     _lastActivity = _now();
     if (_disposed) return;
@@ -258,7 +261,7 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     final next = _turns
         .where((t) => t.phase == AvoTurnPhase.queued)
         .firstOrNull;
-    if (next != null) unawaited(_run(next, proHintAllowed: proHintAllowed));
+    if (next != null) unawaited(_run(next));
   }
 
   Future<void> _finish(

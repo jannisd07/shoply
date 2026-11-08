@@ -3,7 +3,6 @@ import 'package:flutter/widgets.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
-import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_card_scope.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_delete_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_interim_sections.dart';
@@ -64,6 +63,7 @@ Widget? _sectionFor(BuildContext context, AvoCardScope s, AvoWidgetPayload p) {
       final info = p.appInfo;
       return info == null ? null : avoAppInfoSection(context, info);
     case AvoPayloadKind.pickList:
+    case AvoPayloadKind.wrote:
       return null;
   }
 }
@@ -75,12 +75,3 @@ List<Widget> avoChoiceCards(BuildContext context, AvoCardScope scope) => [
     if (p.kind == AvoPayloadKind.pickList && p.pickListData != null)
       AvoPickListCard(payload: p, scope: scope),
 ];
-
-/// What the done changes of a failed round were, for the retry note to Avo
-/// ("Wocheneinkauf: 3 hinzugefügt; Drogerie: 2 verschoben aus …").
-String avoDoneChanges(BuildContext context, AvoCardScope scope) => [
-  for (final p in scope.turn.payloads)
-    if (scope.chat.changeOf(p) case final c?)
-      if (scope.chat.undoPhaseOf(p) != AvoUndoPhase.undone)
-        '${c.listName}: ${avoChangeSummary(context, c)}',
-].join('; ');

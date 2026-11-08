@@ -23,6 +23,7 @@ import 'package:shoply/data/services/avo_assistant_models.dart';
 import 'package:shoply/data/services/avo_consents.dart';
 import 'package:shoply/data/services/avo_conversation.dart';
 import 'package:shoply/data/services/avo_list_changes.dart';
+import 'package:shoply/data/services/avo_tool_writes.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/data/services/claude_service.dart';
@@ -345,7 +346,19 @@ class AvoAssistantService {
         isError: true,
       );
     }
+    final before = payloads.length;
     final result = await _runTool(call.name, call.input, ref, context, payloads);
+    // A write without a card of its own still counts as done for a retry.
+    final listId = call.input['list_id'] ?? call.input['to_list_id'];
+    final marker = avoWriteMarker(
+      call.name,
+      result,
+      hadDoneCard: payloads.skip(before).any((p) => p.isDoneChange),
+      listName: listId is String && avoWritingTools.contains(call.name)
+          ? await _changes(ref).listName(listId)
+          : null,
+    );
+    if (marker != null) payloads.add(marker);
     // A calories tool with the module off: the card offers "Einschalten"
     // (once per answer). Never for the meal plan while it is unreleased.
     if (result['tracking_enabled'] == false &&
@@ -2343,11 +2356,12 @@ class _RefListWriter implements AvoListWriter {
       ref.read(listsNotifierProvider.notifier).updateList(listId, {'name': name});
 
   @override
-  Future<List<ShoppingListModel>> lists() async {
-    final loaded = ref.read(listsNotifierProvider).valueOrNull;
-    if (loaded != null) return loaded;
-    return ListRepository.instance.getUserLists();
-  }
+  Future<List<ShoppingListModel>> lists() =>
+      ListRepository.instance.getUserLists();
+
+  @override
+  List<ShoppingListModel>? shownLists() =>
+      ref.read(listsNotifierProvider).valueOrNull;
 
   @override
   void changed(Iterable<String> listIds) {

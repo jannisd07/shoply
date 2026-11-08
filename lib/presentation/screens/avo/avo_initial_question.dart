@@ -1,11 +1,12 @@
-/// Decides when a question handed to the Avo tab (`/avo?q=…`, from the
-/// "Frag Avo …" field on Home) is sent: exactly once per hand-over, never
-/// again on a rebuild, a tab switch or a return to the tab.
+/// Decides when a text from the Avo tab's URL (`?prompt=` or `?q=`) fills
+/// the composer: once per distinct text, never again on a rebuild, a tab
+/// switch or a return to the tab. It never sends; sending at once is only
+/// for in-app hand-overs (`AvoAsk`, `openAvoWithQuestion`).
 class AvoInitialQuestion {
   String? _lastHandedOver;
 
-  /// The question to send now, or null. [question] is the current `q` of the
-  /// route; a new, different `q` counts as a new hand-over.
+  /// The text to fill in now, or null. [question] is the current URL text; a
+  /// new, different one counts as a new hand-over.
   String? take(String? question) {
     final q = question?.trim();
     if (q == null || q.isEmpty) {

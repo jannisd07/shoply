@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/physics.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -78,6 +78,9 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
 
   AvoChat? _chat;
   int _turnCount = -1;
+
+  /// Height of the pinned status row (offline, AI off, weak connection).
+  double _statusHeight = 0;
   bool _visible = false;
   late final AppLifecycleListener _lifecycle = AppLifecycleListener(
     onResume: () => _chat?.expireIfStale(),
@@ -357,20 +360,6 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
         screenContext != chat.askedContext;
     final canAsk = aiOn && !offline;
 
-    final media = MediaQuery.of(context);
-    final toolbarTop = GlassToolbar.topOffset(context);
-    final top = toolbarTop + AvoSizes.toolbarButton + _titleGap;
-    final turnTop = toolbarTop + AvoSizes.toolbarButton + AvoSpacing.s;
-    final dockBottom = AccessoryDock.bottomOffset(context);
-    final chipSpace = showChip ? AvoSizes.hitTarget + _contextChipGap : 0.0;
-    final bottom =
-        dockBottom + AvoSizes.accessoryHeight + chipSpace + AvoSpacing.l;
-    final lastMinHeight = (media.size.height - turnTop - bottom).clamp(
-      0.0,
-      double.infinity,
-    );
-
-    final pose = chat.isWorking ? AvoPose.thinking : AvoPose.waving;
     final status = !aiOn
         ? StatusRow(
             kind: StatusKind.sectionError,
@@ -384,13 +373,33 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
             text: context.tr('avo_slow_connection'),
           )
         : null;
+    // The status row stays pinned under the head, so it is seen in a long
+    // conversation too; the conversation starts below it.
+    final statusSpace = status == null
+        ? 0.0
+        : _statusHeight + 2 * AvoSpacing.xs;
+
+    final media = MediaQuery.of(context);
+    final toolbarTop = GlassToolbar.topOffset(context);
+    final top = toolbarTop + AvoSizes.toolbarButton + _titleGap + statusSpace;
+    final turnTop =
+        toolbarTop + AvoSizes.toolbarButton + AvoSpacing.s + statusSpace;
+    final dockBottom = AccessoryDock.bottomOffset(context);
+    final chipSpace = showChip ? AvoSizes.hitTarget + _contextChipGap : 0.0;
+    final bottom =
+        dockBottom + AvoSizes.accessoryHeight + chipSpace + AvoSpacing.l;
+    final lastMinHeight = (media.size.height - turnTop - bottom).clamp(
+      0.0,
+      double.infinity,
+    );
+
+    final pose = chat.isWorking ? AvoPose.thinking : AvoPose.waving;
 
     final followUpTarget = contextName ?? contextList?.name;
     final body = <Widget>[
       // VoiceOver reads the title from the head ([_TitleForVoiceOver]), so it
       // comes before "Neues Gespräch" (Kap. 3.6).
       ExcludeSemantics(child: AvoLargeTitle(pose: pose)),
-      if (status != null) ...[const SizedBox(height: AvoSpacing.s), status],
       const SizedBox(height: _historyStart),
       if (turns.isEmpty)
         AvoEmptyChat(
@@ -427,7 +436,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       child: Stack(
         children: [
           Positioned.fill(
-            // VoiceOver (Kap. 3.6): title, "Neues Gespräch", status row and
+            // VoiceOver (Kap. 3.6): title, "Neues Gespräch", status row,
             // conversation, then the composer, whatever scrolls under what.
             child: Semantics(
               container: true,
@@ -455,11 +464,42 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
               ),
             ),
           ),
-          const Positioned(
+          Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: ScrollEdgeFade(height: _topFade),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (status != null)
+                  Semantics(
+                    container: true,
+                    sortKey: const OrdinalSortKey(1.5),
+                    child: ColoredBox(
+                      color: colors.background,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top:
+                              toolbarTop +
+                              AvoSizes.toolbarButton +
+                              AvoSpacing.xs,
+                          bottom: AvoSpacing.xs,
+                        ),
+                        child: _SizeReporter(
+                          onSize: (size) {
+                            if (mounted && size.height != _statusHeight) {
+                              setState(() => _statusHeight = size.height);
+                            }
+                          },
+                          child: status,
+                        ),
+                      ),
+                    ),
+                  ),
+                ScrollEdgeFade(height: status == null ? _topFade : _bottomFade),
+              ],
+            ),
           ),
           Positioned(
             top: toolbarTop,
@@ -541,6 +581,37 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       constraints: BoxConstraints(minHeight: minHeight),
       child: Align(alignment: Alignment.topCenter, child: view),
     );
+  }
+}
+
+/// Reports its child's size after layout (the pinned status row's height).
+class _SizeReporter extends SingleChildRenderObjectWidget {
+  const _SizeReporter({required this.onSize, super.child});
+
+  final ValueChanged<Size> onSize;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderSizeReporter(onSize);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderSizeReporter render) =>
+      render.onSize = onSize;
+}
+
+class _RenderSizeReporter extends RenderProxyBox {
+  _RenderSizeReporter(this.onSize);
+
+  ValueChanged<Size> onSize;
+  Size? _last;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final now = size;
+    if (now == _last) return;
+    _last = now;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onSize(now));
   }
 }
 

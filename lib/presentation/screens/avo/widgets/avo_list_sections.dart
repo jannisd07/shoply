@@ -40,6 +40,18 @@ String avoChangeSummary(BuildContext context, AvoListChange c) {
   final lang = Localizations.maybeLocaleOf(context)?.languageCode ?? 'de';
   String qty(double v) => NumberFormat('0.##', lang).format(v);
   switch (c.kind) {
+    // An add that merged into an item already on the list raised its
+    // quantity: say so instead of "1 hinzugefügt".
+    case AvoListChangeKind.added
+        when c.previousQuantity != null && c.newQuantity != null:
+      return context.tr(
+        'avo_card_quantity',
+        params: {
+          'item': c.itemName ?? '',
+          'new': qty(c.newQuantity!),
+          'old': qty(c.previousQuantity!),
+        },
+      );
     case AvoListChangeKind.added:
       return context.tr('avo_card_added', params: n);
     case AvoListChangeKind.checked:
@@ -76,7 +88,7 @@ String avoChangeSummary(BuildContext context, AvoListChange c) {
 /// The toast for a change made while the tab is not visible (Kap. 3.2),
 /// without Avo's name: "3 Artikel zu Wocheneinkauf hinzugefügt".
 String avoChangeToast(BuildContext context, AvoListChange c) {
-  if (c.kind == AvoListChangeKind.added) {
+  if (c.kind == AvoListChangeKind.added && c.previousQuantity == null) {
     return c.count == 1 && c.items.isNotEmpty
         ? context.tr(
             'avo_toast_added_one',

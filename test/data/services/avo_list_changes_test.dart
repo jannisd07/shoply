@@ -162,6 +162,9 @@ class _Writer implements AvoListWriter {
   ];
 
   @override
+  List<ShoppingListModel>? shownLists() => null;
+
+  @override
   void changed(Iterable<String> listIds) {}
 }
 
@@ -207,6 +210,28 @@ void main() {
       expect(await fresh.undo!(), AvoUndoResult.changedSince);
       expect(writer.deleted, isEmpty);
       expect(writer.items['w']!.firstWhere((i) => i.id == 'm').quantity, 5);
+    });
+
+    test('the read before the add failed: no undo, never a delete '
+        '(round 2, 1)', () async {
+      writer.item('m', 'Milch', quantity: 1);
+      final blind = _BlindBeforeWriter(writer);
+      final change = await AvoListChanges(
+        blind,
+      ).add(listId: 'w', name: 'Milch');
+      expect(change.items.single.id, 'm', reason: 'the add merged');
+      expect(change.undo, isNull);
+      expect(writer.deleted, isEmpty);
+    });
+
+    test('a merged add carries the quantity before and after', () async {
+      writer.item('m', 'Milch', quantity: 1);
+      final change = await changes.add(listId: 'w', name: 'Milch', quantity: 2);
+      expect(change.itemName, 'Milch');
+      expect(change.previousQuantity, 1);
+      expect(change.newQuantity, 3);
+      final fresh = await changes.add(listId: 'w', name: 'Eier');
+      expect(fresh.previousQuantity, isNull);
     });
 
     test('a failing undo reports failed', () async {
@@ -309,6 +334,38 @@ void main() {
       expect(await again.undo!(), AvoUndoResult.changedSince);
     });
   });
+}
+
+/// The first read (before the add) fails, everything else works.
+class _BlindBeforeWriter extends _Writer {
+  _BlindBeforeWriter(this.inner);
+
+  final _Writer inner;
+  bool _first = true;
+
+  @override
+  Future<List<ShoppingItemModel>> itemsOf(String listId) {
+    if (_first) {
+      _first = false;
+      throw Exception('timeout');
+    }
+    return inner.itemsOf(listId);
+  }
+
+  @override
+  List<ShoppingItemModel>? shownItems(String listId) =>
+      inner.shownItems(listId);
+
+  @override
+  Future<void> addItem(
+    String listId, {
+    required String name,
+    required double quantity,
+    String? unit,
+  }) => inner.addItem(listId, name: name, quantity: quantity, unit: unit);
+
+  @override
+  Future<List<ShoppingListModel>> lists() => inner.lists();
 }
 
 /// Offline: the add only shows a pending row.

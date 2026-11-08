@@ -158,6 +158,11 @@ enum AvoPayloadKind {
 
   /// A tool needed a module that is switched off ([AvoWidgetPayload.module]).
   moduleOff,
+
+  /// A tool wrote something that has no card of its own (recipe to list,
+  /// food log, a module switched): shows nothing, but tells a retry that it
+  /// is done ([AvoWidgetPayload.wroteTool]).
+  wrote,
 }
 
 class AvoWidgetPayload {
@@ -177,6 +182,10 @@ class AvoWidgetPayload {
   final AvoListChange? listChange;
   final AppModule? module;
 
+  /// [AvoPayloadKind.wrote]: the tool and the list it wrote to, if any.
+  final String? wroteTool;
+  final String? wroteListName;
+
   const AvoWidgetPayload._({
     required this.kind,
     this.recipes,
@@ -193,7 +202,25 @@ class AvoWidgetPayload {
     this.consentKind,
     this.listChange,
     this.module,
+    this.wroteTool,
+    this.wroteListName,
   });
+
+  /// [tool] wrote something without a card of its own.
+  factory AvoWidgetPayload.wrote(String tool, {String? listName}) =>
+      AvoWidgetPayload._(
+        kind: AvoPayloadKind.wrote,
+        wroteTool: tool,
+        wroteListName: listName,
+      );
+
+  /// Something this payload stands for is already done (a retry must not
+  /// do it again): a list change, a saved setting, a card-less write.
+  bool get isDoneChange => switch (kind) {
+    AvoPayloadKind.listChange || AvoPayloadKind.wrote => true,
+    AvoPayloadKind.settingChange => settingChange?.success ?? false,
+    _ => false,
+  };
 
   /// A change on a list, shown as a result card with "Widerrufen".
   factory AvoWidgetPayload.listChange(AvoListChange change) =>
@@ -265,11 +292,17 @@ class AvoWidgetPayload {
 
   /// A deletion Avo proposed; only a tap on this card deletes.
   factory AvoWidgetPayload.confirmDelete(AvoPendingDelete pending) =>
-      AvoWidgetPayload._(kind: AvoPayloadKind.confirmDelete, pendingDelete: pending);
+      AvoWidgetPayload._(
+        kind: AvoPayloadKind.confirmDelete,
+        pendingDelete: pending,
+      );
 
   /// Asks to share data with Avo before a tool can use it.
   factory AvoWidgetPayload.consentRequest(AvoConsentKind kind) =>
-      AvoWidgetPayload._(kind: AvoPayloadKind.consentRequest, consentKind: kind);
+      AvoWidgetPayload._(
+        kind: AvoPayloadKind.consentRequest,
+        consentKind: kind,
+      );
 
   factory AvoWidgetPayload.appInfo({
     required String topic,

@@ -399,6 +399,73 @@ void main() {
     expect(chat.undoPhaseOf(change), AvoUndoPhase.idle);
   });
 
+  testWidgets('retryPartial shows the newer change and keeps its undo', (
+    tester,
+  ) async {
+    var retried = 0;
+    final full = AvoListChange(
+      kind: AvoListChangeKind.moved,
+      listId: 'd',
+      listName: 'Drogerie',
+      count: 2,
+      undo: () async => AvoUndoResult.undone,
+    );
+    final partial = AvoWidgetPayload.listChange(
+      AvoListChange(
+        kind: AvoListChangeKind.moved,
+        listId: 'd',
+        listName: 'Drogerie',
+        count: 1,
+        failedCount: 1,
+        retryFailed: () async {
+          retried++;
+          return full;
+        },
+        undo: () async => AvoUndoResult.undone,
+      ),
+    );
+    final backend = FakeAvoBackend([
+      AvoScript(payloads: [partial]),
+    ]);
+    final ref = await _ref(tester, backend);
+    final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
+    addTearDown(chat.dispose);
+    chat.send('Verschieb das');
+    await tester.pump();
+    expect(chat.changeOf(partial)!.failedCount, 1);
+    final running = chat.retryPartial(partial);
+    expect(chat.isPartialWorking(partial), isTrue);
+    await running;
+    expect(retried, 1);
+    expect(identical(chat.changeOf(partial), full), isTrue);
+    expect(chat.isPartialWorking(partial), isFalse);
+    await chat.undo(partial);
+    expect(chat.undoPhaseOf(partial), AvoUndoPhase.undone);
+  });
+
+  testWidgets('a write marker counts as done: retry is a new round', (
+    tester,
+  ) async {
+    final backend = FakeAvoBackend([
+      AvoScript(
+        payloads: [AvoWidgetPayload.wrote('log_water')],
+        errorCode: 'timeout',
+      ),
+    ]);
+    final ref = await _ref(tester, backend);
+    final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
+    addTearDown(chat.dispose);
+    final failed = chat.send('250 ml Wasser')!;
+    await tester.pump();
+    chat.retry(failed, doneNote: 'note');
+    await tester.pump();
+    expect(chat.turns, hasLength(2));
+    expect(chat.turns.last.carried, hasLength(1));
+    expect(chat.turns.last.doneChanges.single.wroteTool, 'log_water');
+  });
+
   test('AvoPendingDeletes.restore puts a failed token back while valid', () {
     var now = kNow;
     final deletes = AvoPendingDeletes(now: () => now);

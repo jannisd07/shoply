@@ -105,7 +105,14 @@ AvoWorkStep avoWorkStepFor(
 
 /// One question and its answer in the Avo tab.
 class AvoTurn {
-  AvoTurn(this.id, this.question, this.askedAt, {this.sentText});
+  AvoTurn(
+    this.id,
+    this.question,
+    this.askedAt, {
+    this.sentText,
+    this.carried = const [],
+    this.proHintAllowed = false,
+  });
 
   final int id;
   final String question;
@@ -115,9 +122,23 @@ class AvoTurn {
   /// Avo what is already done).
   final String? sentText;
 
+  /// Done changes of the earlier failed rounds this one asks again for, so
+  /// a second retry still tells Avo about all of them.
+  final List<AvoWidgetPayload> carried;
+
+  /// Free with a known Pro limit when it was asked.
+  final bool proHintAllowed;
+
   /// Asked again as a new round after it failed with done changes: the
   /// changes keep their cards, the retry button goes.
   bool retried = false;
+
+  /// Everything already done for this question: earlier rounds' and its own.
+  List<AvoWidgetPayload> get doneChanges => [
+    ...carried,
+    for (final p in payloads)
+      if (p.isDoneChange) p,
+  ];
 
   AvoTurnPhase phase = AvoTurnPhase.working;
 

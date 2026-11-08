@@ -95,11 +95,15 @@ const _peanutAllergy = AvoSuggestion(
 );
 const _modules = AvoSuggestion('avo_sugg_modules', AvoSuggestionSymbol.toggles);
 
-/// Names from shared lists (other members write them) go into suggestions
-/// that send at once only when short and on one line (W1 review).
+/// Names from shared lists (other members write them) go into text that is
+/// sent to Avo without the person typing it (suggestions, the retry note)
+/// only when short and on one line (W1 review).
 const int _maxNameLength = 40;
 
-String? _safeName(String name) {
+/// [name] trimmed, or null when it is empty, longer than 40 characters or
+/// spans lines.
+String? avoSafeName(String? name) {
+  if (name == null) return null;
   final n = name.trim();
   if (n.isEmpty || n.length > _maxNameLength || n.contains(RegExp(r'[\r\n]'))) {
     return null;
@@ -143,7 +147,7 @@ List<AvoSuggestion> avoEmptySuggestions({
       rows.add(_whatsMissing);
       final names = [
         for (final n in openItemNames)
-          if (_safeName(n) case final safe?) safe,
+          if (avoSafeName(n) case final safe?) safe,
       ];
       if (names.length >= 2) {
         rows.add(
@@ -185,7 +189,7 @@ List<AvoSuggestion> avoFollowUps(
   final hasRecipes = payloads.any(
     (p) => p.kind == AvoPayloadKind.recipes && (p.recipes?.isNotEmpty ?? false),
   );
-  final target = targetList == null ? null : _safeName(targetList);
+  final target = targetList == null ? null : avoSafeName(targetList);
   if (hasRecipes && target != null) {
     out.add(
       AvoSuggestion('avo_chip_ingredients_to', AvoSuggestionSymbol.plus, {

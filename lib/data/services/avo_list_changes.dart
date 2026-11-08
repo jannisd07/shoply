@@ -37,8 +37,11 @@ abstract interface class AvoListWriter {
   Future<void> deleteList(String listId);
   Future<void> renameList(String listId, String name);
 
-  /// The person's lists as the server has them now.
+  /// The person's lists as the server has them now (undo checks).
   Future<List<ShoppingListModel>> lists();
+
+  /// The lists the app shows (names for cards); null when not loaded.
+  List<ShoppingListModel>? shownLists();
 
   /// Refreshes the list overview and open lists after a change.
   void changed(Iterable<String> listIds);
@@ -64,9 +67,20 @@ class AvoListChanges {
     }
   }
 
+  /// The items before a write, or null when they could not be read: then
+  /// nobody knows whether the write merged, and it gets no "Widerrufen".
+  Future<List<ShoppingItemModel>?> _itemsOrUnknown(String listId) async {
+    try {
+      return await writer.itemsOf(listId);
+    } catch (e) {
+      debugPrint('⚠️ [AVO] Items before the add not read: $e');
+      return null;
+    }
+  }
+
   Future<String> listName(String listId) async {
     try {
-      for (final l in await writer.lists()) {
+      for (final l in writer.shownLists() ?? await writer.lists()) {
         if (l.id == listId) return l.name;
       }
     } catch (e) {
@@ -93,14 +107,15 @@ class AvoListChanges {
 
   // ------------------------------------------------------------------ add
 
-  /// Puts one item on [listId] and describes it for the card.
+  /// Puts one item on [listId] and describes it for the card. A merge into
+  /// an item that was already there reads "Milch: Menge 3, vorher 1".
   Future<AvoListChange> add({
     required String listId,
     required String name,
     double quantity = 1,
     String? unit,
   }) async {
-    final before = await _items(listId);
+    final before = await _itemsOrUnknown(listId);
     await writer.addItem(listId, name: name, quantity: quantity, unit: unit);
     final shown = writer.shownItems(listId);
     final saved =
@@ -113,7 +128,7 @@ class AvoListChanges {
               i.id.startsWith('pending-') &&
               i.name.trim().toLowerCase() == wanted,
         );
-    final previous = saved == null
+    final previous = saved == null || before == null
         ? null
         : before.where((i) => i.id == saved.id).firstOrNull;
     final now = DateTime.now();
@@ -123,6 +138,9 @@ class AvoListChanges {
       listName: await listName(listId),
       count: 1,
       pendingOffline: pending,
+      itemName: previous == null ? null : saved!.name,
+      previousQuantity: previous?.quantity,
+      newQuantity: previous == null ? null : saved!.quantity,
       items: [
         saved ??
             ShoppingItemModel(
@@ -135,7 +153,8 @@ class AvoListChanges {
               updatedAt: now,
             ),
       ],
-      undo: saved == null
+      // Unknown before (read failed): never risk deleting a merged row.
+      undo: saved == null || before == null
           ? null
           : previous != null
           ? () => undoMerged(listId, saved, previous.quantity)
