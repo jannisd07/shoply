@@ -2,199 +2,239 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_app_badger/flutter_app_badger.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_dimensions.dart';
-import 'package:shoply/core/constants/paper_colors.dart';
-import 'package:shoply/core/localization/app_localizations.dart';
+
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/core/utils/diet_checker.dart';
+import 'package:shoply/core/utils/item_input_parser.dart';
 import 'package:shoply/data/models/custom_category.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
-import 'package:shoply/data/models/shopping_list_model.dart';
-import 'package:shoply/data/models/store_offer.dart';
-import 'package:shoply/data/services/app_review_service.dart';
+import 'package:shoply/data/repositories/item_batch.dart';
 import 'package:shoply/data/services/category_order_service.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
-import 'package:shoply/data/services/list_import_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/unread_service.dart';
-import 'package:shoply/presentation/screens/lists/category_order_screen.dart';
-import 'package:shoply/presentation/screens/lists/list_settings_screen.dart';
-import 'package:shoply/presentation/screens/lists/shopping_trip_completion.dart';
-import 'package:shoply/presentation/screens/lists/widgets/add_item_composer.dart';
-import 'package:shoply/presentation/screens/lists/widgets/attachment_sheet.dart';
-import 'package:shoply/presentation/screens/lists/widgets/import_review_sheet.dart';
-import 'package:shoply/presentation/screens/lists/widgets/item_form_dialog.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_category_section.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_detail_composer.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_detail_data.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_detail_menu.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_detail_parts.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_drag_controller.dart';
-import 'package:shoply/presentation/screens/lists/widgets/list_price_summary_bar.dart';
-import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
-import 'package:shoply/presentation/screens/lists/widgets/share_list_dialog.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_item_tile.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
-import 'package:shoply/presentation/state/lists_provider.dart';
-import 'package:shoply/presentation/widgets/common/empty_state.dart';
-import 'package:shoply/presentation/widgets/common/loading_indicator.dart';
-import 'package:shoply/presentation/widgets/recommendations/ml_recommendations_section.dart';
+import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
+import 'package:shoply/presentation/widgets/design/avo_figure.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
+import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
+import 'package:shoply/presentation/widgets/design/empty_state.dart';
+import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
+import 'package:shoply/presentation/widgets/design/skeleton.dart';
+import 'package:shoply/presentation/widgets/design/status_row.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
+/// A row just checked off stays in its aisle this long before it moves to
+/// "Erledigt"; tapping it again in that time takes it back (Konzept 11
+/// §1.1: "Nach 0,6 s wandert die Zeile").
+const Duration _linger = Duration(milliseconds: 600);
+
+/// How long "Widerrufen" is offered: the toast's 4 s, 10 s with VoiceOver
+/// (Konzept 00 §12.28).
+const Duration _undoWindow = Duration(seconds: 4);
+const Duration _undoWindowVoiceOver = Duration(seconds: 10);
+
+/// A deleted row is removed for good this long after its toast has gone.
+const Duration _deleteGrace = Duration(milliseconds: 300);
+
+/// Space between the toolbar and the large title (D2: content starts at
+/// 106 = toolbar top 54 + 44 + 8).
+const double _titleTop = AvoSpacing.s; // D2
+
+/// Text inset above and below one line of the add field (D2 Bottom
+/// Accessory: (52 - 22) / 2), to reserve room for a taller field.
+const double _accessoryTextInset = 15; // D2
+
+/// SharedPreferences key prefix for "Erledigt" expanded, per list.
+const String _doneExpandedKey = 'list_done_expanded_';
+
+/// One list (D2-Liste, Konzept 11 §1, §2, §11.1): glass toolbar with back,
+/// "Teilen" + "Mehr" and the tinted cart for shopping mode; large title,
+/// members, progress and Teil B's market chip; the aisles of open items;
+/// "Erledigt" collapsed at the end; the add field above the tab bar.
+///
+/// - Checking off shows "Abgehakt: Milch · Widerrufen"; deleting (full swipe
+///   or menu) hides the row at once and removes it for good only when the
+///   undo time is over, so "Widerrufen" brings it back unchanged.
+/// - The add field reads "2 Milch", "500 g Mehl" and "Milch, Eier, Butter"
+///   locally: one item goes through the items provider, several in one
+///   batch with "Widerrufen".
+/// - `?focus=add` (deep link `list:<id>:add`) focuses the add field.
+/// - Sets the Avo context to this list while it is the current screen.
+/// - Opening still marks the list read and clears its badge and delivered
+///   notifications.
 class ListDetailScreen extends ConsumerStatefulWidget {
-  final String listId;
-  final String listName;
-
   const ListDetailScreen({
     super.key,
     required this.listId,
     required this.listName,
+    this.focusAdd = false,
   });
+
+  final String listId;
+
+  /// Name from the route until the lists are loaded.
+  final String listName;
+
+  /// Focus the add field on open (also read from `?focus=add`).
+  final bool focusAdd;
 
   @override
   ConsumerState<ListDetailScreen> createState() => _ListDetailScreenState();
 }
 
-class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
-  final _searchController = TextEditingController();
-  final _focusNode = FocusNode();
-  final _scrollController = ScrollController();
-  late final _dragController = ListDragController(_scrollController);
+/// A deletion waiting for its undo time to pass.
+class _PendingDelete {
+  _PendingDelete(this.itemId, this.notifier);
 
-  /// Name from the route, replaced after a local rename. The lists
-  /// provider's copy wins once loaded, so collaborator renames show too.
-  late String _listName;
+  final String itemId;
+  final ItemsNotifier notifier;
+  Timer? timer;
+  bool finished = false;
 
-  // Debounced copy of the add-bar text used for live offer search, so a
-  // fast typer doesn't fire a network request per keystroke.
-  final ValueNotifier<String> _offerQuery = ValueNotifier<String>('');
-  Timer? _offerQueryDebounce;
+  void finish() {
+    finished = true;
+    timer?.cancel();
+  }
+}
 
-  // Custom categories and saved order (device-local).
-  List<CustomCategory> _customCategories = [];
-  List<String> _categoryOrder = [];
+/// What the list shows, derived from the items once per change.
+class _ListView {
+  const _ListView({
+    required this.items,
+    required this.aisles,
+    required this.done,
+    required this.openCount,
+  });
 
-  // Grouping cache: regrouped only when items, categories or locale change.
-  List<ListCategoryGroup> _groups = const [];
-  List<ShoppingItemModel>? _groupsItems;
-  String? _groupsLanguage;
-  bool _groupsDirty = true;
+  /// Visible items (without rows waiting to be deleted).
+  final List<ShoppingItemModel> items;
 
-  // True once the push transition has fully settled. Heavy work (refresh
-  // fetches, the ML recommendations section) waits for this so the
-  // Cupertino push renders its frames without competing rebuilds — the
-  // first frame comes from the ItemsNotifier's cached/streamed state.
-  bool _routeTransitionDone = false;
+  /// Aisles of open rows (and rows just checked, still lingering).
+  final List<ListCategoryGroup> aisles;
+
+  /// Checked rows, newest first.
+  final List<ShoppingItemModel> done;
+  final int openCount;
+}
+
+class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
+    with SingleTickerProviderStateMixin {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  final _scroll = ScrollController();
+  late final _drag = ListDragController(_scroll, this);
+  final _moreKey = GlobalKey(debugLabel: 'listMore');
+  final _inlineTitle = ValueNotifier<bool>(false);
+
+  late String _listName = widget.listName;
+  List<CustomCategory> _customCategories = const [];
+  List<String> _categoryOrder = const [];
+
+  final Set<String> _hidden = {};
+  final Map<String, Timer> _lingering = {};
+  _PendingDelete? _pendingDelete;
+  bool? _doneExpanded;
+
+  // Memo of the derived view.
+  _ListView? _view;
+  List<ShoppingItemModel>? _viewSource;
+  String? _viewLanguage;
+  bool _viewDirty = true;
+
+  bool _settled = false;
+  bool _disposed = false;
+  bool _focusChecked = false;
   Animation<double>? _routeAnimation;
+  double _titleHeight = 0;
 
-  // Morph origin for the attachment sheet ("+" button in the composer).
-  final GlobalKey _plusButtonKey = GlobalKey();
+  late final StateController<AvoScreenContext?> _avo;
+  AvoScreenContext? _avoContext;
 
-  /// Measured height of the floating bottom bar (price summary / offer
-  /// suggestions + composer), used as the list's bottom inset so nothing
-  /// hides behind it. Seeded with a sensible value so the first frame is
-  /// already close; [_syncBottomBarHeight] corrects it after layout.
-  final GlobalKey _bottomBarKey = GlobalKey();
-  double _bottomBarHeight = 110;
+  String get _listId => widget.listId;
 
-  // Review prompt state — ensures we only fire rating prompt once per session
-  // when the user completes an entire list (all items checked off).
-  bool _listCompletionReviewFired = false;
-  int? _lastCheckedCount;
+  ItemsNotifier get _items => ref.read(itemsNotifierProvider(_listId).notifier);
+
+  ListDetailActions get _actions => ref.read(listDetailActionsProvider);
 
   @override
   void initState() {
     super.initState();
-    _listName = widget.listName;
-    _searchController.addListener(_onSearchChangedForOffers);
-    // Cheap SharedPreferences read; done right away so items filed under a
-    // custom category don't jump sections once it arrives.
-    _loadCustomCategories();
-    // Defer all non-critical work until the push transition has settled:
-    // the ItemsNotifier already loads (and realtime-streams) on first
-    // watch, so the first frame renders from that state and nothing below
-    // competes with the transition for frame time.
+    _avo = ref.read(avoScreenContextProvider.notifier);
+    _scroll.addListener(_onScroll);
+    unawaited(_loadCustomCategories());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final animation = ModalRoute.of(context)?.animation;
       if (animation == null || animation.status == AnimationStatus.completed) {
-        _onRouteTransitionSettled();
+        _onSettled();
       } else {
         _routeAnimation = animation;
-        animation.addStatusListener(_routeAnimationStatusListener);
+        animation.addStatusListener(_onRouteStatus);
       }
     });
   }
 
-  void _routeAnimationStatusListener(AnimationStatus status) {
-    if (status == AnimationStatus.completed) {
-      _routeAnimation?.removeStatusListener(_routeAnimationStatusListener);
-      _routeAnimation = null;
-      _onRouteTransitionSettled();
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_focusChecked) return;
+    _focusChecked = true;
+    if (widget.focusAdd || _routeAsksForFocus()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
     }
   }
 
-  /// Runs once the screen is fully on screen (push transition settled).
-  void _onRouteTransitionSettled() {
-    if (!mounted || _routeTransitionDone) return;
-    setState(() => _routeTransitionDone = true);
-    _markAsRead();
+  /// `?focus=add` on the route (deep link "list with the add field").
+  bool _routeAsksForFocus() {
+    try {
+      return GoRouterState.of(context).uri.queryParameters['focus'] == 'add';
+    } catch (_) {
+      // Not opened through the router (tests, a plain push).
+      return false;
+    }
+  }
+
+  void _onRouteStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    _routeAnimation?.removeStatusListener(_onRouteStatus);
+    _routeAnimation = null;
+    _onSettled();
+  }
+
+  /// Side effects once the push has settled, so they never compete with the
+  /// transition's frames.
+  void _onSettled() {
+    if (!mounted || _settled) return;
+    _settled = true;
+    unawaited(_markAsRead());
     DynamicTutorialService.instance.onListOpened();
   }
 
-  void _syncBottomBarHeight() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final box =
-          _bottomBarKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box == null || !box.hasSize) return;
-      // Bar height plus the gap it floats above the safe area.
-      final h = box.size.height + 14;
-      if ((h - _bottomBarHeight).abs() > 1) {
-        setState(() => _bottomBarHeight = h);
-      }
-    });
-  }
-
-  /// Debounces the add-bar text into [_offerQuery] (300ms) so live offer
-  /// search only fires once the user pauses typing. Clearing the field
-  /// updates instantly so the suggestion card disappears without delay.
-  void _onSearchChangedForOffers() {
-    final text = _searchController.text.trim();
-    if (text.isEmpty) {
-      _setOfferQuery('');
-      return;
-    }
-    _offerQueryDebounce?.cancel();
-    _offerQueryDebounce = Timer(const Duration(milliseconds: 300), () {
-      _setOfferQuery(text);
-    });
-  }
-
-  void _setOfferQuery(String value) {
-    _offerQueryDebounce?.cancel();
-    if (_offerQuery.value != value) _offerQuery.value = value;
-  }
-
-  Future<void> _loadCustomCategories() async {
-    final service = CategoryOrderService();
-    final categories = await service.getCustomCategories(widget.listId);
-    final order = await service.getCategoryOrder(widget.listId);
-    if (!mounted) return;
-    setState(() {
-      _customCategories = categories;
-      _categoryOrder = order;
-      _groupsDirty = true;
-    });
-  }
-
   Future<void> _markAsRead() async {
-    await UnreadService().markAsRead(widget.listId);
-
+    try {
+      await UnreadService().markAsRead(_listId);
+    } catch (e) {
+      debugPrint('⚠️ [LIST_DETAIL] Mark as read failed: $e');
+    }
     try {
       if (await FlutterAppBadger.isAppBadgeSupported()) {
         FlutterAppBadger.removeBadge();
@@ -202,7 +242,6 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     } catch (e) {
       debugPrint('⚠️ [LIST_DETAIL] Failed to remove badge: $e');
     }
-
     await _clearThisListsNotifications();
   }
 
@@ -211,12 +250,12 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
   Future<void> _clearThisListsNotifications() async {
     if (!(Platform.isIOS || Platform.isAndroid)) return;
     try {
-      final active =
-          await FlutterLocalNotificationsPlugin().getActiveNotifications();
+      final active = await FlutterLocalNotificationsPlugin()
+          .getActiveNotifications();
       for (final notification in active) {
         final id = notification.id;
         final payload = notification.payload;
-        if (id != null && payload != null && payload.contains(widget.listId)) {
+        if (id != null && payload != null && payload.contains(_listId)) {
           await NotificationService.instance.cancel(id);
         }
       }
@@ -225,543 +264,750 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen> {
     }
   }
 
+  Future<void> _loadCustomCategories() async {
+    try {
+      final service = CategoryOrderService();
+      final categories = await service.getCustomCategories(_listId);
+      final order = await service.getCategoryOrder(_listId);
+      if (!_alive) return;
+      setState(() {
+        _customCategories = categories;
+        _categoryOrder = order;
+        _viewDirty = true;
+      });
+    } catch (e) {
+      debugPrint('⚠️ [LIST_DETAIL] Category order not loaded: $e');
+    }
+  }
+
   @override
   void dispose() {
-    _routeAnimation?.removeStatusListener(_routeAnimationStatusListener);
-    _dragController.dispose();
-    _offerQueryDebounce?.cancel();
-    _searchController.removeListener(_onSearchChangedForOffers);
-    _searchController.dispose();
-    _offerQuery.dispose();
-    _focusNode.dispose();
-    _scrollController.dispose();
+    _disposed = true;
+    _routeAnimation?.removeStatusListener(_onRouteStatus);
+    // A deletion still waiting for its undo time happens now.
+    // Deferred: the row's provider must not notify this element while it
+    // is being unmounted.
+    final pending = _pendingDelete;
+    if (pending != null) Future.microtask(() => _commitDelete(pending));
+    for (final timer in _lingering.values) {
+      timer.cancel();
+    }
+    _resetAvoContext();
+    _drag.dispose();
+    _scroll
+      ..removeListener(_onScroll)
+      ..dispose();
+    _controller.dispose();
+    _focus.dispose();
+    _inlineTitle.dispose();
     super.dispose();
   }
 
-  ShoppingListModel? _listFromProvider() {
-    final lists = ref.read(listsNotifierProvider).valueOrNull;
-    return lists?.where((l) => l.id == widget.listId).firstOrNull;
+  bool get _alive => mounted && !_disposed;
+
+  // ---------------------------------------------------------------- Avo
+
+  /// Tells Avo that the person is on this list (Kap. 16, Tabelle 5.2).
+  void _syncAvoContext(String name, {required bool current}) {
+    if (!current) {
+      _avoContext = null;
+      return;
+    }
+    final next = AvoScreenContext(
+      screen: 'list',
+      listId: _listId,
+      listName: name,
+    );
+    if (next == _avoContext) return;
+    _avoContext = next;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_alive && _avoContext == next) _avo.state = next;
+    });
   }
 
-  String get _currentListName => _listFromProvider()?.name ?? _listName;
+  /// Leaving the list clears the context, unless another screen already set
+  /// its own.
+  void _resetAvoContext() {
+    final avo = _avo;
+    final mine = AvoScreenContext(
+      screen: 'list',
+      listId: _listId,
+      listName: _avoContext?.listName,
+    );
+    Future.microtask(() {
+      try {
+        final state = avo.state;
+        if (state?.screen == mine.screen && state?.listId == mine.listId) {
+          avo.state = null;
+        }
+      } catch (_) {
+        // The provider scope is gone (app or test shut down).
+      }
+    });
+  }
 
-  List<ListCategoryGroup> _groupedItems(
-    List<ShoppingItemModel> items,
-    String languageCode,
-  ) {
-    if (_groupsDirty ||
-        !identical(items, _groupsItems) ||
-        languageCode != _groupsLanguage) {
-      _groups = groupItemsByCategory(
-        items,
+  // ---------------------------------------------------------------- scroll
+
+  void _onScroll() {
+    final show = _scroll.hasClients && _scroll.offset > _titleHeight;
+    if (_inlineTitle.value != show) _inlineTitle.value = show;
+  }
+
+  void _dismissKeyboard() {
+    if (_focus.hasFocus) _focus.unfocus();
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([
+      _items.loadItems(),
+      _actions.refreshLists(ref).catchError((Object e) {
+        debugPrint('⚠️ [LIST_DETAIL] Lists not refreshed: $e');
+      }),
+    ]);
+  }
+
+  // ---------------------------------------------------------------- view
+
+  _ListView _derive(List<ShoppingItemModel> all, String language) {
+    if (!_viewDirty &&
+        identical(all, _viewSource) &&
+        language == _viewLanguage &&
+        _view != null) {
+      return _view!;
+    }
+    final items = [
+      for (final item in all)
+        if (!_hidden.contains(item.id)) item,
+    ];
+    final inAisles = [
+      for (final item in items)
+        if (!item.isChecked || _lingering.containsKey(item.id)) item,
+    ];
+    final aisles = [
+      for (final group in groupItemsByCategory(
+        inAisles,
         customCategories: _customCategories,
         categoryOrder: _categoryOrder,
-        languageCode: languageCode,
-      );
-      _groupsItems = items;
-      _groupsLanguage = languageCode;
-      _groupsDirty = false;
-    }
-    return _groups;
-  }
-
-  void _onItemsChanged(
-    AsyncValue<List<ShoppingItemModel>>? previous,
-    AsyncValue<List<ShoppingItemModel>> next,
-  ) {
-    // Detect when the user completes an entire shopping list (all items
-    // checked) — the perfect moment to ask for a rating.
-    final items = next.asData?.value;
-    if (items == null || items.isEmpty) return;
-    final checked = items.where((i) => i.isChecked).length;
-    final prevCount = _lastCheckedCount;
-    _lastCheckedCount = checked;
-
-    if (checked == items.length &&
-        prevCount != null &&
-        prevCount < items.length &&
-        !_listCompletionReviewFired) {
-      _listCompletionReviewFired = true;
-      // Fire and forget — respects AppReviewService throttling internally.
-      AppReviewService.instance.trackPositiveAction('completed_list');
-      Future.delayed(const Duration(milliseconds: 800), () {
-        AppReviewService.instance.maybeRequestReview(reason: 'completed_list');
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final itemsAsync = ref.watch(itemsNotifierProvider(widget.listId));
-    ref.listen(itemsNotifierProvider(widget.listId), _onItemsChanged);
-    // Rebuild on renames (also by collaborators).
-    final listName = ref.watch(
-          listsNotifierProvider.select(
-            (lists) => lists.valueOrNull
-                ?.where((l) => l.id == widget.listId)
-                .firstOrNull
-                ?.name,
-          ),
-        ) ??
-        _listName;
-
-    final items = itemsAsync.valueOrNull;
-    final openCount = items?.where((i) => !i.isChecked).length ?? 0;
-
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        centerTitle: false,
-        titleSpacing: 0,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-        backgroundColor: Colors.transparent,
-        // Stated here because AppBar otherwise derives it from
-        // backgroundColor — and `transparent` estimates as *dark*, which put
-        // white clock and Wi-Fi/battery icons on this light screen. Setting
-        // it on the widget takes precedence over theme and estimation alike.
-        systemOverlayStyle: Theme.of(context).brightness == Brightness.dark
-            ? SystemUiOverlayStyle.light
-            : SystemUiOverlayStyle.dark,
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              listName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: PaperTextStyles.serif(
-                24,
-                color: AppColors.textPrimary(context),
-              ),
-            ),
-            if (items != null && items.isNotEmpty)
-              Text(
-                '$openCount ${context.tr('items_open_suffix')} · ${items.length} ${context.tr('items')}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary(context),
-                ),
-              ),
-          ],
-        ),
-        leadingWidth: 60,
-        leading: ListDetailBackButton(onPressed: _goBack),
-        actions: [
-          ListDetailMenuButton(onSelected: _onMenuSelected),
-          ListDetailShareButton(
-            onPressed: () => showShareListDialog(
-              context,
-              ref,
-              listId: widget.listId,
-              listName: _currentListName,
-            ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              // Paper progress hairline under the header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppDimensions.screenHorizontalPadding,
-                  4,
-                  AppDimensions.screenHorizontalPadding,
-                  6,
-                ),
-                child: ListProgressHairline(
-                  total: items?.length ?? 0,
-                  done: (items?.length ?? 0) - openCount,
-                ),
-              ),
-              Expanded(
-                key: DynamicTutorialService.instance.listItemsAreaKey,
-                child: itemsAsync.when(
-                  data: _buildItemsList,
-                  loading: () =>
-                      LoadingIndicator(message: context.tr('loading_items')),
-                  error: (error, stack) =>
-                      Center(child: Text(context.tr('loading_error'))),
-                ),
-              ),
-            ],
-          ),
-          _buildBottomBar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildItemsList(List<ShoppingItemModel> items) {
-    DynamicTutorialService.instance.updateListItemsData(
-      hasItems: items.isNotEmpty,
-    );
-    if (items.isEmpty) {
-      return EmptyState(
-        icon: Icons.shopping_cart,
-        title: AppLocalizations.of(context).emptyList,
-        subtitle: context.tr('empty_list_hint'),
-        actionText: AppLocalizations.of(context).addItem,
-        onActionPressed: _showAddItemDialog,
-      );
-    }
-
-    final groups = _groupedItems(
-      items,
-      Localizations.localeOf(context).languageCode,
-    );
-
-    // Only the padding depends on the keyboard inset — scoped via a Builder
-    // so keyboard frames re-layout the list's visible rows without
-    // rebuilding the whole screen. Dismissal is handled by
-    // keyboardDismissBehavior.onDrag alone.
-    return Builder(
-      builder: (context) => ListView.builder(
-        controller: _scrollController,
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.only(
-          left: AppDimensions.screenHorizontalPadding,
-          right: AppDimensions.screenHorizontalPadding,
-          // Safe area / keyboard + the floating bar's *measured* height, so
-          // the last rows never hide behind the composer.
-          bottom: MediaQuery.viewInsetsOf(context).bottom +
-              MediaQuery.paddingOf(context).bottom +
-              _bottomBarHeight,
-        ),
-        // +1 for recommendations, +1 for the complete button
-        itemCount: groups.length + 2,
-        itemBuilder: (context, index) {
-          // ML recommendations at the top — deferred until the push
-          // transition settled so its provider work never competes with
-          // transition frames.
-          if (index == 0) {
-            if (!_routeTransitionDone) return const SizedBox.shrink();
-            return MLRecommendationsSection(
-              listId: widget.listId,
-              onAddItem: _addItemFromRecommendation,
-            );
-          }
-
-          if (index == groups.length + 1) {
-            return CompleteShoppingButton(
-              onPressed: () => completeShoppingTrip(
-                this.context,
-                ref,
-                listId: widget.listId,
-                listName: _currentListName,
-                items: items,
-              ),
-            );
-          }
-
-          final group = groups[index - 1];
-          return ListCategorySection(
-            key: ValueKey(group.id),
-            group: group,
-            listId: widget.listId,
-            dragController: _dragController,
-            onEditItem: _showEditItemDialog,
-          );
-        },
-      ),
-    );
-  }
-
-  /// Messages-style composer riding the keyboard. Wrapped in its own Builder
-  /// so ONLY this subtree depends on the per-frame keyboard inset — the
-  /// engine animates viewInsets in lockstep with the iOS keyboard, so
-  /// positioning the bar at viewInsets.bottom directly moves it on the exact
-  /// same curve/frames. The max() keeps the crossover between "resting above
-  /// the home indicator" and "riding the keyboard" continuous.
-  Widget _buildBottomBar() {
-    return Builder(
-      builder: (barContext) {
-        final keyboardInset = MediaQuery.viewInsetsOf(barContext).bottom;
-        final safeBottom = MediaQuery.paddingOf(barContext).bottom;
-        final restingBottom = safeBottom > 20 ? safeBottom - 8 : 12.0;
-        final riding = keyboardInset + 8;
-        return Positioned(
-          left: 10,
-          right: 10,
-          bottom: riding > restingBottom ? riding : restingBottom,
-          child: ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _searchController,
-            builder: (context, value, _) {
-              final isSearching = value.text.trim().length >= 2;
-              // Re-measure whenever the bar's composition changes
-              // (suggestions appear, composer wraps, …).
-              _syncBottomBarHeight();
-              return Column(
-                key: _bottomBarKey,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // While searching, show live offer suggestions (debounced
-                  // query); otherwise the basket price-comparison summary.
-                  // Never both stacked.
-                  if (isSearching)
-                    ValueListenableBuilder<String>(
-                      valueListenable: _offerQuery,
-                      builder: (context, query, _) {
-                        if (query.length < 2) return const SizedBox.shrink();
-                        return OfferSuggestionsBar(
-                          query: query,
-                          onSelect: _addItemFromOffer,
-                        );
-                      },
-                    )
-                  else if (keyboardInset == 0)
-                    Consumer(
-                      builder: (context, ref, _) => ListPriceSummaryBar(
-                        listId: widget.listId,
-                        items: ref
-                                .watch(itemsNotifierProvider(widget.listId))
-                                .valueOrNull ??
-                            const <ShoppingItemModel>[],
-                      ),
-                    ),
-                  const SizedBox(height: 6),
-                  KeyedSubtree(
-                    key: DynamicTutorialService.instance.addItemInputKey,
-                    child: AddItemComposer(
-                      controller: _searchController,
-                      focusNode: _focusNode,
-                      plusButtonKey: _plusButtonKey,
-                      onSubmit: _quickAddItem,
-                      onPlusTap: _openAttachmentSheet,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  void _goBack() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else {
-      context.go('/home');
-    }
-  }
-
-  void _onMenuSelected(ListDetailMenuAction action) {
-    switch (action) {
-      case ListDetailMenuAction.rename:
-        _showRenameListDialog();
-      case ListDetailMenuAction.categoryOrder:
-        _showCategoryOrderScreen();
-      case ListDetailMenuAction.settings:
-        _showListSettingsScreen();
-    }
-  }
-
-  /// "+" button → attachment sheet → AI extraction → review → import.
-  /// Sheets are presented strictly sequentially (each awaited to full
-  /// dismissal before the next appears) so nothing ever stacks or flickers.
-  Future<void> _openAttachmentSheet() async {
-    _focusNode.unfocus();
-    final result = await showAttachmentSheet(
-      context,
-      plusButtonKey: _plusButtonKey,
-    );
-    if (result == null || !mounted) return;
-
-    final reviewed = await showImportReviewSheet(context, result: result);
-    if (reviewed == null || reviewed.isEmpty || !mounted) return;
-
-    await _importReviewedItems(reviewed);
-  }
-
-  Future<void> _importReviewedItems(List<ExtractedListItem> reviewed) async {
-    final toImport = [
-      for (final item in reviewed)
-        (name: item.name, quantity: item.quantity ?? 1.0, unit: item.unit),
+        languageCode: language,
+      ))
+        if (group.items.isNotEmpty) group,
     ];
-    try {
-      await ref
-          .read(itemsNotifierProvider(widget.listId).notifier)
-          .importItems(toImport);
-      if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            context.tr(
-              'import_success',
-              params: {'count': '${toImport.length}'},
-            ),
-          ),
-        ),
+    final done = [
+      for (final item in items)
+        if (item.isChecked && !_lingering.containsKey(item.id)) item,
+    ]..sort(_newestCheckedFirst);
+    final view = _ListView(
+      items: items,
+      aisles: aisles,
+      done: done,
+      openCount: items.where((i) => !i.isChecked).length,
+    );
+    _view = view;
+    _viewSource = all;
+    _viewLanguage = language;
+    _viewDirty = false;
+    return view;
+  }
+
+  static int _newestCheckedFirst(ShoppingItemModel a, ShoppingItemModel b) {
+    final at = a.checkedAt ?? a.updatedAt;
+    final bt = b.checkedAt ?? b.updatedAt;
+    return bt.compareTo(at);
+  }
+
+  void _changeView(VoidCallback change) {
+    if (!_alive) return;
+    setState(() {
+      change();
+      _viewDirty = true;
+    });
+  }
+
+  Duration _undoTime() => MediaQuery.accessibleNavigationOf(context)
+      ? _undoWindowVoiceOver
+      : _undoWindow;
+
+  bool get _doneOpen {
+    final known = _doneExpanded;
+    if (known != null) return known;
+    final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+    return _doneExpanded = prefs?.getBool('$_doneExpandedKey$_listId') ?? false;
+  }
+
+  void _setDoneOpen(bool open) {
+    setState(() => _doneExpanded = open);
+    final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+    unawaited(
+      prefs?.setBool('$_doneExpandedKey$_listId', open).catchError((_) {
+        return false;
+      }),
+    );
+  }
+
+  // ---------------------------------------------------------------- items
+
+  void _toggle(ShoppingItemModel item, bool checked) {
+    final wasLingering = _lingering.remove(item.id);
+    wasLingering?.cancel();
+    if (checked) {
+      final visible = _view?.items ?? const <ShoppingItemModel>[];
+      final lastOpen = !visible.any((i) => !i.isChecked && i.id != item.id);
+      _changeView(() {
+        _lingering[item.id] = Timer(_linger, () {
+          _changeView(() => _lingering.remove(item.id));
+        });
+      });
+      if (lastOpen) unawaited(AvoHaptics.success());
+      AvoToast.show(
+        context,
+        message: context.tr('list_detail_checked', params: {'name': item.name}),
+        actionLabel: context.tr('common_undo'),
+        onAction: () => _toggle(item, false),
       );
-    } catch (_) {
-      if (!mounted) return;
-      // Optimistic insert already rolled back — offer a retry.
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.tr('import_failed')),
-          action: SnackBarAction(
-            label: context.tr('import_retry'),
-            onPressed: () => _importReviewedItems(reviewed),
-          ),
-        ),
-      );
+    } else if (wasLingering != null) {
+      _changeView(() {});
     }
+    final notifier = _items;
+    unawaited(
+      notifier.toggleItemChecked(item.id, checked).catchError((Object e) {
+        debugPrint('❌ [LIST_DETAIL] Check off failed: $e');
+        _changeView(() => _lingering.remove(item.id)?.cancel());
+        _failed();
+      }),
+    );
+  }
+
+  Future<void> _openItem(ShoppingItemModel item) async {
+    _dismissKeyboard();
+    await _actions.openItem(context, listId: _listId, item: item);
+  }
+
+  void _delete(ShoppingItemModel item) {
+    final previous = _pendingDelete;
+    if (previous != null) unawaited(_commitDelete(previous));
+    final pending = _PendingDelete(item.id, _items);
+    final window = _undoTime();
+    pending.timer = Timer(window + _deleteGrace, () => _commitDelete(pending));
+    _pendingDelete = pending;
+    _changeView(() {
+      _hidden.add(item.id);
+      _lingering.remove(item.id)?.cancel();
+    });
+    AvoToast.show(
+      context,
+      message: context.tr('list_detail_deleted', params: {'name': item.name}),
+      actionLabel: context.tr('common_undo'),
+      duration: window,
+      onAction: () => _undoDelete(pending),
+    );
+  }
+
+  void _undoDelete(_PendingDelete pending) {
+    if (pending.finished) return;
+    pending.finish();
+    if (_pendingDelete == pending) _pendingDelete = null;
+    _changeView(() => _hidden.remove(pending.itemId));
+  }
+
+  Future<void> _commitDelete(_PendingDelete pending) async {
+    if (pending.finished) return;
+    pending.finish();
+    if (_pendingDelete == pending) _pendingDelete = null;
+    try {
+      await pending.notifier.deleteItem(pending.itemId);
+    } catch (e) {
+      debugPrint('❌ [LIST_DETAIL] Delete failed: $e');
+      _changeView(() => _hidden.remove(pending.itemId));
+      _failed();
+      return;
+    }
+    _changeView(() => _hidden.remove(pending.itemId));
+  }
+
+  void _failed() {
+    if (!_alive) return;
+    AvoToast.show(context, message: context.tr('list_detail_action_failed'));
   }
 
   bool _dietWarningFor(String name) {
-    final user = ref.read(currentUserProvider).value;
+    final user = ref.read(currentUserProvider).valueOrNull;
     return user != null &&
         DietChecker.checkDietWarning(name, user.dietPreferences);
   }
 
-  void _showAddError(Object e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          context.tr('error_adding', params: {'error': e.toString()}),
-        ),
-        backgroundColor: Colors.red,
+  /// Return in the add field: "2 Milch" is one item with quantity 2,
+  /// "Milch, Eier" two items in one batch with "Widerrufen".
+  Future<void> _submit(String text) async {
+    final language = Localizations.localeOf(context).languageCode;
+    final parsed = parseItemInput(text, lang: language);
+    if (parsed.isEmpty) return;
+    _controller.clear();
+    try {
+      if (parsed.length == 1) {
+        final item = parsed.single;
+        await _items.addItem(
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          notes: item.note,
+          isDietWarning: _dietWarningFor(item.name),
+          // Parsed here already; never rewrite the name in the background.
+          autoParse: false,
+        );
+      } else {
+        await _addBatch([
+          for (final item in parsed)
+            NewItem(
+              name: item.name,
+              quantity: item.quantity,
+              unit: item.unit,
+              notes: item.note,
+            ),
+        ]);
+      }
+    } catch (e) {
+      debugPrint('❌ [LIST_DETAIL] Add "$text" failed: $e');
+      if (!mounted || _disposed) return;
+      // Nothing typed is lost.
+      if (_controller.text.isEmpty) _controller.text = text;
+      AvoToast.show(context, message: context.tr('list_detail_add_failed'));
+    }
+  }
+
+  /// Several typed items at once ("Milch, Eier") with "Widerrufen".
+  Future<void> _addBatch(List<NewItem> items) async {
+    final repository = ref.read(itemRepositoryProvider);
+    final notifier = _items;
+    final result = await repository.addItems(_listId, items);
+    unawaited(notifier.loadItems());
+    if (!mounted || _disposed) return;
+    AvoToast.show(
+      context,
+      message: context.tr(
+        'list_detail_added_many',
+        params: {'count': '${items.length}'},
+      ),
+      actionLabel: context.tr('common_undo'),
+      onAction: () async {
+        try {
+          await repository.undoAddItems(result.token);
+        } catch (e) {
+          debugPrint('❌ [LIST_DETAIL] Undo add failed: $e');
+          _failed();
+        }
+        unawaited(notifier.loadItems());
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------- menu
+
+  void _openMenu(_ListView? view) {
+    _dismissKeyboard();
+    final hidden = ref.read(offersHiddenForListProvider(_listId));
+    showAvoMenu(
+      context,
+      anchorKey: _moreKey,
+      items: listDetailMenuEntries(
+        context,
+        hasOpen: (view?.openCount ?? 0) > 0,
+        hasDone: view?.items.any((i) => i.isChecked) ?? false,
+        offersAvailable: ref.read(offersAvailableProvider),
+        offersHidden: hidden,
+        isOwner: ref.read(listDetailIsOwnerProvider(_listId)),
+        onSelected: (action) => _onMenu(action, offersHidden: hidden),
       ),
     );
   }
 
-  Future<void> _quickAddItem(String name) async {
-    try {
-      // category: null lets Gemini categorize the item.
-      await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
-            name: name,
-            category: null,
-            isDietWarning: _dietWarningFor(name),
-          );
-    } catch (e) {
-      debugPrint('❌ [LIST_DETAIL] Failed to add item "$name": $e');
-      _showAddError(e);
+  Future<void> _onMenu(
+    ListDetailMenuAction action, {
+    required bool offersHidden,
+  }) async {
+    final name = _currentName;
+    switch (action) {
+      case ListDetailMenuAction.shop:
+        await _actions.openShopping(context, _listId);
+      case ListDetailMenuAction.checkout:
+        await _actions.checkout(context, _listId);
+      case ListDetailMenuAction.share:
+        await _share();
+      case ListDetailMenuAction.info:
+        await _actions.openInfo(
+          context,
+          listId: _listId,
+          listName: name,
+          ownerId: ref.read(listDetailListProvider(_listId))?.ownerId,
+        );
+      case ListDetailMenuAction.rename:
+        await _rename();
+      case ListDetailMenuAction.storeOrder:
+        final changed = await _actions.openStoreOrder(
+          context,
+          listId: _listId,
+          listName: name,
+        );
+        if (changed && _alive) {
+          await _loadCustomCategories();
+          unawaited(_items.loadItems());
+        }
+      case ListDetailMenuAction.toggleOffers:
+        await setOffersHiddenForList(ref, _listId, !offersHidden);
+      case ListDetailMenuAction.importNote:
+        await _importNote();
+      case ListDetailMenuAction.delete:
+        await _deleteList();
+      case ListDetailMenuAction.leave:
+        await _leaveList();
     }
   }
 
-  /// Adds a real product from a live retailer offer (see [OfferSuggestionsBar])
-  /// to the list, carrying its price/retailer/unit along with it.
-  Future<void> _addItemFromOffer(StoreOffer offer) async {
-    HapticFeedback.mediumImpact();
-    _searchController.clear();
-    _focusNode.unfocus();
+  String get _currentName =>
+      ref.read(listDetailListProvider(_listId))?.name ?? _listName;
 
-    try {
-      await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
-            name: offer.productName,
-            category: null,
-            isDietWarning: _dietWarningFor(offer.productName),
-            price: offer.price,
-            priceCurrency: 'EUR',
-            priceRetailer: offer.retailerName,
-            priceUnit: offer.unitSizeLabel ?? offer.unitShortName,
-            priceOldValue: offer.regularPrice,
-            // The offer already carries the real product name/unit — skip
-            // the Gemini ingredient-parse pass so it isn't rewritten.
-            autoParse: false,
-          );
-    } catch (e) {
-      _showAddError(e);
-    }
+  Future<void> _share() async {
+    _dismissKeyboard();
+    await _actions.share(context, ref, listId: _listId, listName: _currentName);
   }
 
-  Future<void> _addItemFromRecommendation(
-    String? itemName,
-    String? category,
-    double? quantity,
-  ) async {
-    if (itemName == null || itemName.isEmpty) return;
-
-    try {
-      await ref.read(itemsNotifierProvider(widget.listId).notifier).addItem(
-            name: itemName,
-            quantity: quantity ?? 1.0,
-            category: category,
-          );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            context.tr('item_added_named', params: {'name': itemName}),
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      _showAddError(e);
-    }
-  }
-
-  void _showAddItemDialog() {
-    showItemFormDialog(context, listId: widget.listId);
-  }
-
-  void _showEditItemDialog(ShoppingItemModel item) {
-    showItemFormDialog(context, listId: widget.listId, item: item);
-  }
-
-  Future<void> _showRenameListDialog() async {
-    final currentName = _currentListName;
-    final newName = await showCupertinoDialog<String>(
+  Future<void> _rename() async {
+    final current = _currentName;
+    final name = await showCupertinoDialog<String>(
       context: context,
-      builder: (_) => RenameListDialog(initialName: currentName),
+      builder: (_) => RenameListDialog(initialName: current),
     );
-
-    if (newName == null || newName.isEmpty || newName == currentName) return;
+    if (name == null || name.isEmpty || name == current || !_alive) return;
     try {
-      await ref
-          .read(listsNotifierProvider.notifier)
-          .updateList(widget.listId, {'name': newName});
-      if (mounted) setState(() => _listName = newName);
+      await _actions.renameList(ref, _listId, name);
+      if (_alive) setState(() => _listName = name);
     } catch (e) {
-      debugPrint('❌ [LIST_DETAIL] Failed to rename list: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('action_failed'))),
-      );
+      debugPrint('❌ [LIST_DETAIL] Rename failed: $e');
+      _failed();
     }
   }
 
-  Future<void> _showCategoryOrderScreen() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (context) => CategoryOrderScreen(
-          listId: widget.listId,
-          listName: _currentListName,
-        ),
-      ),
-    );
+  Future<void> _importNote() async {
+    _dismissKeyboard();
+    final notifier = _items;
+    try {
+      await _actions.importNote(context, listId: _listId, anchorKey: _moreKey);
+    } catch (e) {
+      debugPrint('❌ [LIST_DETAIL] Import failed: $e');
+      _failed();
+    }
+    // The import wrote through the repository; show its rows at once.
+    unawaited(notifier.loadItems());
+  }
 
-    // Order or custom categories changed: regroup, and reload items in case
-    // a deleted custom category moved some of them to 'other'.
-    if (result == true && mounted) {
-      await _loadCustomCategories();
-      unawaited(
-        ref.read(itemsNotifierProvider(widget.listId).notifier).loadItems(),
-      );
+  Future<void> _deleteList() async {
+    final name = _currentName;
+    final confirmed = await showAvoConfirm(
+      context,
+      title: context.tr('list_detail_delete_title', params: {'name': name}),
+      message: context.tr('list_detail_delete_message'),
+      confirmLabel: context.tr('list_detail_delete_confirm'),
+    );
+    if (!confirmed || !_alive) return;
+    try {
+      await _actions.deleteList(ref, _listId);
+      if (mounted && !_disposed) _actions.openAllLists(context);
+    } catch (e) {
+      debugPrint('❌ [LIST_DETAIL] Delete list failed: $e');
+      _failed();
     }
   }
 
-  void _showListSettingsScreen() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ListSettingsScreen(
-          listId: widget.listId,
-          listName: _currentListName,
-          // Null until the lists have loaded; the settings screen then
-          // looks the owner up itself.
-          ownerId: _listFromProvider()?.ownerId,
+  Future<void> _leaveList() async {
+    final name = _currentName;
+    final confirmed = await showAvoConfirm(
+      context,
+      title: context.tr('list_detail_leave_title', params: {'name': name}),
+      message: context.tr('list_detail_leave_message'),
+      confirmLabel: context.tr('list_detail_leave_confirm'),
+    );
+    if (!confirmed || !_alive) return;
+    try {
+      await _actions.leaveList(ref, _listId);
+      if (mounted && !_disposed) _actions.openAllLists(context);
+    } catch (e) {
+      debugPrint('❌ [LIST_DETAIL] Leave list failed: $e');
+      _failed();
+    }
+  }
+
+  // ---------------------------------------------------------------- build
+
+  Widget _row(ShoppingItemModel item, ListCategoryGroup? aisle) {
+    return ListItemTile(
+      key: ValueKey<String>(item.id),
+      item: item,
+      listId: _listId,
+      categoryId: aisle?.id ?? item.categoryId ?? item.category ?? 'other',
+      categoryName: aisle?.name ?? '',
+      // Done rows (and rows just checked) are not reordered.
+      dragController: item.isChecked ? null : _drag,
+      onToggle: (checked) => _toggle(item, checked),
+      onOpen: () => _openItem(item),
+      onDelete: () => _delete(item),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final itemsAsync = ref.watch(itemsNotifierProvider(_listId));
+    final list = ref.watch(listDetailListProvider(_listId));
+    final name = list?.name ?? _listName;
+    final offline = ref.watch(isOfflineProvider);
+    final offers = ref.watch(offersAvailableProvider);
+    final images = articleImagesShown(context, ref);
+    final members = list?.isShared ?? false
+        ? ref.watch(listDetailMembersProvider(_listId)).valueOrNull ??
+              const <String>[]
+        : const <String>[];
+    final language = Localizations.localeOf(context).languageCode;
+    _syncAvoContext(name, current: ModalRoute.isCurrentOf(context) ?? true);
+    _titleHeight = context.typography.lineHeightOf(AvoTextStyle.largeTitle);
+
+    final all = itemsAsync.valueOrNull;
+    final view = all == null ? null : _derive(all, language);
+    if (view != null) {
+      DynamicTutorialService.instance.updateListItemsData(
+        hasItems: view.items.isNotEmpty,
+      );
+    }
+    final total = view?.items.length ?? 0;
+    final done = total - (view?.openCount ?? 0);
+    final sum = offers && view != null ? listOpenPriceTotal(view.items) : null;
+    final background = context.isAccessibilityText
+        ? colors.backgroundPlain
+        : colors.background;
+
+    final slivers = <Widget>[
+      CupertinoSliverRefreshControl(onRefresh: _refresh),
+      SliverPadding(
+        padding: EdgeInsets.only(
+          top:
+              GlassToolbar.topOffset(context) +
+              AvoSizes.toolbarButton +
+              _titleTop,
+        ),
+        sliver: SliverToBoxAdapter(
+          child: ListDetailHeader(
+            listId: _listId,
+            title: name,
+            total: total,
+            done: done,
+            members: members,
+            onMembersTap: _share,
+          ),
         ),
       ),
+      if (offline)
+        SliverPadding(
+          padding: const EdgeInsets.only(top: AvoSpacing.m),
+          sliver: SliverToBoxAdapter(
+            child: StatusRow(
+              kind: StatusKind.offline,
+              text: context.tr('common_offline'),
+            ),
+          ),
+        ),
+      ..._content(itemsAsync, view, images),
+      const SliverToBoxAdapter(child: _BottomInset()),
+    ];
+
+    return ColoredBox(
+      color: background,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Listener(
+              onPointerDown: (_) => _dismissKeyboard(),
+              child: KeyedSubtree(
+                key: DynamicTutorialService.instance.listItemsAreaKey,
+                child: CustomScrollView(
+                  controller: _scroll,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  slivers: slivers,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ScrollEdgeFade(color: background),
+          ),
+          Positioned(
+            top: GlassToolbar.topOffset(context),
+            left: 0,
+            right: 0,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _inlineTitle,
+              builder: (context, showTitle, _) => ListDetailToolbar(
+                title: showTitle ? name : null,
+                moreKey: _moreKey,
+                onBack: () => _actions.back(context),
+                onShare: _share,
+                onMore: () => _openMenu(view),
+                onShop: (view?.openCount ?? 0) > 0
+                    ? () => _actions.openShopping(context, _listId)
+                    : null,
+              ),
+            ),
+          ),
+          AccessoryDock(
+            child: KeyedSubtree(
+              key: DynamicTutorialService.instance.addItemInputKey,
+              child: ListDetailComposer(
+                listId: _listId,
+                controller: _controller,
+                focusNode: _focus,
+                onSubmitted: _submit,
+                totalText: sum == null ? null : formatListTotal(sum, language),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  /// The part below the header: loading, error, empty, all done, or the
+  /// aisles with "Erledigt".
+  List<Widget> _content(
+    AsyncValue<List<ShoppingItemModel>> itemsAsync,
+    _ListView? view,
+    bool images,
+  ) {
+    if (view == null) {
+      if (itemsAsync.hasError) {
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.only(top: AvoSpacing.m),
+            sliver: SliverToBoxAdapter(
+              child: StatusRow(
+                kind: StatusKind.sectionError,
+                text: context.tr('list_detail_load_error'),
+                actionLabel: context.tr('common_try_again'),
+                onAction: () => unawaited(_items.loadItems()),
+              ),
+            ),
+          ),
+        ];
+      }
+      // First load without any local data: calm placeholders, no spinner.
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.only(top: AvoSpacing.section),
+          sliver: SliverList.list(
+            children: const [
+              SkeletonSection(),
+              SizedBox(height: AvoSpacing.section),
+              SkeletonSection(),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    if (view.items.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: EmptyState(
+            icon: const Icon(CupertinoIcons.list_bullet),
+            title: context.tr('list_detail_empty_title'),
+            message: context.tr('list_detail_empty_message'),
+            actionLabel: context.tr('list_detail_menu_import'),
+            onAction: _importNote,
+          ),
+        ),
+      ];
+    }
+
+    final doneSection = ListDoneSection(
+      items: view.done,
+      expanded: _doneOpen,
+      onExpandedChanged: _setDoneOpen,
+      withThumbs: images,
+      rowBuilder: (item) => _row(item, null),
+    );
+
+    if (view.aisles.isEmpty) {
+      final count = view.done.length;
+      return [
+        SliverList.list(
+          children: [
+            EmptyState(
+              pose: AvoPose.excited,
+              title: context.tr('list_detail_all_done_title'),
+              message: count == 1
+                  ? context.tr('list_detail_all_done_message_one')
+                  : context.tr(
+                      'list_detail_all_done_message',
+                      params: {'count': '$count'},
+                    ),
+              actionLabel: context.tr('list_detail_menu_checkout'),
+              onAction: () => _actions.checkout(context, _listId),
+            ),
+            doneSection,
+          ],
+        ),
+      ];
+    }
+
+    final blocks = <Widget>[
+      for (final aisle in view.aisles)
+        ListAisleSection(
+          key: ValueKey<String>('aisle-${aisle.id}'),
+          group: aisle,
+          listId: _listId,
+          dragController: _drag,
+          rowBuilder: (item) => _row(item, aisle),
+        ),
+      // Teil B: "4 von 11 Artikeln diese Woche bei Lidl im Angebot …" in a
+      // section of its own; renders nothing without content.
+      Padding(
+        padding: const EdgeInsets.only(top: AvoSpacing.section),
+        child: ListOfferSummary(listId: _listId),
+      ),
+      doneSection,
+    ];
+    return [
+      SliverList.builder(
+        itemCount: blocks.length,
+        itemBuilder: (context, index) => blocks[index],
+      ),
+    ];
+  }
+}
+
+/// Room at the end of the list so the last rows clear the add field and the
+/// tab bar, or the add field on the keyboard. Only this box reads the
+/// keyboard inset, so typing does not rebuild the list.
+class _BottomInset extends StatelessWidget {
+  const _BottomInset();
+
+  @override
+  Widget build(BuildContext context) {
+    final typography = context.typography;
+    // The add field grows with the text size; reserve its real height.
+    final field =
+        typography.lineHeightOf(AvoTextStyle.body) + 2 * _accessoryTextInset;
+    final grow = field > AvoSizes.accessoryHeight
+        ? field - AvoSizes.accessoryHeight
+        : 0.0;
+    final resting = ShellInsets.bottom(context, withAccessory: true) + grow;
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final typing = keyboard > 0
+        ? keyboard + AvoSizes.accessoryGap + field + AvoSpacing.l
+        : 0.0;
+    return SizedBox(height: resting > typing ? resting : typing);
   }
 }

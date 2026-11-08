@@ -1,122 +1,97 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 
-enum ListDetailMenuAction { rename, categoryOrder, settings }
-
-class _MenuEntry {
-  final ListDetailMenuAction action;
-  final String labelKey;
-  final String sfSymbol;
-  final IconData icon;
-
-  const _MenuEntry(this.action, this.labelKey, this.sfSymbol, this.icon);
+/// What the "Mehr" menu of the list can do (Konzept 11 §1.3).
+enum ListDetailMenuAction {
+  shop,
+  checkout,
+  share,
+  info,
+  rename,
+  storeOrder,
+  toggleOffers,
+  importNote,
+  delete,
+  leave,
 }
 
-const _entries = [
-  _MenuEntry(
-    ListDetailMenuAction.rename,
-    'rename_list',
-    'pencil',
-    CupertinoIcons.pencil,
-  ),
-  _MenuEntry(
-    ListDetailMenuAction.categoryOrder,
-    'category_order',
-    'arrow.up.arrow.down',
-    CupertinoIcons.arrow_up_arrow_down,
-  ),
-  _MenuEntry(
-    ListDetailMenuAction.settings,
-    'list_settings',
-    'gearshape',
-    CupertinoIcons.gear,
-  ),
-];
+/// The rows of the "Mehr" menu, in groups. Entries without meaning are left
+/// out rather than dimmed (Konzept 11 §1.3): "Einkaufen" only with open
+/// items, "Einkauf abschließen" only with done ones, the offers entry only
+/// with the offers module, delete for the creator and leave for members.
+List<AvoMenuEntry> listDetailMenuEntries(
+  BuildContext context, {
+  required bool hasOpen,
+  required bool hasDone,
+  required bool offersAvailable,
+  required bool offersHidden,
+  required bool? isOwner,
+  required ValueChanged<ListDetailMenuAction> onSelected,
+}) {
+  AvoMenuItem item(
+    ListDetailMenuAction action,
+    String key, {
+    AvoIconData? icon,
+    bool destructive = false,
+  }) => AvoMenuItem(
+    label: context.tr(key),
+    icon: icon,
+    destructive: destructive,
+    onSelected: () => onSelected(action),
+  );
 
-/// The "…" menu of the list detail app bar: a native glass popup on iOS 26,
-/// a Cupertino action sheet elsewhere.
-class ListDetailMenuButton extends StatefulWidget {
-  final ValueChanged<ListDetailMenuAction> onSelected;
-
-  const ListDetailMenuButton({super.key, required this.onSelected});
-
-  @override
-  State<ListDetailMenuButton> createState() => _ListDetailMenuButtonState();
-}
-
-class _ListDetailMenuButtonState extends State<ListDetailMenuButton> {
-  // Bumped after each selection to force the native popup to rebuild after
-  // navigation.
-  int _popupKeyCounter = 0;
-
-  void _showActionSheet() {
-    HapticFeedback.selectionClick();
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        actions: [
-          for (final entry in _entries)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(ctx);
-                widget.onSelected(entry.action);
-              },
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(entry.icon, size: 20),
-                  const SizedBox(width: 10),
-                  Text(context.tr(entry.labelKey)),
-                ],
-              ),
-            ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.pop(ctx),
-          child: Text(context.tr('cancel')),
-        ),
+  return [
+    if (hasOpen)
+      item(
+        ListDetailMenuAction.shop,
+        'list_detail_menu_shop',
+        icon: AvoIcons.cart,
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!PlatformInfo.isIOS26OrHigher()) {
-      return IconButton(
-        icon: Icon(
-          Icons.more_horiz_rounded,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        onPressed: _showActionSheet,
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: AdaptivePopupMenuButton.icon<ListDetailMenuAction>(
-        key: ValueKey('settings_popup_$_popupKeyCounter'),
-        icon: 'ellipsis.circle',
-        // Messages-metric: 40pt glass circle.
-        size: 40,
-        buttonStyle: PopupButtonStyle.glass,
-        items: [
-          for (final entry in _entries)
-            AdaptivePopupMenuItem<ListDetailMenuAction>(
-              label: context.tr(entry.labelKey),
-              icon: entry.sfSymbol,
-              value: entry.action,
-            ),
-        ],
-        onSelected: (index, entry) {
-          setState(() => _popupKeyCounter++);
-          final action = entry.value;
-          if (action != null) widget.onSelected(action);
-        },
+    if (hasDone)
+      item(
+        ListDetailMenuAction.checkout,
+        'list_detail_menu_checkout',
+        icon: AvoIcons.check,
       ),
-    );
-  }
+    const AvoMenuDivider(),
+    item(
+      ListDetailMenuAction.share,
+      'list_detail_share',
+      icon: AvoIcons.people,
+    ),
+    item(ListDetailMenuAction.info, 'list_detail_menu_info'),
+    item(ListDetailMenuAction.rename, 'list_detail_menu_rename'),
+    item(ListDetailMenuAction.storeOrder, 'list_detail_menu_order'),
+    if (offersAvailable) ...[
+      const AvoMenuDivider(),
+      item(
+        ListDetailMenuAction.toggleOffers,
+        offersHidden
+            ? 'list_detail_menu_show_offers'
+            : 'list_detail_menu_hide_offers',
+        icon: AvoIcons.tag,
+      ),
+    ],
+    const AvoMenuDivider(),
+    item(ListDetailMenuAction.importNote, 'list_detail_menu_import'),
+    if (isOwner != null) ...[
+      const AvoMenuDivider(),
+      if (isOwner)
+        item(
+          ListDetailMenuAction.delete,
+          'list_detail_menu_delete',
+          icon: AvoIcons.trash,
+          destructive: true,
+        )
+      else
+        item(
+          ListDetailMenuAction.leave,
+          'list_detail_menu_leave',
+          destructive: true,
+        ),
+    ],
+  ];
 }

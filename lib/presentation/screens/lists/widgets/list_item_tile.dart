@@ -1,169 +1,276 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/paper_colors.dart';
+import 'package:intl/intl.dart';
+
+import 'package:shoply/core/design/design.dart';
+import 'package:shoply/core/localization/app_translations.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
-import 'package:shoply/data/models/store_offer.dart';
-import 'package:shoply/presentation/screens/lists/widgets/item_offer_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_drag_controller.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
+import 'package:shoply/presentation/widgets/design/item_row.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
-/// "2 kg" / "1.5" — quantity without a trailing ".0", plus the unit.
-String formatItemQuantity(ShoppingItemModel item) {
-  final quantity =
-      item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity;
-  final unit = item.unit;
-  return unit != null && unit.isNotEmpty ? '$quantity $unit' : '$quantity';
+/// A full swipe deletes once the row moved this share of its width
+/// (Konzept 11 §1.1: "Volles Wischen über 60 % der Breite löscht").
+const double _deleteThreshold = 0.6;
+
+/// A long press that moved less than this and was not dropped anywhere
+/// opens the context menu instead of reordering (Konzept 11 §1.1).
+const double _menuSlop = 10;
+
+/// Opacity of the row left behind while it is dragged.
+const double _draggedOpacity = 0.3;
+
+/// The lifted row grows a little (Konzept 11 §1.1: "Skalierung 1,03").
+const double _liftScale = 1.03;
+
+/// Insertion line while another row hovers over this one.
+const double _insertLine = 2;
+
+/// Unit ids the item parser and the editor store (`Categories.units` plus
+/// `bunch`); anything else is shown as typed.
+const Set<String> _knownUnits = {
+  'kg',
+  'g',
+  'l',
+  'ml',
+  'dozen',
+  'pack',
+  'bottle',
+  'can',
+  'box',
+  'bunch',
+};
+
+/// Spellings of "pieces" in older rows.
+const Set<String> _pieceUnits = {
+  'pcs',
+  'pc',
+  'stk',
+  'stk.',
+  'st',
+  'st.',
+  'stück',
+  'x',
+  'piece',
+  'pieces',
+};
+
+/// "2 St.", "1,5 l", "500 g": quantity without a trailing ",0" in the app
+/// language, plus the unit (pieces when none is stored).
+String formatItemQuantity(
+  ShoppingItemModel item, {
+  String languageCode = 'de',
+}) {
+  final number = NumberFormat('0.##', languageCode).format(item.quantity);
+  final unit = item.unit?.trim() ?? '';
+  final lower = unit.toLowerCase();
+  final key = lower.isEmpty || _pieceUnits.contains(lower)
+      ? 'list_detail_unit_pcs'
+      : (_knownUnits.contains(lower) ? 'list_detail_unit_$lower' : null);
+  if (key == null) return '$number $unit';
+  return '$number ${_unitLabel(key, languageCode)}';
 }
 
-/// A list row that can be dragged to another category or position,
-/// swiped to delete, tapped to check (left part) or tapped to edit (right).
-///
-/// Each row is also a [DragTarget], so dropping another item onto it
-/// reorders within the category or moves the item into this category at
-/// this position.
-class DraggableListItemTile extends ConsumerWidget {
-  final ShoppingItemModel item;
-  final String categoryId;
-  final String listId;
-  final ListDragController dragController;
-  final StoreOffer? offer;
-  final ValueChanged<ShoppingItemModel> onEdit;
+String _unitLabel(String key, String languageCode) =>
+    AppTranslations.get(key, languageCode);
 
-  const DraggableListItemTile({
+/// Second line of a row: quantity, note, diet warning ("500 g · für
+/// Lasagne").
+String itemSubtitle(BuildContext context, ShoppingItemModel item) {
+  final lang = Localizations.localeOf(context).languageCode;
+  final note = item.notes?.trim();
+  return [
+    formatItemQuantity(item, languageCode: lang),
+    if (note != null && note.isNotEmpty) note,
+    if (item.isDietWarning) context.tr('list_detail_diet_warning'),
+  ].join(' · ');
+}
+
+/// One item of the list (Konzept 11 §1.1, §1.4): the D2 [ItemRow] with
+/// Teil B's picture and offer pill.
+///
+/// - The leading 54 pt check it off, the rest opens the item full screen.
+/// - A full swipe to the left deletes ([onDelete], the screen offers undo).
+/// - A long press lifts the row: moving it reorders within the aisle or
+///   moves it to another one (the category is set and learned); letting go
+///   without moving opens the context menu (Bearbeiten, Löschen).
+/// - VoiceOver: one element, double tap checks off, custom actions
+///   "Bearbeiten" and "Löschen".
+class ListItemTile extends ConsumerStatefulWidget {
+  const ListItemTile({
     super.key,
     required this.item,
-    required this.categoryId,
     required this.listId,
-    required this.dragController,
-    required this.offer,
-    required this.onEdit,
+    required this.categoryId,
+    required this.categoryName,
+    required this.onToggle,
+    required this.onOpen,
+    required this.onDelete,
+    this.dragController,
   });
 
-  Future<void> _onDrop(WidgetRef ref, ShoppingItemModel dragged) async {
-    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
-    if (dragController.draggedFromCategory == categoryId) {
-      HapticFeedback.lightImpact();
-      await notifier.reorderItemToPosition(dragged.id, item.id);
-    } else {
-      // Move into this category, then land at this item's position.
-      HapticFeedback.mediumImpact();
-      await notifier.updateItem(dragged.id, {'category_id': categoryId});
-      await notifier.reorderItemToPosition(dragged.id, item.id);
+  final ShoppingItemModel item;
+  final String listId;
+
+  /// The aisle the row sits in (drop target for reordering).
+  final String categoryId;
+  final String categoryName;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onOpen;
+  final VoidCallback onDelete;
+
+  /// Null: the row cannot be lifted (done rows).
+  final ListDragController? dragController;
+
+  @override
+  ConsumerState<ListItemTile> createState() => _ListItemTileState();
+}
+
+class _ListItemTileState extends ConsumerState<ListItemTile> {
+  double _moved = 0;
+
+  ShoppingItemModel get _item => widget.item;
+
+  Future<void> _onDrop(ShoppingItemModel dragged) async {
+    final drag = widget.dragController;
+    final notifier = ref.read(itemsNotifierProvider(widget.listId).notifier);
+    unawaited(AvoHaptics.selection());
+    try {
+      if (drag?.draggedFromCategory != widget.categoryId) {
+        await notifier.updateItem(dragged.id, {
+          'category_id': widget.categoryId,
+        });
+        unawaited(
+          CategoryDetector.recordUserCategoryChange(
+            dragged.name,
+            widget.categoryName,
+          ),
+        );
+      }
+      await notifier.reorderItemToPosition(dragged.id, _item.id);
+    } catch (e) {
+      debugPrint('❌ [LIST_DETAIL] Reorder failed: $e');
     }
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    // The row is gone once the item leaves the list, so grab the messenger
-    // before awaiting.
-    final messenger = ScaffoldMessenger.of(context);
-    final deletedLabel = '${item.name} ${context.tr('deleted')}';
-    final failedLabel = context.tr('action_failed');
-    try {
-      await ref.read(itemsNotifierProvider(listId).notifier).deleteItem(item.id);
-      HapticFeedback.lightImpact();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(deletedLabel),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+  void _openMenu() {
+    showAvoMenu(
+      context,
+      items: [
+        AvoMenuItem(
+          label: context.tr('common_edit_item'),
+          onSelected: widget.onOpen,
         ),
-      );
-    } catch (e) {
-      debugPrint('❌ [LIST_DETAIL] Failed to delete item: $e');
-      messenger.showSnackBar(SnackBar(content: Text(failedLabel)));
-    }
+        const AvoMenuDivider(),
+        AvoMenuItem(
+          label: context.tr('list_detail_delete_item'),
+          icon: AvoIcons.trash,
+          destructive: true,
+          onSelected: widget.onDelete,
+        ),
+      ],
+    );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final content = ListItemTileContent(
-      item: item,
-      offer: offer,
-      onToggle: () {
-        HapticFeedback.selectionClick();
-        ref
-            .read(itemsNotifierProvider(listId).notifier)
-            .toggleItemChecked(item.id, !item.isChecked);
+  Widget build(BuildContext context) {
+    final item = _item;
+    final colors = context.colors;
+    final deleteLabel = context.tr('list_detail_delete_item');
+    // Without pictures (setting off, AX sizes) the row leaves no gap.
+    final images = articleImagesShown(context, ref);
+
+    final row = ItemRow(
+      title: item.name,
+      subtitle: itemSubtitle(context, item),
+      thumb: images
+          ? ArticleImage(
+              item: item,
+              size: AvoSizes.thumbSmall,
+              radius: AvoRadii.imageSmall,
+            )
+          : null,
+      trailing: item.isChecked
+          ? null
+          : ItemOfferBadge(listId: widget.listId, item: item),
+      checked: item.isChecked,
+      onToggle: widget.onToggle,
+      onTap: widget.onOpen,
+      openLabel: context.tr('common_edit_item'),
+      semanticActions: {deleteLabel: widget.onDelete},
+    );
+
+    final dismissible = Dismissible(
+      key: ValueKey<String>('dismiss-${item.id}'),
+      direction: DismissDirection.endToStart,
+      dismissThresholds: const {DismissDirection.endToStart: _deleteThreshold},
+      onUpdate: (details) {
+        if (details.reached && !details.previousReached) {
+          unawaited(AvoHaptics.light());
+        }
       },
-      onEdit: () {
-        HapticFeedback.selectionClick();
-        onEdit(item);
-      },
-      onOfferTap: (offer) => showItemOfferSheet(
-        context,
-        ref: ref,
-        listId: listId,
-        item: item,
-        offer: offer,
+      onDismissed: (_) => widget.onDelete(),
+      background: ColoredBox(
+        color: colors.destructive,
+        child: Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: Padding(
+            padding: const EdgeInsetsDirectional.only(end: AvoSpacing.xl),
+            child: AvoIcon(AvoIcons.trash, color: colors.onTint),
+          ),
+        ),
       ),
+      child: ColoredBox(color: colors.surface, child: row),
+    );
+
+    final drag = widget.dragController;
+    if (drag == null) return dismissible;
+
+    final lifted = LongPressDraggable<ShoppingItemModel>(
+      data: item,
+      hapticFeedbackOnStart: false,
+      onDragStarted: () {
+        _moved = 0;
+        drag.startDrag(widget.categoryId);
+      },
+      onDragUpdate: (details) {
+        _moved += details.delta.distance;
+        drag.handleDragUpdate(context, details.globalPosition.dy);
+      },
+      onDragEnd: (details) {
+        drag.endDrag();
+        if (!details.wasAccepted && _moved < _menuSlop && mounted) _openMenu();
+      },
+      feedback: _DragFeedback(
+        width: MediaQuery.sizeOf(context).width - 2 * AvoSpacing.screen,
+        title: item.name,
+        subtitle: itemSubtitle(context, item),
+      ),
+      childWhenDragging: Opacity(opacity: _draggedOpacity, child: row),
+      child: dismissible,
     );
 
     return DragTarget<ShoppingItemModel>(
       onWillAcceptWithDetails: (details) => details.data.id != item.id,
-      onAcceptWithDetails: (details) => _onDrop(ref, details.data),
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
+      onAcceptWithDetails: (details) => _onDrop(details.data),
+      builder: (context, candidates, rejected) {
+        if (candidates.isEmpty) return lifted;
+        return Stack(
           children: [
-            // Insertion indicator line when another item hovers here
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              height: isHovering ? 3 : 0,
-              margin: isHovering
-                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 2)
-                  : EdgeInsets.zero,
-              decoration: BoxDecoration(
-                color: isHovering
-                    ? AppColors.accentColor(context).withValues(alpha: 0.7)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            LongPressDraggable<ShoppingItemModel>(
-              data: item,
-              delay: const Duration(milliseconds: 300),
-              onDragStarted: () {
-                HapticFeedback.mediumImpact();
-                dragController.startDrag(categoryId);
-              },
-              onDragUpdate: (details) => dragController.handleDragUpdate(
-                context,
-                details.globalPosition.dy,
-              ),
-              onDragEnd: (_) => dragController.endDrag(),
-              onDraggableCanceled: (_, __) => dragController.endDrag(),
-              feedback: _DragFeedback(item: item),
-              childWhenDragging: Opacity(opacity: 0.3, child: content),
-              child: Dismissible(
-                key: Key(item.id),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.delete,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                ),
-                confirmDismiss: (direction) async {
-                  HapticFeedback.heavyImpact();
-                  return true;
-                },
-                onDismissed: (_) => _delete(context, ref),
-                child: content,
-              ),
+            lifted,
+            PositionedDirectional(
+              start: ItemRow.separatorIndentOf(context, withThumb: images),
+              end: 0,
+              top: 0,
+              height: _insertLine,
+              child: ColoredBox(color: colors.tint),
             ),
           ],
         );
@@ -172,220 +279,58 @@ class DraggableListItemTile extends ConsumerWidget {
   }
 }
 
+/// The lifted row under the finger: name and quantity on a raised card.
 class _DragFeedback extends StatelessWidget {
-  final ShoppingItemModel item;
-
-  const _DragFeedback({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      elevation: 8,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        width: MediaQuery.of(context).size.width - 64,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.accentColor(context).withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.drag_indicator_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                item.name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            Text(
-              '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} ${item.unit ?? ''}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.white70,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Row content: left part toggles the check, right part opens the editor.
-class ListItemTileContent extends StatelessWidget {
-  final ShoppingItemModel item;
-  final StoreOffer? offer;
-  final VoidCallback onToggle;
-  final VoidCallback onEdit;
-  final ValueChanged<StoreOffer> onOfferTap;
-
-  const ListItemTileContent({
-    super.key,
-    required this.item,
-    required this.offer,
-    required this.onToggle,
-    required this.onEdit,
-    required this.onOfferTap,
+  const _DragFeedback({
+    required this.width,
+    required this.title,
+    required this.subtitle,
   });
 
+  final double width;
+  final String title;
+  final String subtitle;
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accent = AppColors.accentColor(context);
-    final textTertiary = AppColors.textTertiary(context);
-    final offer = this.offer;
-
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.divider(context), width: 1),
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: Row(
-          children: [
-            // LEFT 2/3 ZONE: Tap to check/uncheck
-            Expanded(
-              flex: 2,
-              child: GestureDetector(
-                onTap: onToggle,
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 13, 8, 13),
-                  child: Row(
-                    children: [
-                      // Checkbox - paper circle
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          color: item.isChecked ? accent : Colors.transparent,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: item.isChecked ? accent : textTertiary,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: item.isChecked
-                            ? const Icon(
-                                Icons.check_rounded,
-                                color: Colors.white,
-                                size: 14,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 14),
-                      // Item name and notes
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.name,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w400,
-                                decoration: item.isChecked
-                                    ? TextDecoration.lineThrough
-                                    : null,
-                                decorationColor: textTertiary,
-                                color: item.isChecked
-                                    ? textTertiary
-                                    : AppColors.textPrimary(context),
-                              ),
-                            ),
-                            if (item.notes != null &&
-                                item.notes!.isNotEmpty) ...[
-                              const SizedBox(height: 3),
-                              Text(
-                                item.notes!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? Colors.grey.shade500
-                                      : PaperColors.muted,
-                                ),
-                              ),
-                            ],
-                            if (item.hasPrice) ...[
-                              const SizedBox(height: 3),
-                              Text(
-                                [
-                                  '${item.price!.toStringAsFixed(2)} €',
-                                  if (item.priceUnit != null) item.priceUnit!,
-                                  if (item.priceRetailer != null)
-                                    item.priceRetailer!,
-                                ].join(' · '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: accent,
-                                ),
-                              ),
-                            ],
-                            if (!item.isChecked &&
-                                offer != null &&
-                                ItemOfferChip.isWorthShowing(item, offer))
-                              ItemOfferChip(
-                                item: item,
-                                offer: offer,
-                                onTap: () => onOfferTap(offer),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
+    final colors = context.colors;
+    return Transform.scale(
+      scale: _liftScale,
+      child: SizedBox(
+        width: width,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surfaceRaised,
+            borderRadius: BorderRadius.circular(AvoRadii.card),
+            boxShadow: [
+              BoxShadow(
+                color: colors.shadow,
+                blurRadius: AvoSpacing.xl,
+                offset: const Offset(0, AvoSpacing.s),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AvoSpacing.l,
+              vertical: AvoSpacing.m,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: context.text(AvoTextStyle.body)),
+                Text(
+                  subtitle,
+                  style: context.text(
+                    AvoTextStyle.subhead,
+                    color: colors.secondaryLabel,
+                    tabular: true,
                   ),
                 ),
-              ),
+              ],
             ),
-            // RIGHT ZONE: Tap to edit item
-            GestureDetector(
-              onTap: onEdit,
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 10, 16, 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      formatItemQuantity(item),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: item.isChecked
-                            ? textTertiary
-                            : AppColors.textSecondary(context),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.drag_indicator,
-                      size: 16,
-                      color: textTertiary,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
