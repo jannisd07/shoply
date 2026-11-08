@@ -21,14 +21,15 @@ Home, Routen, Übersetzungen), `dart analyze` ohne Errors/Warnings. Auf dem Ger�
 
 Behoben: Abblendung unter der Toolbar zu niedrig auf großen Statusleisten (`202e207`), Avo-Chips in einer Zeile
 (`d0d1552`, `d2bfcd9`), Top-Listen mit den Farben des Listen-Tabs (`4e41f2e`). Offen:
-- **Kaltstart:** ca. 4 s bis Name und Listen auf Home erscheinen; „lokaler Stand zuerst“ in `lists_provider`/
-  `items_provider`/`currentUserProvider` fehlt noch (A5 Tempo).
-- **Mengen uneinheitlich:** Liste zeigt „1 btl.“/„1 pcs“, Einkaufsmodus „1 bottle“ und bei 1 Stück nichts; ein
-  gemeinsamer Formatierer (`formatItemQuantity`) für beide.
+- **Kaltstart (behoben, `afc9f3a`, `b253576`):** Listen und Name kommen aus dem kontobezogenen Gerätespeicher im
+  ersten Home-Bild (vorher ca. 4 s Warten aufs Netz). Offen: ein grauer Einzelrahmen vor dem ersten Flutter-Bild im
+  Debug-Build; im Release/Profile-Build prüfen (A11).
+- **Mengen (behoben, `a3c1c1f`):** ein Format für Liste und Einkaufsmodus (`lib/core/utils/item_quantity.dart`), ein
+  Stück ohne Einheit ohne zweite Zeile, „L“ wie D2.
 - **Eingabefeld:** Return der Hardware-Tastatur im Simulator hat nicht abgeschickt (Plus-Knopf schon); auf dem Gerät
   mit Software-Tastatur prüfen.
-- **B:** „Offline“-Hinweis trotz Netz (`connectivity_service.dart`); iOS-Mitteilungsdialog ohne Vorab-Erklärung direkt
-  nach dem Login (Quelle offen). An B gemeldet.
+- **B (behoben, `ccf9895`):** Mitteilungsdialog kam von `flutter_app_badger` beim Öffnen einer Liste (jetzt eigener
+  Badge-Kanal ohne Abfrage); „Offline“ gilt erst, wenn eine echte Anfrage scheitert.
 
 ## Router und Repository (A)
 
