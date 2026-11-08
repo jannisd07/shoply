@@ -41,7 +41,7 @@ the Design System section below) take precedence over a skill's house style.
 | In-app texts (buttons, errors, empty states, paywall) | `design:ux-copy`, then `humanizer` |
 | App Store text, landing page (`shoply-landingpage`), marketing | `copywriting` (new) or `copy-editing` (revise), then `humanizer` |
 | Landing page SEO, AI visibility, structured data, many similar pages | `seo-audit`, `ai-seo`, `schema`, `programmatic-seo` |
-| Measuring Gemini / Avo answers (categorisation accuracy, prompt injection) | `promptfoo-evals` (new target: `promptfoo-provider-setup`), only made-up test data |
+| Measuring Claude / Avo answers (categorisation accuracy, prompt injection) | `promptfoo-evals` (new target: `promptfoo-provider-setup`), only made-up test data |
 | Library or API questions (Flutter, Riverpod, Supabase, GoRouter …) | Context7 (`plugin:context7`) |
 | Before a TestFlight/App Store release | `claude-security` (`scan changes`, `low`) |
 
@@ -184,7 +184,7 @@ When making code changes during an active `flutter run` session, the app support
 
 ```
 lib/
-├── main.dart                    # Service initialization (Supabase, Firebase, Gemini, FCM, etc.)
+├── main.dart                    # Start: Supabase + local state before runApp, the rest via StartupScheduler
 ├── app.dart                     # AvoApp root widget (AdaptiveApp) with theme/locale/routing
 ├── core/
 │   ├── config/env.dart          # API keys (gitignored - copy from env.example.dart)
@@ -212,8 +212,9 @@ lib/
 - **State**: Riverpod providers in `presentation/state/`. `FutureProvider` for one-time fetches, `StreamProvider` for realtime (Supabase streams), `Provider` for singletons.
 - **Services**: Singleton pattern (`ServiceName.instance`) or a Riverpod provider. There is no service locator. `main()` initializes Supabase before `runApp`, everything else concurrently in the background.
 - **iOS 26 Styling**: Uses `adaptive_platform_ui` package for Liquid Glass effects. Custom `MainScaffold` implements floating glass pill navbar with spring physics animations.
-- **AI Categorization**: `gemini-2.0-flash-lite` via `GeminiCategorizationService` with a serialized 1100 ms rate limit and SharedPreferences cache. Falls back to `ProductClassifierService` keyword matching (1000+ German/English keywords across 29 categories). Language-agnostic category IDs (e.g., `'dairy'`) displayed in current locale.
-- **Avo AI Chat**: Gemini 2.0 Flash Lite via `AvoAssistantService`. Can add items to lists, search recipes, analyze lists. Full-screen route `/avo`.
+- **AI (Claude)**: every AI call goes through the Supabase Edge Function `ai` (`supabase/functions/ai`): JWT check, quota per person, task and day (`ai_consume_quota_b`, limits in `app_flags.ai_limits`, Pro via `is_premium_user`), kill switch `app_flags.ai_enabled`. The Anthropic key is only the Supabase secret `ANTHROPIC_API_KEY`, never in the app. Models: `claude-haiku-5-5` for `categorize`, `recommend`, `nutrition_estimate`; `claude-sonnet-5-5` for `avo_chat`, `meal_photo`, `list_import`. The app calls it only through `ClaudeService` (`run` for JSON tasks, `streamAvo` for Avo's SSE stream).
+- **Categorization**: `AiCategorizationService.categorizeLocal` (synchronous: learned mappings, cached Claude answers, `categories.dart` keywords) at once, `refineCategory`/`categorizeBatch` in the background via Claude. Adding an item never waits for AI. Language-agnostic category IDs (e.g., `'dairy'`) displayed in current locale.
+- **Avo AI Chat**: `AvoAssistantService` streams the task `avo_chat` (system prompt and tools live server-side in `supabase/functions/_shared/avo_system.ts` / `avo_tools.ts`); the app runs the tools with the person's session, keeps the history append-only (`AvoConversation`) and can only propose deletions (`propose_delete` → confirm card with one-time token). Root of the Avo tab `/avo`.
 - **Premium**: `SubscriptionService` handles iOS IAP. Features gated via `subscription.isPremium`. Android IAP not implemented.
   - Product IDs: `shoply_premium_monthly` ($2.99/month), `shoply_premium_yearly` ($29.99/year), both with 14-day free trial.
   - Supabase DB functions: `activate_subscription`, `activate_trial`, `is_premium_user`
@@ -260,7 +261,7 @@ URL scheme: `shoply://` + Universal Links. Routes handled by `DeepLinkService`. 
 `lib/core/config/env.dart` is gitignored. Copy `env.example.dart` → `env.dart` and fill in:
 - Supabase URL + anon key (from Supabase Dashboard → Settings → API)
 - Google OAuth web client ID (use **Web** Client ID, not iOS)
-- Gemini API key
+- No AI key: the Anthropic key is the Supabase secret `ANTHROPIC_API_KEY` (set by the owner)
 
 `lib/firebase_options.dart` is gitignored - generate via `flutterfire configure`.
 `ios/Runner/GoogleService-Info.plist` is gitignored - download from Firebase Console.
@@ -284,7 +285,7 @@ without being asked:
 - **Services**: `ServiceName.instance` or a Riverpod provider; write list/item data only through `ItemRepository`/`ListRepository` (they handle optimistic state, realtime and pushes).
 - **Snackbars**: `ScaffoldMessenger.of(context)` works on iOS because `app.dart` wraps the app in a `ScaffoldMessenger` (CupertinoApp has none). Keep that wrapper.
 - **Debug output**: `debugPrint`, never `print`.
-- **Gemini API calls**: Always maintain 1100ms minimum delay between requests. Check SharedPreferences cache first. Never reduce this delay.
+- **AI calls**: only via `ClaudeService` → Edge Function `ai`; never an API key in the app, repo or logs. Local result first, Claude in the background; quota and throttling are server-side. Never log prompts or user data.
 - **Platform guards**: Firebase, FCM, IAP, Siri, Analytics are iOS/Android only. Always check `Platform.isIOS` or `Platform.isAndroid` before using.
 - **pubspec.yaml**: Many packages are commented out with explanations (macOS compat, iOS build issues). Don't re-enable without testing.
 - **Debug logging**: Use emoji prefixes: `🔵 [FEATURE]` info, `✅ [FEATURE]` success, `❌ [FEATURE]` error, `⚠️ [FEATURE]` warning.

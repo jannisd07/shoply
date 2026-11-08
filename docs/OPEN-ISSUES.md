@@ -2,10 +2,19 @@
 
 Dinge, die Claude nicht selbst erledigen kann oder darf: Backend-Änderungen, Deploys, Secrets und
 Produktentscheidungen. Erledigtes **löschen**, Neues oben in der passenden Gruppe eintragen.
-Stand: 2026-11-07 (aus dem Repo-Aufräumen).
+Stand: 2026-11-08.
 
 ## 1. Dringend: Dinge, die gerade kaputt sind
 
+- **Claude live schalten (Teil B, S3).** Bis dahin fällt die Kategorisierung auf die lokale Erkennung zurück, Avo,
+  Essensfoto und Zettel-Import antworten mit einem Fehler. Reihenfolge, jeder Schritt einzeln freigeben:
+  1. Secret setzen: `supabase secrets set ANTHROPIC_API_KEY=…` (nur der Owner; API-Credits aus der Claude Console).
+  2. Migrationen anwenden: `20261108000000_b_app_flags`, `20261108000100_b_ai_usage`,
+     `20261108000200_b_meal_photos_private`, `20261108000300_b_list_store`, `20261108001000_b_calories`,
+     `20261108002000_b_meal_plan` (alle in `supabase/migrations/`).
+  3. Deploy: `supabase functions deploy ai` und `supabase functions deploy extract-shopping-list` (Hülle für alte Builds).
+  4. Danach den alten Gemini-Key in Google AI Studio widerrufen; er steckt in ausgelieferten Builds.
+  5. In der Claude Console eine harte Monatsgrenze setzen.
 - **Firebase-Konfiguration auf Jannis' Mac (`~/Apps/shoply-neu`) ist veraltet.** Richtig ist das Projekt
   `shoply-92f28` (CLAUDE.md, Edge Function `send-push-notification`). Dort ist aber `lib/firebase_options.dart`
   ein Platzhalter und `ios/Runner/GoogleService-Info.plist` gehört zum alten Projekt `shoplyai-1554e`. Folge:
@@ -15,9 +24,8 @@ Stand: 2026-11-07 (aus dem Repo-Aufräumen).
   löschen und `database/clear_invalid_fcm_tokens.sql` einmal ausführen.
 - **Spalte `shopping_lists.order_index` fehlt** (Fehler 42703). Listen umsortieren schlägt immer fehl und springt
   zurück. Spalte anlegen (besser pro Mitglied: `list_members.order_index`) oder Umsortieren entfernen.
-- **Edge Functions deployen.** Code ist korrigiert, aber erst nach dem Deploy live:
-  `supabase functions deploy send-push-notification` und `supabase functions deploy extract-shopping-list`
-  (Autorisierung ergänzt, keine Debug-Logs mehr an den Aufrufer, Besitzprüfung vor dem Löschen).
+- **Edge Function `send-push-notification` deployen.** Code ist korrigiert, aber erst nach dem Deploy live:
+  `supabase functions deploy send-push-notification` (Autorisierung ergänzt, keine Debug-Logs an den Aufrufer).
 
 ## 2. Sicherheit und Abos
 
