@@ -301,6 +301,14 @@ void main() {
             semanticLabel: 'Portionen',
             onChanged: (_) {},
           ),
+          const SizedBox(height: AvoSpacing.s),
+          // Long unit (gallery finding): wraps or scales, never overflows.
+          ValueStepper(
+            value: 4,
+            unit: 'Portionen',
+            semanticLabel: 'Portionen',
+            onChanged: (_) {},
+          ),
         ],
       ),
     ),

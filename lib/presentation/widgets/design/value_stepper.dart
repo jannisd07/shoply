@@ -138,6 +138,26 @@ class _ValueStepperState extends State<ValueStepper> {
     return unit == null || unit.isEmpty ? number : '$number $unit';
   }
 
+  /// The number with its unit on one line. A unit too long for the space
+  /// left scales down instead of overflowing (the number never does).
+  Widget _valueContent(TextStyle valueStyle, String? unit) {
+    final number = RollingNumber(value: widget.value, style: valueStyle);
+    if (unit == null || unit.isEmpty) return number;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        number,
+        const SizedBox(width: AvoSpacing.xs),
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(unit, style: context.text(AvoTextStyle.body)),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -167,18 +187,7 @@ class _ValueStepperState extends State<ValueStepper> {
         child: Center(
           widthFactor: 1,
           heightFactor: 1,
-          child: ExcludeSemantics(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                RollingNumber(value: widget.value, style: valueStyle),
-                if (unit != null && unit.isNotEmpty) ...[
-                  const SizedBox(width: AvoSpacing.xs),
-                  Text(unit, style: context.text(AvoTextStyle.body)),
-                ],
-              ],
-            ),
-          ),
+          child: ExcludeSemantics(child: _valueContent(valueStyle, unit)),
         ),
       ),
     );
@@ -222,7 +231,7 @@ class _ValueStepperState extends State<ValueStepper> {
                   onHoldStart: () => _startRepeat(-1),
                   onHoldEnd: _stopRepeat,
                 ),
-                value,
+                Flexible(child: value),
                 _StepButton(
                   plus: true,
                   compact: compact,
