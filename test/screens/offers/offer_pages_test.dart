@@ -453,7 +453,7 @@ void main() {
         ),
       );
       expect(find.text('REWE · Kaufst du etwa alle 10 Tage'), findsOneWidget);
-      await tester.tap(find.bySemanticsLabel('Auf die Liste').first);
+      await tester.tap(find.bySemanticsLabel('Haferflocken, Auf die Liste'));
       await tester.pumpAndSettle();
       expect(find.text('Wocheneinkauf'), findsWidgets);
       expect(find.text('Lidl · Angebot gilt dort nicht'), findsOneWidget);
