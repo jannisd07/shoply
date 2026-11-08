@@ -304,15 +304,30 @@ without being asked:
 
 ## Design System
 
-**The current state is mixed (Paper + Liquid Glass + old Material) — see [docs/DESIGN-STATUS.md](docs/DESIGN-STATUS.md) before any UI work; a redesign is planned.** On iOS `AppTheme` is ignored (CupertinoApp), so colors/fonts come from tokens used directly in widgets. Target values:
-- 90% monochrome with 10% accent color
-- Cards: 16-20px border radius, soft layered shadows, 24px internal padding
-- Sections: minimum 24-32px spacing between sections
-- Touch targets: minimum 64px height
-- Animations: 250ms default with `Curves.easeInOutCubic`, 400ms for emphasis
-- No heavy borders — use shadows or subtle backgrounds (`alpha: 0.08-0.12`)
+**The look is D2 · Glas** (Apple style, iOS Liquid Glass on the floating layer, SF Pro, springs). The binding source is the
+artifact "Shoply Redesign – 5 Richtungen", page "D2 · Glas" (`D2-Komponenten` and the screens), summarised in
+[docs/redesign/design-quelle.md](docs/redesign/design-quelle.md). The old "Paper" look (cream, Georgia, terracotta) is
+gone; functions and flows per area are in `docs/redesign/konzept/`, whose visual notes are outdated.
 
-Color constants in `AppColors`, spacing in `AppDimensions`, text styles in `AppTextStyles` (all in `lib/core/constants/`).
+- **Tokens:** one import, `package:shoply/core/design/design.dart`. Colours `context.colors.*` (light, dark and two
+  high-contrast variants, all text ≥ 4.5:1), type `context.text(AvoTextStyle.body)` (iOS styles, Dynamic Type up to
+  AX5), `AvoSpacing`, `AvoRadii`, `AvoSizes`, `ShellInsets` (where tab bar and accessory sit; never measure them),
+  `AvoMotion` (springs from response and damping, `context.reduceMotion`), `AvoHaptics` (the only way to trigger
+  haptics). On iOS `AppTheme` is ignored (CupertinoApp), so widgets read these tokens, never the theme.
+- **Components:** `lib/presentation/widgets/design/`, one file each with a test: glass (`GlassSurface` only on the
+  floating layer, `ContentGlass` on photos inside content), `AppButton`, `GlassToolbar`/`GlassIconButton`,
+  `InsetSection` and rows, `CheckCircle`, `ValueStepper`, `AppSegmentedControl`, chips, progress, search, states
+  (`EmptyState`, `SkeletonSection`, `StatusRow`, `AvoToast`), dialogs (`showAvoConfirm`, `showModuleOffAlert`),
+  `ProBadge`/`ProGate.run`, `AvoFigure`, `AvoIcons`, `AppTabBar`, and from S2b list, recipe, menu, editor and input
+  pieces. Screens are built from these; Teil B uses the same set.
+- **Rules:** no hex values, font sizes or durations in screens (a D2 one-off inside a component is a private constant
+  marked `// D2`). Text never sits in a fixed height, only minimum heights; at AX sizes rows wrap or stack. Touch
+  targets ≥ 44 pt. Reduce Transparency and Increase Contrast turn glass opaque; Reduce Motion turns movement into
+  short fades. Avo appears only as the 3D figure (`AvoFigure`). No sheets or sliders (hard rule above).
+- **Layout check:** every screen and component passes `layoutMatrix` from `test/layout/layout_matrix.dart` (widths
+  320–440 pt, text scale 1.0–3.1, bold text, dark mode, contrast; fails on any overflow or clipped text).
+- `AppColors`, `PaperColors`, `PaperTextStyles` and `AppDimensions` in `lib/core/constants/` are legacy shims that
+  already show D2 values; don't use them in new code. They go once no screen needs them.
 
 ## Deployment
 
