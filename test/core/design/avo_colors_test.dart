@@ -33,6 +33,7 @@ void main() {
           expect(contrast(c.secondaryLabel, bg), greaterThanOrEqualTo(4.5));
           expect(contrast(c.placeholder, bg), greaterThanOrEqualTo(4.5));
           expect(contrast(c.tint, bg), greaterThanOrEqualTo(4.5));
+          expect(contrast(c.warning, bg), greaterThanOrEqualTo(4.5));
         }
         expect(contrast(c.destructive, c.surface), greaterThanOrEqualTo(4.5));
         expect(contrast(c.onTint, c.tintFill), greaterThanOrEqualTo(4.5));

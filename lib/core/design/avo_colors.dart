@@ -29,6 +29,7 @@ class AvoColors extends ThemeExtension<AvoColors> {
     required this.tintSoft,
     required this.tintIcon,
     required this.destructive,
+    required this.warning,
     required this.red,
     required this.uncheckedRing,
     required this.chipSelected,
@@ -97,6 +98,10 @@ class AvoColors extends ThemeExtension<AvoColors> {
   /// Destructive text ("Liste löschen").
   final Color destructive;
 
+  /// Warning glyphs and short warning texts (allergy hint, offer caveat):
+  /// at least 4.5:1 on [background] and [surface] in every palette.
+  final Color warning;
+
   /// Error and badge fills.
   final Color red;
 
@@ -147,6 +152,7 @@ class AvoColors extends ThemeExtension<AvoColors> {
     tintSoft: Color(0xFFE7F3EA),
     tintIcon: Color(0xFF2E8B47),
     destructive: Color(0xFFD70015),
+    warning: Color(0xFFA8521A), // 5.4:1 on white, 4.8:1 on #F2F2F7
     red: Color(0xFFFF3B30),
     // Darker than D2's #C7C7CC (1.68:1) so the ring reaches 3:1 on white;
     // owner decision 2026-11-07.
@@ -155,7 +161,7 @@ class AvoColors extends ThemeExtension<AvoColors> {
     onChipSelected: Color(0xFFFFFFFF),
     glassFill: Color(0xA3FFFFFF), // .64
     glassBorder: Color(0xBFFFFFFF), // .75
-    glassTintFill: Color(0xE01F7A3A), // .88
+    glassTintFill: Color(0xF51F7A3A), // .96: white text 4.99:1 over light content (D2 .88)
     glassTintBorder: Color(0x59FFFFFF), // .35
     glassFallback: Color(0xFFF9F9FB),
     shadow: Color(0xFF000000),
@@ -182,6 +188,7 @@ class AvoColors extends ThemeExtension<AvoColors> {
     tintSoft: Color(0xFF16301E),
     tintIcon: Color(0xFF4CC46E),
     destructive: Color(0xFFFF6961),
+    warning: Color(0xFFFF9F0A), // 8.3:1 on #1C1C1E
     red: Color(0xFFFF453A),
     uncheckedRing: Color(0xFF7C7C80),
     chipSelected: Color(0xFFFFFFFF),
@@ -215,6 +222,7 @@ class AvoColors extends ThemeExtension<AvoColors> {
     tintSoft: Color(0xFFE7F3EA),
     tintIcon: Color(0xFF145A28),
     destructive: Color(0xFFA50011),
+    warning: Color(0xFF8A3F0F), // 6.7:1 on #F2F2F7
     red: Color(0xFFD70015),
     uncheckedRing: Color(0xFF6C6C70),
     chipSelected: Color(0xFF000000),
@@ -248,6 +256,7 @@ class AvoColors extends ThemeExtension<AvoColors> {
     tintSoft: Color(0xFF16301E),
     tintIcon: Color(0xFF7EE29A),
     destructive: Color(0xFFFF8A84),
+    warning: Color(0xFFFFB64D), // 9.8:1 on #1C1C1E
     red: Color(0xFFFF6961),
     uncheckedRing: Color(0xFFAEAEB2),
     chipSelected: Color(0xFFFFFFFF),
@@ -308,6 +317,7 @@ class AvoColors extends ThemeExtension<AvoColors> {
       tintSoft: l(tintSoft, other.tintSoft),
       tintIcon: l(tintIcon, other.tintIcon),
       destructive: l(destructive, other.destructive),
+      warning: l(warning, other.warning),
       red: l(red, other.red),
       uncheckedRing: l(uncheckedRing, other.uncheckedRing),
       chipSelected: l(chipSelected, other.chipSelected),
