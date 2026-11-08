@@ -12,7 +12,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// hourly token refresh — providers that only care about *who* is signed in
 /// should watch [authUserIdProvider] instead.
 final authUserProvider = StreamProvider<User?>((ref) {
-  return SupabaseService.instance.authStateChanges.map((state) => state.session?.user);
+  return SupabaseService.instance.authStateChanges.map(
+    (state) => state.session?.user,
+  );
 });
 
 /// The signed-in user's id, or null when signed out.
@@ -40,6 +42,15 @@ final authUserIdProvider = Provider<String?>((ref) {
 
 String? _lastSeenUserId;
 
+/// The profile saved on this device for the signed-in account (name,
+/// onboarding flag), available before [currentUserProvider] has asked the
+/// server, so Home can greet by name on a cold start.
+final cachedUserProfileProvider = FutureProvider<CachedUserProfile?>((ref) {
+  final userId = ref.watch(authUserIdProvider);
+  if (userId == null) return null;
+  return OfflineCacheService.instance.getCachedUserProfile(userId);
+});
+
 /// Provider for current user model. Caches the display_name/onboarding flag
 /// in [OfflineCacheService] on every successful fetch so the router can still
 /// make redirect decisions when the device is offline.
@@ -57,9 +68,11 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
     // at most once per device.
     final applied = await OnboardingAnswersService.instance
         .applyPendingAnswersToAccount(
-      userId,
-      accountCreatedAt: DateTime.tryParse(row['created_at'] as String? ?? ''),
-    );
+          userId,
+          accountCreatedAt: DateTime.tryParse(
+            row['created_at'] as String? ?? '',
+          ),
+        );
     if (applied) row = await _fetchUserRow(userId) ?? row;
 
     final model = UserModel.fromJson(row);
@@ -97,7 +110,8 @@ Future<Map<String, dynamic>> _createUserRow(User authUser) {
       .insert({
         'id': authUser.id,
         'email': authUser.email,
-        'display_name': authUser.userMetadata?['display_name'] ??
+        'display_name':
+            authUser.userMetadata?['display_name'] ??
             authUser.email?.split('@')[0],
         'auth_provider': authUser.appMetadata['provider'],
         'created_at': now,

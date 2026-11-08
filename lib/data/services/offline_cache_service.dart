@@ -94,24 +94,39 @@ class OfflineCacheService {
   // =============================================
 
   static const String _cachedListsKey = '${_prefix}lists';
+
+  /// The account the cached lists belong to.
+  static const String _cachedListsUserKey = '${_prefix}lists_user';
   static const String _cachedListItemsPrefix = '${_prefix}list_items_';
 
-  /// Cache a list of shopping lists
-  Future<void> cacheLists(List<ShoppingListModel> lists) async {
+  /// Cache a list of shopping lists, for [userId]'s account when given.
+  Future<void> cacheLists(
+    List<ShoppingListModel> lists, {
+    String? userId,
+  }) async {
     try {
       final prefs = await _preferences;
       final listsJson = lists.map((l) => jsonEncode(l.toJson())).toList();
       await prefs.setStringList(_cachedListsKey, listsJson);
+      if (userId != null) {
+        await prefs.setString(_cachedListsUserKey, userId);
+      } else {
+        await prefs.remove(_cachedListsUserKey);
+      }
       debugPrint('✅ [OFFLINE] Cached ${lists.length} shopping lists');
     } catch (e) {
       debugPrint('❌ [OFFLINE] Error caching shopping lists: $e');
     }
   }
 
-  /// Get cached shopping lists
-  Future<List<ShoppingListModel>?> getCachedLists() async {
+  /// Get cached shopping lists. With [userId] only lists cached for that
+  /// account (a cold start shows them at once, never another account's).
+  Future<List<ShoppingListModel>?> getCachedLists({String? userId}) async {
     try {
       final prefs = await _preferences;
+      if (userId != null && prefs.getString(_cachedListsUserKey) != userId) {
+        return null;
+      }
       final listsJson = prefs.getStringList(_cachedListsKey);
 
       if (listsJson == null || listsJson.isEmpty) {
@@ -157,7 +172,10 @@ class OfflineCacheService {
   }
 
   /// Cache items for a specific shopping list
-  Future<void> cacheListItems(String listId, List<ShoppingItemModel> items) async {
+  Future<void> cacheListItems(
+    String listId,
+    List<ShoppingItemModel> items,
+  ) async {
     // Memory first and synchronously, so a navigation happening in the same
     // frame as a write already sees the new data.
     _memoryItems[listId] = List.unmodifiable(items);
@@ -258,11 +276,13 @@ class OfflineCacheService {
       final prefs = await _preferences;
       final keys = prefs
           .getKeys()
-          .where((k) =>
-              k.startsWith(_prefix) ||
-              k.startsWith(_legacyListItemsPrefix) ||
-              k == _cachedProfileKey ||
-              _legacyKeys.contains(k))
+          .where(
+            (k) =>
+                k.startsWith(_prefix) ||
+                k.startsWith(_legacyListItemsPrefix) ||
+                k == _cachedProfileKey ||
+                _legacyKeys.contains(k),
+          )
           .toList();
       for (final key in keys) {
         await prefs.remove(key);

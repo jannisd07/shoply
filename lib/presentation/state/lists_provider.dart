@@ -40,11 +40,29 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
   /// a list event, completing a trip one event per deleted row).
   static const _realtimeDebounceDelay = Duration(milliseconds: 400);
 
-  ListsNotifier(this._repository, this._userId)
-      : super(_seed(_userId)) {
+  ListsNotifier(this._repository, this._userId) : super(_seed(_userId)) {
     if (_userId == null) return; // Signed out: nothing to load or watch.
+    // Cold start: paint this account's lists from the device right away;
+    // the network answer replaces them (Konzept 00: local state first).
+    if (state is! AsyncData<List<ShoppingListModel>>) {
+      unawaited(_seedFromDisk());
+    }
     loadLists();
     _repository.subscribeToItemChanges(_onRemoteChange);
+  }
+
+  Future<void> _seedFromDisk() async {
+    final cached = await OfflineCacheService.instance.getCachedLists(
+      userId: _userId,
+    );
+    if (!mounted || cached == null || cached.isEmpty) return;
+    if (state is AsyncData<List<ShoppingListModel>>) return; // network won
+    state = AsyncValue.data(cached);
+    unawaited(
+      OfflineCacheService.instance.warmListItems([
+        for (final l in cached) l.id,
+      ]),
+    );
   }
 
   static AsyncValue<List<ShoppingListModel>> _seed(String? userId) {
@@ -73,23 +91,27 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
       _lastKnown = lists;
       _lastKnownUserId = _userId;
       // Cache for offline use
-      OfflineCacheService.instance.cacheLists(lists);
+      OfflineCacheService.instance.cacheLists(lists, userId: _userId);
       // Pull each list's cached items into memory while the user is still
       // looking at the overview, so tapping a list can paint its contents in
       // the first frame instead of waiting on SharedPreferences or Supabase.
       unawaited(
-        OfflineCacheService.instance.warmListItems([for (final l in lists) l.id]),
+        OfflineCacheService.instance.warmListItems([
+          for (final l in lists) l.id,
+        ]),
       );
       // Update widget with available lists for configuration
-      WidgetService.updateAvailableLists(
-        [for (final l in lists) {'id': l.id, 'name': l.name}],
-      );
+      WidgetService.updateAvailableLists([
+        for (final l in lists) {'id': l.id, 'name': l.name},
+      ]);
       // Refresh the Quick-Add widget's frequently-bought-item suggestions
       unawaited(_updateWidgetRecentItems());
     } catch (error, stackTrace) {
       if (!mounted || state is AsyncData<List<ShoppingListModel>>) return;
       // Try offline cache
-      final cached = await OfflineCacheService.instance.getCachedLists();
+      final cached = await OfflineCacheService.instance.getCachedLists(
+        userId: _userId,
+      );
       if (!mounted) return;
       state = cached != null && cached.isNotEmpty
           ? AsyncValue.data(cached)
@@ -105,11 +127,13 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
     try {
       final stats = await _trackingService.getFrequentItems(limit: 8);
       final items = stats
-          .map((s) => WidgetRecentItem(
-                name: _titleCase(s.itemName),
-                category: s.preferredCategory,
-                quantity: s.preferredQuantity ?? 1.0,
-              ))
+          .map(
+            (s) => WidgetRecentItem(
+              name: _titleCase(s.itemName),
+              category: s.preferredCategory,
+              quantity: s.preferredQuantity ?? 1.0,
+            ),
+          )
           .toList();
       await WidgetService.updateRecentItems(items);
     } catch (e) {
@@ -122,9 +146,11 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
     if (trimmed.isEmpty) return trimmed;
     return trimmed
         .split(' ')
-        .map((word) => word.isEmpty
-            ? word
-            : '${word[0].toUpperCase()}${word.substring(1)}')
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
         .join(' ');
   }
 
@@ -218,9 +244,11 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
 /// Lists state notifier provider. Rebuilt per signed-in account, so the
 /// next user never sees the previous user's lists.
 final listsNotifierProvider =
-    StateNotifierProvider<ListsNotifier, AsyncValue<List<ShoppingListModel>>>((ref) {
-  return ListsNotifier(
-    ref.watch(listRepositoryProvider),
-    ref.watch(authUserIdProvider),
-  );
-});
+    StateNotifierProvider<ListsNotifier, AsyncValue<List<ShoppingListModel>>>((
+      ref,
+    ) {
+      return ListsNotifier(
+        ref.watch(listRepositoryProvider),
+        ref.watch(authUserIdProvider),
+      );
+    });

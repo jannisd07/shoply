@@ -171,7 +171,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final lists = ref.watch(listsNotifierProvider).valueOrNull ?? const [];
     final user = ref.watch(currentUserProvider).valueOrNull;
-    final rawName = user?.displayName;
+    // Until the server answers, the name saved on this device.
+    final rawName =
+        user?.displayName ??
+        ref.watch(cachedUserProfileProvider).valueOrNull?.displayName;
     final firstName = rawName == null || rawName.trim().isEmpty
         ? null
         : DisplayNameHelper.getDisplayName(
