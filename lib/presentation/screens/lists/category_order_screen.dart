@@ -1,533 +1,560 @@
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:shoply/core/constants/app_colors.dart';
+import 'package:flutter/semantics.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:shoply/core/constants/categories.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/custom_category.dart';
 import 'package:shoply/data/services/category_order_service.dart';
-import 'package:shoply/presentation/widgets/common/confirm_dialog.dart';
-import 'package:shoply/presentation/widgets/common/liquid_glass_button.dart';
-import 'package:shoply/presentation/widgets/common/paper_settings.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_info_category_editor.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_info_rows.dart';
+import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/widgets/design/app_button.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
+import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
+import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
+import 'package:shoply/presentation/widgets/design/inset_section.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
-/// Screen for managing category order and custom categories for a specific list.
+/// Category symbol size (Konzept 11 §12.1: 17 pt, `labelSecondary`).
+const double _kSymbolSize = 17;
+
+/// Lift while dragging (Konzept 11 §12.1: 1.03 with `shadowFloat`).
+const double _kLiftScale = 1.03;
+const double _kLiftShadowAlpha = 0.16; // D2 floating shadow
+const double _kLiftShadowBlur = 18; // D2
+const Offset _kLiftShadowOffset = Offset(0, 6); // D2
+
+/// Category ids whose items count as one category: the open items per
+/// category of a list. Overridden in tests.
+final categoryOrderOpenCountsProvider = Provider.autoDispose
+    .family<Map<String, int>, String>((ref, listId) {
+      final items =
+          ref.watch(itemsNotifierProvider(listId)).valueOrNull ?? const [];
+      final counts = <String, int>{};
+      for (final i in items) {
+        if (i.isChecked) continue;
+        final id = i.categoryId ?? i.category ?? 'other';
+        counts[id] = (counts[id] ?? 0) + 1;
+      }
+      return counts;
+    });
+
+/// One row of the order.
+@immutable
+class _Category {
+  const _Category.builtIn(this.id) : custom = null;
+  _Category.custom(CustomCategory this.custom) : id = custom.id;
+
+  final String id;
+  final CustomCategory? custom;
+
+  bool get isCustom => custom != null;
+
+  String name(BuildContext context) =>
+      custom?.name ??
+      Categories.getById(id).getName(Localizations.localeOf(context).languageCode);
+}
+
+/// "Reihenfolge im Markt" (Konzept 11 §12.1): every category of the list in
+/// the order the person walks through the store, always sortable by the
+/// handle or a long press, with the open count; own categories (tap to
+/// rename or delete), "Kategorie hinzufügen" and "Standard-Reihenfolge".
 ///
-/// Order and custom categories are stored on this device only, so changes
-/// here are not announced to other list members.
-class CategoryOrderScreen extends StatefulWidget {
-  final String listId;
-  final String listName;
-
+/// Order and own categories are kept by [CategoryOrderService], today on
+/// this device only. The screen pops `true` when something changed, so the
+/// list regroups.
+class CategoryOrderScreen extends ConsumerStatefulWidget {
   const CategoryOrderScreen({
     super.key,
     required this.listId,
     required this.listName,
   });
 
+  final String listId;
+  final String listName;
+
   @override
-  State<CategoryOrderScreen> createState() => _CategoryOrderScreenState();
+  ConsumerState<CategoryOrderScreen> createState() =>
+      _CategoryOrderScreenState();
 }
 
-class _CategoryOrderScreenState extends State<CategoryOrderScreen> {
-  final _service = CategoryOrderService();
-  List<_CategoryItem> _categories = [];
-  bool _isLoading = true;
-  bool _hasChanges = false;
+class _CategoryOrderScreenState extends ConsumerState<CategoryOrderScreen> {
+  final CategoryOrderService _service = CategoryOrderService();
+  List<_Category>? _items;
+  bool _changed = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCategories();
+    _load();
   }
 
-  Future<void> _loadCategories() async {
+  Future<void> _load() async {
     final order = await _service.getCategoryOrder(widget.listId);
-    final customCategories = await _service.getCustomCategories(widget.listId);
-
-    final customMap = {for (final c in customCategories) c.id: c};
-    final builtInIds = Categories.allIds;
-
-    _CategoryItem builtIn(String id) => _CategoryItem(
-          id: id,
-          name: id, // Store ID for translation lookup
-          color: Categories.getById(id).color,
-          isCustom: false,
-        );
-
-    final items = <_CategoryItem>[];
-
-    // Add categories in order
+    final customs = await _service.getCustomCategories(widget.listId);
+    final customById = {for (final c in customs) c.id: c};
+    final builtIn = Categories.allIds;
+    final items = <_Category>[];
     for (final id in order) {
-      final custom = customMap[id];
-      if (custom != null) {
-        items.add(_CategoryItem.custom(custom));
-      } else if (builtInIds.contains(id)) {
-        items.add(builtIn(id));
+      final c = customById[id];
+      if (c != null) {
+        items.add(_Category.custom(c));
+      } else if (builtIn.contains(id)) {
+        items.add(_Category.builtIn(id));
       }
     }
-
-    // Add any built-in categories not in order yet
-    for (final id in builtInIds) {
-      if (!order.contains(id)) items.add(builtIn(id));
+    for (final id in builtIn) {
+      if (!order.contains(id)) items.add(_Category.builtIn(id));
     }
-
-    // Add any custom categories not in order yet (at top)
-    for (final custom in customCategories) {
-      if (!order.contains(custom.id)) {
-        items.insert(0, _CategoryItem.custom(custom));
-      }
+    for (final c in customs) {
+      if (!order.contains(c.id)) items.insert(0, _Category.custom(c));
     }
-
-    if (!mounted) return;
-    setState(() {
-      _categories = items;
-      _isLoading = false;
-    });
+    if (mounted) setState(() => _items = items);
   }
 
-  Future<void> _saveOrder() async {
-    final order = _categories.map((c) => c.id).toList();
-    await _service.saveCategoryOrder(widget.listId, order);
-    if (mounted) setState(() => _hasChanges = true);
+  Future<void> _save(List<_Category> items) async {
+    _changed = true;
+    await _service.saveCategoryOrder(widget.listId, [
+      for (final c in items) c.id,
+    ]);
   }
 
-  Future<void> _showAddCategorySheet() async {
-    final result = await _showCategoryFormSheet(context);
-    if (result == null || !mounted) return;
-
-    final category = await _service.addCustomCategory(
-      widget.listId,
-      result.name,
-      result.color,
-    );
-    if (!mounted) return;
-    setState(() {
-      _categories.insert(0, _CategoryItem.custom(category));
-      _hasChanges = true;
-    });
-    await _saveOrder();
-  }
-
-  Future<void> _showEditCategorySheet(_CategoryItem category) async {
-    final result = await _showCategoryFormSheet(context, existing: category);
-    if (result == null || !mounted) return;
-
-    if (result.delete) {
-      await _showDeleteConfirmation(category);
+  /// Moves the row at [oldIndex] to [newIndex] (both in the list without
+  /// the moved row's gap, as `onReorderItem` reports them).
+  void _reorder(int oldIndex, int newIndex) {
+    final items = [...?_items];
+    if (oldIndex == newIndex ||
+        newIndex < 0 ||
+        newIndex >= items.length) {
       return;
     }
-
-    final updated = CustomCategory(
-      id: category.id,
-      name: result.name,
-      color: result.color,
-    );
-    await _service.updateCustomCategory(widget.listId, updated);
-    if (!mounted) return;
-    setState(() {
-      final index = _categories.indexWhere((c) => c.id == category.id);
-      if (index != -1) _categories[index] = _CategoryItem.custom(updated);
-      _hasChanges = true;
-    });
+    AvoHaptics.selection();
+    items.insert(newIndex, items.removeAt(oldIndex));
+    setState(() => _items = items);
+    _save(items);
   }
 
-  Future<void> _showDeleteConfirmation(_CategoryItem category) async {
-    final confirmed = await confirmDestructive(
+  Future<void> _reset() async {
+    final previous = [...?_items];
+    final customs = [
+      for (final c in previous)
+        if (c.isCustom) c,
+    ];
+    final items = [
+      ...customs,
+      for (final id in Categories.allIds) _Category.builtIn(id),
+    ];
+    setState(() => _items = items);
+    await _save(items);
+    if (!mounted) return;
+    AvoToast.show(
       context,
-      title: context.tr('delete_category'),
-      message: context.tr('delete_category_confirm'),
-      confirmLabel: context.tr('delete'),
+      message: context.tr('list_ov_order_reset'),
+      actionLabel: context.tr('common_undo'),
+      onAction: () {
+        if (!mounted) return;
+        setState(() => _items = previous);
+        _save(previous);
+      },
     );
-    if (!confirmed) return;
-    await _service.deleteCustomCategory(widget.listId, category.id);
-    if (!mounted) return;
-    setState(() {
-      _categories.removeWhere((c) => c.id == category.id);
-      _hasChanges = true;
-    });
   }
+
+  Set<String> _takenNames(BuildContext context) => {
+    for (final c in _items ?? const <_Category>[]) c.name(context),
+  };
+
+  Future<void> _add() async {
+    final result = await openCategoryEditor(
+      context,
+      takenNames: _takenNames(context),
+    );
+    final name = result?.name;
+    if (name == null || !mounted) return;
+    await _service.addCustomCategory(
+      widget.listId,
+      name,
+      Categories.getById('other').color,
+    );
+    _changed = true;
+    await _load();
+  }
+
+  Future<void> _edit(_Category category) async {
+    final custom = category.custom;
+    if (custom == null) return;
+    final result = await openCategoryEditor(
+      context,
+      initialName: custom.name,
+      takenNames: _takenNames(context),
+    );
+    if (result == null || !mounted) return;
+    if (result.delete) {
+      await _delete(category);
+      return;
+    }
+    final name = result.name;
+    if (name == null || name == custom.name) return;
+    await _service.updateCustomCategory(
+      widget.listId,
+      CustomCategory(id: custom.id, name: name, color: custom.color),
+    );
+    _changed = true;
+    await _load();
+  }
+
+  Future<void> _delete(_Category category) async {
+    final custom = category.custom;
+    if (custom == null) return;
+    final other = Categories.getById(
+      'other',
+    ).getName(Localizations.localeOf(context).languageCode);
+    final confirmed = await showAvoConfirm(
+      context,
+      title: context.tr('list_ov_delete_title', params: {'name': custom.name}),
+      message: context.tr(
+        'list_ov_category_delete_message',
+        params: {'other': other},
+      ),
+      confirmLabel: context.tr('list_ov_delete'),
+    );
+    if (!confirmed || !mounted) return;
+    await _service.deleteCustomCategory(widget.listId, custom.id);
+    _changed = true;
+    await _load();
+  }
+
+  void _close() => Navigator.of(context).pop(_changed);
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = AppColors.background(context);
-    final textSecondary = AppColors.textSecondary(context);
+    final colors = context.colors;
+    final items = _items;
+    final counts = ref.watch(categoryOrderOpenCountsProvider(widget.listId));
+    final store = ref.watch(storeForListProvider(widget.listId));
+    final route = ModalRoute.of(context);
+    final cover = route is PageRoute && route.fullscreenDialog;
+    final ax = context.isAccessibilityText;
+    final intro = store == null
+        ? context.tr('list_ov_order_for_list', params: {'list': widget.listName})
+        : context.tr(
+            'list_ov_order_for_store',
+            params: {'store': store.name, 'list': widget.listName},
+          );
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: PaperSettingsAppBar(
-        title: context.tr('category_order'),
-        onBack: () => Navigator.pop(context, _hasChanges),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: PaperCircleIconButton(
-                icon: Icons.add_rounded,
-                onTap: _showAddCategorySheet,
-              ),
+    final slivers = <Widget>[
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AvoSpacing.screen,
+            0,
+            AvoSpacing.screen,
+            AvoSpacing.m,
+          ),
+          child: Text(intro, style: context.text(AvoTextStyle.body)),
+        ),
+      ),
+      if (items != null)
+        SliverPadding(
+          padding: EdgeInsets.symmetric(
+            horizontal: ax ? 0 : AvoSpacing.screen,
+          ),
+          sliver: SliverReorderableList(
+            itemCount: items.length,
+            onReorderItem: _reorder,
+            proxyDecorator: (child, index, animation) => AnimatedBuilder(
+              animation: animation,
+              child: child,
+              builder: (context, child) {
+                final t = Curves.easeOut.transform(animation.value);
+                final scale = context.reduceMotion
+                    ? 1.0
+                    : 1 + (_kLiftScale - 1) * t;
+                return Transform.scale(
+                  scale: scale,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: colors.shadow.withValues(
+                            alpha: _kLiftShadowAlpha * t,
+                          ),
+                          blurRadius: _kLiftShadowBlur,
+                          offset: _kLiftShadowOffset,
+                        ),
+                      ],
+                    ),
+                    child: child,
+                  ),
+                );
+              },
+            ),
+            itemBuilder: (context, index) => _OrderRow(
+              key: ValueKey(items[index].id),
+              index: index,
+              count: items.length,
+              name: items[index].name(context),
+              symbol: items[index].isCustom
+                  ? const AvoIcon(AvoIcons.tag, size: _kSymbolSize)
+                  : Icon(
+                      Categories.getById(items[index].id).icon,
+                      size: _kSymbolSize,
+                    ),
+              open: counts[items[index].id] ?? 0,
+              onTap: items[index].isCustom
+                  ? () => _edit(items[index])
+                  : null,
+              onMove: (delta) => _reorder(index, index + delta),
             ),
           ),
-        ],
+        ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            ax ? AvoSpacing.l : AvoSpacing.xxxl,
+            AvoSpacing.s,
+            ax ? AvoSpacing.l : AvoSpacing.xxxl,
+            0,
+          ),
+          child: Text(
+            context.tr('list_ov_order_footer'),
+            style: context.text(
+              AvoTextStyle.footnote,
+              color: colors.secondaryLabel,
+            ),
+          ),
+        ),
       ),
-      body: _isLoading
-          ? const Center(child: CupertinoActivityIndicator())
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(26, 4, 26, 16),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      context.tr('drag_to_reorder'),
-                      style: TextStyle(
-                        color: textSecondary,
-                        fontSize: 13,
-                        height: 1.5,
-                      ),
-                    ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: AvoSpacing.section),
+          child: InsetSection(
+            children: [
+              ListInfoActionRow(
+                label: context.tr('list_ov_add_category'),
+                icon: AvoIcons.plus,
+                onTap: _add,
+              ),
+            ],
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            AvoSpacing.screen,
+            AvoSpacing.l,
+            AvoSpacing.screen,
+            ShellInsets.bottom(context),
+          ),
+          child: Center(
+            child: AppButton.plain(
+              label: context.tr('list_ov_default_order'),
+              onPressed: items == null ? null : _reset,
+            ),
+          ),
+        ),
+      ),
+    ];
+
+    return PopScope<Object?>(
+      canPop: !_changed,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _close();
+      },
+      child: ColoredBox(
+        color: colors.background,
+        child: Stack(
+          children: [
+            CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height:
+                        GlassToolbar.topOffset(context) +
+                        AvoSizes.toolbarButton +
+                        AvoSpacing.m,
                   ),
                 ),
-                Expanded(
-                  child: ReorderableListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: _categories.length,
-                    autoScrollerVelocityScalar: 25.0,
-                    onReorder: (oldIndex, newIndex) {
-                      HapticFeedback.mediumImpact();
-                      setState(() {
-                        if (newIndex > oldIndex) newIndex--;
-                        final item = _categories.removeAt(oldIndex);
-                        _categories.insert(newIndex, item);
-                      });
-                      _saveOrder();
-                    },
-                    proxyDecorator: (child, index, animation) {
-                      return AnimatedBuilder(
-                        animation: animation,
-                        builder: (context, child) {
-                          final scale = Tween<double>(begin: 1.0, end: 1.03).animate(animation);
-                          return Transform.scale(
-                            scale: scale.value,
-                            child: Material(
-                              color: Colors.transparent,
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: child,
-                      );
-                    },
-                    itemBuilder: (context, index) {
-                      final category = _categories[index];
-                      return _buildCategoryTile(category, isDark, index);
-                    },
-                  ),
-                ),
+                ...slivers,
               ],
             ),
-    );
-  }
-
-  Widget _buildCategoryTile(_CategoryItem category, bool isDark, int index) {
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final dividerColor = AppColors.divider(context);
-
-    return Column(
-      key: ValueKey(category.id),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            children: [
-              // Color dot
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: category.color,
-                  shape: BoxShape.circle,
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: ScrollEdgeFade(),
+            ),
+            Positioned(
+              top: GlassToolbar.topOffset(context),
+              left: 0,
+              right: 0,
+              child: GlassToolbar(
+                leading: GlassIconButton(
+                  icon: AvoIcon(cover ? AvoIcons.xmark : AvoIcons.chevronBack),
+                  semanticLabel: context.tr(cover ? 'common_close' : 'back'),
+                  onPressed: _close,
                 ),
+                title: context.tr('list_ov_order'),
               ),
-              const SizedBox(width: 14),
-              // Category name
-              Expanded(
-                child: Text(
-                  category.isCustom
-                      ? category.name
-                      : Categories.getById(category.id).getName(Localizations.localeOf(context).languageCode),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 15,
-                    color: textPrimary,
-                  ),
-                ),
-              ),
-              // Edit for custom
-              if (category.isCustom)
-                GestureDetector(
-                  onTap: () => _showEditCategorySheet(category),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Icon(
-                      Icons.edit_rounded,
-                      color: textSecondary.withValues(alpha: 0.5),
-                      size: 16,
-                    ),
-                  ),
-                ),
-              // Drag handle
-              Icon(
-                Icons.drag_handle_rounded,
-                color: textSecondary.withValues(alpha: 0.4),
-                size: 22,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-        if (index < _categories.length - 1)
-          Container(height: 0.5, color: dividerColor),
-      ],
+      ),
     );
   }
 }
 
-class _CategoryItem {
-  final String id;
-  final String name;
-  final Color color;
-  final bool isCustom;
-
-  _CategoryItem({
-    required this.id,
+/// One category row: symbol, name, open count, grip. Rounded at the ends
+/// of the group (plain from AX1), hairline below except the last.
+class _OrderRow extends StatelessWidget {
+  const _OrderRow({
+    super.key,
+    required this.index,
+    required this.count,
     required this.name,
-    required this.color,
-    required this.isCustom,
+    required this.symbol,
+    required this.open,
+    required this.onMove,
+    this.onTap,
   });
 
-  _CategoryItem.custom(CustomCategory category)
-      : id = category.id,
-        name = category.name,
-        color = category.color,
-        isCustom = true;
-}
-
-/// Result of the add/edit category sheet.
-class _CategoryFormResult {
+  final int index;
+  final int count;
   final String name;
-  final Color color;
-  final bool delete;
+  final Widget symbol;
+  final int open;
 
-  const _CategoryFormResult({
-    required this.name,
-    required this.color,
-    this.delete = false,
-  });
-}
+  /// Moves the row by -1 or +1 (VoiceOver actions).
+  final ValueChanged<int> onMove;
 
-const _categoryColors = <Color>[
-  Colors.red,
-  Colors.pink,
-  Colors.purple,
-  Colors.deepPurple,
-  Colors.indigo,
-  Colors.blue,
-  Colors.lightBlue,
-  Colors.cyan,
-  Colors.teal,
-  Colors.green,
-  Colors.lightGreen,
-  Colors.lime,
-  Colors.amber,
-  Colors.orange,
-  Colors.deepOrange,
-  Colors.brown,
-];
-
-/// Shows the add (no [existing]) or edit category sheet.
-Future<_CategoryFormResult?> _showCategoryFormSheet(
-  BuildContext context, {
-  _CategoryItem? existing,
-}) {
-  return showModalBottomSheet<_CategoryFormResult>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => _CategoryFormSheet(existing: existing),
-  );
-}
-
-class _CategoryFormSheet extends StatefulWidget {
-  final _CategoryItem? existing;
-
-  const _CategoryFormSheet({this.existing});
-
-  @override
-  State<_CategoryFormSheet> createState() => _CategoryFormSheetState();
-}
-
-class _CategoryFormSheetState extends State<_CategoryFormSheet> {
-  late final TextEditingController _nameController;
-  late Color _selectedColor;
-
-  bool get _isEdit => widget.existing != null;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.existing?.name ?? '');
-    _selectedColor = widget.existing?.color ?? AppColors.lightAccent;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) return;
-    Navigator.pop(
-      context,
-      _CategoryFormResult(name: name, color: _selectedColor),
-    );
-  }
+  /// Own categories: rename or delete.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
+    final ax = context.isAccessibilityText;
+    final first = index == 0;
+    final last = index == count - 1;
+    final radius = ax ? 0.0 : AvoRadii.group;
+    final countText = open > 0
+        ? Text(
+            '$open',
+            style: context.text(
+              AvoTextStyle.subhead,
+              color: colors.secondaryLabel,
+              tabular: true,
+            ),
+          )
+        : null;
 
-    return AdaptiveBlurView(
-      blurStyle: BlurStyle.systemMaterial,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: Container(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+    final grip = ReorderableDragStartListener(
+      index: index,
+      child: SizedBox.square(
+        dimension: AvoSizes.hitTarget,
+        child: Center(
+          child: Icon(
+            CupertinoIcons.line_horizontal_3,
+            size: 20,
+            color: colors.secondaryLabel,
+          ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Glass handle bar
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.4)
-                        : Colors.black.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
+      ),
+    );
+
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(name, style: context.text(AvoTextStyle.body)),
+        if (ax && countText != null) countText,
+      ],
+    );
+
+    final row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(
+          start: AvoSpacing.l,
+          end: AvoSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            IconTheme.merge(
+              data: IconThemeData(color: colors.secondaryLabel),
+              child: symbol,
+            ),
+            const SizedBox(width: AvoSpacing.m),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AvoSpacing.s),
+                child: text,
               ),
-              const SizedBox(height: 24),
-              Text(
-                context.tr(_isEdit ? 'edit_category' : 'add_category'),
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
-                  color: isDark ? Colors.white : Colors.black,
-                ),
-              ),
-              const SizedBox(height: 24),
-              AdaptiveTextField(
-                controller: _nameController,
-                placeholder: context.tr(
-                  _isEdit ? 'category_name' : 'category_name_hint',
-                ),
-                autofocus: !_isEdit,
-                textCapitalization: TextCapitalization.sentences,
-                // Rebuild so the submit button enables as soon as a name
-                // is typed.
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                context.tr('select_color'),
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final color in _categoryColors)
-                    GestureDetector(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        setState(() => _selectedColor = color);
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _selectedColor == color
-                                ? (isDark ? Colors.white : Colors.black)
-                                : Colors.transparent,
-                            width: 3,
-                          ),
-                          boxShadow: _selectedColor == color
-                              ? [
-                                  BoxShadow(
-                                    color: color.withValues(alpha: 0.5),
-                                    blurRadius: 8,
-                                    spreadRadius: 2,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              if (_isEdit)
-                Row(
-                  children: [
-                    Expanded(
-                      child: LiquidGlassOutlinedButton(
-                        label: context.tr('delete'),
-                        isDestructive: true,
-                        onPressed: () => Navigator.pop(
-                          context,
-                          _CategoryFormResult(
-                            name: widget.existing!.name,
-                            color: widget.existing!.color,
-                            delete: true,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: LiquidGlassFilledButton(
-                        label: context.tr('save'),
-                        onPressed: _submit,
-                      ),
-                    ),
-                  ],
-                )
-              else
-                LiquidGlassFilledButton(
-                  label: context.tr('add'),
-                  onPressed:
-                      _nameController.text.trim().isEmpty ? null : _submit,
-                ),
-              // Extra padding for iOS 26 home indicator/navbar
-              SizedBox(height: 34 + MediaQuery.of(context).viewPadding.bottom),
+            ),
+            if (!ax && countText != null) ...[
+              countText,
+              const SizedBox(width: AvoSpacing.xs),
             ],
+            grip,
+          ],
+        ),
+      ),
+    );
+
+    final actions = <CustomSemanticsAction, VoidCallback>{
+      if (index > 0)
+        CustomSemanticsAction(label: context.tr('list_ov_move_up')): () =>
+            onMove(-1),
+      if (index < count - 1)
+        CustomSemanticsAction(label: context.tr('list_ov_move_down')): () =>
+            onMove(1),
+    };
+
+    final tap = onTap;
+    return Semantics(
+      container: true,
+      button: tap != null,
+      label: open > 0
+          ? '$name, ${context.tr('home_open_items', params: {'n': '$open'})}'
+          : name,
+      onTap: tap,
+      customSemanticsActions: actions,
+      excludeSemantics: true,
+      child: ReorderableDelayedDragStartListener(
+        index: index,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: tap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(first ? radius : 0),
+                bottom: Radius.circular(last ? radius : 0),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                row,
+                if (!last)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(
+                      start: AvoSpacing.l + _kSymbolSize + AvoSpacing.m,
+                    ),
+                    child: SizedBox(
+                      height: AvoSizes.hairline,
+                      width: double.infinity,
+                      child: ColoredBox(color: colors.separator),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
