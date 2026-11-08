@@ -1,6 +1,10 @@
 import 'package:shoply/core/localization/translations/common.dart';
 import 'package:shoply/core/localization/translations/home.dart';
 import 'package:shoply/core/localization/translations/lists.dart';
+import 'package:shoply/core/localization/translations/lists_detail.dart';
+import 'package:shoply/core/localization/translations/lists_item.dart';
+import 'package:shoply/core/localization/translations/lists_overview.dart';
+import 'package:shoply/core/localization/translations/lists_shopping.dart';
 import 'package:shoply/core/localization/translations/recipes.dart';
 import 'package:shoply/core/localization/translations/onboarding.dart';
 import 'package:shoply/core/localization/translations/auth.dart';
@@ -45,6 +49,10 @@ class AppTranslations {
     ...commonEn,
     ...homeEn,
     ...listsEn,
+    ...listsDetailEn,
+    ...listsItemEn,
+    ...listsShoppingEn,
+    ...listsOverviewEn,
     ...recipesEn,
     ...onboardingEn,
     ...authEn,
@@ -65,6 +73,10 @@ class AppTranslations {
     ...commonDe,
     ...homeDe,
     ...listsDe,
+    ...listsDetailDe,
+    ...listsItemDe,
+    ...listsShoppingDe,
+    ...listsOverviewDe,
     ...recipesDe,
     ...onboardingDe,
     ...authDe,
