@@ -1,40 +1,48 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_dimensions.dart';
-import 'package:shoply/core/constants/app_text_styles.dart';
-import 'package:shoply/core/localization/app_localizations.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/presentation/state/shopping_history_provider.dart';
-import 'package:shoply/data/services/supabase_service.dart';
-import 'package:shoply/data/services/dynamic_tutorial_service.dart';
-import 'package:shoply/presentation/screens/history/shopping_history_screen.dart';
-import 'package:shoply/presentation/state/lists_provider.dart';
-import 'package:shoply/presentation/widgets/common/confirm_dialog.dart';
-import 'package:shoply/data/models/shopping_list_model.dart';
-import 'package:shoply/core/constants/paper_colors.dart';
-import 'package:shoply/presentation/screens/home/widgets/greeting_header.dart';
-import 'package:shoply/presentation/screens/home/home_nudge_card_order.dart';
-import 'package:shoply/presentation/screens/home/widgets/avo_nudge_card.dart';
-import 'package:shoply/presentation/screens/home/widgets/personal_flyer_card.dart';
-import 'package:shoply/presentation/screens/home/widgets/calorie_recipe_nudge_card.dart';
-import 'package:shoply/presentation/screens/home/widgets/pending_splits_banner.dart';
-import 'package:shoply/presentation/screens/home/widgets/price_comparison_nudge_card.dart';
-import 'package:shoply/presentation/screens/home/widgets/split_trip_nudge_card.dart';
-import 'package:shoply/presentation/screens/home/weekly_deals_screen.dart';
-import 'package:shoply/presentation/providers/price_comparison_provider.dart';
-import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
+import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/data/services/dynamic_tutorial_service.dart';
+import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/widget_service.dart';
+import 'package:shoply/presentation/screens/home/home_layout.dart';
+import 'package:shoply/presentation/screens/home/widgets/home_avo_card.dart';
+import 'package:shoply/presentation/screens/home/widgets/home_for_you.dart';
+import 'package:shoply/presentation/screens/home/widgets/home_header.dart';
+import 'package:shoply/presentation/screens/home/widgets/home_top_lists.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/state/shopping_history_provider.dart';
+import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
+import 'package:shoply/presentation/widgets/design/home_card.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
+/// Content starts 52 pt below the safe area (D2: 106 on a 54 pt status bar).
+const double _kTopInset = 52; // D2
+
+/// The list "Weiter einkaufen" points at: the one with open items that was
+/// used last, or null.
+ShoppingListModel? continueShoppingList(List<ShoppingListModel> lists) {
+  final open = lists.where((l) => (l.uncheckedCount ?? 0) > 0).toList()
+    ..sort(
+      (a, b) => (b.lastAccessedAt ?? b.updatedAt).compareTo(
+        a.lastAccessedAt ?? a.updatedAt,
+      ),
+    );
+  return open.isEmpty ? null : open.first;
+}
+
+/// Home tab (D2 "Für dich", owner decision 07.11.2026): greeting, the Avo
+/// card, Teil B's money, calorie and cooking sections, the tile grid, the
+/// top lists. Every section comes from the local state at once and is left
+/// out when its module is off or it has nothing to show (`home_layout.dart`).
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -70,14 +78,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Reload account-scoped data when the signed-in user changes.
     _authSubscription = SupabaseService.instance.client.auth.onAuthStateChange
         .listen((data) {
-      final newUserId = data.session?.user.id;
-      if (_lastUserId != newUserId && mounted) {
-        _lastUserId = newUserId;
-        ref.read(listsNotifierProvider.notifier).loadLists();
-        ref.invalidate(recentHistoryProvider);
-        _syncWidgetCredentials();
-      }
-    });
+          final newUserId = data.session?.user.id;
+          if (_lastUserId != newUserId && mounted) {
+            _lastUserId = newUserId;
+            ref.read(listsNotifierProvider.notifier).loadLists();
+            ref.invalidate(recentHistoryProvider);
+            _syncWidgetCredentials();
+          }
+        });
   }
 
   void _updateTutorialListsData(List<ShoppingListModel>? lists) {
@@ -93,8 +101,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
       return;
     }
-    final newest =
-        lists.reduce((a, b) => b.updatedAt.isAfter(a.updatedAt) ? b : a);
+    final newest = lists.reduce(
+      (a, b) => b.updatedAt.isAfter(a.updatedAt) ? b : a,
+    );
     tutorial.updateListsData(hasLists: true, firstListId: newest.id);
   }
 
@@ -124,7 +133,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!mounted) return;
       lists = ref.read(listsNotifierProvider).value;
     }
-
     if (lists == null) return;
 
     if (lists.isNotEmpty) {
@@ -144,7 +152,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           .createList(context.tr('my_first_list'));
       tutorial.updateListsData(hasLists: true, firstListId: list.id);
     } catch (e) {
-      debugPrint('❌ [HOME] Error creating tutorial list: $e');
+      debugPrint('[HOME] Error creating tutorial list: $e');
     } finally {
       _isCreatingTutorialList = false;
     }
@@ -154,797 +162,134 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     unawaited(WidgetService.syncCredentialsFromSession());
   }
 
-  // Native iOS-style refresh indicator with smooth animation
-  Widget _buildRefreshIndicator(
-    BuildContext context,
-    RefreshIndicatorMode refreshState,
-    double percentageComplete,
-    double pulledExtent,
-  ) {
-    const Curve opacityCurve = Interval(0.4, 1.0, curve: Curves.easeInOut);
-
-    return Opacity(
-      opacity: opacityCurve.transform(percentageComplete),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        child: () {
-          switch (refreshState) {
-            case RefreshIndicatorMode.drag:
-              // Beim Ziehen: Zeige Fortschritt
-              return CupertinoActivityIndicator.partiallyRevealed(
-                progress: percentageComplete,
-              );
-            case RefreshIndicatorMode.armed:
-            case RefreshIndicatorMode.refresh:
-              // Beim Laden: Voller Spinner
-              return const CupertinoActivityIndicator();
-            case RefreshIndicatorMode.done:
-              // Fertig: Spinner mit Fade-out
-              return const CupertinoActivityIndicator();
-            default:
-              return const SizedBox.shrink();
-          }
-        }(),
-      ),
-    );
+  Future<void> _refresh() async {
+    ref.invalidate(recentHistoryProvider);
+    await ref.read(listsNotifierProvider.notifier).loadLists();
   }
 
   @override
   Widget build(BuildContext context) {
-    final listsAsync = ref.watch(listsNotifierProvider);
-    final userData = ref.watch(currentUserProvider).value;
-    final displayName = DisplayNameHelper.getDisplayName(userData?.displayName);
-    final avatarUrl = userData?.avatarUrl;
+    final lists = ref.watch(listsNotifierProvider).valueOrNull ?? const [];
+    final user = ref.watch(currentUserProvider).valueOrNull;
+    final rawName = user?.displayName;
+    final firstName = rawName == null || rawName.trim().isEmpty
+        ? null
+        : DisplayNameHelper.getDisplayName(
+            rawName,
+            fallback: '',
+          ).split(' ').first;
 
-    return Scaffold(
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          if (notification is ScrollStartNotification) {
-            FocusScope.of(context).unfocus();
-          }
-          return false;
-        },
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
+    final offersOn = ref.watch(offersAvailableProvider);
+    final continueList = continueShoppingList(lists);
+    final input = HomeLayoutInput(
+      avo: ref.watch(moduleEnabledProvider(AppModule.avo)),
+      offers: offersOn,
+      calories: ref.watch(moduleEnabledProvider(AppModule.calories)),
+      mealPlan: ref.watch(moduleEnabledProvider(AppModule.mealPlan)),
+      savingsHint: ref.watch(homeSavingsHintHasContentProvider),
+      month: ref.watch(homeMonthHasContentProvider),
+      spending: ref.watch(homeSpendingHasContentProvider),
+      savingsGoal: ref.watch(homeSavingsGoalHasContentProvider),
+      caloriesToday: ref.watch(homeCaloriesHasContentProvider),
+      continueShopping: continueList != null,
+      restock: ref.watch(homeRestockHasContentProvider),
+      offersTile: ref.watch(homeOffersTileHasContentProvider),
+      water: ref.watch(homeWaterHasContentProvider),
+      lists: lists.isNotEmpty,
+      recentTrips: ref.watch(homeRecentTripsHasContentProvider),
+      cookToday: ref.watch(homeCookTodayHasContentProvider),
+    );
+
+    final sections = homeSections(input);
+    final children = <Widget>[HomeHeader(firstName: firstName)];
+    HomeSection? previous;
+    for (final section in sections) {
+      children
+        ..add(SizedBox(height: homeSectionGap(previous, section)))
+        ..add(
+          _section(
+            section,
+            input: input,
+            firstName: firstName,
+            lists: lists,
+            continueList: continueList,
           ),
-          slivers: [
-            // Native iOS Pull-to-Refresh - MUSS erstes Sliver sein!
-            CupertinoSliverRefreshControl(
-              refreshTriggerPullDistance: 100.0,
-              refreshIndicatorExtent: 60.0,
-              builder:
-                  (
-                    BuildContext context,
-                    RefreshIndicatorMode refreshState,
-                    double pulledExtent,
-                    double refreshTriggerPullDistance,
-                    double refreshIndicatorExtent,
-                  ) {
-                    final double percentageComplete =
-                        (pulledExtent / refreshTriggerPullDistance).clamp(
-                          0.0,
-                          1.0,
-                        );
-
-                    return Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: pulledExtent > 0 ? pulledExtent - 40 : 0,
-                          child: Center(
-                            child: _buildRefreshIndicator(
-                              context,
-                              refreshState,
-                              percentageComplete,
-                              pulledExtent,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-              onRefresh: () =>
-                  ref.read(listsNotifierProvider.notifier).loadLists(),
-            ),
-            // Safe Area nach dem Refresh Control
-            SliverSafeArea(
-              top: true,
-              bottom: false,
-              sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
-            ),
-            // Collapsing Header (Hallo + Avatar)
-            SliverPersistentHeader(
-              delegate: GreetingHeader(
-                displayName: displayName,
-                avatarUrl: avatarUrl,
-                onAvatarTap: () => context.go('/profile'),
-              ),
-              pinned: false,
-              floating: false,
-            ),
-
-            // Avo hint strip (paper cream box)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppDimensions.screenHorizontalPadding,
-                  8,
-                  AppDimensions.screenHorizontalPadding,
-                  0,
-                ),
-                child: GestureDetector(
-                  onTap: () => context.push('/avo'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 11,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFE8DA),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.eco_outlined,
-                          size: 16,
-                          color: PaperColors.sageInk,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            context.tr('avo_hint_home'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF5A5346),
-                            ),
-                          ),
-                        ),
-                        Text(
-                          context.tr('show_label'),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: PaperColors.terracotta,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: PendingSplitsBanner()),
-
-            // Proactive nudge cards: "Split [list]'s trip?", Avo's restock
-            // reminder, "N kcal left — dinner ideas", and "this list is €X
-            // cheaper at [store]". Each renders nothing when it has no
-            // relevant data, so reordering them by what the user said
-            // matters to them during onboarding (Feature 7's "what kind of
-            // user are they" priorities) is always safe — nothing is ever
-            // hidden, only reordered. Users with no priorities set (skipped
-            // onboarding, or onboarded before this existed) see the
-            // original fixed order unchanged.
-            ...orderedHomeNudgeCards(userData?.appPriorities.toSet() ?? {})
-                .map((kind) => SliverToBoxAdapter(child: _homeNudgeCard(kind))),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppDimensions.spacingLarge),
-            ),
-
-            // Listen-Header: kicker + terracotta text action
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimensions.screenHorizontalPadding,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      context.tr('your_lists').toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        letterSpacing: 2,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary(context),
-                      ),
-                    ),
-                    // Tap: create list. Long-press: join a shared list.
-                    GestureDetector(
-                      onTap: () => _showCreateListDialog(context, ref),
-                      onLongPress: () => _showJoinListDialog(context, ref),
-                      behavior: HitTestBehavior.opaque,
-                      child: Text(
-                        context.tr('new_list_plus'),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.accentColor(context),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppDimensions.spacingMedium),
-            ),
-
-            // Horizontale Listen
-            SliverToBoxAdapter(
-              child: listsAsync.when(
-                data: (lists) {
-                  final tutorial = DynamicTutorialService.instance;
-
-                  if (lists.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppDimensions.screenHorizontalPadding,
-                      ),
-                      child: Container(
-                        height: 140,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(
-                            AppDimensions.cardBorderRadius,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            context.tr('no_lists_yet'),
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              color: AppColors.lightTextSecondary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-
-                  final sortedLists = [...lists]
-                    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
-                  // Paper editorial index: numbered vertical rows with
-                  // hairline progress instead of horizontal cards.
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppDimensions.screenHorizontalPadding,
-                    ),
-                    child: Column(
-                      children: [
-                        for (
-                          int index = 0;
-                          index < sortedLists.length;
-                          index++
-                        )
-                          Builder(
-                            builder: (context) {
-                              final list = sortedLists[index];
-                              final isFirstList = index == 0;
-
-                              return _PaperListRow(
-                                key: ValueKey(list.id),
-                                index: index,
-                                name: list.name,
-                                itemCount: list.itemCount ?? 0,
-                                uncheckedCount: list.uncheckedCount,
-                                isShared: list.isShared,
-                                tutorialKey: isFirstList
-                                    ? tutorial.firstListCardKey
-                                    : null,
-                                onTap: () {
-                                  context.push(
-                                    '/lists/${list.id}?name=${Uri.encodeComponent(list.name)}',
-                                  );
-                                  // Complete tutorial step if this is the first list
-                                  if (isFirstList &&
-                                      tutorial.isActive &&
-                                      tutorial.currentStepId ==
-                                          TutorialStepId.openShoppingList) {
-                                    tutorial.completeCurrentStep();
-                                  }
-                                },
-                                onLongPress: () => _deleteList(list),
-                              );
-                            },
-                          ),
-                      ],
-                    ),
-                  );
-                },
-                loading: () => const SizedBox(
-                  height: 140,
-                  child: Center(child: CupertinoActivityIndicator()),
-                ),
-                error: (_, __) => Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppDimensions.screenHorizontalPadding,
-                  ),
-                  child: Container(
-                    height: 140,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(
-                        AppDimensions.cardBorderRadius,
-                      ),
-                    ),
-                    child: Center(child: Text(context.tr('loading_error'))),
-                  ),
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppDimensions.spacingLarge),
-            ),
-
-            // Angebote strip (paper cream block) — real entry point into
-            // WeeklyDealsScreen, teasing a real count of matched deals when
-            // available instead of static, non-tappable copy.
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimensions.screenHorizontalPadding,
-                ),
-                child: Consumer(
-                  builder: (context, ref, _) {
-                    final dealsCount = ref
-                            .watch(personalizedDealsProvider)
-                            .valueOrNull
-                            ?.length ??
-                        0;
-                    return GestureDetector(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const WeeklyDealsScreen(),
-                          ),
-                        );
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: PaperColors.cream,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    context.tr('deals_kicker').toUpperCase(),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      letterSpacing: 2,
-                                      fontWeight: FontWeight.w600,
-                                      color: PaperColors.creamInk,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    dealsCount > 0
-                                        ? context.tr(
-                                            'deals_teaser_matching',
-                                            params: {'count': '$dealsCount'},
-                                          )
-                                        : context.tr('deals_teaser'),
-                                    style: PaperTextStyles.serif(
-                                      14,
-                                      color: const Color(0xFF4A4232),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.arrow_forward,
-                              size: 16,
-                              color: PaperColors.creamInk,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppDimensions.spacingLarge),
-            ),
-
-            // Aktivitätszeile -> Einkaufsverlauf
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimensions.screenHorizontalPadding,
-                ),
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ShoppingHistoryScreen(),
-                      ),
-                    );
-                  },
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    padding: const EdgeInsets.only(top: 12),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(color: AppColors.divider(context)),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.notifications_none,
-                          size: 15,
-                          color: AppColors.textSecondary(context),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _LatestActivityLine(),
-                        ),
-                        Icon(
-                          Icons.chevron_right,
-                          size: 16,
-                          color: AppColors.textTertiary(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(
-              child: SizedBox(height: AppDimensions.spacingXLarge),
-            ),
-
-            // Extra Bottom Padding für Navigation Bar + Safe Area
-            // Safe Area am Ende
-            SliverSafeArea(
-              top: false,
-              bottom: true,
-              sliver: SliverPadding(
-                padding: const EdgeInsets.only(bottom: 200),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showCreateListDialog(BuildContext context, WidgetRef ref) async {
-    final result = await AdaptiveAlertDialog.inputShow(
-      context: context,
-      title: context.tr('create_new_list'),
-      message: context.tr('enter_list_name_prompt'),
-      icon: PlatformInfo.isIOS26OrHigher()
-          ? 'list.bullet.circle.fill'
-          : Icons.list_alt,
-      input: AdaptiveAlertDialogInput(
-        placeholder: context.tr('enter_list_name'),
-        initialValue: '',
-        keyboardType: TextInputType.text,
-      ),
-      actions: [
-        AlertAction(
-          title: context.tr('cancel'),
-          style: AlertActionStyle.cancel,
-          onPressed: () {},
-        ),
-        AlertAction(
-          title: context.tr('create'),
-          style: AlertActionStyle.primary,
-          onPressed: () {},
-        ),
-      ],
-    );
-
-    if (result != null && result.trim().isNotEmpty) {
-      try {
-        await ref
-            .read(listsNotifierProvider.notifier)
-            .createList(result.trim());
-
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(context.tr('list_created'))));
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('${context.tr('error')}: $e')));
-        }
-      }
-    }
-  }
-
-  void _showJoinListDialog(BuildContext context, WidgetRef ref) async {
-    final result = await AdaptiveAlertDialog.inputShow(
-      context: context,
-      title: context.tr('join_list'),
-      message: context.tr('enter_share_code'),
-      icon: PlatformInfo.isIOS26OrHigher() ? 'person.2.fill' : Icons.group,
-      input: AdaptiveAlertDialogInput(
-        placeholder: context.tr('share_code'),
-        initialValue: '',
-        keyboardType: TextInputType.text,
-      ),
-      actions: [
-        AlertAction(
-          title: context.tr('cancel'),
-          style: AlertActionStyle.cancel,
-          onPressed: () {},
-        ),
-        AlertAction(
-          title: context.tr('join'),
-          style: AlertActionStyle.primary,
-          onPressed: () {},
-        ),
-      ],
-    );
-
-    if (result != null && result.trim().isNotEmpty) {
-      final shareCode = result.trim().toUpperCase();
-
-      try {
-        final list = await ref
-            .read(listsNotifierProvider.notifier)
-            .joinListWithCode(shareCode);
-
-        if (!context.mounted) return;
-
-        if (list != null) {
-          AdaptiveAlertDialog.show(
-            context: context,
-            title: context.tr('joined_successfully'),
-            message: context.tr(
-              'joined_list_message',
-              params: {'listName': list.name},
-            ),
-            icon: PlatformInfo.isIOS26OrHigher()
-                ? 'checkmark.circle.fill'
-                : Icons.check_circle,
-            iconColor: Colors.green,
-            actions: [
-              AlertAction(
-                title: context.tr('ok'),
-                style: AlertActionStyle.primary,
-                onPressed: () {},
-              ),
-            ],
-          );
-        } else {
-          AdaptiveAlertDialog.show(
-            context: context,
-            title: context.tr('error'),
-            message: context.tr('invalid_share_code'),
-            icon: PlatformInfo.isIOS26OrHigher()
-                ? 'xmark.circle.fill'
-                : Icons.error,
-            iconColor: Colors.red,
-            actions: [
-              AlertAction(
-                title: context.tr('ok'),
-                style: AlertActionStyle.cancel,
-                onPressed: () {},
-              ),
-            ],
-          );
-        }
-      } catch (e) {
-        if (!context.mounted) return;
-
-        AdaptiveAlertDialog.show(
-          context: context,
-          title: context.tr('error'),
-          message: '${context.tr('join_error')}: $e',
-          icon: PlatformInfo.isIOS26OrHigher()
-              ? 'exclamationmark.triangle.fill'
-              : Icons.warning,
-          iconColor: Colors.orange,
-          actions: [
-            AlertAction(
-              title: context.tr('ok'),
-              style: AlertActionStyle.cancel,
-              onPressed: () {},
-            ),
-          ],
         );
-      }
+      previous = section;
     }
-  }
 
-  Future<void> _deleteList(ShoppingListModel list) async {
-    HapticFeedback.mediumImpact();
-    final l10n = AppLocalizations.of(context);
-    final confirmed = await confirmDestructive(
-      context,
-      title: l10n.deleteListTitle,
-      message: l10n.deleteListMessage(list.name),
-      confirmLabel: l10n.deleteConfirm,
-      iconSize: 48,
-    );
-    if (!confirmed) return;
-    try {
-      await ref.read(listsNotifierProvider.notifier).deleteList(list.id);
-    } catch (e) {
-      debugPrint('❌ [HOME] Failed to delete list: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('action_failed'))),
-      );
-    }
-  }
-
-  Widget _homeNudgeCard(HomeNudgeCardKind kind) {
-    switch (kind) {
-      case HomeNudgeCardKind.split:
-        return const SplitTripNudgeCard();
-      case HomeNudgeCardKind.avoRestock:
-        return const AvoNudgeCard();
-      case HomeNudgeCardKind.personalFlyer:
-        return const PersonalFlyerCard();
-      case HomeNudgeCardKind.calorieRecipe:
-        return const CalorieRecipeNudgeCard();
-      case HomeNudgeCardKind.priceComparison:
-        return const PriceComparisonNudgeCard();
-    }
-  }
-}
-
-/// Latest shopping activity as a single paper line.
-class _LatestActivityLine extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final historyAsync = ref.watch(recentHistoryProvider);
-    final textSecondary = AppColors.textSecondary(context);
-    final style = TextStyle(fontSize: 12, color: textSecondary);
-
-    return historyAsync.when(
-      data: (entries) {
-        if (entries.isEmpty) {
-          return Text(context.tr('shopping_history'), style: style);
-        }
-        final latest = entries.first;
-        final locale = Localizations.localeOf(context).toString();
-        final date = DateFormat('d. MMM', locale).format(latest.completedAt);
-        return Text(
-          '${context.tr('last_shopped_prefix')} ${latest.listName} · $date',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: style,
-        );
-      },
-      loading: () => Text(context.tr('shopping_history'), style: style),
-      error: (_, __) => Text(context.tr('shopping_history'), style: style),
-    );
-  }
-}
-
-/// Paper-style editorial list row: serif number, name, hairline progress.
-class _PaperListRow extends StatelessWidget {
-  final int index;
-  final String name;
-  final int itemCount;
-  final int? uncheckedCount;
-  final bool isShared;
-  final GlobalKey? tutorialKey;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  const _PaperListRow({
-    super.key,
-    required this.index,
-    required this.name,
-    required this.itemCount,
-    required this.uncheckedCount,
-    this.isShared = false,
-    required this.onTap,
-    required this.onLongPress,
-    this.tutorialKey,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = AppColors.accentColor(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final baseline = AppColors.divider(context);
-
-    final unchecked = (uncheckedCount ?? itemCount).clamp(0, itemCount);
-    final done = itemCount - unchecked;
-    final progress = itemCount > 0 ? done / itemCount : 0.0;
-
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        key: tutorialKey,
+    return ColoredBox(
+      color: context.colors.background,
+      child: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  (index + 1).toString().padLeft(2, '0'),
-                  style: PaperTextStyles.serif(14, color: accent),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: PaperTextStyles.serif(18, color: textPrimary),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        (itemCount == 0
-                                ? context.tr('list_empty_label')
-                                : unchecked == 0
-                                    ? context.tr('all_done_label')
-                                    : context.tr(
-                                        'items_left',
-                                        params: {'n': '$unchecked'},
-                                      )) +
-                            (isShared
-                                ? ' · ${context.tr('shared_label')}'
-                                : ''),
-                        style: TextStyle(fontSize: 12, color: textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isShared)
-                  Icon(Icons.people_outline, size: 17, color: textSecondary),
-              ],
+          CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
             ),
+            slivers: [
+              CupertinoSliverRefreshControl(onRefresh: _refresh),
+              SliverPadding(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.paddingOf(context).top + _kTopInset,
+                  bottom: ShellInsets.bottom(context),
+                ),
+                sliver: SliverList.list(children: children),
+              ),
+            ],
           ),
-          Container(
-            height: 2.5,
-            color: baseline,
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: progress.clamp(0.0, 1.0),
-              heightFactor: 1,
-              child: ColoredBox(color: accent),
-            ),
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(child: ScrollEdgeFade()),
           ),
         ],
       ),
     );
   }
-}
 
+  Widget _section(
+    HomeSection section, {
+    required HomeLayoutInput input,
+    required String? firstName,
+    required List<ShoppingListModel> lists,
+    required ShoppingListModel? continueList,
+  }) {
+    Widget inset(Widget child) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
+      child: child,
+    );
+
+    switch (section) {
+      case HomeSection.avoCard:
+        return inset(
+          HomeAvoCard(
+            firstName: firstName,
+            offersOn: input.offers,
+            hasSavingsHint: input.savingsHint,
+          ),
+        );
+      case HomeSection.savingsHint:
+        return inset(const AvoCard(child: HomeSavingsHint()));
+      case HomeSection.month:
+        return inset(const HomeMonthCard());
+      case HomeSection.spending:
+        return inset(const HomeSpendingComparison());
+      case HomeSection.savingsGoal:
+        return inset(const HomeSavingsGoal());
+      case HomeSection.calories:
+        return inset(const HomeCaloriesToday());
+      case HomeSection.forYou:
+        return HomeForYou(tiles: homeTiles(input), continueList: continueList);
+      case HomeSection.topLists:
+        return HomeTopLists(lists: lists);
+      case HomeSection.recentTrips:
+        return inset(const HomeRecentTrips());
+      case HomeSection.cookToday:
+        return inset(const HomeCookToday());
+      case HomeSection.tip:
+        // One-time tips arrive with A5 (Konzept 10.3.3, rank 9).
+        return const SizedBox.shrink();
+    }
+  }
+}
