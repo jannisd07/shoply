@@ -204,7 +204,9 @@ class OfferSummaryCard extends StatelessWidget {
       child: card,
     );
 
-    if (hide == null) return card;
+    // Reduce Motion: no swipe; the close button, the long press and the
+    // VoiceOver actions hide the card (`angebote.md` 3.5).
+    if (hide == null || context.reduceMotion) return card;
     return Dismissible(
       key: const ValueKey('offer-summary-swipe'),
       direction: DismissDirection.endToStart,

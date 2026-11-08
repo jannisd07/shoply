@@ -275,11 +275,16 @@ class _Body extends ConsumerWidget {
                       ),
                     ),
                     if (pack != null)
-                      Text(
-                        ' · $pack',
-                        style: context.text(
-                          AvoTextStyle.subhead,
-                          color: colors.secondaryLabel,
+                      // The dot is for the eye only; VoiceOver reads "1 l".
+                      Semantics(
+                        label: pack,
+                        excludeSemantics: true,
+                        child: Text(
+                          ' · $pack',
+                          style: context.text(
+                            AvoTextStyle.subhead,
+                            color: colors.secondaryLabel,
+                          ),
                         ),
                       ),
                   ],

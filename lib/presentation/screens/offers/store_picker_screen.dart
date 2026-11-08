@@ -317,10 +317,8 @@ class _StoreRowState extends State<_StoreRow> {
     final colors = context.colors;
     final mark = widget.mark;
     final subtitle = widget.subtitle;
-    final label = [
-      widget.semanticLabel ?? widget.title,
-      if (widget.checked) context.tr('common_selected'),
-    ].join(', ');
+    // "Lidl, ausgewählt": VoiceOver adds the state from [selected].
+    final label = widget.semanticLabel ?? widget.title;
     return Semantics(
       button: true,
       selected: widget.checked,
