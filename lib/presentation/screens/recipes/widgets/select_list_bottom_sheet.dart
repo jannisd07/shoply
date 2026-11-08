@@ -10,6 +10,7 @@ import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/repositories/item_batch.dart';
+import 'package:shoply/data/services/tip_service.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_adaptation.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_data.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_texts.dart';
@@ -24,6 +25,7 @@ import 'package:shoply/presentation/widgets/design/full_screen_editor.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/segmented_control.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 
 // "Zutaten auf die Liste" (Konzept 13 §13, R-11): a full screen instead of
 // the sheet the concept describes (owner rule: no sheets).
@@ -122,6 +124,8 @@ Future<void> showAddIngredientsResult(
     rememberRecipeTargetList(c, result.recipeId, listId);
     final added = await repository.addItems(listId, result.items);
     refresh(listId);
+    // Tip T6 has done its job (Konzept 17 §6.1).
+    c.read(tipServiceProvider).markDone(TipId.recipeToList);
     return (listId, added.token);
   }
 

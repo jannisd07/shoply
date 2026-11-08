@@ -670,7 +670,8 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     }
   }
 
-  /// Shopping mode; the tips T2 and T4 count it (Konzept 17 §6.1).
+  /// Shopping mode; the tips T2 and T4 count it (Konzept 17 §6.1). The
+  /// shopping mode reports itself too, for entries that skip the list.
   Future<void> _openShopping() {
     ref.read(tipServiceProvider).note(TipEvent.shoppingStarted);
     return _actions.openShopping(context, _listId);

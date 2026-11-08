@@ -4,6 +4,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'package:shoply/data/services/tip_service.dart';
+import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
@@ -103,6 +105,8 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
     _avoContext = ref.read(avoScreenContextProvider.notifier);
     _previousContext = _avoContext.state;
     _setAwake(true);
+    // Tip T2 is done however the shopping mode was opened.
+    ref.read(tipServiceProvider).note(TipEvent.shoppingStarted);
   }
 
   @override
@@ -156,6 +160,7 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
     final count = items.where((i) => i.isChecked).length;
     final saved = await openCheckoutFlow(context, widget.listId);
     if (!saved || !mounted) return;
+    ref.read(tipServiceProvider).note(TipEvent.tripCompleted);
     unawaited(
       showSuccessMoment(
         context,
