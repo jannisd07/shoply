@@ -1,6 +1,7 @@
 // Stufe 2 (prompt-b-vorrang.md): the Home sections of Teil B. Shells render
 // nothing and report no content, so Teil A's Home lays out in the first
 // frame without anything jumping in later; each passes the layout matrix.
+// The calorie sections have content: test/slots/home_calories_test.dart.
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,10 +16,8 @@ void main() {
     HomeMonthCard(),
     HomeSpendingComparison(),
     HomeSavingsGoal(),
-    HomeCaloriesToday(),
     HomeRestockTile(),
     HomeOffersTile(),
-    HomeWaterTile(),
     HomeRecentTrips(),
     HomeCookToday(),
   ];
@@ -28,10 +27,8 @@ void main() {
     homeMonthHasContentProvider,
     homeSpendingHasContentProvider,
     homeSavingsGoalHasContentProvider,
-    homeCaloriesHasContentProvider,
     homeRestockHasContentProvider,
     homeOffersTileHasContentProvider,
-    homeWaterHasContentProvider,
     homeRecentTripsHasContentProvider,
     homeCookTodayHasContentProvider,
   ];

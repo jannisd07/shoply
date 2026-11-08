@@ -1,6 +1,15 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+export 'home_calories.dart'
+    show
+        HomeCalorieIdeasHint,
+        HomeCaloriesToday,
+        HomeWaterTile,
+        homeCalorieIdeasHintHasContentProvider,
+        homeCaloriesHasContentProvider,
+        homeWaterHasContentProvider;
+
 // Home sections from Teil B for D2 "Für dich" (prompt-b-vorrang.md, Stufe 2).
 // Teil A builds the frame, the order, the 16-pt side margin and the spacing,
 // and hides a section when its module is off; B draws the content.
@@ -55,15 +64,7 @@ class HomeSavingsGoal extends StatelessWidget {
   Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
-/// "Kalorien heute" with "Mahlzeit hinzufügen" (calories module).
-final homeCaloriesHasContentProvider = Provider<bool>((ref) => false);
-
-class HomeCaloriesToday extends StatelessWidget {
-  const HomeCaloriesToday({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
+// "Kalorien heute" and "Wasser heute" (calories module): home_calories.dart.
 
 /// Tile "Nochmal kaufen"; its plus adds through `ItemRepository.addItems`
 /// with undo.
@@ -82,16 +83,6 @@ final homeOffersTileHasContentProvider = Provider<bool>((ref) => false);
 
 class HomeOffersTile extends StatelessWidget {
   const HomeOffersTile({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
-/// Tile "Wasser heute" (calories module).
-final homeWaterHasContentProvider = Provider<bool>((ref) => false);
-
-class HomeWaterTile extends StatelessWidget {
-  const HomeWaterTile({super.key});
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();

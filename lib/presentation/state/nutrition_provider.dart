@@ -10,7 +10,6 @@ import 'package:uuid/uuid.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/calorie_day.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
-import 'package:shoply/data/models/food_product.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/user_food.dart';
 import 'package:shoply/data/models/water_log_entry.dart';
@@ -171,8 +170,9 @@ class CalorieDayNotifier extends StateNotifier<CalorieDayState> {
     this.dateKey,
     Future<CalorieBackend?> backend, {
     void Function()? onLocalChange,
+    CalorieDay? initial,
   })  : _onLocalChange = onLocalChange,
-        super(CalorieDayState(dateKey: dateKey, refreshing: true)) {
+        super(CalorieDayState(dateKey: dateKey, day: initial, refreshing: true)) {
     _init(backend);
   }
 
@@ -281,7 +281,8 @@ class CalorieDayNotifier extends StateNotifier<CalorieDayState> {
 final calorieWeekRevisionProvider = StateProvider.family<int, String>((ref, weekStartKey) => 0);
 
 /// The state of one local day (`YYYY-MM-DD`). Stays alive once opened so
-/// switching days never waits.
+/// switching days never waits. Starts with the day stored on this device,
+/// so a screen has its numbers in the first frame (§3.1).
 final calorieDayProvider =
     StateNotifierProvider.family<CalorieDayNotifier, CalorieDayState, String>((ref, dateKey) {
   final backend = ref.watch(calorieBackendProvider.future);
@@ -289,9 +290,17 @@ final calorieDayProvider =
   return CalorieDayNotifier(
     dateKey,
     backend,
+    initial: _storedDay(ref, dateKey),
     onLocalChange: () => ref.read(calorieWeekRevisionProvider(week).notifier).state++,
   );
 });
+
+CalorieDay? _storedDay(Ref ref, String dateKey) {
+  final userId = ref.read(authUserIdProvider);
+  final prefs = ref.read(calorieSharedPreferencesProvider).valueOrNull;
+  if (userId == null || prefs == null) return null;
+  return CalorieDayStore.readFrom(prefs, userId, dateKey);
+}
 
 /// What the diary screen watches: [dateKey] with the day before and (up to
 /// today) the day after already loading, so swiping never waits.
@@ -676,41 +685,61 @@ final nutritionGoalProvider = FutureProvider.autoDispose<NutritionGoal?>((ref) a
   }
 });
 
-// ── Old diary screen (until the P2 screens replace it) ─────────────────
+/// What the diary and the Home card know about the goal in this frame.
+enum CalorieGoalStatus {
+  /// First start without a stored goal, the server has not answered yet.
+  loading,
 
-/// The date currently shown on the calorie dashboard — defaults to today,
-/// changeable via the day-switcher.
-final selectedLogDateProvider = StateProvider.autoDispose<DateTime>((ref) {
-  final now = ref.watch(calorieClockProvider)();
-  return DateTime(now.year, now.month, now.day);
+  /// There really is no goal (or no calorie target in it).
+  none,
+
+  /// A goal with a calorie target ([CalorieGoalState.goal]).
+  set,
+
+  /// Loading failed and this device has no goal stored. Never shown as
+  /// "no goal" (concept 15 2.1).
+  error,
+}
+
+class CalorieGoalState {
+  const CalorieGoalState(this.status, [this.goal]);
+
+  final CalorieGoalStatus status;
+
+  /// Set only for [CalorieGoalStatus.set].
+  final NutritionGoal? goal;
+
+  int? get kcal => goal?.dailyCalorieTarget;
+}
+
+CalorieGoalState _goalStateOf(NutritionGoal? goal) => goal != null && goal.isConfigured
+    ? CalorieGoalState(CalorieGoalStatus.set, goal)
+    : const CalorieGoalState(CalorieGoalStatus.none);
+
+/// [nutritionGoalProvider] for the first frame: while the server answers,
+/// the goal stored on this device stands in, so nothing jumps.
+final calorieGoalStateProvider = Provider.autoDispose<CalorieGoalState>((ref) {
+  final async = ref.watch(nutritionGoalProvider);
+  CalorieGoalState? stored() {
+    final userId = ref.watch(authUserIdProvider);
+    final prefs = ref.watch(calorieSharedPreferencesProvider).valueOrNull;
+    final raw = userId == null ? null : prefs?.getString(_goalCacheKey(userId));
+    if (raw == null) return null;
+    try {
+      return _goalStateOf(NutritionGoal.fromJson(jsonDecode(raw) as Map<String, dynamic>));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return async.when(
+    data: _goalStateOf,
+    loading: () => stored() ?? const CalorieGoalState(CalorieGoalStatus.loading),
+    error: (_, __) => stored() ?? const CalorieGoalState(CalorieGoalStatus.error),
+  );
 });
 
-final _selectedDayProvider = Provider.autoDispose<CalorieDayState>((ref) {
-  final key = calorieDayKey(ref.watch(selectedLogDateProvider));
-  return ref.watch(calorieDiaryDayProvider(key));
-});
-
-/// Food entries of [selectedLogDateProvider]'s day, from the local day state.
-final dailyFoodLogProvider = Provider.autoDispose<AsyncValue<List<FoodLogEntry>>>((ref) {
-  return ref.watch(_selectedDayProvider).asAsync.whenData((d) => d.entries);
-});
-
-/// Calorie/macro totals for the selected date, computed locally.
-final dailyNutritionTotalsProvider = Provider.autoDispose<DailyNutritionTotals>((ref) {
-  return ref.watch(_selectedDayProvider).day?.totals ?? const DailyNutritionTotals();
-});
-
-/// Water logged on the selected date, in ml.
-final dailyWaterTotalProvider = Provider.autoDispose<AsyncValue<int>>((ref) {
-  return ref.watch(_selectedDayProvider).asAsync.whenData((d) => d.waterMl);
-});
-
-/// Per-day totals of the last 7 days (old weekly strip).
-final weeklyNutritionTotalsProvider =
-    FutureProvider.autoDispose<Map<DateTime, DailyNutritionTotals>>((ref) async {
-  final service = ref.watch(foodLogServiceProvider);
-  return service.getWeeklyTotals();
-});
+// ── Old screens still in use (week, weight; until their slices) ───────
 
 /// The assembled weekly look-back, or null while no goal is configured.
 /// Fetches its inputs in one go, so one change invalidates one provider.
@@ -746,31 +775,13 @@ final weightHistoryProvider = FutureProvider.autoDispose<List<WeightLogEntry>>((
   return service.getHistory();
 });
 
-/// Open Food Facts search results for a (debounced) query string.
-final foodSearchProvider =
-    FutureProvider.autoDispose.family<List<FoodProduct>, String>((ref, query) async {
-  final service = ref.watch(openFoodFactsServiceProvider);
-  return service.search(query);
-});
-
-/// Open Food Facts barcode lookup for a manually-entered code.
-final barcodeLookupProvider =
-    FutureProvider.autoDispose.family<FoodProduct?, String>((ref, barcode) async {
-  final service = ref.watch(openFoodFactsServiceProvider);
-  return service.lookupBarcode(barcode);
-});
-
 /// For callers that wrote directly through a service (Avo, old sheets):
-/// reloads today and the shown day and the weekly views. New code writes
+/// reloads today and the weekly views. New code writes
 /// through [calorieDiaryProvider] and never needs this.
 void invalidateNutritionLog(WidgetRef ref) {
-  final now = ref.read(calorieClockProvider)();
-  final keys = {calorieDayKey(now), calorieDayKey(ref.read(selectedLogDateProvider))};
-  for (final key in keys) {
-    unawaited(ref.read(calorieDayProvider(key).notifier).refresh());
-  }
-  ref.invalidate(calorieWeekServerProvider(calorieWeekStartKey(calorieDayKey(now))));
-  ref.invalidate(weeklyNutritionTotalsProvider);
+  final today = calorieDayKey(ref.read(calorieClockProvider)());
+  unawaited(ref.read(calorieDayProvider(today).notifier).refresh());
+  ref.invalidate(calorieWeekServerProvider(calorieWeekStartKey(today)));
   ref.invalidate(weeklyNutritionSummaryProvider);
   ref.invalidate(weightHistoryProvider);
 }

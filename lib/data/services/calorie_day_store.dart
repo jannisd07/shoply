@@ -54,6 +54,18 @@ class CalorieDayStore {
 
   static String keyFor(String userId, String dateKey) => '$_prefix${userId}_$dateKey';
 
+  /// The stored state of [dateKey] without a store instance, for the first
+  /// frame of a screen (null when unknown or unreadable).
+  static CalorieDay? readFrom(SharedPreferences prefs, String userId, String dateKey) {
+    final raw = prefs.getString(keyFor(userId, dateKey));
+    if (raw == null) return null;
+    try {
+      return CalorieDay.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
   final SharedPreferences _prefs;
   final String userId;
   final int daysBack;
