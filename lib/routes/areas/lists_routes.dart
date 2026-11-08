@@ -5,6 +5,7 @@ import 'package:shoply/presentation/screens/lists/all_lists_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_activities_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_detail_screen.dart';
 import 'package:shoply/presentation/screens/lists/shopping_mode_screen.dart';
+import 'package:shoply/presentation/screens/onboarding/onboarding_steps.dart';
 import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -24,9 +25,17 @@ final List<RouteBase> listsBranchRoutes = [
         pageBuilder: (context, state) {
           final listId = state.pathParameters['listId']!;
           final listName = state.uri.queryParameters['name'] ?? 'Shopping List';
+          // `?arrival=` from the end of the onboarding (Konzept 17 §3.12).
+          final arrival = OnboardingArrival.fromId(
+            state.uri.queryParameters[OnboardingArrival.queryKey],
+          );
           return CupertinoPage(
             key: state.pageKey,
-            child: ListDetailScreen(listId: listId, listName: listName),
+            child: ListDetailScreen(
+              listId: listId,
+              listName: listName,
+              arrival: arrival,
+            ),
           );
         },
         routes: [

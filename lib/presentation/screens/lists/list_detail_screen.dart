@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,9 +17,9 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/repositories/item_batch.dart';
 import 'package:shoply/data/services/category_order_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
-import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/data/services/native/app_badge_channel.dart';
 import 'package:shoply/data/services/notification_service.dart';
+import 'package:shoply/data/services/tip_service.dart';
 import 'package:shoply/data/services/unread_service.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_category_section.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_detail_composer.dart';
@@ -27,6 +28,7 @@ import 'package:shoply/presentation/screens/lists/widgets/list_detail_menu.dart'
 import 'package:shoply/presentation/screens/lists/widgets/list_detail_parts.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_drag_controller.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_item_tile.dart';
+import 'package:shoply/presentation/screens/onboarding/onboarding_steps.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
@@ -40,6 +42,8 @@ import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 import 'package:shoply/presentation/widgets/design/success_moment.dart';
+import 'package:shoply/presentation/widgets/tips/list_tips.dart';
+import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 
 /// A row just checked off stays in its aisle this long before it moves to
 /// "Erledigt"; tapping it again in that time takes it back (Konzept 11
@@ -77,6 +81,9 @@ const String _doneExpandedKey = 'list_done_expanded_';
 ///   locally: one item goes through the items provider, several in one
 ///   batch with "Widerrufen".
 /// - `?focus=add` (deep link `list:<id>:add`) focuses the add field.
+/// - `?arrival=` after the onboarding (Konzept 17 §3.12): `new` focuses the
+///   add field with tip T1, `joined` shows tip T5, `existing` a one-time
+///   status; the tip sits in "Für heute" ([ListTipSection]).
 /// - Sets the Avo context to this list while it is the current screen.
 /// - Opening still marks the list read and clears its badge and delivered
 ///   notifications.
@@ -86,6 +93,7 @@ class ListDetailScreen extends ConsumerStatefulWidget {
     required this.listId,
     required this.listName,
     this.focusAdd = false,
+    this.arrival,
   });
 
   final String listId;
@@ -95,6 +103,9 @@ class ListDetailScreen extends ConsumerStatefulWidget {
 
   /// Focus the add field on open (also read from `?focus=add`).
   final bool focusAdd;
+
+  /// `?arrival=` when the onboarding opened this list.
+  final OnboardingArrival? arrival;
 
   @override
   ConsumerState<ListDetailScreen> createState() => _ListDetailScreenState();
@@ -178,6 +189,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
   void initState() {
     super.initState();
     _avo = ref.read(avoScreenContextProvider.notifier);
+    applyListArrival(ref, context, listId: _listId, arrival: widget.arrival);
     _scroll.addListener(_onScroll);
     unawaited(_loadCustomCategories());
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -197,7 +209,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     super.didChangeDependencies();
     if (_focusChecked) return;
     _focusChecked = true;
-    if (widget.focusAdd || _routeAsksForFocus()) {
+    if (widget.focusAdd ||
+        _routeAsksForFocus() ||
+        widget.arrival == OnboardingArrival.created) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focus.requestFocus();
       });
@@ -227,7 +241,6 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     if (!mounted || _settled) return;
     _settled = true;
     unawaited(_markAsRead());
-    DynamicTutorialService.instance.onListOpened();
   }
 
   Future<void> _markAsRead() async {
@@ -622,7 +635,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     final name = _currentName;
     switch (action) {
       case ListDetailMenuAction.shop:
-        await _actions.openShopping(context, _listId);
+        await _openShopping();
       case ListDetailMenuAction.checkout:
         await _checkout();
       case ListDetailMenuAction.share:
@@ -657,6 +670,12 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     }
   }
 
+  /// Shopping mode; the tips T2 and T4 count it (Konzept 17 §6.1).
+  Future<void> _openShopping() {
+    ref.read(tipServiceProvider).note(TipEvent.shoppingStarted);
+    return _actions.openShopping(context, _listId);
+  }
+
   String get _currentName =>
       ref.read(listDetailListProvider(_listId))?.name ?? _listName;
 
@@ -669,6 +688,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     final count = items.where((i) => i.isChecked).length;
     final saved = await _actions.checkout(context, _listId);
     if (!saved || !mounted) return;
+    ref.read(tipServiceProvider).note(TipEvent.tripCompleted);
     unawaited(
       showSuccessMoment(
         context,
@@ -786,11 +806,6 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
 
     final all = itemsAsync.valueOrNull;
     final view = all == null ? null : _derive(all, language);
-    if (view != null) {
-      DynamicTutorialService.instance.updateListItemsData(
-        hasItems: view.items.isNotEmpty,
-      );
-    }
     final total = view?.items.length ?? 0;
     final done = total - (view?.openCount ?? 0);
     final sum = offers && view != null ? listOpenPriceTotal(view.items) : null;
@@ -828,6 +843,14 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
             ),
           ),
         ),
+      // "Für heute" with the one tip (Konzept 11 §1.1 item 6, 17 §6.1).
+      SliverToBoxAdapter(
+        child: ListTipSection(
+          items: view?.items,
+          shared: list?.isShared,
+          arrival: widget.arrival,
+        ),
+      ),
       ..._content(itemsAsync, view, images),
       const SliverToBoxAdapter(child: _BottomInset()),
     ];
@@ -839,17 +862,14 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
           Positioned.fill(
             child: Listener(
               onPointerDown: (_) => _dismissKeyboard(),
-              child: KeyedSubtree(
-                key: DynamicTutorialService.instance.listItemsAreaKey,
-                child: CustomScrollView(
-                  controller: _scroll,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics(),
-                  ),
-                  slivers: slivers,
+              child: CustomScrollView(
+                controller: _scroll,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
                 ),
+                slivers: slivers,
               ),
             ),
           ),
@@ -871,22 +891,17 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
                 onBack: () => _actions.back(context),
                 onShare: _share,
                 onMore: () => _openMenu(view),
-                onShop: (view?.openCount ?? 0) > 0
-                    ? () => _actions.openShopping(context, _listId)
-                    : null,
+                onShop: (view?.openCount ?? 0) > 0 ? _openShopping : null,
               ),
             ),
           ),
           AccessoryDock(
-            child: KeyedSubtree(
-              key: DynamicTutorialService.instance.addItemInputKey,
-              child: ListDetailComposer(
-                listId: _listId,
-                controller: _controller,
-                focusNode: _focus,
-                onSubmitted: _submit,
-                totalText: sum == null ? null : formatListTotal(sum, language),
-              ),
+            child: ListDetailComposer(
+              listId: _listId,
+              controller: _controller,
+              focusNode: _focus,
+              onSubmitted: _submit,
+              totalText: sum == null ? null : formatListTotal(sum, language),
             ),
           ),
         ],
@@ -987,9 +1002,9 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
           rowBuilder: (item) => _row(item, aisle),
         ),
       // Teil B: "4 von 11 Artikeln diese Woche bei Lidl im Angebot …" in a
-      // section of its own; renders nothing without content.
-      Padding(
-        padding: const EdgeInsets.only(top: AvoSpacing.section),
+      // section of its own; without content neither it nor its gap shows.
+      _GapWhenFilled(
+        gap: AvoSpacing.section,
         child: ListOfferSummary(listId: _listId),
       ),
       doneSection,
@@ -1024,5 +1039,84 @@ class _BottomInset extends StatelessWidget {
         ? keyboard + AvoSizes.accessoryGap + field + AvoSpacing.l
         : 0.0;
     return SizedBox(height: resting > typing ? resting : typing);
+  }
+}
+
+/// [gap] above [child], only while the child has a height: a slot that
+/// renders nothing leaves no space (Teil B's `ListOfferSummary`).
+class _GapWhenFilled extends SingleChildRenderObjectWidget {
+  const _GapWhenFilled({required this.gap, required super.child});
+
+  final double gap;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderGapWhenFilled(gap);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderGapWhenFilled renderObject,
+  ) {
+    renderObject.gap = gap;
+  }
+}
+
+class _RenderGapWhenFilled extends RenderShiftedBox {
+  _RenderGapWhenFilled(this._gap) : super(null);
+
+  double _gap;
+  set gap(double value) {
+    if (value == _gap) return;
+    _gap = value;
+    markNeedsLayout();
+  }
+
+  double _withGap(double height) => height > 0 ? height + _gap : 0;
+
+  BoxConstraints _childConstraints(BoxConstraints c) => c.copyWith(
+    minHeight: 0,
+    maxHeight: c.maxHeight.isFinite
+        ? (c.maxHeight - _gap).clamp(0.0, double.infinity)
+        : c.maxHeight,
+  );
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      _withGap(child?.getMinIntrinsicHeight(width) ?? 0);
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      _withGap(child?.getMaxIntrinsicHeight(width) ?? 0);
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      child?.getMinIntrinsicWidth(height) ?? 0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      child?.getMaxIntrinsicWidth(height) ?? 0;
+
+  @override
+  Size computeDryLayout(covariant BoxConstraints constraints) {
+    final box = child;
+    if (box == null) return constraints.smallest;
+    final size = box.getDryLayout(_childConstraints(constraints));
+    return constraints.constrain(Size(size.width, _withGap(size.height)));
+  }
+
+  @override
+  void performLayout() {
+    final box = child;
+    if (box == null) {
+      size = constraints.smallest;
+      return;
+    }
+    box.layout(_childConstraints(constraints), parentUsesSize: true);
+    final filled = box.size.height > 0;
+    (box.parentData! as BoxParentData).offset = Offset(0, filled ? _gap : 0);
+    size = constraints.constrain(
+      Size(box.size.width, _withGap(box.size.height)),
+    );
   }
 }
