@@ -14,7 +14,8 @@ const Map<String, String> homeTipsEn = {
       'Tip: “Add ingredients to list” in a recipe puts everything you need for it on your list.',
   'tip_t7': 'Tip: Set your diet and allergies, and recipes adapt to you.',
   'tip_t7_action': 'Set up',
-  'tip_t8': 'Tip: Press and hold the Avo circle to talk to Avo.',
+  'tip_t8':
+      'Tip: You can also talk to Avo. In the Avo tab, tap the waveform on the right of the input field.',
   'tip_t9':
       'Tip: Put recipes on the days. “To list” then puts all their ingredients on your list at once.',
   'tip_hide': 'Hide',
@@ -42,7 +43,8 @@ const Map<String, String> homeTipsDe = {
   'tip_t7':
       'Tipp: Stell Ernährung und Allergien ein, dann passen sich Rezepte an.',
   'tip_t7_action': 'Einstellen',
-  'tip_t8': 'Tipp: Halte den Avo-Kreis gedrückt, um mit Avo zu sprechen.',
+  'tip_t8':
+      'Tipp: Du kannst auch mit Avo sprechen. Tippe im Avo-Tab auf das Wellen-Symbol rechts im Eingabefeld.',
   'tip_t9':
       'Tipp: Leg Rezepte auf die Tage. „Auf die Liste“ setzt danach alle Zutaten auf einmal auf deine Liste.',
   'tip_hide': 'Ausblenden',
