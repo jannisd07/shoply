@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_info_colors.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/home_card.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
@@ -22,15 +23,6 @@ List<ShoppingListModel> homeTopLists(List<ShoppingListModel> lists) {
       ),
     );
   return sorted.take(kHomeTopListCount).toList();
-}
-
-/// A list's colour from its `#RRGGBB` background, or null.
-Color? listColorOf(ShoppingListModel list) {
-  if (list.getBackgroundType() != 'color') return null;
-  final hex = list.getBackgroundValue()?.replaceFirst('#', '');
-  if (hex == null || hex.length != 6) return null;
-  final value = int.tryParse(hex, radix: 16);
-  return value == null ? null : Color(0xFF000000 | value);
 }
 
 /// "Top-Listen" on Home (D2): heading with "Alle", up to three lists as
@@ -71,9 +63,8 @@ class HomeTopLists extends StatelessWidget {
         context.tr('home_open_items', params: {'n': '$open'}),
       if (list.isShared) context.tr('shared_label'),
     ];
-    final imageUrl = list.getBackgroundType() == 'image'
-        ? list.backgroundImageUrl
-        : null;
+    // Same colour and cover rules as the Listen tab.
+    final imageUrl = listCoverUrl(list);
     return ListRow(
       title: list.name,
       meta: complete
@@ -81,7 +72,7 @@ class HomeTopLists extends StatelessWidget {
           : (parts.isEmpty ? null : parts.join(' · ')),
       complete: complete,
       cover: imageUrl == null ? null : ItemThumb(image: NetworkImage(imageUrl)),
-      color: listColorOf(list),
+      color: listDisplayColor(context, list),
       glyph: AvoIcon(AvoIcons.cart, size: 20, color: colors.onTint),
       showChevron: false,
       onTap: () => openAppDestination(context, AppDestinations.list(list.id)),

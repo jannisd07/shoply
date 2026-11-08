@@ -62,12 +62,6 @@ void main() {
     expect(homeTopLists(_lists).map((l) => l.id), ['b', 'a', 'c']);
   });
 
-  test('list colour from #RRGGBB only', () {
-    expect(listColorOf(_list('x')), const Color(0xFFFF9F0A));
-    expect(listColorOf(_list('x', value: 'nope')), isNull);
-    expect(listColorOf(_list('x', type: 'gradient', value: 'g1')), isNull);
-  });
-
   testWidgets('top lists show open counts and "Alles erledigt"', (
     tester,
   ) async {

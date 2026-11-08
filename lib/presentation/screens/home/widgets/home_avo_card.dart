@@ -145,19 +145,27 @@ class HomeAvoCard extends StatelessWidget {
             ],
           )
         else
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            child: Row(
-              children: [
-                for (var i = 0; i < chips.length; i++) ...[
-                  if (i > 0) const SizedBox(width: AvoSpacing.s),
-                  _AskChip(
-                    label: chips[i],
-                    onTap: () => openAvoWithQuestion(context, chips[i]),
-                  ),
-                ],
-              ],
+          // Runs to the card's edges (D2 margin -16, padding 16) and is
+          // clipped there.
+          LayoutBuilder(
+            builder: (context, constraints) => OverflowBox(
+              minWidth: constraints.maxWidth + 2 * _kCardPadding.left,
+              maxWidth: constraints.maxWidth + 2 * _kCardPadding.left,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.symmetric(horizontal: _kCardPadding.left),
+                child: Row(
+                  children: [
+                    for (var i = 0; i < chips.length; i++) ...[
+                      if (i > 0) const SizedBox(width: AvoSpacing.s),
+                      _AskChip(
+                        label: chips[i],
+                        onTap: () => openAvoWithQuestion(context, chips[i]),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
       ],
