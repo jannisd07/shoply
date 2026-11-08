@@ -4,11 +4,11 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 
 ## Stand
 
-2026-11-08 abends: P1 ist bis auf die App-Seite von Avo und Fotos auf `main` (`0721f38` … `0e5026a`): Edge Function
-`ai` mit Quote, Claude-Client, Kategorisierung lokal zuerst, Angebote nur vom Markt der Liste (ohne Ersatz-PLZ und
-Korbvergleich), App-Start, Artikelbilder, Wochenplan-Daten. Noch lokal und nicht committet: Foto-Client, Kalorien-Logik,
-Swift-Kanäle (Health, Scanner, Stimme), Evals, Screen-Specs. Die Swift-Teile folgen erst nach einem iOS-Build.
-**Für S3 fehlen nur Owner-Schritte:** Secret setzen, `ai` deployen, Migrationen anwenden (siehe Fragen an den Owner).
+2026-11-08 spät: **Gemini ist raus.** Avo läuft über Claude (`0b91307`), Kalorien-Daten und Foto-Client sind auf
+`main` (`437fc58`), das Gemini-Paket ist entfernt (`7f422f2`). Lokal und noch nicht committet: die Swift-Seite der
+nativen Kanäle (Health, Scanner, Stimme, Reduce Transparency) samt `AppDelegate`/`Info.plist`. Sie folgt nach einem
+iOS-Build nach dem Neustart des Macs. Danach: B-Screens auf S2a/S2b, Widgets/Siri, Evals, Prüfmatrix.
+**Für S3 fehlen nur Owner-Schritte** (Secret, Migrationen, Deploy), siehe `docs/OPEN-ISSUES.md` ganz oben.
 
 ## Meilensteine
 
