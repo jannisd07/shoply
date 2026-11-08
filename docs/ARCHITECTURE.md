@@ -109,15 +109,20 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   go_router fällt von `/calories` auf diese Root-Routen zurück, deshalb dürfen sie hinter der Shell stehen.
 - **Lokal zuerst:** Jeder Tag ist ein `calorieDayProvider(dateKey)` (`state/nutrition_provider.dart`). Er startet mit
   dem Tag aus `CalorieDayStore` (SharedPreferences, heute und 14 Tage davor), fragt danach den Server und führt die
-  Antwort mit der Schreib-Warteschlange zusammen (`mergeServerDay`). Änderungen, die während eines Abrufs lokal
-  passiert sind, gewinnen über diese Antwort (`applyLocalChanges`): Der Server kann den Tag vor dem Schreiben gelesen
-  haben, während das Schreiben schon bestätigt ist. So geht kein Eintrag verloren und keiner kommt doppelt.
+  Antwort mit der Schreib-Warteschlange zusammen (`mergeServerDay`). Der Server kann den Tag lesen, bevor ein
+  Schreiben ankommt, das schon bestätigt ist, wenn die Antwort eintrifft (zum Beispiel beim Zurückkommen ins Netz,
+  wenn Warteschlange und Neuladen gleichzeitig starten). Deshalb gilt für die eigenen Schreibvorgänge dieses Geräts:
+  Was beim Start des Abrufs in der Warteschlange stand, und was während des Abrufs lokal geändert wurde
+  (`applyLocalChanges`), liegt über der Antwort, nach ID, also weder verloren noch doppelt. Abrufe eines Tages laufen
+  nie gleichzeitig (ein weiterer Aufruf läuft danach). Ändert ein anderes Gerät dieselbe Zeile gleichzeitig, gilt bis
+  zum nächsten Abruf die Fassung dieses Geräts.
 - **Schreiben** nur über `calorieDiaryProvider` (`CalorieDiary`): sofort im lokalen Tag, dann
   `CalorieWriteQueue` (dauerhaft, Wiederholung mit Backoff, „Nicht gespeichert“ bei Ablehnung), dann Apple Health.
   Rückgängig legt die Zeile an ihren alten Platz zurück (Reihenfolge nach `created_at`). Neue Spalten nur mit
   `app_flags.calories_schema_v2` (prüfen die Services).
-- **Heute** ist `calorieTodayKeyProvider`: er rechnet sich um Mitternacht neu und prüft jede Minute, ob der Tag
-  gewechselt hat (Timer stehen still, solange iOS die App pausiert). Alles, was „für heute“ schreibt (Home-Wasser,
+- **Heute** ist `calorieTodayKeyProvider`: er rechnet sich um Mitternacht neu, sobald die App aus dem Hintergrund
+  zurückkommt, und zur Sicherheit jede Minute (Timer stehen still, solange iOS die App pausiert). Alles, was
+  „für heute“ schreibt (Home-Wasser,
   „Essen eintragen“ ohne Datum, „Heute nochmal eintragen“), liest die Uhr erst beim Tippen
   (`calorieTodayKeyNow`), damit ein über Nacht offener Screen nie in gestern schreibt.
 - **Ziel:** `calorieGoalStateProvider` unterscheidet lädt / kein Ziel / gesetzt / Fehler und nimmt bis zur Antwort das

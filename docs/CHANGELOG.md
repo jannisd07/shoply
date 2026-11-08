@@ -30,8 +30,9 @@ sind `weekly_deals_screen.dart`, `zip_code_sheet.dart`, die alte Rezept-Angebots
 - **„Essen eintragen“ `/calories/add`** als Vollbild statt Bottom-Sheet: Mahlzeit im Titel-Menü, „Zuletzt gegessen“
   mit einem Tipp, Suche im eigenen Verlauf. Foto, Barcode, Menge und Manuell folgen mit den nächsten Paketen.
 - **Home:** Karte „Kalorien heute“ und Kachel „Wasser heute“ mit echten Zahlen aus dem Gerätespeicher im ersten Frame.
-- **Fehler behoben:** „Heute“ wechselt um Mitternacht (vorher schrieb ein über Nacht offener Screen in gestern); ein
-  Eintrag, der während eines Server-Abrufs geschrieben wurde, verschwindet nicht mehr; ein Ziel-Ladefehler sieht nicht
+- **Fehler behoben:** „Heute“ wechselt um Mitternacht und beim Zurückkommen aus dem Hintergrund (vorher schrieb ein
+  über Nacht offener Screen in gestern); ein eigener Eintrag, der beim Neuladen noch unterwegs war (etwa offline
+  eingetragen, dann zurück im Netz), verschwindet nicht mehr und kommt nicht doppelt; ein Ziel-Ladefehler sieht nicht
   mehr wie „kein Ziel“ aus; nach der Rückkehr ins Netz lädt das Tagebuch selbst.
 - Weg: altes Kalorien-Dashboard, die Sheets `food_entry_sheet` und `log_recipe_sheet` (Rezept öffnet jetzt den
   Vollbild-Screen „Ins Tagebuch“), 42 alte Texte.

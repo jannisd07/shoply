@@ -262,6 +262,28 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('back from the background after midnight: "Heute" is the new day at once', (tester) async {
+    var now = DateTime(2026, 11, 7, 23, 59, 30);
+    final env = await CalorieTestEnv.create(server: {kToday: usualDay()});
+    final semantics = tester.ensureSemantics();
+    await pumpCalories(tester, const CaloriesDiaryScreen(), overrides: env.overrides(clock: () => now));
+    await settle(tester);
+
+    for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pump();
+    // The night passes while iOS keeps the app suspended (its timers stand still).
+    now = DateTime(2026, 11, 8, 7, 15);
+    for (final state in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pump();
+    await tester.pump();
+    expect(find.bySemanticsLabel('Date: Today, Sunday, November 8'), findsOneWidget);
+    semantics.dispose();
+  });
+
   testWidgets('a goal that fails to load with a known day: eaten kcal and a retry, never "no goal"',
       (tester) async {
     final env = await CalorieTestEnv.create(server: {kToday: usualDay()});

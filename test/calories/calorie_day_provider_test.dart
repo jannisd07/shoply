@@ -54,6 +54,8 @@ FoodLogEntry _food(String name, int kcal) => FoodLogEntry(
     );
 
 void main() {
+  // "Today" listens for the return from the background (needs a binding).
+  TestWidgetsFlutterBinding.ensureInitialized();
   late SharedPreferences prefs;
   late _FakeRemote remote;
   late ProviderContainer container;

@@ -33,6 +33,8 @@ Widget _home() => ListView(
     );
 
 void main() {
+  // "Today" listens for the return from the background (needs a binding).
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('b_slots still exports both sections', () {
     expect(slots.homeCaloriesHasContentProvider, same(homeCaloriesHasContentProvider));
     expect(slots.homeWaterHasContentProvider, same(homeWaterHasContentProvider));

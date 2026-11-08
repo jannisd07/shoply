@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -66,13 +67,13 @@ final openFoodFactsServiceProvider = Provider<OpenFoodFactsService>((ref) {
 final calorieClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
 /// How often "today" is checked against the clock besides the midnight
-/// timer: timers pause while iOS suspends the app, so after a night in the
-/// background the next check comes at most this long after the return.
+/// timer and the return from the background (timers pause while iOS
+/// suspends the app); a safety net for a missed lifecycle event.
 const Duration _kTodayCheck = Duration(minutes: 1);
 
 /// Today's day key (`YYYY-MM-DD`). Moves on by itself at the next local
-/// midnight (and on the first check after the app comes back from the
-/// background), so a screen that stays open overnight shows the new day.
+/// midnight and when the app comes back from the background, so a screen
+/// that stays open overnight shows the new day.
 /// Writes meant for "today" read [calorieTodayKeyNow] at tap time instead.
 final calorieTodayKeyProvider = Provider.autoDispose<String>((ref) {
   final clock = ref.watch(calorieClockProvider);
@@ -85,7 +86,12 @@ final calorieTodayKeyProvider = Provider.autoDispose<String>((ref) {
       if (calorieDayKey(clock()) != key) ref.invalidateSelf();
     }),
   ];
+  // Back from the background: check at once, not at the next tick.
+  final resume = AppLifecycleListener(onResume: () {
+    if (calorieDayKey(clock()) != key) ref.invalidateSelf();
+  });
   ref.onDispose(() {
+    resume.dispose();
     for (final t in timers) {
       t.cancel();
     }
@@ -242,31 +248,69 @@ class CalorieDayNotifier extends StateNotifier<CalorieDayState> {
     await refresh();
   }
 
+  /// The refresh that is running, if any; [refresh] calls during it wait
+  /// for it and then run once more, so two fetches never overlap.
+  Future<void>? _refreshing;
+  bool _refreshAgain = false;
+
   /// Merges the server's day with the waiting writes. Errors keep the local
-  /// state and land in [CalorieDayState.error].
-  Future<void> refresh() async {
+  /// state and land in [CalorieDayState.error]. Calls while a refresh runs
+  /// are folded into one more refresh after it (the returned future
+  /// completes after that one).
+  Future<void> refresh() {
+    final running = _refreshing;
+    if (running != null) {
+      _refreshAgain = true;
+      return running;
+    }
+    return _refreshing = _refreshLoop();
+  }
+
+  Future<void> _refreshLoop() async {
+    try {
+      do {
+        _refreshAgain = false;
+        await _refreshOnce();
+      } while (_refreshAgain && mounted);
+    } finally {
+      _refreshing = null;
+    }
+  }
+
+  Future<void> _refreshOnce() async {
     final backend = _backend;
     if (backend == null || !mounted) return;
     state = state.copyWith(refreshing: true);
-    // The server may read the day before a write that is made while this
-    // fetch runs, and the write may be confirmed (and leave the queue)
-    // before the answer arrives. Local changes made during the fetch
-    // therefore win over the answer, so a row is never lost, brought back
-    // or doubled; the next refresh sees the server with them.
+    // The server may read the day before a write commits, and that write
+    // may be confirmed (and leave the queue) before the answer arrives.
+    // Two cases, both covered:
+    // - a write already waiting when the fetch starts (reconnect: the queue
+    //   flushes while this fetch runs): it is applied on top of the answer
+    //   even if it has left the queue meanwhile;
+    // - a change made while the fetch runs: it wins over the answer.
+    // Rows are matched by id, so nothing is lost, brought back or doubled.
+    // The next refresh reads the server with those writes.
     final before = state.day;
+    // All days: a move to another day is a write for that day that also
+    // removes the row here.
+    final startWrites = backend.queue.writes;
     try {
       final server = await backend.remote.fetchDay(dateKey);
       if (!mounted) return;
+      final now = backend.queue.writes;
+      final nowIds = {for (final w in now) w.id};
       final merged = applyLocalChanges(
         mergeServerDay(
           server: server,
-          writes: backend.queue.writes,
+          // Confirmed since the start (older), then still waiting.
+          writes: [...startWrites.where((w) => !nowIds.contains(w.id)), ...now],
           local: state.day,
           syncedAt: DateTime.now().toUtc(),
         ),
         before: before,
         after: state.day,
-      );
+        // Only rows still waiting count as not synced.
+      ).copyWith(syncStates: backend.queue.syncStatesFor(dateKey));
       state = CalorieDayState(dateKey: dateKey, day: merged);
       await backend.store.save(merged);
       _onLocalChange?.call();

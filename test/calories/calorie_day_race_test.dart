@@ -176,6 +176,76 @@ void main() {
     expect(container.read(calorieDayProvider('2026-11-06')).day!.entries.map((e) => e.id), ['a', 'b', 'c']);
   });
 
+  test('a write waiting when the refresh starts survives (reconnect: queue flush + reload)', () async {
+    container.listen(calorieDayProvider('2026-11-07'), (_, __) {});
+    await settle();
+    // Logged while offline: the write waits in the queue.
+    remote.writeGate = Completer<void>();
+    final saved = await container.read(calorieDiaryProvider).addFood(_food('', 'Pizza', 850, '2026-11-07'));
+    await settle();
+
+    // Back online: the reload reads the day before the write commits ...
+    remote.gate = Completer<void>();
+    final refresh = container.read(calorieDayProvider('2026-11-07').notifier).refresh();
+    await settle();
+    // ... the write commits and leaves the queue ...
+    remote.writeGate!.complete();
+    await settle();
+    expect(remote.days['2026-11-07']!.entries.single.id, saved.id);
+    // ... then the old answer arrives.
+    remote.gate!.complete();
+    await refresh;
+
+    final day = container.read(calorieDayProvider('2026-11-07')).day!;
+    expect(day.entries.map((e) => e.id), [saved.id]);
+    expect(day.syncStateOf(saved.id), CalorieSyncState.synced);
+    expect(stored('2026-11-07')!.entries.map((e) => e.id), [saved.id]);
+  });
+
+  test('a deletion waiting when the refresh starts does not bring the row back', () async {
+    remote.days['2026-11-06'] = CalorieDay(dateKey: '2026-11-06', entries: [_food('x', 'Kuchen', 400, '2026-11-06')]);
+    container.listen(calorieDayProvider('2026-11-06'), (_, __) {});
+    await settle();
+    final row = container.read(calorieDayProvider('2026-11-06')).day!.entries.single;
+    remote.writeGate = Completer<void>();
+    await container.read(calorieDiaryProvider).deleteFood(row);
+    await settle();
+
+    remote.gate = Completer<void>();
+    final refresh = container.read(calorieDayProvider('2026-11-06').notifier).refresh();
+    await settle();
+    remote.writeGate!.complete();
+    await settle();
+    remote.gate!.complete();
+    await refresh;
+    expect(container.read(calorieDayProvider('2026-11-06')).day!.entries, isEmpty);
+  });
+
+  test('overlapping refreshes run one after the other and end with the server state', () async {
+    remote.days['2026-11-06'] = CalorieDay(dateKey: '2026-11-06', entries: [_food('x', 'Kuchen', 400, '2026-11-06')]);
+    container.listen(calorieDayProvider('2026-11-06'), (_, __) {});
+    await settle();
+    final fetchesBefore = remote.fetches;
+
+    remote.gate = Completer<void>();
+    final notifier = container.read(calorieDayProvider('2026-11-06').notifier);
+    final first = notifier.refresh();
+    final second = notifier.refresh();
+    await settle();
+    expect(remote.fetches, fetchesBefore + 1, reason: 'the second waits for the first');
+
+    // Another device deletes the row between the two reads.
+    remote.days['2026-11-06'] = CalorieDay(dateKey: '2026-11-06');
+    final gate = remote.gate!;
+    remote.gate = null;
+    gate.complete();
+    await first;
+    await second;
+    expect(remote.fetches, fetchesBefore + 2);
+    expect(container.read(calorieDayProvider('2026-11-06')).day!.entries, isEmpty,
+        reason: 'the first answer is not replayed as a local change');
+  });
+
   test('applyLocalChanges: added, edited and deleted rows win over an old answer', () {
     final a = _food('a', 'A', 1, '2026-11-06');
     final b = _food('b', 'B', 2, '2026-11-06');
