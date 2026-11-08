@@ -19,7 +19,7 @@ import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/recipe_offers_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
-import 'package:shoply/presentation/screens/calories/log_recipe.dart';
+import 'package:shoply/presentation/screens/calories/calories_recipe_screen.dart';
 import 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart';
 import 'package:shoply/presentation/screens/lists/widgets/item_offer_badge.dart';
 import 'package:shoply/presentation/screens/lists/widgets/item_offer_card.dart';
@@ -32,6 +32,8 @@ import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/article_image.dart';
 import 'package:shoply/presentation/widgets/deals/offers_setup_step.dart';
+
+import '../screens/calories/calorie_fakes.dart';
 
 /// P0.3 (request A-2, contract 3.3): the slot widgets Teil A builds the new
 /// screens against. Offer slots stay empty, and never ask the offers source,
@@ -442,60 +444,70 @@ void main() {
   });
 
   group('openLogRecipe', () {
-    testWidgets('pushes the full-screen diary entry', (tester) async {
+    Future<List<Override>> calorieOverrides() async {
+      final env = await CalorieTestEnv.create();
+      return [...env.overrides(), aiRemoteEnabledProvider.overrideWithValue(true)];
+    }
+
+    testWidgets('pushes the full-screen diary entry from the right', (tester) async {
       final observer = _PushObserver();
       await _pumpLauncher(
         tester,
         (context) => openLogRecipe(context, recipe),
         observer: observer,
+        overrides: await calorieOverrides(),
       );
 
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
       _expectFullScreenPush(observer);
-      expect(find.byType(LogRecipeScreen), findsOneWidget);
-      expect(find.text('Log to diary'), findsOneWidget);
+      expect(find.byType(CaloriesRecipeScreen), findsOneWidget);
+      expect(find.text('Add to diary'), findsOneWidget);
       expect(find.text('Pfannkuchen'), findsOneWidget);
-      expect(find.text('420 kcal'), findsOneWidget);
+      expect(find.text('420 kcal per serving'), findsOneWidget);
     });
 
     testWidgets('servings change in half steps, never below one half', (
       tester,
     ) async {
-      await _pumpLauncher(tester, (context) => openLogRecipe(context, recipe));
+      final semantics = tester.ensureSemantics();
+      await _pumpLauncher(
+        tester,
+        (context) => openLogRecipe(context, recipe),
+        overrides: await calorieOverrides(),
+      );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Half a serving more'));
+      await tester.tap(find.bySemanticsLabel('Increase'));
       await tester.pump();
       expect(find.text('1.5'), findsOneWidget);
-      expect(find.text('630 kcal'), findsOneWidget);
 
       for (var i = 0; i < 4; i++) {
-        await tester.tap(find.byTooltip('Half a serving less'));
+        await tester.tap(find.bySemanticsLabel('Decrease'));
         await tester.pump();
       }
       expect(find.text('0.5'), findsOneWidget);
-      expect(find.text('210 kcal'), findsOneWidget);
+      semantics.dispose();
     });
 
-    testWidgets('does nothing for a recipe without nutrition values', (
+    testWidgets('a recipe without nutrition opens "ohne Nährwerte"', (
       tester,
     ) async {
-      final observer = _PushObserver();
       final plain = recipe.copyWith(nutrition: const NutritionInfo());
       await _pumpLauncher(
         tester,
         (context) => openLogRecipe(context, plain),
-        observer: observer,
+        overrides: await calorieOverrides(),
       );
 
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      expect(observer.pushed, hasLength(1), reason: 'only the home route');
-      expect(find.byType(LogRecipeScreen), findsNothing);
+      expect(find.byType(CaloriesRecipeScreen), findsOneWidget);
+      expect(find.text('This recipe has no nutrition data.'), findsOneWidget);
+      expect(find.text('Estimate calories'), findsOneWidget);
     });
   });
 }

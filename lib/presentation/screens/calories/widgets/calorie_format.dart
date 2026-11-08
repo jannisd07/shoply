@@ -46,6 +46,20 @@ extension CalorieFormat on BuildContext {
   String longDate(DateTime date) =>
       DateFormat.MMMMEEEEd(_dateLocale).format(date);
 
+  /// "Anfang März", "Mitte Februar", "Ende Februar 2027" (S13, S14): when a
+  /// target weight is about reached.
+  String roughDate(DateTime at, DateTime now) {
+    final month = at.year == now.year
+        ? DateFormat.MMMM(_dateLocale).format(at)
+        : DateFormat.yMMMM(_dateLocale).format(at);
+    final key = at.day <= 10
+        ? 'cal_when_early'
+        : at.day <= 20
+            ? 'cal_when_mid'
+            : 'cal_when_late';
+    return tr(key, params: {'month': month});
+  }
+
   /// "16:10" / "4:10 PM".
   String clockTime(DateTime time) => DateFormat.jm(_dateLocale).format(time);
 
@@ -88,8 +102,24 @@ extension CalorieFormat on BuildContext {
       return tr(q == 1 ? 'cal_servings_one' : 'cal_servings_other',
           params: {'n': amount(q)});
     }
+    if (unit == 'piece') {
+      return tr(q == 1 ? 'cal_pieces_one' : 'cal_pieces_other', params: {'n': amount(q)});
+    }
     if (unit == null || unit.isEmpty) return q == 1 ? null : amount(q);
     return '${amount(q)} ${entry.unit!.trim()}';
+  }
+
+  /// The unit of an entry's amount as shown after a number field ("g",
+  /// "Portion", "Stück"); null without a unit.
+  String? entryUnitLabel(FoodLogEntry entry) {
+    final unit = entry.unit?.trim();
+    if (unit == null || unit.isEmpty) return null;
+    return switch (unit.toLowerCase()) {
+      'g' || 'ml' => unit.toLowerCase(),
+      'serving' || 'portion' => tr('cal_unit_portion'),
+      'piece' => tr('cal_unit_piece'),
+      _ => unit,
+    };
   }
 
   /// Second line of a diary row: "60 g", "1 Portion · geschätzt",

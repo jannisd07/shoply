@@ -18,8 +18,13 @@ class FoodProduct extends Equatable {
   final double? servingG;
   final double? packageG;
 
-  /// Open Food Facts had no name ([name] then holds a placeholder).
+  /// Open Food Facts had no name ([name] is then empty; the screens treat
+  /// the product as unknown).
   final bool hasName;
+
+  /// Sold by volume (`product_quantity_unit` "ml"): amounts and "pro 100 ml"
+  /// are in millilitres.
+  final bool isLiquid;
 
   const FoodProduct({
     required this.barcode,
@@ -33,6 +38,7 @@ class FoodProduct extends Equatable {
     this.servingG,
     this.packageG,
     this.hasName = true,
+    this.isLiquid = false,
   });
 
   bool get hasNutrition => caloriesPer100g != null;
@@ -83,8 +89,9 @@ class FoodProduct extends Equatable {
     final name = (json['product_name'] as String?)?.trim();
     return FoodProduct(
       barcode: json['code'] as String? ?? '',
-      name: (name == null || name.isEmpty) ? 'Unknown product' : name,
+      name: name ?? '',
       hasName: name != null && name.isNotEmpty,
+      isLiquid: (json['product_quantity_unit'] as String?)?.trim().toLowerCase() == 'ml',
       brand: _brandString(json['brands']),
       imageUrl: json['image_front_small_url'] as String?,
       caloriesPer100g: _num(nutriments, 'energy-kcal_100g')?.round(),
@@ -95,6 +102,64 @@ class FoodProduct extends Equatable {
       packageG: _grams(json['product_quantity']),
     );
   }
+
+  /// The product as this device keeps it (product cache, "Zuletzt
+  /// gescannt").
+  Map<String, dynamic> toCacheJson() => {
+        'barcode': barcode,
+        'name': name,
+        'brand': brand,
+        'image': imageUrl,
+        'kcal': caloriesPer100g,
+        'protein': proteinPer100g,
+        'carbs': carbsPer100g,
+        'fat': fatPer100g,
+        'serving_g': servingG,
+        'package_g': packageG,
+        'liquid': isLiquid,
+      };
+
+  factory FoodProduct.fromCacheJson(Map<String, dynamic> json) {
+    double? d(String k) => (json[k] as num?)?.toDouble();
+    final name = json['name'] as String? ?? '';
+    return FoodProduct(
+      barcode: json['barcode'] as String,
+      name: name,
+      hasName: name.isNotEmpty,
+      brand: json['brand'] as String?,
+      imageUrl: json['image'] as String?,
+      caloriesPer100g: (json['kcal'] as num?)?.round(),
+      proteinPer100g: d('protein'),
+      carbsPer100g: d('carbs'),
+      fatPer100g: d('fat'),
+      servingG: d('serving_g'),
+      packageG: d('package_g'),
+      isLiquid: json['liquid'] as bool? ?? false,
+    );
+  }
+
+  /// The same product with nutrition per 100 g typed in from the pack
+  /// (S7 "Nährwerte fehlen").
+  FoodProduct withNutrition({
+    required int kcal,
+    double? protein,
+    double? carbs,
+    double? fat,
+  }) =>
+      FoodProduct(
+        barcode: barcode,
+        name: name,
+        brand: brand,
+        imageUrl: imageUrl,
+        caloriesPer100g: kcal,
+        proteinPer100g: protein,
+        carbsPer100g: carbs,
+        fatPer100g: fat,
+        servingG: servingG,
+        packageG: packageG,
+        hasName: hasName,
+        isLiquid: isLiquid,
+      );
 
   @override
   List<Object?> get props => [
@@ -109,5 +174,6 @@ class FoodProduct extends Equatable {
         servingG,
         packageG,
         hasName,
+        isLiquid,
       ];
 }

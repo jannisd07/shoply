@@ -34,7 +34,11 @@ class FoodEntryActions {
     required this.onMove,
     required this.onRetry,
     this.onLogAgainToday,
+    this.onEdit,
   });
+
+  /// Tap, "Bearbeiten": opens S9.
+  final VoidCallback? onEdit;
 
   /// Deletes (with undo); resolves to false when it failed, so a swiped row
   /// slides back.
@@ -125,6 +129,8 @@ class FoodEntryRow extends StatelessWidget {
 
   void _openMenu(BuildContext context) {
     showAvoMenu(context, items: [
+      if (actions.onEdit case final edit?)
+        AvoMenuItem(label: context.tr('cal_menu_edit'), onSelected: edit),
       AvoMenuItem(
         label: context.tr('cal_menu_move'),
         onSelected: () => _openMoveMenu(context),
@@ -232,11 +238,13 @@ class FoodEntryRow extends StatelessWidget {
             ? '$spoken, ${context.tr('cal_row_sending_a11y')}'
             : spoken;
 
+    final edit = actions.onEdit;
     final row = Semantics(
       container: true,
       label: label,
-      button: failed,
-      onTap: failed ? actions.onRetry : null,
+      button: failed || edit != null,
+      hint: !failed && edit != null ? context.tr('cal_edit_hint') : null,
+      onTap: failed ? actions.onRetry : edit,
       customSemanticsActions: {
         CustomSemanticsAction(label: context.tr('cal_menu_move')): () => _openMoveMenu(context),
         if (actions.onLogAgainToday case final again?)
@@ -251,7 +259,7 @@ class FoodEntryRow extends StatelessWidget {
                 unawaited(AvoHaptics.error());
                 actions.onRetry();
               }
-            : null,
+            : edit,
         onLongPress: () => _openMenu(context),
         child: ColoredBox(
           color: colors.surface,

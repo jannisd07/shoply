@@ -80,6 +80,7 @@ void main() {
       calorieClockProvider.overrideWithValue(() => DateTime(2026, 11, 7, 12)),
       calorieOnlineStreamProvider.overrideWithValue(const Stream<bool>.empty()),
       healthBridgeProvider.overrideWithValue(null),
+      calorieFetchTimeoutProvider.overrideWithValue(const Duration(milliseconds: 50)),
     ]);
   });
 
@@ -244,6 +245,37 @@ void main() {
     expect(remote.fetches, fetchesBefore + 2);
     expect(container.read(calorieDayProvider('2026-11-06')).day!.entries, isEmpty,
         reason: 'the first answer is not replayed as a local change');
+  });
+
+  test('a fetch that never answers times out and does not block later refreshes', () async {
+    remote.days['2026-11-04'] = CalorieDay(dateKey: '2026-11-04', entries: [_food('a', 'Apfel', 80, '2026-11-04')]);
+    // The first fetch hangs forever.
+    remote.gate = Completer<void>();
+    container.listen(calorieDayProvider('2026-11-04'), (_, __) {});
+    await settle();
+    final notifier = container.read(calorieDayProvider('2026-11-04').notifier);
+    // Folded into the hanging one: it may only end once that one gives up.
+    final waiting = notifier.refresh();
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(remote.fetches, greaterThanOrEqualTo(1));
+
+    // The server answers again; the folded refresh runs and gets the day.
+    remote.gate = null;
+    await waiting.timeout(const Duration(seconds: 2));
+    await notifier.refresh().timeout(const Duration(seconds: 2));
+    final state = container.read(calorieDayProvider('2026-11-04'));
+    expect(state.day!.entries.map((e) => e.id), ['a']);
+    expect(state.error, isNull);
+    expect(state.refreshing, isFalse);
+  });
+
+  test('a timed-out fetch keeps the local day and reports a network error', () async {
+    remote.gate = Completer<void>();
+    container.listen(calorieDayProvider('2026-11-03'), (_, __) {});
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    final state = container.read(calorieDayProvider('2026-11-03'));
+    expect(state.error?.code, CalorieErrorCode.network);
+    expect(state.refreshing, isFalse);
   });
 
   test('applyLocalChanges: added, edited and deleted rows win over an old answer', () {

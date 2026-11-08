@@ -9,7 +9,7 @@ import Foundation
 /// `GeneratedPluginRegistrant.register(with: self)`. Registration only wires
 /// channels: no permission dialog, no audio session, no HealthKit store.
 ///
-/// Channels: `shoply/health`, `shoply/scanner`, `shoply/voice` with
+/// Channels: `shoply/health`, `shoply/scanner`, `shoply/camera`, `shoply/voice` with
 /// `shoply/voice/events` and `shoply/voice/levels`, `shoply/accessibility`
 /// with `shoply/accessibility/events`, `shoply/app`.
 enum ShoplyNativeChannels {
@@ -26,20 +26,22 @@ enum ShoplyNativeChannels {
     let messenger = registrar.messenger()
     let health = HealthKitChannel()
     let scanner = BarcodeScannerChannel()
+    let camera = MealCameraChannel()
     let voice = VoiceChannel()
     let accessibility = AccessibilityChannel()
     let app = AppBadgeChannel()
-    retained = [health, scanner, voice, accessibility, app]
+    retained = [health, scanner, camera, voice, accessibility, app]
 
     bind("shoply/health", health, messenger)
     bind("shoply/scanner", scanner, messenger)
+    bind("shoply/camera", camera, messenger)
     bind("shoply/voice", voice, messenger)
     stream("shoply/voice/events", voice.events, messenger)
     stream("shoply/voice/levels", voice.levels, messenger)
     bind("shoply/accessibility", accessibility, messenger)
     stream("shoply/accessibility/events", accessibility.events, messenger)
     bind("shoply/app", app, messenger)
-    nativeLog("✅ [NativeChannels] health, scanner, voice, accessibility and app registered")
+    nativeLog("✅ [NativeChannels] health, scanner, camera, voice, accessibility and app registered")
   }
 
   @MainActor

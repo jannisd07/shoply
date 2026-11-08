@@ -89,7 +89,7 @@ final class BarcodeScannerChannel: NativeMethodHandler {
     }
   }
 
-  private static func topViewController() -> UIViewController? {
+  static func topViewController() -> UIViewController? {
     let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
     let active = scenes.filter { $0.activationState == .foregroundActive }
     let windows = (active.isEmpty ? scenes : active).flatMap(\.windows)

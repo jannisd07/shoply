@@ -17,12 +17,15 @@ class MealPhotoException implements Exception {
   final String code;
 
   /// `no_food_detected` (no food or drink on the photo), `unreadable_image`
-  /// (no readable photo), `quota_exceeded` (daily photo limit reached),
+  /// (no readable photo), `refused` (Claude will not estimate this photo),
+  /// `ai_disabled` (kill switch), `quota_exceeded` (daily photo limit reached),
   /// `rate_limited`, `timeout`, `network_error`, `not_signed_in` and
   /// `provider_error` (anything else).
   static const Set<String> codes = {
     'no_food_detected',
     'unreadable_image',
+    'refused',
+    'ai_disabled',
     'quota_exceeded',
     'rate_limited',
     'timeout',
@@ -142,7 +145,9 @@ class MealPhotoAnalysisService {
 
   static String _codeFor(String claudeCode) => switch (claudeCode) {
         'no_food_detected' => 'no_food_detected',
-        'unreadable_image' || 'refused' => 'unreadable_image',
+        'unreadable_image' => 'unreadable_image',
+        'refused' => 'refused',
+        'ai_disabled' => 'ai_disabled',
         'quota_exceeded' => 'quota_exceeded',
         'rate_limited' => 'rate_limited',
         'timeout' => 'timeout',

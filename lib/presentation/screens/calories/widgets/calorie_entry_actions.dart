@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -10,6 +11,7 @@ import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_meal_section.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/route_paths.dart';
 
 /// A new diary row with the food, amount and numbers of [template] for
 /// [dateKey] and [meal] (re-logging from "Zuletzt gegessen" or "Heute
@@ -86,6 +88,28 @@ Future<FoodLogEntry?> logFoodAgain(
   return saved;
 }
 
+/// Logs a new [entry] (S5, S7, S8, S10) with the light impact in the same
+/// frame and "{name} eingetragen · Widerrufen". Returns the saved row, or
+/// null when it could not be queued (the person then sees why).
+Future<FoodLogEntry?> logNewFood(BuildContext context, WidgetRef ref, FoodLogEntry entry) async {
+  final message = context.tr('cal_logged_toast', params: {'name': entry.foodName});
+  final undo = context.tr('common_undo');
+  final diary = ref.read(calorieDiaryProvider);
+  unawaited(AvoHaptics.light());
+  final FoodLogEntry saved;
+  try {
+    saved = await diary.addFood(entry);
+  } catch (e) {
+    debugPrint('❌ [CalorieDiary] Logging failed: ${calorieErrorKind(e)}');
+    if (context.mounted) showCalorieWriteFailed(context);
+    return null;
+  }
+  if (context.mounted) {
+    AvoToast.show(context, message: message, actionLabel: undo, onAction: () => diary.deleteFood(saved));
+  }
+  return saved;
+}
+
 /// The diary's row actions (S1 Interaktion): delete with "Widerrufen", move
 /// to another meal, retry a "Nicht gespeichert" row, log a past row again
 /// today.
@@ -101,6 +125,10 @@ class CalorieEntryActions {
       onDelete: () => _delete(entry),
       onMove: (meal) => diary.updateFood(entry, entry.copyWith(mealType: meal)),
       onRetry: () => diary.retry(entry.id),
+      onEdit: () => unawaited(context.push(
+            Uri(path: '${RoutePaths.calories}/entry/${entry.id}', queryParameters: {'date': entry.dateKey}).toString(),
+            extra: entry,
+          )),
       onLogAgainToday: pastDay
           // Today as it is at the tap (the screen may have been open since
           // yesterday).

@@ -19,6 +19,7 @@ class CalorieColors {
     required this.waterFill,
     required this.warning,
     required this.emptyDrop,
+    required this.health,
   });
 
   /// Ring, carbohydrate bar, week bars (`calRing`, 3.97:1 on white).
@@ -45,6 +46,10 @@ class CalorieColors {
   /// Outline of an empty drop on the water tile (3.26:1 on white).
   final Color emptyDrop;
 
+  /// The Health heart beside "Wird auch in Apple Health gespeichert"
+  /// (decorative, 3.27:1 on the grouped background).
+  final Color health;
+
   static const _light = CalorieColors._(
     ring: Color(0xFFC8641A), // D2 #E8833A darkened to 3:1 (§3.7)
     protein: Color(0xFF3B82F6), // D2
@@ -54,6 +59,7 @@ class CalorieColors {
     waterFill: Color(0xFFE8F0FE), // D2
     warning: Color(0xFFA8521A), // D2 kicker
     emptyDrop: Color(0xFF8E8E93), // D2 §3.7 outline
+    health: Color(0xFFFF2D55), // D2 Health
   );
 
   static const _dark = CalorieColors._(
@@ -65,6 +71,7 @@ class CalorieColors {
     waterFill: Color(0xFF1E2A3D), // D2 water square, dark
     warning: Color(0xFFFF9F5A), // D2 kicker lightened, 8.39:1
     emptyDrop: Color(0xFF8E8E93), // D2, 5.22:1 on #1C1C1E
+    health: Color(0xFFFF375F), // iOS pink, dark
   );
 
   static const _lightHighContrast = CalorieColors._(
@@ -76,6 +83,7 @@ class CalorieColors {
     waterFill: Color(0xFFE8F0FE), // D2
     warning: Color(0xFF8A4012), // D2, 7.44:1
     emptyDrop: Color(0xFF6C6C70), // D2
+    health: Color(0xFFD30F45), // iOS pink, Increase Contrast
   );
 
   static const _darkHighContrast = CalorieColors._(
@@ -87,6 +95,7 @@ class CalorieColors {
     waterFill: Color(0xFF1E2A3D), // D2
     warning: Color(0xFFFFC08A), // D2, 10.66:1
     emptyDrop: Color(0xFFAEAEB2), // D2
+    health: Color(0xFFFF6482), // iOS pink, dark Increase Contrast
   );
 
   /// The colours for [context]: brightness from the theme (as `AvoColors`

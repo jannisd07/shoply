@@ -163,6 +163,11 @@ final calorieBackendProvider = FutureProvider<CalorieBackend?>((ref) async {
   );
 });
 
+/// How long one fetch of a day may take before it counts as a network
+/// error (the day keeps its local state and shows the error). Override in
+/// tests.
+final calorieFetchTimeoutProvider = Provider<Duration>((ref) => const Duration(seconds: 20));
+
 /// One day as the diary shows it. [day] null = this device knows nothing
 /// about the day yet (unknown, never "nothing eaten"); [error] is the last
 /// failed refresh, shown as a status row while [day] stays visible.
@@ -208,12 +213,16 @@ class CalorieDayNotifier extends StateNotifier<CalorieDayState> {
     Future<CalorieBackend?> backend, {
     void Function()? onLocalChange,
     CalorieDay? initial,
+    this.fetchTimeout = const Duration(seconds: 20),
   })  : _onLocalChange = onLocalChange,
         super(CalorieDayState(dateKey: dateKey, day: initial, refreshing: true)) {
     _init(backend);
   }
 
   final String dateKey;
+
+  /// A fetch that has not answered by then fails as a network error.
+  final Duration fetchTimeout;
   final void Function()? _onLocalChange;
   final Completer<void> _ready = Completer<void>();
   CalorieBackend? _backend;
@@ -295,7 +304,9 @@ class CalorieDayNotifier extends StateNotifier<CalorieDayState> {
     // removes the row here.
     final startWrites = backend.queue.writes;
     try {
-      final server = await backend.remote.fetchDay(dateKey);
+      // A fetch that never answers must not hold every later refresh of
+      // this day (they wait for the running one).
+      final server = await backend.remote.fetchDay(dateKey).timeout(fetchTimeout);
       if (!mounted) return;
       final now = backend.queue.writes;
       final nowIds = {for (final w in now) w.id};
@@ -376,6 +387,7 @@ final calorieDayProvider =
     dateKey,
     backend,
     initial: _storedDay(ref, dateKey),
+    fetchTimeout: ref.read(calorieFetchTimeoutProvider),
     onLocalChange: () => ref.read(calorieWeekRevisionProvider(week).notifier).state++,
   );
 });
@@ -468,6 +480,14 @@ final healthSyncServiceProvider = Provider<HealthSyncService?>((ref) {
   unawaited(service.resumePendingDeletes());
   ref.onDispose(service.dispose);
   return service;
+});
+
+/// New entries are also written to Apple Health ("Wird auch in Apple Health
+/// gespeichert", S5): Health exists here and the person connected it.
+final calorieHealthWritesProvider = Provider<bool>((ref) {
+  if (ref.watch(healthSyncServiceProvider) == null) return false;
+  final prefs = ref.watch(calorieSharedPreferencesProvider).valueOrNull;
+  return (prefs?.getBool(_healthConnectedKey) ?? false) && ref.watch(moduleEnabledProvider(AppModule.calories));
 });
 
 Future<void> setHealthConnected(WidgetRef ref, bool connected) async {

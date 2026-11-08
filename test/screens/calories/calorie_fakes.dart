@@ -4,6 +4,7 @@
 // Supabase or the network.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -17,19 +18,31 @@ import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/calorie_day.dart';
 import 'package:shoply/data/models/diet_challenge.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
+import 'package:shoply/data/models/food_product.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/data/models/user_food.dart';
+import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/models/water_log_entry.dart';
 import 'package:shoply/data/models/weight_log_entry.dart';
 import 'package:shoply/data/services/calorie_day_store.dart';
 import 'package:shoply/data/services/calorie_recipe_nudge_service.dart';
 import 'package:shoply/data/services/calorie_write_queue.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/data/services/meal_photo_analysis_service.dart';
+import 'package:shoply/data/services/meal_photo_storage_service.dart';
+import 'package:shoply/data/services/native/barcode_scanner_channel.dart';
+import 'package:shoply/data/services/native/meal_camera_channel.dart';
+import 'package:shoply/data/services/open_food_facts_service.dart';
+import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_diary_provider.dart';
+import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/presentation/state/diet_challenge_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/areas/calories_routes.dart';
 
 const kUser = 'u1';
 final kNow = DateTime(2026, 11, 7, 12);
@@ -49,10 +62,23 @@ class FakeCalorieRemote implements CalorieRemote {
 
   /// Keeps food and water writes like a server would, so a later fetch
   /// returns them.
+  /// Goal and own-food writes as the server got them.
+  final List<Map<String, dynamic>> goals = [];
+  final List<Map<String, dynamic>> userFoods = [];
+  final List<Map<String, dynamic>> weights = [];
+
   @override
   Future<void> execute(QueuedWrite write) async {
     if (writeError != null) throw writeError!;
     executed.add(write);
+    switch (write.kind) {
+      case CalorieWriteKinds.goal:
+        goals.add(write.payload);
+      case CalorieWriteKinds.userFood:
+        userFoods.add(write.payload);
+      case CalorieWriteKinds.weight:
+        weights.add(write.payload);
+    }
     final key = write.dateKey;
     if (key == null) return;
     final day = days[key] ?? CalorieDay(dateKey: key);
@@ -198,9 +224,48 @@ class CalorieTestEnv {
     int ideas = 6,
     DateTime? now,
     DateTime Function()? clock,
+    bool ai = true,
+    bool schemaV2 = true,
+    bool pro = false,
+    FakeCalorieCamera? camera,
+    List<FoodProduct> offHits = const [],
+    Object? offSearchError,
+    Map<String, FoodProduct> offProducts = const {},
+    Object? offBarcodeError,
+    List<UserFood> userFoods = const [],
+    Future<MealPhotoEstimate> Function(Uint8List photo)? analyzer,
+    CalorieNutritionEstimator? estimator,
+    UserModel? user,
+    Future<Recipe> Function(String id)? recipeLoader,
+    FakeMealPhotoBucket? bucket,
   }) {
     final g = identical(goalValue, _defaultGoal) ? goal() : goalValue as NutritionGoal?;
+    final photos = bucket ?? FakeMealPhotoBucket();
     return [
+      aiRemoteEnabledProvider.overrideWithValue(ai),
+      calorieSchemaV2Provider.overrideWithValue(schemaV2),
+      isSubscribedProvider.overrideWithValue(pro),
+      calorieCameraProvider.overrideWithValue(camera ?? FakeCalorieCamera()),
+      calorieOffSearchProvider.overrideWithValue((q) async {
+        if (offSearchError != null) throw offSearchError;
+        final lower = q.toLowerCase();
+        return offHits.where((p) => p.name.toLowerCase().contains(lower) || (p.brand?.toLowerCase().contains(lower) ?? false)).toList();
+      }),
+      calorieOffBarcodeProvider.overrideWithValue((code) async {
+        if (offBarcodeError != null) throw offBarcodeError;
+        return offProducts[code];
+      }),
+      userFoodsRemoteProvider.overrideWithValue(() async => userFoods),
+      mealPhotoAnalyzerProvider.overrideWithValue(analyzer ?? (_) => Completer<MealPhotoEstimate>().future),
+      calorieNutritionEstimatorProvider.overrideWithValue(estimator ??
+          (String text, {int? servings}) async =>
+              const CalorieNutritionEstimate(kcal: 320, proteinG: 14, carbsG: 30, fatG: 15, confidence: EstimateConfidence.medium)),
+      calorieUserProfileProvider.overrideWith((ref) async => user),
+      calorieProfileWriterProvider.overrideWithValue(({required int age, required double heightCm, required String gender}) async {}),
+      calorieRecipeLoaderProvider.overrideWithValue(recipeLoader ?? (id) async => throw StateError('no recipe $id')),
+      mealPhotoStorageProvider.overrideWithValue(
+        MealPhotoStorageService(bucket: photos, currentUserId: () => kUser, newFileId: () => 'photo1'),
+      ),
       calorieSharedPreferencesProvider.overrideWith((ref) => prefs),
       calorieRemoteProvider.overrideWithValue(remote),
       authUserIdProvider.overrideWithValue(kUser),
@@ -247,6 +312,133 @@ class CalorieTestEnv {
 }
 
 const Object _defaultGoal = Object();
+
+/// The device camera in tests: answers from fields and records the calls.
+class FakeCalorieCamera implements CalorieCamera {
+  FakeCalorieCamera({
+    this.supported = true,
+    this.available = true,
+    this.permissionValue = CameraPermission.authorized,
+    this.grant = true,
+    BarcodeScanResult? scanResult,
+    MealPhotoResult? photoResult,
+    MealPhotoResult? pickResult,
+  })  : scanResult = scanResult ?? const BarcodeScanResult(BarcodeScanStatus.cancelled),
+        photoResult = photoResult ?? const MealPhotoResult(MealPhotoStatus.cancelled),
+        pickResult = pickResult ?? const MealPhotoResult(MealPhotoStatus.cancelled);
+
+  bool supported;
+  bool available;
+  CameraPermission permissionValue;
+
+  /// The answer to the system question.
+  bool grant;
+  BarcodeScanResult scanResult;
+  MealPhotoResult photoResult;
+  MealPhotoResult pickResult;
+  int scans = 0;
+  int photos = 0;
+  int picks = 0;
+  int requests = 0;
+
+  @override
+  Future<bool> scannerSupported() async => supported;
+  @override
+  Future<bool> cameraAvailable() async => available;
+  @override
+  Future<CameraPermission> permission() async => permissionValue;
+  @override
+  Future<bool> requestAccess() async {
+    requests++;
+    permissionValue = grant ? CameraPermission.authorized : CameraPermission.denied;
+    return grant;
+  }
+
+  @override
+  Future<BarcodeScanResult> scan(BarcodeScannerLabels labels) async {
+    scans++;
+    return scanResult;
+  }
+
+  @override
+  Future<MealPhotoResult> takePhoto(MealCameraLabels labels) async {
+    photos++;
+    return photoResult;
+  }
+
+  @override
+  Future<MealPhotoResult> pickPhoto() async {
+    picks++;
+    return pickResult;
+  }
+}
+
+/// The private photo bucket in memory.
+class FakeMealPhotoBucket implements MealPhotoBucket {
+  final Map<String, Uint8List> files = {};
+
+  @override
+  Future<void> upload(String path, Uint8List bytes, {required String contentType}) async => files[path] = bytes;
+
+  @override
+  Future<String> createSignedUrl(String path, Duration expiresIn) async => 'https://example.invalid/$path';
+}
+
+/// A tiny JPEG header: enough for the media type check.
+final Uint8List kJpeg = Uint8List.fromList([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+
+/// An Open Food Facts product.
+FoodProduct offProduct(
+  String code,
+  String name, {
+  String? brand,
+  int? kcal = 63,
+  double? protein = 11,
+  double? carbs = 4,
+  double? fat = 0.2,
+  double? servingG,
+  double? packageG,
+}) =>
+    FoodProduct(
+      barcode: code,
+      name: name,
+      brand: brand,
+      caloriesPer100g: kcal,
+      proteinPer100g: protein,
+      carbsPer100g: carbs,
+      fatPer100g: fat,
+      servingG: servingG,
+      packageG: packageG,
+    );
+
+/// Answers [MealPhotoEstimate.fromJson] as the server would.
+MealPhotoEstimate photoEstimate({
+  String dish = 'Spaghetti Bolognese',
+  int kcal = 650,
+  List<Map<String, Object>>? components,
+  List<String> allergens = const [],
+  String confidence = 'unsicher',
+}) =>
+    MealPhotoEstimate.fromJson({
+      'dish': dish,
+      'kcal': kcal,
+      'protein_g': 32,
+      'carbs_g': 78,
+      'fat_g': 21,
+      'confidence': confidence,
+      'components': components ??
+          [
+            {'name': 'Spaghetti, gekocht', 'grams': 220, 'kcal': 345},
+            {'name': 'Bolognese-Soße', 'grams': 150, 'kcal': 305},
+          ],
+      'allergens': allergens,
+    });
+
+/// Thrown by a fake analyzer.
+MealPhotoException photoError(String code) => MealPhotoException(code);
+
+/// A typed OFF failure.
+const OffRequestFailed kOffFailed = OffRequestFailed('network');
 
 /// The connection in tests; set it to false to "come back online".
 final testOfflineProvider = StateProvider<bool>((ref) => false);
@@ -341,4 +533,70 @@ Future<List<String>> pumpCalories(
   await tester.pump();
   await tester.pump();
   return visited;
+}
+
+/// Pumps the real calories routes (diary in a Home branch, the full-screen
+/// routes above it) starting at [initial], for flows across screens.
+Future<GoRouter> pumpCaloriesFlow(
+  WidgetTester tester, {
+  required List<Override> overrides,
+  String initial = '/start',
+  Locale locale = const Locale('en'),
+  Size size = const Size(390, 844),
+}) async {
+  tester.view.physicalSize = size * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  final router = GoRouter(
+    initialLocation: initial,
+    routes: [
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => shell,
+        branches: [
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/start', builder: (_, __) => const Text('Start')),
+            GoRoute(path: '/home', builder: (_, __) => const Text('Home')),
+            GoRoute(path: '/calories', builder: buildCaloriesRoot, routes: caloriesChildRoutes),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/recipes',
+              builder: (_, __) => const Text('Rezepte'),
+              routes: [GoRoute(path: ':id', builder: (_, s) => Text('Rezept ${s.pathParameters['id']}'))],
+            ),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/settings', builder: (_, __) => const Text('Settings'), routes: caloriesSettingsRoutes),
+          ]),
+        ],
+      ),
+      ...caloriesRootRoutes,
+      GoRoute(path: '/pro', builder: (_, __) => const Text('Pro')),
+    ],
+  );
+  addTearDown(router.dispose);
+  await tester.pumpWidget(ProviderScope(
+    overrides: overrides,
+    child: MaterialApp.router(
+      routerConfig: router,
+      locale: locale,
+      supportedLocales: const [Locale('en'), Locale('de')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      theme: ThemeData(platform: TargetPlatform.iOS, fontFamily: 'CupertinoSystemText'),
+      builder: (context, child) => AvoDesignScope(
+        reduceTransparencyOverride: false,
+        child: AvoToastHost(child: child!),
+      ),
+    ),
+  ));
+  await tester.pump();
+  await tester.pump();
+  return router;
+}
+
+/// Pumps frames for [steps] × 100 ms (springs, debounces, fakes).
+Future<void> settleFrames(WidgetTester tester, {int steps = 8}) async {
+  for (var i = 0; i < steps; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }

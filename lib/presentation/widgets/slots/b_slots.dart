@@ -53,7 +53,7 @@ export 'package:shoply/presentation/widgets/article_image.dart'
     show ArticleImage, ArticleImageCredit, articleImagesShown;
 
 // Recipes.
-export 'package:shoply/presentation/screens/calories/log_recipe.dart'
+export 'package:shoply/presentation/screens/calories/calories_recipe_screen.dart'
     show openLogRecipe;
 export 'package:shoply/presentation/screens/recipes/widgets/recipe_offers_card.dart'
     show IngredientOfferBadge, RecipeOfferSummary, RecipeOffersCard;

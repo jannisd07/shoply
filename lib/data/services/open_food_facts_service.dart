@@ -82,6 +82,20 @@ class OffRateLimited implements Exception {
   String toString() => 'OffRateLimited(retry after $retryAfter)';
 }
 
+/// An Open Food Facts request failed (no connection, timeout, server
+/// error). Search and barcode lookup throw it instead of answering "no
+/// results" (`kalorien.md` §7.2: a network error never looks like "nothing
+/// found").
+class OffRequestFailed implements Exception {
+  const OffRequestFailed(this.reason);
+
+  /// `network`, `timeout` or `http_<status>`; never contains user input.
+  final String reason;
+
+  @override
+  String toString() => 'OffRequestFailed($reason)';
+}
+
 /// The per-IP limits of the Open Food Facts API: 10 searches and 15 product
 /// reads per minute. Above that OFF may block the IP, so every OFF caller
 /// (this service and the name search of `OpenPricesService`) shares
@@ -170,7 +184,8 @@ class OpenFoodFactsService {
   static const _productBaseUrl =
       'https://world.openfoodfacts.org/api/v2/product';
   static const _fields =
-      'code,product_name,brands,nutriments,image_front_small_url';
+      'code,product_name,brands,nutriments,image_front_small_url,'
+      'serving_quantity,product_quantity,product_quantity_unit';
   static const _photoFields = 'code,image_front_small_url,image_front_url';
   static const _timeout = Duration(seconds: 8);
 
@@ -208,11 +223,12 @@ class OpenFoodFactsService {
     return true;
   }
 
-  /// Searches by free-text name. Returns an empty list (never throws) on
-  /// network failure or no results. At the search limit it waits for a
-  /// free slot (the caller keeps showing its loading state) rather than
-  /// answering "no results"; a search still waiting is dropped with an
-  /// empty answer when a newer one starts (typing).
+  /// Searches by free-text name; an empty list means OFF knows nothing
+  /// that matches. Throws [OffRequestFailed] on a network or server error.
+  /// At the search limit it waits for a free slot (the caller keeps showing
+  /// its loading state) rather than answering "no results"; a search still
+  /// waiting is dropped with an empty answer when a newer one starts
+  /// (typing).
   Future<List<FoodProduct>> search(String query, {int limit = 15}) async {
     final trimmed = query.trim();
     if (trimmed.length < 2) return [];
@@ -225,19 +241,19 @@ class OpenFoodFactsService {
       debugPrint('🔵 [OpenFoodFacts] Waiting search dropped for a newer one');
       return [];
     }
+    final uri = Uri.parse(_searchBaseUrl).replace(
+      queryParameters: {
+        'q': trimmed,
+        'page_size': '$limit',
+        'fields': _fields,
+      },
+    );
+    final response = await _send(uri, 'Search');
+    if (response.statusCode != 200) {
+      debugPrint('⚠️ [OpenFoodFacts] Search returned ${response.statusCode}');
+      throw OffRequestFailed('http_${response.statusCode}');
+    }
     try {
-      final uri = Uri.parse(_searchBaseUrl).replace(
-        queryParameters: {
-          'q': trimmed,
-          'page_size': '$limit',
-          'fields': _fields,
-        },
-      );
-      final response = await _get(uri);
-      if (response.statusCode != 200) {
-        debugPrint('⚠️ [OpenFoodFacts] Search returned ${response.statusCode}');
-        return [];
-      }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final hits = body['hits'] as List? ?? [];
       return hits
@@ -246,36 +262,56 @@ class OpenFoodFactsService {
           .where((p) => p.barcode.isNotEmpty)
           .toList();
     } catch (e) {
-      debugPrint('⚠️ [OpenFoodFacts] Search failed: $e');
-      return [];
+      debugPrint('⚠️ [OpenFoodFacts] Search answer unreadable: ${e.runtimeType}');
+      throw const OffRequestFailed('unreadable');
     }
   }
 
-  /// Exact-barcode lookup (e.g. from manual barcode entry). Returns null if
-  /// not found or on network failure. At the product limit it waits for a
-  /// free slot rather than answering "not found".
+  /// Sends [uri]; network errors and timeouts become [OffRequestFailed].
+  Future<http.Response> _send(Uri uri, String what) async {
+    try {
+      return await _get(uri);
+    } on TimeoutException {
+      debugPrint('⚠️ [OpenFoodFacts] $what timed out');
+      throw const OffRequestFailed('timeout');
+    } catch (e) {
+      debugPrint('⚠️ [OpenFoodFacts] $what failed: ${e.runtimeType}');
+      throw const OffRequestFailed('network');
+    }
+  }
+
+  /// Exact-barcode lookup (scan or typed number). Null when OFF does not
+  /// know the barcode; throws [OffRequestFailed] on a network or server
+  /// error. At the product limit it waits for a free slot rather than
+  /// answering "not found".
   Future<FoodProduct?> lookupBarcode(String barcode) async {
     final trimmed = barcode.trim();
     if (trimmed.isEmpty) return null;
     await _acquire(_limits.product);
-    try {
-      final uri = Uri.parse(
-        '$_productBaseUrl/$trimmed.json',
-      ).replace(queryParameters: {'fields': _fields});
-      final response = await _get(uri);
-      if (response.statusCode != 200) return null;
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      if (body['status'] == 0) return null; // OFF's "not found" marker
-      final product = body['product'] as Map<String, dynamic>?;
-      if (product == null) return null;
-      // The v2 endpoint doesn't echo `code` inside `product` on every
-      // response — fall back to the barcode we looked up.
-      product['code'] ??= trimmed;
-      return FoodProduct.fromOpenFoodFacts(product);
-    } catch (e) {
-      debugPrint('⚠️ [OpenFoodFacts] Barcode lookup failed: $e');
-      return null;
+    final uri = Uri.parse(
+      '$_productBaseUrl/$trimmed.json',
+    ).replace(queryParameters: {'fields': _fields});
+    final response = await _send(uri, 'Barcode lookup');
+    // OFF answers an unknown barcode with 404 and `status: 0`.
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) {
+      debugPrint('⚠️ [OpenFoodFacts] Barcode lookup returned ${response.statusCode}');
+      throw OffRequestFailed('http_${response.statusCode}');
     }
+    final Map<String, dynamic> body;
+    try {
+      body = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('⚠️ [OpenFoodFacts] Barcode answer unreadable: ${e.runtimeType}');
+      throw const OffRequestFailed('unreadable');
+    }
+    if (body['status'] == 0) return null; // OFF's "not found" marker
+    final product = body['product'] as Map<String, dynamic>?;
+    if (product == null) return null;
+    // The v2 endpoint doesn't echo `code` inside `product` on every
+    // response — fall back to the barcode we looked up.
+    product['code'] ??= trimmed;
+    return FoodProduct.fromOpenFoodFacts(product);
   }
 
   /// The front photo of [barcode] for article images, or null.
