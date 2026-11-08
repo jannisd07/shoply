@@ -4,14 +4,27 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
-07.11.2026: **S2a ist erreicht**: B kann seine Screens auf die Komponenten aus Teil 1 und die neue Tab-Struktur
-umbauen (Avo ist ein Tab, Kalorien ein Push im Home-Tab). S2b folgt direkt. Davor: **S1 ist erreicht.** Übersetzungen und Router liegen in Bereichsdateien, das Modulsystem steht. B darf ab
-jetzt seine eigenen Übersetzungs- und Routendateien ändern und `moduleEnabledProvider` abfragen. Als Nächstes baut A das Fundament (A2: Tokens, Komponenten, D2-Tab-Bar,
-Prüfgerüst). A3 ist erledigt. Aus A2 sind schon da und nutzbar: Tokens (`lib/core/design/design.dart`:
-`context.colors`, `context.text(AvoTextStyle.body)`, `AvoSpacing`, `AvoRadii`, `AvoMotion`, `AvoHaptics`) und das
-Prüfgerüst `test/layout/layout_matrix.dart` (`layoutMatrix('Name', (context) => Widget())`). Komponenten und Tab-Bar
-folgen mit S2. Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`. **Vorrang-Aufgaben für B, damit niemand wartet:
-`docs/redesign/prompt-b-vorrang.md`.**
+08.11.2026: Teil A läuft jetzt auf Jannis' Mac **im selben Ordner wie B** (`~/Apps/shoply-neu`, auf `main`, kein
+eigener Worktree wegen Speicher). Regeln für beide: kein `git stash`/`checkout`/`switch`/`reset`/`add -A`; nur eigene
+Pfade committen (`git commit -m … -- <pfade>`); abgleichen mit `git fetch && git merge --ff-only origin/main`;
+analyze/Tests nur auf eigene Pfade.
+
+**S2b fast fertig** (nutzbar, alle in `lib/presentation/widgets/design/`): `AvoCard`/`AvoTile`/`AvoTileGrid`/
+`AvoSectionHeader` (`home_card.dart`), `ItemRow`/`ItemThumb`, `ListCard`/`ListRow`, `Avatar`/`AvatarStack`/
+`PresenceDot`, `QuickAddTile`, `AddItemAccessory`/`AvoComposerField`/`AccessoryDock`, `AvoMenuItem`/`AvoMenuDivider`/
+`showAvoMenu`/`AvoMenuButton`, `FullScreenEditor`/`pushFullScreenEditor`, `ProGate.run`/`ProFeatures`
+(`pro_gate.dart`); dazu `AppBrand` (`lib/core/constants/app_brand.dart`) und `openAppDestination`/`AppDestinations`
+(`lib/routes/app_destinations.dart`). Noch offen in S2b: `RecipeCard`/`RecipeHeroCard`/`GlassInfoPanel`,
+`AvoBarChart`, Komponenten-Galerie.
+
+**A4 Home ist gebaut** (D2 „Für dich“, Reihenfolge `lib/presentation/screens/home/home_layout.dart`): B's Abschnitte
+erscheinen, wenn Modul an und `…HasContentProvider` true. Die alten Home-Karten, der Angebote-Streifen und die
+Verlaufszeile sind weg. „Liste beitreten“ sitzt jetzt im Mehr-Menü des Listen-Tabs.
+
+**A9:** Analyse in [`pro-konzept.md`](pro-konzept.md); Free gegen Pro entscheidet der Owner. Bis dahin ist nichts
+gesperrt.
+
+Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`. Vorrang-Aufgaben für B: `docs/redesign/prompt-b-vorrang.md`.
 
 ## Meilensteine
 
@@ -21,7 +34,8 @@ folgen mit S2. Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`. **Vorrang-Au
 | S1 Struktur | **erledigt** | 07.11.2026 | siehe `git log --grep "(a1)"` |
 | A3 Eingabeleiste (Bug der Mutter des Owners) | **erledigt**: Text wird bei keiner Breite (320–440 pt) und keiner Textgröße (bis 3,1×) mehr abgeschnitten, Nachweis `test/screens/lists/add_item_composer_test.dart` (40 Fälle) | 07.11.2026 | siehe `git log --grep "(a3)"` |
 | S2a Fundament Teil 1 | **erledigt**: D2-Tab-Bar (Home, Listen, Avo, Rezepte, Profil; Avo-Tab auf `/avo`), Kalorien als Push im Home-Tab, Fehlerseite, Modul-Wächter, Deep-Link-Übersetzung, Komponenten Teil 1 (Liste in `prompt-b-vorrang.md`) | 07.11.2026 | `ce66d9f`, `f16e071` |
-| S2 Fundament (S2b: Editor, Eingabefeld, Menüs, Zeilen/Karten, Charts, `ProGate.run`, `AppBrand`) | in Arbeit | | |
+| S2 Fundament (S2b: Editor, Eingabefeld, Menüs, Zeilen/Karten, Charts, `ProGate.run`, `AppBrand`) | in Arbeit: alles außer Rezeptkarten, Charts und Galerie auf `main` | 08.11.2026 | `ad2a9c4` … `5ccea14` |
+| A4 Home (D2 „Für dich“) | **gebaut**, ohne „Tipp von Avo“ (kommt mit A5) | 08.11.2026 | `4618daf`, `22a7153`, `41a974d` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
@@ -167,7 +181,8 @@ Provider in `lib/presentation/widgets/slots/b_slots.dart`; Stufe 2: Home-Abschni
 ## Fragen an den Owner
 
 Offen:
-- Free gegen Pro (kommt nach der Analyse in A9).
+- Free gegen Pro: Varianten A/B/C in [`pro-konzept.md`](pro-konzept.md) (Analyse fertig 08.11.2026), dazu die dort
+  genannten offenen Fakten (Testzeitraum, Beleg-Prüfung, RPC-Rechte, rechtliche Links).
 - Neue Maskottchen-Grafiken und das finale App-Icon-Motiv (A10, mit Bild-Prompts).
 - TestFlight und App Store (erst am Ende).
 
