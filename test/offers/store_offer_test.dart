@@ -47,10 +47,4 @@ void main() {
     expect(offer.isFromChain('lidl'), isTrue);
     expect(offer.isFromChain('rewe'), isFalse);
   });
-
-  test('no retailer image and no own percentage', () {
-    // ignore: deprecated_member_use_from_same_package
-    expect(offer.imageUrl, isEmpty);
-    // ignore: deprecated_member_use_from_same_package
-  });
 }

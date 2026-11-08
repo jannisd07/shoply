@@ -85,15 +85,23 @@ void main() {
             ),
           ],
         );
+        final noRegion = name == 'no region';
         for (final type in [
           ItemOfferBadge,
           ItemOfferCard,
-          ListOfferSummary,
+          if (!noRegion) ListOfferSummary,
           ListOfferCountBadge,
-          OfferSuggestionsBar,
+          if (!noRegion) OfferSuggestionsBar,
         ]) {
           expect(tester.getSize(find.byType(type)), Size.zero, reason: '$type');
         }
+        // Without a region the list and the add field only say where to
+        // set one (3.4); no offer, no number.
+        expect(
+          find.text('Für Angebote in deiner Region: Postleitzahl festlegen'),
+          noRegion ? findsNWidgets(2) : findsNothing,
+        );
+        expect(find.textContaining('€'), findsNothing);
         expect(asked, 0, reason: 'no request to the offers source');
       });
     }
@@ -726,6 +734,7 @@ class _CachedSync extends ListOfferSync {
     required String chainId,
     required String zip,
     required List<String> itemNames,
+    bool force = false,
   }) async {
     onRead?.call();
     return snapshots[listId]!;

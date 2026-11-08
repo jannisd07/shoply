@@ -14,6 +14,13 @@ class _FakeLookup implements RegionLookup {
   Region? region;
   final prompts = <bool>[];
   final saved = <String>[];
+  final located = <Region>[];
+  var removed = 0;
+  var locates = 0;
+  LocateResult locateResult = const LocateResult(
+    LocateOutcome.found,
+    region: Region(zip: '79098', city: 'Freiburg', source: RegionSource.gps),
+  );
   final _changes = StreamController<void>.broadcast();
 
   void changeElsewhere(Region? next) {
@@ -39,6 +46,26 @@ class _FakeLookup implements RegionLookup {
     region = zip.isEmpty
         ? null
         : Region(zip: zip, source: RegionSource.manual);
+    _changes.add(null);
+  }
+
+  @override
+  Future<LocateResult> locate() async {
+    locates++;
+    return locateResult;
+  }
+
+  @override
+  Future<void> saveLocatedRegion(Region next) async {
+    located.add(next);
+    region = next;
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> removeRegion() async {
+    removed++;
+    region = null;
     _changes.add(null);
   }
 }
@@ -119,7 +146,7 @@ void main() {
     expect(container.read(regionProvider), isNull);
   });
 
-  test('removing the region clears the typed zip', () async {
+  test('"Region entfernen" leaves no region, at once', () async {
     final lookup = _FakeLookup(
       const Region(zip: '79098', source: RegionSource.manual),
     );
@@ -127,11 +154,33 @@ void main() {
     container.read(regionProvider);
     await _settle();
 
-    await container.read(regionControllerProvider.notifier).clearManualZip();
+    final done = container.read(regionControllerProvider.notifier).remove();
+    expect(container.read(regionProvider), isNull);
+    await done;
     await _settle();
 
-    expect(lookup.saved, ['']);
+    expect(lookup.removed, 1);
     expect(container.read(regionProvider), isNull);
+  });
+
+  test('a located region is saved as the location, a typed one as the zip',
+      () async {
+    final lookup = _FakeLookup();
+    final container = _container(lookup);
+    container.read(regionProvider);
+    await _settle();
+    final notifier = container.read(regionControllerProvider.notifier);
+
+    const gps = Region(zip: '89077', city: 'Ulm', source: RegionSource.gps);
+    await notifier.saveRegion(gps);
+    expect(lookup.located, [gps]);
+    expect(container.read(regionProvider), gps);
+
+    await notifier.saveRegion(
+      const Region(zip: '10115', source: RegionSource.manual),
+    );
+    expect(lookup.saved, ['10115']);
+    expect(container.read(regionProvider)?.zip, '10115');
   });
 
   test('a change saved elsewhere (profile, Avo) shows at once', () async {
@@ -149,15 +198,21 @@ void main() {
     expect(container.read(regionProvider)?.zip, '10117');
   });
 
-  test('"Standort verwenden" is the one place that may ask', () async {
+  test('"Standort verwenden" finds the region but saves nothing', () async {
     final lookup = _FakeLookup();
     final container = _container(lookup);
     container.read(regionProvider);
     await _settle();
 
-    await container.read(regionControllerProvider.notifier).useLocation();
+    final result = await container
+        .read(regionControllerProvider.notifier)
+        .locate();
 
-    expect(lookup.prompts.last, isTrue);
+    expect(lookup.locates, 1);
+    expect(result.region?.zip, '79098');
+    expect(lookup.located, isEmpty);
+    expect(lookup.saved, isEmpty);
+    expect(container.read(regionProvider), isNull);
   });
 
   test('a German zip code has exactly five digits', () {
@@ -165,5 +220,13 @@ void main() {
     expect(isValidZip(''), isFalse);
     expect(isValidZip('1011'), isFalse);
     expect(isValidZip('101155'), isFalse);
+  });
+
+  test('zone 00 and 99999 are no German zip codes', () {
+    expect(isKnownZip('01067'), isTrue);
+    expect(isKnownZip('79098'), isTrue);
+    expect(isKnownZip('00123'), isFalse);
+    expect(isKnownZip('99999'), isFalse);
+    expect(isKnownZip('7909'), isFalse);
   });
 }

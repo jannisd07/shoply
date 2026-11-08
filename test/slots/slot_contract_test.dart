@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shoply/data/models/nutrition_info.dart';
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_info.dart';
 import 'package:shoply/data/models/store_offer.dart';
@@ -109,18 +110,26 @@ void main() {
       expect(spy.calls, 0);
     });
 
-    testWidgets('RecipeOffersCard(request:)', (tester) async {
+    testWidgets('RecipeOfferSummary(recipe:, listId:)', (tester) async {
       await _pumpSlot(
         tester,
-        RecipeOffersCard(
-          request: RecipeOffersRequest(
-            recipeId: recipe.id,
-            ingredientNames: const ['Milch'],
-          ),
+        RecipeOfferSummary(recipe: recipe, listId: listId),
+        overrides: offersOff(),
+      );
+      _expectEmpty(tester, find.byType(RecipeOfferSummary));
+      expect(spy.calls, 0);
+    });
+
+    testWidgets('IngredientOfferBadge(listId:, ingredient:)', (tester) async {
+      await _pumpSlot(
+        tester,
+        IngredientOfferBadge(
+          listId: listId,
+          ingredient: recipe.ingredients.first,
         ),
         overrides: offersOff(),
       );
-      _expectEmpty(tester, find.byType(RecipeOffersCard));
+      _expectEmpty(tester, find.byType(IngredientOfferBadge));
       expect(spy.calls, 0);
     });
 
@@ -608,10 +617,7 @@ class _OfferSourceSpy {
       calls++;
       return [offer];
     }),
-    recipeOffersProvider.overrideWith((ref, request) async {
-      calls++;
-      return null;
-    }),
+    recipeOfferSourceProvider.overrideWithValue(_RecipeSourceSpy(this)),
   ];
 }
 
@@ -682,5 +688,40 @@ class _EmptySource extends Fake implements OfferPriceService {
   }) async {
     calls++;
     return const [];
+  }
+}
+
+/// Counts every recipe offer lookup, cached or not.
+class _RecipeSourceSpy implements RecipeOfferSource {
+  _RecipeSourceSpy(this.spy);
+
+  final _OfferSourceSpy spy;
+
+  @override
+  Future<RecipeOffersResult?> cachedOffers({
+    required String recipeId,
+    required List<String> ingredientNames,
+    required String zipCode,
+    String? chainId,
+  }) async {
+    spy.calls++;
+    return null;
+  }
+
+  @override
+  Future<RecipeOffersResult> getOffers({
+    required String recipeId,
+    required List<String> ingredientNames,
+    required String zipCode,
+    String? chainId,
+  }) async {
+    spy.calls++;
+    return RecipeOffersResult(
+      recipeId: recipeId,
+      zipCode: zipCode,
+      checkedIngredientCount: 0,
+      matches: const [],
+      signature: '',
+    );
   }
 }

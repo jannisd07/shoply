@@ -1,4 +1,6 @@
-// Shared fakes for the offer slot and screen tests (Teil B, S1-S8).
+// Shared fakes for the offer slot and screen tests (Teil B, S1-S16).
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +10,10 @@ import 'package:go_router/go_router.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/store_detection_service.dart';
+import 'package:shoply/data/services/user_location_service.dart'
+    show RegionLookup;
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
@@ -17,6 +22,7 @@ import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
 import 'package:shoply/presentation/providers/store_choice_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
+import 'package:shoply/presentation/providers/weekly_offers_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
@@ -192,6 +198,8 @@ List<Override> offersOn({
   offerCategoryOfProvider.overrideWithValue((name) => 'dairy'),
   offerListNameProvider.overrideWith((ref, id) => listName),
   moduleEnabledProvider.overrideWith((ref, module) => true),
+  isOfflineProvider.overrideWithValue(false),
+  regularOffersProvider.overrideWith((ref) async => RegularOffers.none),
 ];
 
 /// Pumps [child] at `/` of a router that also knows Teil B's offer routes,
@@ -232,3 +240,100 @@ Future<GoRouter> pumpOffers(
   if (settle) await tester.pumpAndSettle();
   return router;
 }
+
+/// Pumps the full screen [screen] at `/` (a stand-in list at
+/// `/lists/:listId` and Teil B's offer routes next to it), so pushes and
+/// pops behave as in the app.
+Future<GoRouter> pumpOfferScreen(
+  WidgetTester tester,
+  Widget screen, {
+  List<Override> overrides = const [],
+  Locale locale = const Locale('de'),
+  bool settle = true,
+  List<RouteBase> routes = const [],
+}) async {
+  final router = GoRouter(
+    routes: [
+      GoRoute(path: '/', builder: (context, state) => screen),
+      ...routes,
+      ...offersRootRoutes,
+    ],
+  );
+  await tester.pumpWidget(
+    ProviderScope(
+      key: UniqueKey(),
+      overrides: overrides,
+      child: MaterialApp.router(
+        routerConfig: router,
+        builder: (context, child) => AvoToastHost(child: child!),
+        locale: locale,
+        supportedLocales: const [Locale('de'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        theme: ThemeData(platform: TargetPlatform.iOS),
+      ),
+    ),
+  );
+  if (settle) await tester.pumpAndSettle();
+  return router;
+}
+
+/// A region source without location services: records what was saved and
+/// answers "Standort verwenden" with [locateResult].
+class FakeRegionLookup implements RegionLookup {
+  FakeRegionLookup([this.region]);
+
+  Region? region;
+  LocateResult locateResult = const LocateResult(LocateOutcome.unavailable);
+  final saved = <String>[];
+  final located = <Region>[];
+  var removed = 0;
+  var locates = 0;
+  final _changes = StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get changes => _changes.stream;
+
+  @override
+  Future<Region?> getRegion({
+    bool allowPermissionPrompt = false,
+    bool forceRefresh = false,
+  }) async => region;
+
+  @override
+  Future<void> setManualZipCode(String zip) async {
+    saved.add(zip);
+    region = zip.isEmpty ? null : Region(zip: zip, source: RegionSource.manual);
+  }
+
+  @override
+  Future<LocateResult> locate() async {
+    locates++;
+    return locateResult;
+  }
+
+  @override
+  Future<void> saveLocatedRegion(Region next) async {
+    located.add(next);
+    region = next;
+  }
+
+  @override
+  Future<void> removeRegion() async {
+    removed++;
+    region = null;
+  }
+}
+
+/// Offers on with the real region controller over [lookup] (S11, S14).
+List<Override> offersWithRegion(
+  FakeRegionLookup lookup, {
+  bool remote = true,
+  String? account = testAccount,
+}) => [
+  offersRemoteEnabledProvider.overrideWithValue(remote),
+  offersAvailableProvider.overrideWithValue(remote),
+  offerAccountIdProvider.overrideWithValue(account),
+  regionLookupProvider.overrideWithValue(lookup),
+  moduleEnabledProvider.overrideWith((ref, module) => true),
+  isOfflineProvider.overrideWithValue(false),
+];

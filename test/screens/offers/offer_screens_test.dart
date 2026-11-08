@@ -549,6 +549,6 @@ void main() {
     expect(const CustomStoreChoice('Bio'), const CustomStoreChoice('Bio'));
     expect(const NoStoreChoice(), const NoStoreChoice());
     expect(storeInfoForChain('lidl')?.name, 'Lidl');
-    expect(OfferSurface.values, hasLength(3));
+    expect(OfferSurface.values, hasLength(5));
   });
 }

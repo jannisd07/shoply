@@ -191,10 +191,10 @@ void main() {
       expect(match().isStillValid, isTrue);
     });
 
-    test('there is no retailer image and no own percentage', () {
-      // ignore: deprecated_member_use_from_same_package
-      expect(match(price: 0.89, regularPrice: 1.19).imageUrl, isEmpty);
-      // ignore: deprecated_member_use_from_same_package
+    test('without the full offer the detail still gets one to open', () {
+      final offer = match(price: 0.89, regularPrice: 1.19).storeOffer;
+      expect(offer.price, 0.89);
+      expect(offer.regularPrice, 1.19);
     });
   });
 }

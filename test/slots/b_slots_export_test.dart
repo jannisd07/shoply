@@ -48,7 +48,35 @@ void main() {
     expect(providers, hasLength(3));
   });
 
-  test('RecipeOffersCard takes a recipe', () {
-    expect(RecipeOffersCard.new, isNotNull);
+  test('the recipe slots take a recipe, a list and an ingredient', () {
+    final recipe = Recipe(
+      id: 'r',
+      name: 'Shakshuka',
+      description: '',
+      imageUrl: '',
+      prepTimeMinutes: 5,
+      cookTimeMinutes: 20,
+      defaultServings: 2,
+      ingredients: const [Ingredient(name: 'Paprika', amount: 1, unit: '')],
+      instructions: const [],
+      authorId: 'a',
+      authorName: 'Avo',
+      createdAt: DateTime(2026, 11, 8),
+    );
+    final widgets = <Widget>[
+      RecipeOffersCard(recipe: recipe),
+      RecipeOffersCard(recipe: recipe, listId: 'l'),
+      RecipeOfferSummary(recipe: recipe, listId: 'l'),
+      IngredientOfferBadge(listId: 'l', ingredient: recipe.ingredients.first),
+    ];
+    expect(widgets, hasLength(4));
+    final Future<StoreChoice?> Function(
+      BuildContext, {
+      String? listId,
+      StorePickerOrigin from,
+    })
+    picker = openStorePicker;
+    expect(picker, isNotNull);
+    expect(StorePickerOrigin.values, contains(StorePickerOrigin.info));
   });
 }
