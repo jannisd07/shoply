@@ -314,7 +314,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
     final changes = bundleChanges(
       ref.watch(listChangesProvider(widget.listId)).valueOrNull ?? const [],
     );
-    final now = DateTime.now();
+    final now = ref.watch(listChangesClockProvider)();
 
     ListMember? ownerMember;
     for (final m in members) {

@@ -27,7 +27,7 @@ class ListActivitiesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userId = ref.watch(authUserIdProvider);
-    final now = DateTime.now();
+    final now = ref.watch(listChangesClockProvider)();
     final cutoff = now.subtract(const Duration(days: kListChangesDays));
     final all = ref.watch(listChangesProvider(listId)).valueOrNull ?? const [];
     final recent = [

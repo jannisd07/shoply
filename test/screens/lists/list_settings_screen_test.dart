@@ -22,7 +22,9 @@ import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 import '../../layout/layout_matrix.dart';
 import 'all_lists_fakes.dart';
 
-final _now = DateTime.now();
+// Mid-afternoon, so "12 to 44 min ago" stays on the same day at any hour
+// the tests run.
+final _now = DateTime(2026, 11, 8, 15);
 
 ShoppingListModel _list({String owner = 'u1', int items = 12}) =>
     ShoppingListModel(
@@ -80,6 +82,7 @@ List<Override> _overrides({
 }) => [
   allListsSourceProvider.overrideWithValue(AsyncData([list ?? _list()])),
   authUserIdProvider.overrideWithValue('u1'),
+  listChangesClockProvider.overrideWithValue(() => _now),
   isOfflineProvider.overrideWithValue(offline),
   listMembersProvider.overrideWith((ref, id) async => _members),
   listActionsProvider.overrideWithValue(actions ?? FakeListActions()),

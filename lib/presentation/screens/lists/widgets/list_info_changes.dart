@@ -24,6 +24,12 @@ const int kListInfoChangeCount = 5;
 /// "Alle Änderungen" goes this many days back (Konzept 11 §10.3).
 const int kListChangesDays = 30;
 
+/// The clock of Listen-Info and "Alle Änderungen" ("Heute", "vor 12 Min.");
+/// tests give it a fixed time.
+final listChangesClockProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+);
+
 /// Consecutive equal events of one person within this window are one row
 /// ("Lena hat 5 Artikel abgehakt").
 const Duration kListChangeBundle = Duration(minutes: 10);
