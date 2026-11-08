@@ -143,6 +143,8 @@ owner_of() {
       echo B ;;
     docs/*)
       echo GETEILT ;;
+    test/layout/screens/b/*)
+      echo B ;;
     test/layout/*)
       echo A ;;
     test/*)
