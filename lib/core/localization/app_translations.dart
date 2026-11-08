@@ -12,6 +12,9 @@ import 'package:shoply/core/localization/translations/recipes_detail.dart';
 import 'package:shoply/core/localization/translations/recipes_library.dart';
 import 'package:shoply/core/localization/translations/onboarding.dart';
 import 'package:shoply/core/localization/translations/auth.dart';
+import 'package:shoply/core/localization/translations/auth_flow.dart';
+import 'package:shoply/core/localization/translations/home_tips.dart';
+import 'package:shoply/core/localization/translations/onboarding_flow.dart';
 import 'package:shoply/core/localization/translations/profile.dart';
 import 'package:shoply/core/localization/translations/settings.dart';
 import 'package:shoply/core/localization/translations/paywall.dart';
@@ -64,6 +67,9 @@ class AppTranslations {
     ...recipesCookEn,
     ...onboardingEn,
     ...authEn,
+    ...onboardingFlowEn,
+    ...authFlowEn,
+    ...homeTipsEn,
     ...profileEn,
     ...settingsEn,
     ...paywallEn,
@@ -92,6 +98,9 @@ class AppTranslations {
     ...recipesCookDe,
     ...onboardingDe,
     ...authDe,
+    ...onboardingFlowDe,
+    ...authFlowDe,
+    ...homeTipsDe,
     ...profileDe,
     ...settingsDe,
     ...paywallDe,
