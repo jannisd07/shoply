@@ -7,8 +7,9 @@ final dietChallengeServiceProvider = Provider<DietChallengeService>((ref) {
   return DietChallengeService.instance;
 });
 
-/// Currently active challenges (auto-closes any that just passed their
-/// fixed target end date — see [DietChallengeService.getActiveChallenges]).
+/// Currently running challenges; fixed ones past their end are shown in the
+/// history instead (the server closes them on its schedule, see
+/// [DietChallengeService.getActiveChallenges]).
 final activeChallengesProvider = FutureProvider.autoDispose<List<DietChallenge>>((ref) async {
   if (ref.watch(authUserIdProvider) == null) return [];
   final service = ref.watch(dietChallengeServiceProvider);

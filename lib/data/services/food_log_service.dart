@@ -1,148 +1,201 @@
 import 'package:flutter/foundation.dart';
-import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+
+import 'package:shoply/data/models/calorie_day.dart';
+import 'package:shoply/data/models/food_log_entry.dart';
+import 'package:shoply/data/services/app_flags_service.dart';
 
 /// CRUD for `food_log_entries` — the day-by-day food diary.
+///
+/// Every method throws [CalorieDataException] on failure (also when signed
+/// out) instead of returning an empty result, so a network error never looks
+/// like "nothing logged" (concept 15 2.1). Rows carry a client-made id and
+/// are upserted, so a retry after a timeout never duplicates an entry.
 class FoodLogService {
   FoodLogService._();
   static final FoodLogService instance = FoodLogService._();
 
-  final _supabase = Supabase.instance.client;
+  static const _table = 'food_log_entries';
 
-  String? get _userId => _supabase.auth.currentUser?.id;
+  SupabaseClient get _supabase => Supabase.instance.client;
 
-  String _dateKey(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  bool get _schemaV2 =>
+      AppFlagsService.instance.current.isEnabled(calorieSchemaV2FlagKey, fallback: false);
 
-  Future<List<FoodLogEntry>> getEntriesForDate(DateTime date) async {
-    final userId = _userId;
-    if (userId == null) return [];
+  String _userId() {
+    final id = _supabase.auth.currentUser?.id;
+    if (id == null) throw const CalorieDataException(CalorieErrorCode.notSignedIn);
+    return id;
+  }
+
+  Future<T> _guard<T>(String what, Future<T> Function() run) async {
     try {
-      final response = await _supabase
-          .from('food_log_entries')
-          .select()
-          .eq('user_id', userId)
-          .eq('logged_date', _dateKey(date))
-          .order('created_at');
-      return (response as List)
-          .map((row) => FoodLogEntry.fromJson(row as Map<String, dynamic>))
-          .toList();
+      return await run();
     } catch (e) {
-      debugPrint('⚠️ [FoodLog] Failed to load entries: $e');
-      return [];
+      final error = CalorieDataException.from(e);
+      debugPrint('❌ [FoodLog] $what failed: ${error.code.name} ($e)');
+      throw error;
     }
   }
 
-  Future<FoodLogEntry> addEntry(FoodLogEntry entry) async {
-    final response = await _supabase
-        .from('food_log_entries')
-        .insert(entry.toInsertJson())
-        .select()
-        .single();
-    return FoodLogEntry.fromJson(response);
-  }
+  static List<FoodLogEntry> _rows(Object response) => (response as List)
+      .map((row) => FoodLogEntry.fromJson(row as Map<String, dynamic>))
+      .toList();
 
-  Future<void> deleteEntry(String id) async {
-    await _supabase.from('food_log_entries').delete().eq('id', id);
-  }
+  Future<List<FoodLogEntry>> getEntriesForDate(DateTime date) =>
+      getEntriesForDay(calorieDayKey(date));
 
-  /// Days (normalized to midnight) with at least one food entry in the last
-  /// [days] days — a single-column fetch, used for the logging streak.
-  Future<Set<DateTime>> getRecentLoggedDates({int days = 60}) async {
-    final userId = _userId;
-    if (userId == null) return {};
-    final since = DateTime.now().subtract(Duration(days: days));
-    try {
-      final response = await _supabase
-          .from('food_log_entries')
-          .select('logged_date')
-          .eq('user_id', userId)
-          .gte('logged_date', _dateKey(since));
-      return (response as List)
-          .map((row) {
-            final d = DateTime.parse((row as Map)['logged_date'] as String);
-            return DateTime(d.year, d.month, d.day);
-          })
-          .toSet();
-    } catch (e) {
-      debugPrint('⚠️ [FoodLog] Failed to load logged dates: $e');
-      return {};
+  Future<List<FoodLogEntry>> getEntriesForDay(String dateKey) => _guard('Loading $dateKey', () async {
+        final response = await _supabase
+            .from(_table)
+            .select()
+            .eq('user_id', _userId())
+            .eq('logged_date', dateKey)
+            .order('created_at');
+        return _rows(response);
+      });
+
+  /// Inserts or replaces [entry] by id. An empty id gets a new one.
+  Future<FoodLogEntry> upsertEntry(FoodLogEntry entry) => _guard('Saving entry', () async {
+        final userId = _userId();
+        final row = FoodLogEntry(
+          id: entry.id.isEmpty ? const Uuid().v4() : entry.id,
+          userId: entry.userId.isEmpty ? userId : entry.userId,
+          loggedDate: entry.loggedDate,
+          mealType: entry.mealType,
+          origin: entry.origin,
+          sourceRecipeId: entry.sourceRecipeId,
+          foodName: entry.foodName,
+          brand: entry.brand,
+          quantity: entry.quantity,
+          unit: entry.unit,
+          calories: entry.calories,
+          proteinG: entry.proteinG,
+          carbsG: entry.carbsG,
+          fatG: entry.fatG,
+          barcode: entry.barcode,
+          photoUrl: entry.photoUrl,
+          photoPath: entry.photoPath,
+          estimated: entry.estimated,
+          confidence: entry.confidence,
+          healthUuid: entry.healthUuid,
+          loggedTime: entry.loggedTime,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+        );
+        final response = await _supabase
+            .from(_table)
+            .upsert(row.toUpsertJson(schemaV2: _schemaV2), onConflict: 'id')
+            .select()
+            .single();
+        return FoodLogEntry.fromJson(response);
+      });
+
+  /// Direct save for callers that do not go through the diary queue yet
+  /// (Avo, old sheets).
+  Future<FoodLogEntry> addEntry(FoodLogEntry entry) => upsertEntry(entry);
+
+  Future<void> deleteEntry(String id) => _guard('Deleting entry', () async {
+        await _supabase.from(_table).delete().eq('user_id', _userId()).eq('id', id);
+      });
+
+  /// Per-day sums for [startKey]..[endKey] (inclusive), fetching only the
+  /// number columns (Inv. 4.23). Days without entries are absent (unknown).
+  Future<Map<String, DailyNutritionTotals>> getDailyTotals(String startKey, String endKey) =>
+      _guard('Loading totals', () async {
+        final response = await _supabase
+            .from(_table)
+            .select('logged_date, calories, protein_g, carbs_g, fat_g')
+            .eq('user_id', _userId())
+            .gte('logged_date', startKey)
+            .lte('logged_date', endKey);
+        return sumByDay((response as List).cast<Map<String, dynamic>>());
+      });
+
+  /// Groups number-only rows by `logged_date`.
+  @visibleForTesting
+  static Map<String, DailyNutritionTotals> sumByDay(List<Map<String, dynamic>> rows) {
+    final sums = <String, List<num>>{};
+    for (final row in rows) {
+      final key = (row['logged_date'] as String).substring(0, 10);
+      final s = sums.putIfAbsent(key, () => [0, 0, 0, 0]);
+      s[0] += (row['calories'] as num?) ?? 0;
+      s[1] += (row['protein_g'] as num?) ?? 0;
+      s[2] += (row['carbs_g'] as num?) ?? 0;
+      s[3] += (row['fat_g'] as num?) ?? 0;
     }
+    return sums.map((day, s) => MapEntry(
+          day,
+          DailyNutritionTotals(
+            calories: s[0].round(),
+            proteinG: s[1].toDouble(),
+            carbsG: s[2].toDouble(),
+            fatG: s[3].toDouble(),
+          ),
+        ));
   }
 
-  /// Recipe ids logged as meals (source == 'recipe') in the last [days]
-  /// days — used to avoid re-suggesting a dinner the user just cooked.
-  Future<Set<String>> getRecentSourceRecipeIds({int days = 5}) async {
-    final userId = _userId;
-    if (userId == null) return {};
-    final since = DateTime.now().subtract(Duration(days: days));
-    try {
-      final response = await _supabase
-          .from('food_log_entries')
-          .select('source_recipe_id')
-          .eq('user_id', userId)
-          .eq('source', 'recipe')
-          .gte('logged_date', _dateKey(since));
-      return (response as List)
-          .map((row) => (row as Map)['source_recipe_id'] as String?)
-          .whereType<String>()
-          .toSet();
-    } catch (e) {
-      debugPrint('⚠️ [FoodLog] Failed to load recent recipe ids: $e');
-      return {};
-    }
-  }
-
-  /// Meals logged from a recipe (`source == 'recipe'`) in the last 7 days —
-  /// same window as [getWeeklyTotals], used to count how many of the week's
-  /// cooked meals were high-protein.
-  Future<List<FoodLogEntry>> getWeeklyRecipeSourcedEntries() async {
-    final userId = _userId;
-    if (userId == null) return [];
-    final today = DateTime.now();
-    final weekAgo = today.subtract(const Duration(days: 6));
-    try {
-      final response = await _supabase
-          .from('food_log_entries')
-          .select()
-          .eq('user_id', userId)
-          .eq('source', 'recipe')
-          .gte('logged_date', _dateKey(weekAgo))
-          .lte('logged_date', _dateKey(today));
-      return (response as List)
-          .map((row) => FoodLogEntry.fromJson(row as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      debugPrint('⚠️ [FoodLog] Failed to load weekly recipe-sourced entries: $e');
-      return [];
-    }
-  }
-
-  /// Last 7 days of daily totals, oldest first — for a weekly summary.
+  /// Last 7 days of daily totals (keys at local midnight) — legacy shape for
+  /// the old weekly strip.
   Future<Map<DateTime, DailyNutritionTotals>> getWeeklyTotals() async {
-    final userId = _userId;
-    if (userId == null) return {};
-    final today = DateTime.now();
-    final weekAgo = today.subtract(const Duration(days: 6));
-    try {
-      final response = await _supabase
-          .from('food_log_entries')
-          .select()
-          .eq('user_id', userId)
-          .gte('logged_date', _dateKey(weekAgo))
-          .lte('logged_date', _dateKey(today));
-      final entries = (response as List)
-          .map((row) => FoodLogEntry.fromJson(row as Map<String, dynamic>))
-          .toList();
-      final byDay = <DateTime, List<FoodLogEntry>>{};
-      for (final e in entries) {
-        final key = DateTime(e.loggedDate.year, e.loggedDate.month, e.loggedDate.day);
-        (byDay[key] ??= []).add(e);
-      }
-      return byDay.map((day, list) => MapEntry(day, DailyNutritionTotals.fromEntries(list)));
-    } catch (e) {
-      debugPrint('⚠️ [FoodLog] Failed to load weekly totals: $e');
-      return {};
-    }
+    final todayKey = calorieDayKey(DateTime.now());
+    final totals = await getDailyTotals(shiftCalorieDayKey(todayKey, -6), todayKey);
+    return totals.map((key, t) => MapEntry(parseCalorieDayKey(key), t));
   }
+
+  /// Days (local midnight) with at least one entry in the last [days] days —
+  /// a single-column fetch, used for the logging streak.
+  Future<Set<DateTime>> getRecentLoggedDates({int days = 60}) => _guard('Loading logged dates', () async {
+        final since = shiftCalorieDayKey(calorieDayKey(DateTime.now()), -days);
+        final response = await _supabase
+            .from(_table)
+            .select('logged_date')
+            .eq('user_id', _userId())
+            .gte('logged_date', since);
+        return (response as List)
+            .map((row) => parseCalorieDayKey(((row as Map)['logged_date'] as String).substring(0, 10)))
+            .toSet();
+      });
+
+  /// Recipe ids logged as meals in the last [days] days — used to avoid
+  /// re-suggesting a dinner the user just cooked.
+  Future<Set<String>> getRecentSourceRecipeIds({int days = 5}) => _guard('Loading recent recipes', () async {
+        final since = shiftCalorieDayKey(calorieDayKey(DateTime.now()), -days);
+        final response = await _supabase
+            .from(_table)
+            .select('source_recipe_id')
+            .eq('user_id', _userId())
+            .eq('source', 'recipe')
+            .gte('logged_date', since);
+        return (response as List)
+            .map((row) => (row as Map)['source_recipe_id'] as String?)
+            .whereType<String>()
+            .toSet();
+      });
+
+  /// Meals logged from a recipe in the last 7 days — counts the week's
+  /// high-protein cooked meals.
+  Future<List<FoodLogEntry>> getWeeklyRecipeSourcedEntries() => _guard('Loading recipe meals', () async {
+        final todayKey = calorieDayKey(DateTime.now());
+        final response = await _supabase
+            .from(_table)
+            .select()
+            .eq('user_id', _userId())
+            .eq('source', 'recipe')
+            .gte('logged_date', shiftCalorieDayKey(todayKey, -6))
+            .lte('logged_date', todayKey);
+        return _rows(response);
+      });
+
+  /// Newest entries for "Zuletzt gegessen" (the caller removes duplicates).
+  Future<List<FoodLogEntry>> getRecentEntries({int limit = 60}) => _guard('Loading recent entries', () async {
+        final response = await _supabase
+            .from(_table)
+            .select()
+            .eq('user_id', _userId())
+            .order('created_at', ascending: false)
+            .limit(limit);
+        return _rows(response);
+      });
 }

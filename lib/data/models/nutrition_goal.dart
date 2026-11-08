@@ -48,6 +48,29 @@ extension ActivityLevelX on ActivityLevel {
       };
 }
 
+/// Tempo for losing or gaining weight (replaces the old `Slider` and the
+/// "Zeitraum" in weeks; `timeline_weeks` stays readable).
+enum GoalPace { gemuetlich, normal, zuegig }
+
+extension GoalPaceX on GoalPace {
+  String get dbValue => name;
+
+  static GoalPace? fromDb(String? value) => switch (value) {
+        'gemuetlich' => GoalPace.gemuetlich,
+        'normal' => GoalPace.normal,
+        'zuegig' => GoalPace.zuegig,
+        _ => null,
+      };
+
+  /// kg per week: losing 0.25 / 0.5 / 0.75, gaining 0.1 / 0.25 / 0.4
+  /// (concept 15 3.14). 0 for "maintain"/"custom".
+  double kgPerWeek(NutritionGoalType goal) => switch (goal) {
+        NutritionGoalType.loseWeight => const [0.25, 0.5, 0.75][index],
+        NutritionGoalType.gainMuscle => const [0.1, 0.25, 0.4][index],
+        _ => 0,
+      };
+}
+
 /// A user's calorie/macro targets and the inputs used to calculate them.
 /// One row per user (`user_id` is the primary key on the server).
 class NutritionGoal extends Equatable {
@@ -64,6 +87,10 @@ class NutritionGoal extends Equatable {
   final int? carbsTargetG;
   final int? fatTargetG;
   final int waterTargetMl;
+
+  /// "Verbrauch durch Workouts gutschreiben" (default off, concept 15 2.2).
+  final bool creditWorkouts;
+  final GoalPace? pace;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -81,6 +108,8 @@ class NutritionGoal extends Equatable {
     this.carbsTargetG,
     this.fatTargetG,
     this.waterTargetMl = 2000,
+    this.creditWorkouts = false,
+    this.pace,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -104,12 +133,16 @@ class NutritionGoal extends Equatable {
       carbsTargetG: json['carbs_target_g'] as int?,
       fatTargetG: json['fat_target_g'] as int?,
       waterTargetMl: json['water_target_ml'] as int? ?? 2000,
+      creditWorkouts: json['credit_workouts'] as bool? ?? false,
+      pace: GoalPaceX.fromDb(json['pace'] as String?),
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
 
-  Map<String, dynamic> toUpsertJson() {
+  /// Row for `nutrition_goals`. The B6 columns (`credit_workouts`, `pace`)
+  /// are only sent once the migration is applied ([schemaV2]).
+  Map<String, dynamic> toUpsertJson({bool schemaV2 = false}) {
     return {
       'user_id': userId,
       'calorie_tracking_enabled': calorieTrackingEnabled,
@@ -124,6 +157,10 @@ class NutritionGoal extends Equatable {
       'carbs_target_g': carbsTargetG,
       'fat_target_g': fatTargetG,
       'water_target_ml': waterTargetMl,
+      if (schemaV2) ...{
+        'credit_workouts': creditWorkouts,
+        'pace': pace?.dbValue,
+      },
     };
   }
 
@@ -140,6 +177,11 @@ class NutritionGoal extends Equatable {
     int? carbsTargetG,
     int? fatTargetG,
     int? waterTargetMl,
+    bool? creditWorkouts,
+    GoalPace? pace,
+    bool clearTargetWeight = false,
+    bool clearTimeline = false,
+    bool clearPace = false,
   }) {
     return NutritionGoal(
       userId: userId,
@@ -147,14 +189,16 @@ class NutritionGoal extends Equatable {
       goalType: goalType ?? this.goalType,
       activityLevel: activityLevel ?? this.activityLevel,
       currentWeightKg: currentWeightKg ?? this.currentWeightKg,
-      targetWeightKg: targetWeightKg ?? this.targetWeightKg,
+      targetWeightKg: clearTargetWeight ? null : (targetWeightKg ?? this.targetWeightKg),
       heightCm: heightCm ?? this.heightCm,
-      timelineWeeks: timelineWeeks ?? this.timelineWeeks,
+      timelineWeeks: clearTimeline ? null : (timelineWeeks ?? this.timelineWeeks),
       dailyCalorieTarget: dailyCalorieTarget ?? this.dailyCalorieTarget,
       proteinTargetG: proteinTargetG ?? this.proteinTargetG,
       carbsTargetG: carbsTargetG ?? this.carbsTargetG,
       fatTargetG: fatTargetG ?? this.fatTargetG,
       waterTargetMl: waterTargetMl ?? this.waterTargetMl,
+      creditWorkouts: creditWorkouts ?? this.creditWorkouts,
+      pace: clearPace ? null : (pace ?? this.pace),
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );
@@ -175,5 +219,7 @@ class NutritionGoal extends Equatable {
         carbsTargetG,
         fatTargetG,
         waterTargetMl,
+        creditWorkouts,
+        pace,
       ];
 }

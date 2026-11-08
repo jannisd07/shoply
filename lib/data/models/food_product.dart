@@ -13,6 +13,14 @@ class FoodProduct extends Equatable {
   final double? carbsPer100g;
   final double? fatPer100g;
 
+  /// One serving / one package in grams, when Open Food Facts knows them
+  /// ("Portion · 150 g", "Packung · 500 g").
+  final double? servingG;
+  final double? packageG;
+
+  /// Open Food Facts had no name ([name] then holds a placeholder).
+  final bool hasName;
+
   const FoodProduct({
     required this.barcode,
     required this.name,
@@ -22,13 +30,19 @@ class FoodProduct extends Equatable {
     this.proteinPer100g,
     this.carbsPer100g,
     this.fatPer100g,
+    this.servingG,
+    this.packageG,
+    this.hasName = true,
   });
 
   bool get hasNutrition => caloriesPer100g != null;
 
-  /// Scales per-100g nutrition to a given weight in grams.
-  int caloriesFor(double grams) =>
-      caloriesPer100g == null ? 0 : ((caloriesPer100g! * grams) / 100).round();
+  /// Scales per-100g nutrition to a given weight in grams (0 without data;
+  /// new code uses [caloriesForOrNull] so a missing value is never 0 kcal).
+  int caloriesFor(double grams) => caloriesForOrNull(grams) ?? 0;
+
+  int? caloriesForOrNull(double grams) =>
+      caloriesPer100g == null ? null : ((caloriesPer100g! * grams) / 100).round();
   double? _scale(double? per100g, double grams) =>
       per100g == null ? null : (per100g * grams) / 100;
   double? proteinFor(double grams) => _scale(proteinPer100g, grams);
@@ -45,10 +59,20 @@ class FoodProduct extends Equatable {
     return s.split(',').first.trim();
   }
 
-  static double? _num(Map<String, dynamic>? nutriments, String key) {
-    final v = nutriments?[key];
-    if (v == null) return null;
-    return (v as num).toDouble();
+  /// Open Food Facts sends numbers as numbers or strings ("63", "n/a");
+  /// anything unreadable is "unknown", never a crash (old `as num` emptied
+  /// the whole search).
+  static double? _toDouble(Object? v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v.trim().replaceAll(',', '.'));
+    return null;
+  }
+
+  static double? _num(Map<String, dynamic>? nutriments, String key) => _toDouble(nutriments?[key]);
+
+  static double? _grams(Object? v) {
+    final d = _toDouble(v);
+    return d != null && d > 0 ? d : null;
   }
 
   /// Parses one hit from the search-a-licious `/search` endpoint or one
@@ -60,12 +84,15 @@ class FoodProduct extends Equatable {
     return FoodProduct(
       barcode: json['code'] as String? ?? '',
       name: (name == null || name.isEmpty) ? 'Unknown product' : name,
+      hasName: name != null && name.isNotEmpty,
       brand: _brandString(json['brands']),
       imageUrl: json['image_front_small_url'] as String?,
       caloriesPer100g: _num(nutriments, 'energy-kcal_100g')?.round(),
       proteinPer100g: _num(nutriments, 'proteins_100g'),
       carbsPer100g: _num(nutriments, 'carbohydrates_100g'),
       fatPer100g: _num(nutriments, 'fat_100g'),
+      servingG: _grams(json['serving_quantity']),
+      packageG: _grams(json['product_quantity']),
     );
   }
 
@@ -79,5 +106,8 @@ class FoodProduct extends Equatable {
         proteinPer100g,
         carbsPer100g,
         fatPer100g,
+        servingG,
+        packageG,
+        hasName,
       ];
 }

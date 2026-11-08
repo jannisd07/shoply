@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 
-/// Which built-in diet challenge a row tracks. `custom` exists in the DB
-/// check constraint for future use but has no dedicated UI yet.
+/// Which diet challenge a row tracks. `custom` challenges carry their own
+/// title, daily question and optional duration (B6 columns).
 enum ChallengeType { fasting16_8, noSugar30, custom }
 
 extension ChallengeTypeX on ChallengeType {
@@ -60,7 +60,13 @@ class DietChallenge extends Equatable {
 
   /// `'yyyy-MM-dd' -> kept?`. A day with no entry is unmarked (not assumed
   /// success or failure) — only rendered as "missed" once it's in the past.
+  /// Rows of `challenge_checkins` win over the old `daily_checkins` jsonb.
   final Map<String, bool> dailyCheckins;
+
+  /// Own challenges only: name, daily question, length in days (null = no end).
+  final String? title;
+  final String? question;
+  final int? durationDays;
 
   const DietChallenge({
     required this.id,
@@ -72,10 +78,21 @@ class DietChallenge extends Equatable {
     this.completedAt,
     required this.createdAt,
     this.dailyCheckins = const {},
+    this.title,
+    this.question,
+    this.durationDays,
   });
 
   factory DietChallenge.fromJson(Map<String, dynamic> json) {
     final rawCheckins = json['daily_checkins'] as Map<String, dynamic>? ?? const {};
+    final checkins = <String, bool>{
+      for (final e in rawCheckins.entries)
+        if (e.value is bool) e.key: e.value as bool,
+    };
+    for (final row in (json['challenge_checkins'] as List?) ?? const []) {
+      final map = row as Map;
+      checkins[(map['date'] as String).substring(0, 10)] = map['kept'] as bool;
+    }
     return DietChallenge(
       id: json['id'] as String,
       userId: json['user_id'] as String,
@@ -87,19 +104,35 @@ class DietChallenge extends Equatable {
       completedAt:
           json['completed_at'] != null ? DateTime.parse(json['completed_at'] as String) : null,
       createdAt: DateTime.parse(json['created_at'] as String),
-      dailyCheckins: rawCheckins.map((key, value) => MapEntry(key, value as bool)),
+      dailyCheckins: checkins,
+      title: json['title'] as String?,
+      question: json['question'] as String?,
+      durationDays: (json['duration_days'] as num?)?.toInt(),
     );
   }
 
-  Map<String, dynamic> toInsertJson() {
+  /// Row for `nutrition_challenges`; the custom fields only exist after the
+  /// B6 migration ([schemaV2]).
+  Map<String, dynamic> toInsertJson({bool schemaV2 = false}) {
     return {
       'user_id': userId,
       'challenge_type': type.dbValue,
       'status': status.dbValue,
       'started_at': startedAt.toIso8601String(),
       'target_end_at': targetEndAt?.toIso8601String(),
+      if (schemaV2) ...{
+        'title': title,
+        'question': question,
+        'duration_days': durationDays,
+      },
     };
   }
+
+  /// How the app shows the row: a fixed challenge past its end counts as
+  /// completed (the server closes it on its schedule, not on read).
+  DietChallenge asDisplayed() => isPastTargetEnd
+      ? copyWith(status: ChallengeStatus.completed, completedAt: targetEndAt)
+      : this;
 
   bool get isCheckedInToday => dailyCheckins.containsKey(challengeDateKey(DateTime.now()));
 
@@ -136,7 +169,7 @@ class DietChallenge extends Equatable {
       DateTime.now().difference(DateTime(startedAt.year, startedAt.month, startedAt.day)).inDays +
       1;
 
-  int? get fixedDurationDays => type.fixedDurationDays;
+  int? get fixedDurationDays => type.fixedDurationDays ?? durationDays;
 
   /// Days remaining until a fixed-length challenge's target end (null for
   /// open-ended challenges like 16:8, or once the challenge is no longer
@@ -175,10 +208,25 @@ class DietChallenge extends Equatable {
       completedAt: completedAt ?? this.completedAt,
       createdAt: createdAt,
       dailyCheckins: dailyCheckins ?? this.dailyCheckins,
+      title: title,
+      question: question,
+      durationDays: durationDays,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [id, userId, type, status, startedAt, targetEndAt, completedAt, createdAt, dailyCheckins];
+  List<Object?> get props => [
+        id,
+        userId,
+        type,
+        status,
+        startedAt,
+        targetEndAt,
+        completedAt,
+        createdAt,
+        dailyCheckins,
+        title,
+        question,
+        durationDays,
+      ];
 }
