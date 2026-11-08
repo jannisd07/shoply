@@ -9,8 +9,4 @@ class Env {
   // Get these from Google Cloud Console
   static const String googleClientId = 'YOUR-IOS-CLIENT-ID.apps.googleusercontent.com';
   static const String googleWebClientId = 'YOUR-WEB-CLIENT-ID.apps.googleusercontent.com';
-  
-  // Google Gemini AI API Key
-  // Get this from Google AI Studio (https://makersuite.google.com/app/apikey)
-  static const String geminiApiKey = 'your-gemini-api-key';
 }
