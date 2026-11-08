@@ -74,8 +74,8 @@ OfferSummary? summarizeListOffers({
     final offer = offersByItemId[item.id];
     if (offer == null || !offer.isFromChain(chainId)) continue;
     matched++;
-    savings += offerSavingsCents(offer, quantity: item.quantity, unit: item.unit) ??
-        0;
+    savings +=
+        offerSavingsCents(offer, quantity: item.quantity, unit: item.unit) ?? 0;
   }
   if (matched == 0) return null;
   return OfferSummary(
@@ -135,38 +135,89 @@ double packCount(double quantity, String? unit) {
 }
 
 const Set<String> _pieceUnits = {
-  'x', 'stk', 'stk.', 'st', 'st.', 'pcs', 'pc', 'piece', 'pieces', 'stück',
+  'x',
+  'stk',
+  'stk.',
+  'st',
+  'st.',
+  'pcs',
+  'pc',
+  'piece',
+  'pieces',
+  'stück',
 };
 
-/// The sentence for [summary] in [languageCode] ('de' or 'en'), exactly in
-/// the wording of Kap. 12 rule 3.
-String formatOfferSummary(OfferSummary summary, String languageCode) {
-  final singular = summary.total == 1;
-  final cents = summary.savingsCents;
-  final params = {
+/// The mandatory sentence of [OfferSummary] in its three shapes (Kap. 12
+/// rule 3, `angebote.md` 3.3): [head] and [detail] for the two lines of the
+/// D2 savings card, [sentence] for VoiceOver and every one-line place.
+@immutable
+class OfferSummaryText {
+  const OfferSummaryText({
+    required this.head,
+    required this.detail,
+    required this.sentence,
+  });
+
+  /// "4 von 11 Artikeln diese Woche bei Lidl im Angebot".
+  final String head;
+
+  /// "ca. 3,20 € gespart · in deiner Region · Preise laut Händler"; without
+  /// savings "in deiner Region · Preise laut Händler".
+  final String detail;
+
+  /// "4 von 11 Artikeln diese Woche bei Lidl im Angebot, ca. 3,20 € gespart,
+  /// in deiner Region".
+  final String sentence;
+}
+
+/// The texts of [summary] in [languageCode] ('de' or 'en'). This is the
+/// only place that puts the sentence together.
+OfferSummaryText offerSummaryText(OfferSummary summary, String languageCode) {
+  String t(String key, Map<String, String> params) =>
+      AppTranslations.get(key, languageCode, params: params);
+  final counts = {
     'matched': '${summary.matched}',
     'total': '${summary.total}',
     'store': summary.storeName,
   };
+  final head = summary.total == 1
+      ? t('offer_summary_head_one', counts)
+      : t('offer_summary_head_other', counts);
+  final area = t('offer_in_your_area', const {});
+  final prices = t('offer_retailer_prices', const {});
+  final cents = summary.savingsCents;
   if (cents == null) {
-    return singular
-        ? AppTranslations.get('offer_summary_one', languageCode, params: params)
-        : AppTranslations.get('offer_summary', languageCode, params: params);
+    return OfferSummaryText(
+      head: head,
+      detail: '$area · $prices',
+      sentence: t('offer_summary_sentence_no_savings', {'head': head}),
+    );
   }
-  params['amount'] = formatEuroAmount(cents, languageCode);
-  return singular
-      ? AppTranslations.get('offer_summary_one_saved', languageCode,
-          params: params)
-      : AppTranslations.get('offer_summary_saved', languageCode,
-          params: params);
+  final amount = formatEuroCents(cents, languageCode);
+  return OfferSummaryText(
+    head: head,
+    detail: '${t('offer_summary_saved', {'amount': amount})} · $area · $prices',
+    sentence: t('offer_summary_sentence', {'head': head, 'amount': amount}),
+  );
 }
 
+/// The sentence for [summary] in [languageCode] ('de' or 'en'), exactly in
+/// the wording of Kap. 12 rule 3 ([OfferSummaryText.sentence]).
+String formatOfferSummary(OfferSummary summary, String languageCode) =>
+    offerSummaryText(summary, languageCode).sentence;
+
 /// "3,20" (German) or "3.20" (English) for [cents], without the currency
-/// sign, which the sentence places.
+/// sign.
 String formatEuroAmount(int cents, String languageCode) {
   final euros = cents ~/ 100;
   final rest = (cents % 100).toString().padLeft(2, '0');
   return languageCode == 'de' ? '$euros,$rest' : '$euros.$rest';
+}
+
+/// "3,20 €" (German) or "€3.20" (English) for [cents].
+String formatEuroCents(int cents, String languageCode) {
+  final amount = formatEuroAmount(cents, languageCode);
+  return languageCode == 'de' ? '$amount €' : '€$amount';
 }
 
 typedef _Amount = ({double amount, String unit});

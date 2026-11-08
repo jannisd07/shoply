@@ -502,8 +502,9 @@ class _DealCard extends StatelessWidget {
 }
 
 /// Bottom sheet to pick which list a browsed deal should be added to,
-/// creating a brand-new item (unlike `showItemOfferSheet`, which updates an
-/// item that already exists on a list).
+/// creating a brand-new item (unlike the offer detail `/offers/offer/:id`,
+/// which takes the price for an item already on a list). Replaced by the
+/// menu "Auf welche Liste?" with S10.
 class _AddDealSheet extends ConsumerStatefulWidget {
   final _DealDisplay display;
   const _AddDealSheet({required this.display});

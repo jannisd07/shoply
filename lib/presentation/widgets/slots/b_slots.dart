@@ -14,6 +14,8 @@ export 'package:shoply/data/services/avo_nudge_service.dart'
     show RestockSuggestion;
 export 'package:shoply/presentation/providers/list_offer_prefs_provider.dart'
     show offersHiddenForListProvider, setOffersHiddenForList;
+export 'package:shoply/presentation/providers/store_choice_provider.dart'
+    show ChainStoreChoice, CustomStoreChoice, NoStoreChoice, StoreChoice;
 export 'package:shoply/presentation/providers/store_for_list_provider.dart'
     show storeForListProvider;
 export 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart'
@@ -30,6 +32,11 @@ export 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.
     show OfferSuggestionsBar;
 export 'package:shoply/presentation/screens/lists/widgets/store_chip.dart'
     show StoreChip;
+// "Markt wählen" (S2) for the list info row "Markt" and "Neue Liste".
+export 'package:shoply/presentation/screens/offers/offer_paths.dart'
+    show StorePickerOrigin;
+export 'package:shoply/presentation/screens/offers/store_menu.dart'
+    show openStorePicker;
 export 'package:shoply/presentation/state/avo_nudge_provider.dart'
     show restockSuggestionsProvider;
 export 'package:shoply/presentation/widgets/article_image.dart'

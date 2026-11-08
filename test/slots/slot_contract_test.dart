@@ -185,9 +185,7 @@ void main() {
       expect(find.text('Weidemilch 1,5 %'), findsOneWidget);
     });
 
-    testWidgets('adds the tapped offer to its list', (
-      tester,
-    ) async {
+    testWidgets('adds the tapped offer to its list', (tester) async {
       final spy = _OfferSourceSpy(offer);
       final items = _RecordingItemsNotifier(listId);
       await _pumpSlot(
@@ -204,24 +202,25 @@ void main() {
       await tester.pump();
 
       expect(items.added, hasLength(1));
-      expect(items.added.single.name, 'Weidemilch 1,5 %');
+      expect(
+        items.added.single.name,
+        'milch',
+        reason: 'the item keeps the name as typed, not the product name',
+      );
       expect(items.added.single.price, 0.99);
       expect(items.added.single.retailer, 'Lidl');
       expect(
         items.added.single.autoParse,
         isFalse,
-        reason: 'the offer already has the real product name',
+        reason: 'the typed text was parsed already',
       );
     });
   });
 
-  group('shells until S4 render nothing, with offers on too', () {
-    List<Override> offersOn() => [offersAvailableProvider.overrideWithValue(true)];
-
-    testWidgets('StoreChip', (tester) async {
-      await _pumpSlot(tester, const StoreChip(listId: listId), overrides: offersOn());
-      _expectEmpty(tester, find.byType(StoreChip));
-    });
+  group('without offers of the list the item slots render nothing', () {
+    List<Override> offersOn() => [
+      offersAvailableProvider.overrideWithValue(true),
+    ];
 
     testWidgets('ItemOfferBadge, also compact', (tester) async {
       await _pumpSlot(
@@ -256,6 +255,21 @@ void main() {
       );
       _expectEmpty(tester, find.byType(ListOfferCountBadge));
     });
+  });
+
+  testWidgets('StoreChip is core: "Choose store" with offers off too', (
+    tester,
+  ) async {
+    await _pumpSlot(
+      tester,
+      const StoreChip(listId: listId),
+      overrides: [
+        offersAvailableProvider.overrideWithValue(false),
+        storeGuessForListProvider.overrideWith((ref, id) async => null),
+      ],
+    );
+    expect(find.text('Choose store'), findsOneWidget);
+    expect(find.bySemanticsLabel('Choose store'), findsOneWidget);
   });
 
   testWidgets('OffersSetupStep moves on by itself, exactly once', (
@@ -311,9 +325,7 @@ void main() {
       },
     );
 
-    testWidgets('keeps the lists hidden in an earlier session', (
-      tester,
-    ) async {
+    testWidgets('keeps the lists hidden in an earlier session', (tester) async {
       SharedPreferences.setMockInitialValues({
         hiddenOfferListsPrefsKey: ['old-list'],
       });
@@ -374,7 +386,11 @@ void main() {
 
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      expect(find.text('open'), findsOneWidget, reason: 'no confirmation of its own');
+      expect(
+        find.text('open'),
+        findsOneWidget,
+        reason: 'no confirmation of its own',
+      );
       expect(_LauncherResult.last, isTrue);
     });
   });
@@ -497,7 +513,8 @@ Future<void> _pumpLauncher(
           body: Builder(
             builder: (context) => Center(
               child: TextButton(
-                onPressed: () async => _LauncherResult.last = await open(context),
+                onPressed: () async =>
+                    _LauncherResult.last = await open(context),
                 child: const Text('open'),
               ),
             ),
@@ -542,7 +559,10 @@ class _OfferSourceSpy {
   final StoreOffer offer;
   int calls = 0;
 
+  /// The kill switch is known to be on, so only [offersAvailableProvider]
+  /// (module) decides.
   List<Override> get overrides => [
+    offersRemoteEnabledProvider.overrideWithValue(true),
     regionLoadedProvider.overrideWithValue(true),
     regionProvider.overrideWithValue(
       const Region(zip: '80331', source: RegionSource.manual),
