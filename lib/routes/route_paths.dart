@@ -48,6 +48,10 @@ abstract final class RoutePaths {
   /// Registered with A9.
   static const pro = '/pro';
 
+  /// The paywall for one feature (`/pro?feature=<id>`).
+  static String proFor(String feature) =>
+      Uri(path: pro, queryParameters: {'feature': feature}).toString();
+
   // --- Teil B roots -----------------------------------------------------------
   /// Tab "Avo" from S2 on (before that a full-screen route).
   static const avo = '/avo';
