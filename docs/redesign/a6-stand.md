@@ -41,7 +41,5 @@ Errors/Warnings). Im Simulator (iPhone 17) angesehen: Tab, Detail, Kochmodus.
 
 ## Für Teil B
 
-- `allergen_matcher.dart`: Käse und Milchprodukte (Feta, Halloumi, Gouda, Emmentaler, Cheddar, Camembert, Brie,
-  Pecorino, Gorgonzola, Burrata, Ghee, Skyr, Paneer, Frischkäse, Buttermilch, Crème fraîche) unter `milk`/`lactose`;
-  heute ergänzt das Detail sie lokal.
-- Slots `RecipeOfferSummary(recipe:, listId:)`, `IngredientOfferBadge(listId:, ingredient:)`; `addRecipeToPlan`.
+- Slots `RecipeOfferSummary(recipe:, listId:)`, `IngredientOfferBadge(listId:, ingredient:)` (kommen mit Angebote S15);
+  `addRecipeToPlan` (kommt mit B7). Käse im `allergen_matcher.dart` ist erledigt (`0e1d0e8`, `88f558e`).
