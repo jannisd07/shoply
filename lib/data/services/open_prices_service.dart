@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/utils/request_throttle.dart';
 import 'package:shoply/data/models/shelf_price.dart';
+import 'package:shoply/data/services/open_food_facts_service.dart'
+    show OffRateLimits, offUserAgent;
 
 /// Regular shelf prices from Open Food Facts' **Open Prices** database.
 ///
@@ -35,10 +37,6 @@ class OpenPricesService {
   static const _searchUrl = 'https://search.openfoodfacts.org/search';
   static const _pricesUrl = 'https://prices.openfoodfacts.org/api/v1/prices';
 
-  /// Open Food Facts asks every client to identify itself; anonymous or
-  /// browser-spoofing agents get rate limited.
-  static const _userAgent = 'Shoply (com.dominik.shoply)';
-
   static const _cachePrefix = 'open_prices_v1_';
   static const _cacheTtl = Duration(days: 7);
 
@@ -51,7 +49,9 @@ class OpenPricesService {
 
   final Map<String, ShelfPrice?> _memory = {};
 
-  /// Space out request starts; these are free, volunteer-run services.
+  /// Space out request starts; these are free, volunteer-run services. The
+  /// name search also counts against the shared Open Food Facts search
+  /// limit ([OffRateLimits.shared]).
   final _throttle = RequestThrottle(const Duration(milliseconds: 400));
 
   /// Best-guess regular price for [name], or null when nothing usable was
@@ -102,6 +102,13 @@ class OpenPricesService {
   /// Name → Open Food Facts product hits (barcodes plus their categories).
   Future<List<Map<String, dynamic>>> _searchHits(String query) async {
     await _throttle.wait();
+    // A background lookup: it never waits for, and never caches, a full
+    // search window, and it leaves room for the person's own searches.
+    if (!OffRateLimits.shared.search.tryAcquire(
+      keepFree: OffRateLimits.backgroundKeepFree,
+    )) {
+      throw _RequestFailed('search rate limit');
+    }
     final uri = Uri.parse(_searchUrl).replace(queryParameters: {
       'q': query,
       'langs': 'de',
@@ -317,7 +324,7 @@ class OpenPricesService {
   Future<http.Response> _get(Uri uri) {
     return http.get(uri, headers: {
       'accept': 'application/json',
-      'user-agent': _userAgent,
+      'user-agent': offUserAgent,
     }).timeout(const Duration(seconds: 15));
   }
 }

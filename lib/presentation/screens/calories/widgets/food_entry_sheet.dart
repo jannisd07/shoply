@@ -14,6 +14,7 @@ import 'package:shoply/data/services/meal_photo_analysis_service.dart';
 import 'package:shoply/data/services/meal_photo_storage_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
+import 'package:shoply/presentation/widgets/article_image.dart' show OffPhotoCredit;
 
 /// Opens the "add food" flow for one meal on one day: search Open Food
 /// Facts by name, enter a barcode, or type calories/macros manually.
@@ -526,6 +527,13 @@ class _ProductTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 12, color: textSecondary),
                   ),
+                  if (product.imageUrl != null)
+                    OffPhotoCredit(
+                      barcode: product.barcode,
+                      compact: true,
+                      // Same provider as Image.network above: no second load.
+                      photo: NetworkImage(product.imageUrl!),
+                    ),
                 ],
               ),
             ),
