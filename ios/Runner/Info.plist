@@ -57,7 +57,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>This app needs camera access to scan receipts and take photos.</string>
+	<string>Avo nutzt die Kamera für Fotos von Essen und Einkaufszetteln, für dein Profilbild und zum Scannen von Strichcodes. Beim Scannen speichert Avo keine Bilder.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Avo liest Gewicht, Größe, Geburtsdatum, Wasser und Workouts aus Apple Health, damit du nichts doppelt eintragen musst. Gelesene Werte bleiben auf deinem iPhone, bis du sie selbst übernimmst.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Was du in Avo einträgst, speichert Avo auch in Apple Health: Essen mit Kalorien und Nährwerten, Wasser, Gewicht und Workouts.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Avo nutzt das Mikrofon nur im Sprachmodus, solange du mit Avo sprichst.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Avo wandelt im Sprachmodus deine Stimme direkt auf deinem iPhone in Text um. Der Text wird nur für deine Anfrage an Avo verwendet.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>This app needs permission to save images to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

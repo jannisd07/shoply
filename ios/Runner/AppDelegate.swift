@@ -6,7 +6,7 @@ import UserNotifications
 import WidgetKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, MessagingDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
   private let widgetChannel = "com.shoply.widget"
   private let appGroupId = "group.com.shoply.app"
   
@@ -14,9 +14,14 @@ import WidgetKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Register plugins first
+    // Register plugins first. firebase_core configures the default
+    // FirebaseApp here when GoogleService-Info.plist is bundled.
     GeneratedPluginRegistrant.register(with: self)
-    
+
+    // Teil B channels: shoply/health, shoply/scanner, shoply/voice,
+    // shoply/accessibility. They ask for permissions only when Dart calls.
+    ShoplyNativeChannels.register(registry: self)
+
     // Register native Liquid Glass platform view.
     // Der Messenger kommt vom Registrar, nicht von window?.rootViewController:
     // nach der UIScene-Migration sind window/rootViewController in
@@ -40,25 +45,15 @@ import WidgetKit
     // Setup widget method channel
     setupWidgetChannel()
     
-    // Set notification delegate
+    // Taps and foreground notifications reach the plugins through
+    // FlutterAppDelegate (see the overrides below). No permission prompt at
+    // launch: Dart asks through NotificationPermissionService when a
+    // notification is useful.
     UNUserNotificationCenter.current().delegate = self
     
-    // Set Firebase Messaging delegate (required when swizzling is disabled)
-    Messaging.messaging().delegate = self
-    
-    // Request notification permission
-    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-      print("📱 [APNS] Permission granted: \(granted)")
-      if let error = error {
-        print("❌ [APNS] Permission error: \(error.localizedDescription)")
-      }
-    }
-    
-    // CRITICAL: Explicitly register for remote notifications
-    // This triggers APNs to provide a device token
+    // Asks for nothing; APNs hands out a device token for FCM.
     DispatchQueue.main.async {
       application.registerForRemoteNotifications()
-      print("📱 [APNS] Registered for remote notifications")
     }
     
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
@@ -261,27 +256,34 @@ import WidgetKit
     result(true)
   }
   
-  // MARK: - MessagingDelegate (required when swizzling is disabled)
-  func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-    print("🔥 [FCM] Token received via delegate: \(fcmToken ?? "nil")")
-    // The Flutter plugin will handle this automatically
-  }
-  
-  // Handle notification when app is in foreground
+  // MARK: - UNUserNotificationCenterDelegate
+  // super hands each callback to every plugin that registered for it
+  // (flutter_local_notifications, firebase_messaging). Each answers through
+  // the completion handler, sometimes for notifications that are not its
+  // own, so iOS gets exactly one combined answer here.
+
+  // Notification while the app is in the foreground.
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    completionHandler([[.banner, .sound, .badge]])
+    let answers = PresentationAnswers()
+    super.userNotificationCenter(center, willPresent: notification) { pluginOptions in
+      answers.answered = true
+      answers.combined.formUnion(pluginOptions)
+    }
+    // No plugin answered: show it as before instead of dropping it.
+    completionHandler(answers.answered ? answers.combined : [.banner, .list, .sound])
   }
   
-  // Handle notification tap
+  // Notification tap: routed in Dart (local reminders, FCM onMessageOpenedApp).
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
+    super.userNotificationCenter(center, didReceive: response) {}
     completionHandler()
   }
   
@@ -290,8 +292,11 @@ import WidgetKit
     _ application: UIApplication,
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
   ) {
-    print("📱 [APNS] Device token received: \(deviceToken.map { String(format: "%02.2hhx", $0) }.joined())")
-    Messaging.messaging().apnsToken = deviceToken
+    // Swizzling is off (FirebaseAppDelegateProxyEnabled = false), so map the
+    // APNs token by hand, but only once Firebase is configured.
+    if FirebaseApp.app() != nil {
+      Messaging.messaging().apnsToken = deviceToken
+    }
     // CRITICAL: Call super to let Flutter plugin handle this
     super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
   }
@@ -305,4 +310,15 @@ import WidgetKit
     // CRITICAL: Call super to let Flutter plugin handle this
     super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
   }
+}
+
+/// The presentation options the plugins answer with for one notification.
+/// Checked for flutter_local_notifications 19.5.0 (answers only for its own
+/// notifications) and firebase_messaging 16.0.4 (answers for every one,
+/// empty unless foreground options are set, so FCM pushes are not shown
+/// twice): both answer synchronously inside super's call. A later answer
+/// would be dropped, so re-check this after a plugin update.
+private final class PresentationAnswers: @unchecked Sendable {
+  var answered = false
+  var combined: UNNotificationPresentationOptions = []
 }

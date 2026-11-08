@@ -11,6 +11,13 @@
 		149B34B2C1E5819398148FF5 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 34D8EE2E36D92E99D08CA48C /* Pods_RunnerTests.framework */; };
 		15821589A442FF24B1D4021C /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1564682162F2EC27D37BD98B /* Pods_Runner.framework */; };
 		28314D8E93D1D6F51846FF91 /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68594ED2B117AE6CCA312209 /* AppIntents.swift */; };
+		4A8225BC7D63B14021144928 /* NativeChannelSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB28D6AC36691B7B47550904 /* NativeChannelSupport.swift */; };
+		29F45D1B93C384B407AD3A13 /* GTIN.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D20D5B14142343385ECA3F /* GTIN.swift */; };
+		30773D29C751F98E8A73D561 /* AccessibilityChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4C79B85947FE7DD7B52D907 /* AccessibilityChannel.swift */; };
+		15C7AC2785E58907A1231A07 /* HealthKitChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CE5A76802AAEF5E894120D /* HealthKitChannel.swift */; };
+		7AFA6A6B05568AC19F678906 /* BarcodeScannerChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D140210CFCD18C110AD34B /* BarcodeScannerChannel.swift */; };
+		39D75ABD4173C29F1D981481 /* VoiceChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176A0AF2B7610513D4D3EAD8 /* VoiceChannel.swift */; };
+		9C04BDD01861B33B90682CCF /* ShoplyNativeChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128CD41185BF6EC9B3B968B8 /* ShoplyNativeChannels.swift */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		4F6DE41A0205E8C4D8B4C7B6 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 08CC55291BED81E355F77325 /* GoogleService-Info.plist */; };
@@ -88,6 +95,13 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		68594ED2B117AE6CCA312209 /* AppIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
+		BB28D6AC36691B7B47550904 /* NativeChannelSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NativeChannelSupport.swift; sourceTree = "<group>"; };
+		94D20D5B14142343385ECA3F /* GTIN.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GTIN.swift; sourceTree = "<group>"; };
+		D4C79B85947FE7DD7B52D907 /* AccessibilityChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AccessibilityChannel.swift; sourceTree = "<group>"; };
+		46CE5A76802AAEF5E894120D /* HealthKitChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthKitChannel.swift; sourceTree = "<group>"; };
+		B6D140210CFCD18C110AD34B /* BarcodeScannerChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BarcodeScannerChannel.swift; sourceTree = "<group>"; };
+		176A0AF2B7610513D4D3EAD8 /* VoiceChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceChannel.swift; sourceTree = "<group>"; };
+		128CD41185BF6EC9B3B968B8 /* ShoplyNativeChannels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShoplyNativeChannels.swift; sourceTree = "<group>"; };
 		9E98BBB9D49B7C6253A05DDE /* LiquidGlassViewFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiquidGlassViewFactory.swift; sourceTree = "<group>"; };
 		AC93E8255E00C9F17CF032E5 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 		E4272C5A2F781BA90030B378 /* ShoppingListWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShoppingListWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -214,6 +228,20 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		AE650BEFDE899345A20DD990 /* NativeChannels */ = {
+			isa = PBXGroup;
+			children = (
+				BB28D6AC36691B7B47550904 /* NativeChannelSupport.swift */,
+				94D20D5B14142343385ECA3F /* GTIN.swift */,
+				D4C79B85947FE7DD7B52D907 /* AccessibilityChannel.swift */,
+				46CE5A76802AAEF5E894120D /* HealthKitChannel.swift */,
+				B6D140210CFCD18C110AD34B /* BarcodeScannerChannel.swift */,
+				176A0AF2B7610513D4D3EAD8 /* VoiceChannel.swift */,
+				128CD41185BF6EC9B3B968B8 /* ShoplyNativeChannels.swift */,
+			);
+			path = NativeChannels;
+			sourceTree = "<group>";
+		};
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
@@ -228,6 +256,7 @@
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				9E98BBB9D49B7C6253A05DDE /* LiquidGlassViewFactory.swift */,
 				68594ED2B117AE6CCA312209 /* AppIntents.swift */,
+				AE650BEFDE899345A20DD990 /* NativeChannels */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -593,6 +622,13 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				6308DF5DFA4E016B7A20BF6B /* LiquidGlassViewFactory.swift in Sources */,
 				28314D8E93D1D6F51846FF91 /* AppIntents.swift in Sources */,
+				4A8225BC7D63B14021144928 /* NativeChannelSupport.swift in Sources */,
+				29F45D1B93C384B407AD3A13 /* GTIN.swift in Sources */,
+				30773D29C751F98E8A73D561 /* AccessibilityChannel.swift in Sources */,
+				15C7AC2785E58907A1231A07 /* HealthKitChannel.swift in Sources */,
+				7AFA6A6B05568AC19F678906 /* BarcodeScannerChannel.swift in Sources */,
+				39D75ABD4173C29F1D981481 /* VoiceChannel.swift in Sources */,
+				9C04BDD01861B33B90682CCF /* ShoplyNativeChannels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
