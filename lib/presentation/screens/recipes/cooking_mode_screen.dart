@@ -1,1056 +1,892 @@
 import 'dart:async';
+import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/physics.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/paper_colors.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/services/notification_service.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/recipe_editor_palette.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/step_progress_ring.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/data/services/recipe_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_chrome.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_logic.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_overview.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_pages.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_progress.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_theme.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_timers.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/widgets/design/app_button.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
+import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
+import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
+import 'package:shoply/presentation/widgets/design/pro_gate.dart';
+import 'package:shoply/presentation/widgets/design/progress.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
-/// Full-screen cooking mode that guides users step-by-step through a recipe
-class CookingModeScreen extends StatefulWidget {
-  final Recipe recipe;
-  final int servings;
+export 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_progress.dart'
+    show CookingProgress, cookingProgressProvider;
 
+/// A page spring has landed within half a point.
+const Tolerance _pageTolerance = Tolerance(distance: 0.5, velocity: 10);
+
+/// Reduce Motion: a horizontal flick faster than this (points per second)
+/// turns the page.
+const double _flickVelocity = 300;
+
+/// The Pro id of the cooking mode ([ProGate.run]); not gated until the owner
+/// decides (A9).
+const String kCookModeFeature = 'cook_mode';
+
+/// Keeps the screen on while the cooking mode is in front.
+abstract interface class CookingKeepAwake {
+  Future<void> enable();
+  Future<void> disable();
+}
+
+/// [CookingKeepAwake] through `wakelock_plus`; failures are logged, never
+/// shown.
+class WakelockCookingKeepAwake implements CookingKeepAwake {
+  const WakelockCookingKeepAwake();
+
+  @override
+  Future<void> enable() => _guard(WakelockPlus.enable, 'on');
+
+  @override
+  Future<void> disable() => _guard(WakelockPlus.disable, 'off');
+
+  static Future<void> _guard(Future<void> Function() call, String what) async {
+    try {
+      await call();
+    } catch (e) {
+      debugPrint('⚠️ [COOKING] Screen could not be kept $what: $e');
+    }
+  }
+}
+
+/// How the cooking mode keeps the screen on; overridden in tests.
+final cookingKeepAwakeProvider = Provider<CookingKeepAwake>(
+  (ref) => const WakelockCookingKeepAwake(),
+);
+
+/// Sends a rating from the "Fertig" page; overridden in tests.
+final cookingRateRecipeProvider =
+    Provider<Future<void> Function(String recipeId, int rating)>(
+      (ref) =>
+          (id, rating) => RecipeService().rateRecipe(id, rating),
+    );
+
+/// Shares a recipe from the "Fertig" page; overridden in tests.
+final cookingShareRecipeProvider = Provider<Future<void> Function(Recipe)>(
+  (ref) => (recipe) async {
+    try {
+      await Share.share(RecipeService().getShareText(recipe));
+    } catch (e) {
+      debugPrint('⚠️ [COOKING] Share failed: $e');
+    }
+  },
+);
+
+/// The cooking mode (R-14, Konzept 13 §16): always black, one page per
+/// screen ("Zutaten", every step, "Fertig"), swipe or tap to move, timers
+/// per step with a local notification, the screen stays on. Where one
+/// stopped is kept for 24 h (§19.2).
+///
+/// Open it with [openCookingMode].
+class CookingModeScreen extends ConsumerStatefulWidget {
   const CookingModeScreen({
     super.key,
     required this.recipe,
     required this.servings,
   });
 
+  /// The recipe in the version shown in the detail.
+  final Recipe recipe;
+
+  /// The servings chosen in the detail.
+  final int servings;
+
   @override
-  State<CookingModeScreen> createState() => _CookingModeScreenState();
+  ConsumerState<CookingModeScreen> createState() => _CookingModeScreenState();
 }
 
-class _CookingModeScreenState extends State<CookingModeScreen> {
-  /// Local notification id for the step timer.
-  static const _timerNotificationId = 700100;
+class _CookingModeScreenState extends ConsumerState<CookingModeScreen>
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  late final List<String> _steps = [
+    for (final s in widget.recipe.instructions)
+      if (s.trim().isNotEmpty) s.trim(),
+  ];
+  late final List<List<StepTime>> _times = [
+    for (final s in _steps) detectStepTimes(s),
+  ];
+  late final List<List<int>> _stepIngredients = [
+    for (final s in _steps) ingredientsInStep(widget.recipe.ingredients, s),
+  ];
 
-  int _currentStep = 0;
-  final Set<int> _checkedIngredients = {};
-  late int _currentServings;
+  late int _servings = _initialServings(widget.servings);
+  int _page = 0;
+  final Set<int> _checked = {};
+  final Set<int> _visited = {0};
+  late int _rating = widget.recipe.userRating ?? 0;
+  bool _rateFailed = false;
 
-  // Step timer. The remaining time is computed from a wall-clock end time,
-  // so it stays correct while iOS suspends the app (a per-second decrement
-  // froze in the background), and a local notification fires at the end.
-  Timer? _timer;
-  DateTime? _timerEndsAt;
-  final _remainingSeconds = ValueNotifier<int>(0);
-  bool _timerRunning = false;
-  int? _activeTimerStep;
+  String? _userId;
+  bool _caloriesOn = false;
+  bool _offline = false;
 
-  late PageController _pageController;
-  RecipeEditorPalette _p = const RecipeEditorPalette(false);
+  bool _restoring = true;
+  int? _resumedAt;
+  bool _showHint = false;
+  bool _closing = false;
 
-  int get _totalSteps => widget.recipe.instructions.length + 1;
+  late final CookingTimers _timers;
+  String _timerShape = '';
+  late PageController _pages = PageController();
+  late final AnimationController _pageSpring = AnimationController.unbounded(
+    vsync: this,
+  );
+  bool _springing = false;
 
-  List<Ingredient> get _adjustedIngredients {
-    return widget.recipe.ingredients
-        .map(
-          (ing) => ing.adjustForServings(
-            widget.recipe.defaultServings,
-            _currentServings,
-          ),
-        )
-        .toList();
+  late final CookingKeepAwake _keepAwake;
+  bool _awake = false;
+  late final StateController<AvoScreenContext?> _avoContext;
+  AvoScreenContext? _previousContext;
+  static const _ownContext = AvoScreenContext(screen: 'recipe');
+  late final ProviderContainer _container;
+
+  int get _stepCount => _steps.length;
+  int get _donePage => _stepCount + 1;
+  int get _pageCount => _stepCount + 2;
+
+  int _initialServings(int value) {
+    final fallback = widget.recipe.defaultServings;
+    final v = value > 0 ? value : (fallback > 0 ? fallback : 2);
+    return v.clamp(kCookingMinServings, kCookingMaxServings);
   }
-
-  bool get _allIngredientsChecked =>
-      _checkedIngredients.length == _adjustedIngredients.length;
 
   @override
   void initState() {
     super.initState();
-    _currentServings = widget.servings;
-    _pageController = PageController();
-    WakelockPlus.enable();
+    WidgetsBinding.instance.addObserver(this);
+    _container = ProviderScope.containerOf(context, listen: false);
+    _timers = CookingTimers(
+      alerts: ref.read(cookingTimerAlertsProvider),
+      clock: ref.read(cookingClockProvider),
+      notificationTitle: (_) => widget.recipe.name,
+      notificationBody: (step) => context.tr(
+        'recipe_cook_notification_body',
+        params: {'n': '${step + 1}'},
+      ),
+      onFinished: _onTimerFinished,
+    )..addListener(_onTimersChanged);
+    _pageSpring.addListener(_followSpring);
+    _keepAwake = ref.read(cookingKeepAwakeProvider);
+    _setAwake(true);
+    _avoContext = ref.read(avoScreenContextProvider.notifier);
+    _previousContext = _avoContext.state;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _avoContext.state = _ownContext;
+    });
+    unawaited(_restore());
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    if (_timerEndsAt != null) {
-      NotificationService.instance.cancel(_timerNotificationId);
-    }
-    _remainingSeconds.dispose();
-    _pageController.dispose();
-    WakelockPlus.disable();
+    WidgetsBinding.instance.removeObserver(this);
+    _setAwake(false);
+    if (!_closing) unawaited(_save());
+    _timers
+      ..removeListener(_onTimersChanged)
+      ..dispose();
+    _pageSpring.dispose();
+    _pages.dispose();
+    final controller = _avoContext;
+    final previous = _previousContext;
+    scheduleMicrotask(() {
+      if (controller.mounted && controller.state == _ownContext) {
+        controller.state = previous;
+      }
+    });
     super.dispose();
   }
 
-  void _closeCookingMode() {
-    Navigator.of(context).pop();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    _setAwake(resumed);
+    if (resumed) {
+      _timers.tick();
+    } else if (state == AppLifecycleState.paused) {
+      unawaited(_save());
+    }
   }
 
-  void _goToStep(int step) {
-    if (step >= 0 && step < _totalSteps) {
-      setState(() => _currentStep = step);
-      _pageController.animateToPage(
-        step,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+  void _setAwake(bool on) {
+    if (on == _awake) return;
+    _awake = on;
+    unawaited(on ? _keepAwake.enable() : _keepAwake.disable());
+  }
+
+  // ---------------------------------------------------------------- state
+
+  Future<void> _restore() async {
+    final progress = await CookingProgressStore.load(widget.recipe.id);
+    final hintSeen = await CookingProgressStore.hintSeen();
+    if (!mounted) return;
+    setState(() {
+      _restoring = false;
+      _showHint = !hintSeen;
+      if (progress != null) {
+        _page = progress.page.clamp(0, _donePage);
+        _checked
+          ..clear()
+          ..addAll(progress.checked);
+        _visited
+          ..clear()
+          ..addAll({0, ...progress.visited, _page});
+        _servings = progress.servings.clamp(
+          kCookingMinServings,
+          kCookingMaxServings,
+        );
+        if (_page > 0) _resumedAt = _page;
+      }
+    });
+    if (progress != null) _timers.restore(progress.timers);
+  }
+
+  bool get _hasProgress => _page > 0 || _checked.isNotEmpty || !_timers.isEmpty;
+
+  Future<void> _save() async {
+    if (_restoring) return;
+    final id = widget.recipe.id;
+    if (_hasProgress) {
+      await CookingProgressStore.save(
+        CookingProgress(
+          recipeId: id,
+          page: _page,
+          servings: _servings,
+          checked: Set.of(_checked),
+          visited: Set.of(_visited),
+          timers: _timers.timers,
+          savedAt: DateTime.now(),
+        ),
+      );
+    } else {
+      await CookingProgressStore.clear(id);
+    }
+    _container.invalidate(cookingProgressProvider(id));
+  }
+
+  void _onTimersChanged() {
+    final now = _timers.now;
+    final shape = [
+      for (final t in _timers.timers)
+        '${t.step}:${t.running}:${t.finishedAt(now)}',
+    ].join(',');
+    if (shape == _timerShape) return;
+    _timerShape = shape;
+    if (mounted) setState(() {});
+    unawaited(_save());
+  }
+
+  void _onTimerFinished(int step) {
+    if (!mounted) return;
+    unawaited(AvoHaptics.warning());
+    announceTimerFinished(context, step);
+  }
+
+  StepTimerState _timerStateFor(int step) {
+    final t = _timers.forStep(step);
+    if (t == null) return StepTimerState.none;
+    if (t.finishedAt(_timers.now)) return StepTimerState.finished;
+    return t.running ? StepTimerState.running : StepTimerState.paused;
+  }
+
+  // ------------------------------------------------------------ navigation
+
+  void _followSpring() {
+    if (_pages.hasClients) _pages.jumpTo(_pageSpring.value);
+  }
+
+  void _goTo(int page) {
+    final target = page.clamp(0, _pageCount - 1);
+    if (target == _page) return;
+    _pageSeen(target);
+    if (context.reduceMotion || !_pages.hasClients) return;
+    final position = _pages.position;
+    final to = target * position.viewportDimension;
+    _springing = true;
+    _pageSpring.value = position.pixels;
+    // Completes only when it lands (an interrupted spring never does).
+    _pageSpring
+        .animateWith(
+          SpringSimulation(
+            AvoMotion.standard,
+            position.pixels,
+            to,
+            0,
+            tolerance: _pageTolerance,
+            snapToEnd: true,
+          ),
+        )
+        .then((_) {
+          _springing = false;
+          if (mounted && _pages.hasClients) _pages.jumpTo(to);
+        });
+  }
+
+  void _pageSeen(int page) {
+    setState(() {
+      _page = page;
+      _visited.add(page);
+      _resumedAt = null;
+      if (_showHint) {
+        _showHint = false;
+        unawaited(CookingProgressStore.markHintSeen());
+      }
+    });
+    unawaited(_save());
+  }
+
+  /// A swipe settled on [page] (PageView).
+  void _onPageChanged(int page) {
+    if (_springing || page == _page) return;
+    unawaited(AvoHaptics.selection());
+    _pageSeen(page);
+  }
+
+  /// Reduce Motion: pages cross-fade, a horizontal flick still moves.
+  void _onFlick(DragEndDetails details) {
+    final v = details.primaryVelocity ?? 0;
+    if (v.abs() < _flickVelocity) return;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final forward = rtl ? v > 0 : v < 0;
+    final next = forward ? _page + 1 : _page - 1;
+    if (next < 0 || next >= _pageCount) return;
+    unawaited(AvoHaptics.selection());
+    _goTo(next);
+  }
+
+  bool get _proLocked =>
+      _page == 1 && _stepCount > 1 && ProGate.isLocked(ref, kCookModeFeature);
+
+  void _next() {
+    if (_page >= _donePage) {
+      unawaited(_finish());
+      return;
+    }
+    if (_proLocked) {
+      unawaited(
+        ProGate.run(
+          context,
+          ref,
+          feature: kCookModeFeature,
+          action: () => _goTo(_page + 1),
+        ),
+      );
+      return;
+    }
+    _goTo(_page + 1);
+  }
+
+  void _back() => _goTo(_page - 1);
+
+  String _nextLabel() {
+    if (_page >= _donePage) return context.tr('recipe_cook_close_done');
+    if (_page == _stepCount && _stepCount > 0) {
+      return context.tr('recipe_cook_finish');
+    }
+    return context.tr('recipe_cook_next');
+  }
+
+  // --------------------------------------------------------------- actions
+
+  bool get _midCooking =>
+      (_page >= 1 && _page <= _stepCount) || _timers.anyRunning;
+
+  Future<void> _close() async {
+    if (_closing) return;
+    if (_page >= _donePage) {
+      await _finish();
+      return;
+    }
+    if (_midCooking) {
+      final step = _page.clamp(1, math.max(1, _stepCount));
+      final leave = await showAvoConfirm(
+        context,
+        title: context.tr('recipe_cook_leave_title'),
+        message: context.tr(
+          _timers.anyRunning
+              ? 'recipe_cook_leave_message_timer'
+              : 'recipe_cook_leave_message',
+          params: {'n': '$step'},
+        ),
+        confirmLabel: context.tr('recipe_cook_leave_confirm'),
+        cancelLabel: context.tr('recipe_cook_leave_cancel'),
+        destructive: false,
+      );
+      if (!leave || !mounted) return;
+    }
+    _closing = true;
+    await _save();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Done cooking: timers stop, the progress goes.
+  Future<void> _finish() async {
+    if (_closing) return;
+    _closing = true;
+    _timers.stopAll();
+    await CookingProgressStore.clear(widget.recipe.id);
+    _container.invalidate(cookingProgressProvider(widget.recipe.id));
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  void _startOver() {
+    _timers.stopAll();
+    setState(() {
+      _checked.clear();
+      _visited
+        ..clear()
+        ..add(0);
+      _resumedAt = null;
+    });
+    if (_page == 0) {
+      unawaited(_save());
+    } else {
+      _goTo(0);
+    }
+  }
+
+  void _toggle(int index) {
+    unawaited(AvoHaptics.light());
+    setState(() {
+      if (!_checked.remove(index)) _checked.add(index);
+    });
+    unawaited(_save());
+  }
+
+  void _toggleAll() {
+    final all = widget.recipe.ingredients.length;
+    setState(() {
+      if (_checked.length >= all) {
+        _checked.clear();
+      } else {
+        _checked.addAll(List.generate(all, (i) => i));
+      }
+    });
+    unawaited(_save());
+  }
+
+  Future<void> _openServings() async {
+    final next = await openCookingServings(
+      context,
+      recipe: widget.recipe,
+      servings: _servings,
+    );
+    if (next == null || !mounted || next == _servings) return;
+    // Checked ingredients stay checked (Konzept 13 §16.3).
+    setState(() => _servings = next);
+    unawaited(_save());
+  }
+
+  Future<void> _openOverview() async {
+    final page = await openCookingOverview(
+      context,
+      steps: _steps,
+      current: _page,
+      visited: _visited,
+    );
+    if (page != null && mounted) _goTo(page);
+  }
+
+  void _startTimer(int step, Duration duration) {
+    _timers.start(step, duration);
+  }
+
+  void _onTimerTap(BuildContext capsuleContext) {
+    final list = _timers.timers;
+    if (list.isEmpty) return;
+    final now = _timers.now;
+    final first = list.first;
+    if (first.finishedAt(now)) {
+      _timers.acknowledge(first.step);
+      return;
+    }
+    final items = <AvoMenuEntry>[];
+    for (final t in list) {
+      final stepLabel = context.tr(
+        'recipe_cook_step_label',
+        params: {'n': '${t.step + 1}'},
+      );
+      final subtitle = t.finishedAt(now)
+          ? context.tr(
+              'recipe_cook_timer_done_step',
+              params: {'step': stepLabel},
+            )
+          : '$stepLabel · ${formatTimerClock(t.left(now))}';
+      if (items.isNotEmpty) items.add(const AvoMenuDivider());
+      items
+        ..add(
+          AvoMenuItem(
+            label: context.tr(
+              t.running
+                  ? 'recipe_cook_timer_pause'
+                  : 'recipe_cook_timer_resume',
+            ),
+            subtitle: subtitle,
+            enabled: !t.finishedAt(now),
+            onSelected: () =>
+                t.running ? _timers.pause(t.step) : _timers.resume(t.step),
+          ),
+        )
+        ..add(
+          AvoMenuItem(
+            label: context.tr('recipe_cook_timer_plus_minute'),
+            onSelected: () => _timers.addMinute(t.step),
+          ),
+        )
+        ..add(
+          AvoMenuItem(
+            label: context.tr('recipe_cook_timer_stop'),
+            destructive: true,
+            onSelected: () => _timers.stop(t.step),
+          ),
+        );
+    }
+    unawaited(
+      showAvoMenu(
+        capsuleContext,
+        items: items,
+        semanticLabel: context.tr('recipe_cook_timers'),
+      ),
+    );
+  }
+
+  Future<void> _rate(int stars) async {
+    final before = _rating;
+    setState(() {
+      _rating = stars;
+      _rateFailed = false;
+    });
+    try {
+      await ref.read(cookingRateRecipeProvider)(widget.recipe.id, stars);
+    } catch (e) {
+      debugPrint('❌ [COOKING] Rating failed: $e');
+      if (!mounted) return;
+      unawaited(AvoHaptics.error());
+      setState(() {
+        _rating = before;
+        _rateFailed = true;
+      });
+    }
+  }
+
+  // ----------------------------------------------------------------- build
+
+  String _pageLabel(BuildContext context, {required bool short}) {
+    if (_page == 0) return context.tr('recipe_cook_page_ingredients');
+    if (_page >= _donePage) return context.tr('recipe_cook_page_done');
+    return context.tr(
+      short ? 'recipe_cook_step_short' : 'recipe_cook_step_of',
+      params: {'n': '$_page', 'total': '$_stepCount'},
+    );
+  }
+
+  double get _progress {
+    if (_page >= _donePage) return 1;
+    if (_stepCount == 0) return 0;
+    return _page / _stepCount;
+  }
+
+  List<Ingredient> get _scaled => [
+    for (final i in widget.recipe.ingredients)
+      scaleIngredient(i, widget.recipe.defaultServings, _servings),
+  ];
+
+  Widget _buildPage(BuildContext context, int page) {
+    final lang = Localizations.localeOf(context).languageCode;
+    final scaled = _scaled;
+    if (page == 0) {
+      return CookingIngredientsPage(
+        ingredients: [
+          for (final i in scaled)
+            CookingIngredientLine(
+              name: i.name,
+              amount: formatIngredientAmount(i, lang),
+            ),
+        ],
+        servings: _servings,
+        checked: _checked,
+        onToggle: _toggle,
+        onToggleAll: _toggleAll,
       );
     }
-  }
-
-  void _nextStep() {
-    if (_currentStep < _totalSteps - 1) {
-      _goToStep(_currentStep + 1);
+    if (page >= _donePage) {
+      final recipe = widget.recipe;
+      final canLog = _caloriesOn && (recipe.nutrition?.hasData ?? false);
+      return CookingDonePage(
+        rating: _rating,
+        canRate: recipe.id.isNotEmpty && recipe.authorId != _userId,
+        onRate: _rate,
+        rateFailed: _rateFailed,
+        offline: _offline,
+        onShare: () => unawaited(ref.read(cookingShareRecipeProvider)(recipe)),
+        onLog: canLog ? () => unawaited(openLogRecipe(context, recipe)) : null,
+      );
     }
+    final step = page - 1;
+    return CookingStepPage(
+      number: page,
+      text: _steps[step],
+      ingredients: [
+        for (final i in _stepIngredients[step])
+          formatIngredientLine(scaled[i], lang),
+      ],
+      times: _times[step],
+      timerState: _timerStateFor(step),
+      onStartTimer: (d) => _startTimer(step, d),
+    );
   }
 
-  void _previousStep() {
-    if (_currentStep > 0) {
-      _goToStep(_currentStep - 1);
+  Widget _buildPages(BuildContext context) {
+    if (_restoring) return const SizedBox.expand();
+    if (context.reduceMotion) {
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: _onFlick,
+        child: AnimatedSwitcher(
+          duration: AvoMotion.fadeReduced,
+          child: KeyedSubtree(
+            key: ValueKey(_page),
+            child: _buildPage(context, _page),
+          ),
+        ),
+      );
     }
-  }
-
-  void _toggleIngredient(int index) {
-    HapticFeedback.selectionClick();
-    setState(() {
-      if (_checkedIngredients.contains(index)) {
-        _checkedIngredients.remove(index);
-      } else {
-        _checkedIngredients.add(index);
-      }
-    });
-  }
-
-  void _toggleSelectAll() {
-    HapticFeedback.mediumImpact();
-    setState(() {
-      if (_allIngredientsChecked) {
-        _checkedIngredients.clear();
-      } else {
-        _checkedIngredients.clear();
-        for (int i = 0; i < _adjustedIngredients.length; i++) {
-          _checkedIngredients.add(i);
-        }
-      }
-    });
-  }
-
-  void _showServingsSelector() {
-    HapticFeedback.mediumImpact();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: _p.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    if (!_pages.hasClients && _pages.initialPage != _page) {
+      final old = _pages;
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      _pages = PageController(initialPage: _page);
+    }
+    return Listener(
+      onPointerDown: (_) {
+        if (!_springing) return;
+        _pageSpring.stop();
+        _springing = false;
+      },
+      child: PageView.builder(
+        controller: _pages,
+        physics: const BouncingScrollPhysics(),
+        onPageChanged: _onPageChanged,
+        itemCount: _pageCount,
+        itemBuilder: _buildPage,
       ),
-      builder: (context) => _ServingsSelectorSheet(
-        currentServings: _currentServings,
-        palette: _p,
-        onServingsChanged: (newServings) {
-          setState(() {
-            _currentServings = newServings;
-            _checkedIngredients.clear();
-          });
-          Navigator.pop(context);
+    );
+  }
+
+  Map<CustomSemanticsAction, VoidCallback> _semanticActions(
+    BuildContext context,
+  ) {
+    final step = _page - 1;
+    final first = step >= 0 && step < _stepCount && _times[step].isNotEmpty
+        ? _times[step].first
+        : null;
+    return {
+      if (_page < _donePage)
+        CustomSemanticsAction(label: context.tr('recipe_cook_next_step')):
+            _next,
+      if (_page > 0)
+        CustomSemanticsAction(label: context.tr('recipe_cook_previous')): _back,
+      if (first != null && _timerStateFor(step) == StepTimerState.none)
+        CustomSemanticsAction(
+          label: context.tr('recipe_cook_start_timer'),
+        ): () =>
+            _startTimer(step, first.duration),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Watched here, not in the page builder (which runs during layout).
+    _userId = ref.watch(authUserIdProvider);
+    _caloriesOn = ref.watch(moduleEnabledProvider(AppModule.calories));
+    _offline = ref.watch(isOfflineProvider);
+    return CookingModeTheme(
+      child: Builder(
+        builder: (context) {
+          final colors = context.colors;
+          final bottomSafe = MediaQuery.paddingOf(context).bottom;
+          return PopScope<Object?>(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) unawaited(_close());
+            },
+            child: ColoredBox(
+              color: colors.background,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: GlassToolbar.topOffset(context)),
+                  CookingTopBar(
+                    recipeName: widget.recipe.name,
+                    pageLabel: _pageLabel(context, short: false),
+                    shortPageLabel: _pageLabel(context, short: true),
+                    servings: _servings,
+                    onClose: () => unawaited(_close()),
+                    onServings: () => unawaited(_openServings()),
+                    onOverview: () => unawaited(_openOverview()),
+                  ),
+                  const SizedBox(height: AvoSpacing.m),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AvoSpacing.screen,
+                    ),
+                    child: ProgressLine(
+                      value: _progress,
+                      semanticLabel: context.tr('common_progress'),
+                      semanticValue: _pageLabel(context, short: false),
+                    ),
+                  ),
+                  if (_resumedAt != null)
+                    _ResumeRow(step: _resumedAt!, onStartOver: _startOver)
+                  else if (_showHint)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AvoSpacing.screen,
+                        AvoSpacing.s,
+                        AvoSpacing.screen,
+                        0,
+                      ),
+                      child: Text(
+                        context.tr('recipe_cook_first_hint'),
+                        style: context.text(
+                          AvoTextStyle.footnote,
+                          color: colors.secondaryLabel,
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Semantics(
+                            customSemanticsActions: _semanticActions(context),
+                            child: _buildPages(context),
+                          ),
+                        ),
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: ScrollEdgeFade(
+                            height: AvoSpacing.xl,
+                            color: colors.background,
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: RotatedBox(
+                            quarterTurns: 2,
+                            child: ScrollEdgeFade(
+                              height: AvoSpacing.xl,
+                              color: colors.background,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AvoSpacing.s),
+                  CookingBottomBar(
+                    onBack: _page > 0 ? _back : null,
+                    nextLabel: _nextLabel(),
+                    onNext: _next,
+                    nextIsPro: _proLocked,
+                    timer: _timers.isEmpty
+                        ? null
+                        : CookingTimerCapsule(
+                            timers: _timers,
+                            onTap: _onTimerTap,
+                          ),
+                  ),
+                  SizedBox(height: math.max(bottomSafe, AvoSpacing.l)),
+                ],
+              ),
+            ),
+          );
         },
       ),
     );
   }
-
-  void _startTimer(int minutes) {
-    HapticFeedback.mediumImpact();
-    _activeTimerStep = _currentStep;
-    _runTimer(Duration(minutes: minutes));
-  }
-
-  void _runTimer(Duration duration) {
-    _timer?.cancel();
-    final endsAt = DateTime.now().add(duration);
-    _timerEndsAt = endsAt;
-    _remainingSeconds.value = duration.inSeconds;
-    setState(() => _timerRunning = true);
-    NotificationService.instance.scheduleNotification(
-      id: _timerNotificationId,
-      title: context.tr('cooking_mode_timer_done'),
-      body: '${widget.recipe.name} · ${context.tr('cooking_mode_time_up')}',
-      scheduledFor: endsAt,
-    );
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
-  }
-
-  /// Seconds left until [_timerEndsAt], rounded up.
-  int _secondsLeft(DateTime endsAt) =>
-      (endsAt.difference(DateTime.now()).inMilliseconds / 1000).ceil();
-
-  void _tick() {
-    final endsAt = _timerEndsAt;
-    if (endsAt == null) return;
-    final left = _secondsLeft(endsAt);
-    if (left > 0) {
-      _remainingSeconds.value = left;
-      return;
-    }
-    _stopTimer(remaining: 0);
-    setState(() => _timerRunning = false);
-    HapticFeedback.heavyImpact();
-    _showTimerCompleteDialog();
-  }
-
-  /// Stops ticking and drops the scheduled notification.
-  void _stopTimer({required int remaining}) {
-    _timer?.cancel();
-    _timerEndsAt = null;
-    _remainingSeconds.value = remaining;
-    NotificationService.instance.cancel(_timerNotificationId);
-  }
-
-  void _pauseTimer() {
-    HapticFeedback.lightImpact();
-    final endsAt = _timerEndsAt;
-    final left = endsAt == null
-        ? _remainingSeconds.value
-        : _secondsLeft(endsAt);
-    _stopTimer(remaining: left < 0 ? 0 : left);
-    setState(() => _timerRunning = false);
-  }
-
-  void _resumeTimer() {
-    HapticFeedback.lightImpact();
-    if (_remainingSeconds.value <= 0) return;
-    _runTimer(Duration(seconds: _remainingSeconds.value));
-  }
-
-  void _cancelTimer() {
-    HapticFeedback.lightImpact();
-    _stopTimer(remaining: 0);
-    setState(() {
-      _timerRunning = false;
-      _activeTimerStep = null;
-    });
-  }
-
-  void _showTimerCompleteDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _p.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _p.green.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.timer_off, color: _p.green, size: 24),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              context.tr('cooking_mode_timer_done'),
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: _p.textPrimary,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          context.tr('cooking_mode_time_up'),
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 15, color: _p.textSecondary),
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _activeTimerStep = null);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _p.accent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Text(
-              context.tr('ok'),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _formatTime(int seconds) {
-    final minutes = seconds ~/ 60;
-    final secs = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
-  }
-
-  void _showExitConfirmation() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _p.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          context.tr('cooking_mode_exit_title'),
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: _p.textPrimary,
-          ),
-        ),
-        content: Text(
-          context.tr('cooking_mode_exit_message'),
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 15, color: _p.textSecondary),
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              context.tr('cancel'),
-              style: TextStyle(color: _p.textSecondary),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _closeCookingMode();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Text(
-              context.tr('cooking_mode_exit_button'),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _p = RecipeEditorPalette.of(context);
-
-    return Scaffold(
-      backgroundColor: _p.bg,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _buildHeader(),
-
-            if (_timerRunning || _remainingSeconds.value > 0) _buildTimerBar(),
-
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (index) => setState(() => _currentStep = index),
-                itemCount: _totalSteps,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return _buildIngredientsStep();
-                  } else {
-                    return _buildCookingStep(index - 1);
-                  }
-                },
-              ),
-            ),
-
-            _buildNavigationBar(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: _p.bg,
-        border: Border(bottom: BorderSide(color: _p.border, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          // Close button
-          GestureDetector(
-            onTap: _showExitConfirmation,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: _p.card,
-                shape: BoxShape.circle,
-                border: Border.all(color: _p.border),
-              ),
-              child: Icon(Icons.close, color: _p.textPrimary, size: 22),
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // Title and step
-          Expanded(
-            child: Column(
-              children: [
-                Text(
-                  widget.recipe.name,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: _p.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _currentStep == 0
-                      ? context.tr('cooking_mode_ingredients')
-                      : context.tr(
-                          'cooking_mode_step_of',
-                          params: {
-                            'current': '$_currentStep',
-                            'total': '${widget.recipe.instructions.length}',
-                          },
-                        ),
-                  style: TextStyle(fontSize: 13, color: _p.textSecondary),
-                ),
-              ],
-            ),
-          ),
-
-          StepProgressRing(
-            currentStep: _currentStep,
-            totalSteps: _totalSteps,
-            color: _p.accent,
-            trackColor: _p.border,
-            textColor: _p.textPrimary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimerBar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [_p.accent.withOpacity(0.1), _p.accent.withOpacity(0.05)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _p.accent.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: _p.accent.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _timerRunning ? Icons.timer : Icons.pause_circle_outline,
-              color: _p.accent,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          // Only this text rebuilds every second, not the whole screen.
-          ValueListenableBuilder<int>(
-            valueListenable: _remainingSeconds,
-            builder: (context, seconds, _) => Text(
-              _formatTime(seconds),
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: _p.accent,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: _timerRunning ? _pauseTimer : _resumeTimer,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: _p.accent.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _timerRunning ? Icons.pause : Icons.play_arrow,
-                color: _p.accent,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _cancelTimer,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.close, color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIngredientsStep() {
-    final ingredients = _adjustedIngredients;
-    final servingsText = _currentServings == 1
-        ? '1 ${context.tr('cooking_mode_portion')}'
-        : '$_currentServings ${context.tr('cooking_mode_portions')}';
-
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Hero icon
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _p.green.withOpacity(0.2),
-                    _p.green.withOpacity(0.1),
-                  ],
-                ),
-                shape: BoxShape.circle,
-                border: Border.all(color: _p.green.withOpacity(0.3), width: 2),
-              ),
-              child: Icon(Icons.restaurant_menu, color: _p.green, size: 36),
-            ),
-            const SizedBox(height: 20),
-
-            // Title
-            Text(
-              context.tr('cooking_mode_gather_ingredients'),
-              textAlign: TextAlign.center,
-              style: PaperTextStyles.serif(24, color: _p.textPrimary),
-            ),
-            const SizedBox(height: 8),
-
-            // Subtitle
-            Text(
-              context.tr('cooking_mode_gather_subtitle'),
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 15, color: _p.textSecondary),
-            ),
-            const SizedBox(height: 12),
-
-            // Servings badge - TAPPABLE
-            GestureDetector(
-              onTap: _showServingsSelector,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: _p.accent.withValues(alpha: _p.isDark ? 0.2 : 0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _p.accent.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.people, size: 18, color: _p.accent),
-                    const SizedBox(width: 8),
-                    Text(
-                      servingsText,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: _p.accent,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.edit, size: 14, color: _p.accent),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Ingredients card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _p.card,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _p.border),
-              ),
-              child: Column(
-                children: [
-                  // Select all button
-                  GestureDetector(
-                    onTap: _toggleSelectAll,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _p.input,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _p.border),
-                      ),
-                      child: Text(
-                        _allIngredientsChecked
-                            ? context.tr('deselect_all')
-                            : context.tr('select_all'),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: _p.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Ingredients list
-                  ...ingredients.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final ingredient = entry.value;
-                    final isChecked = _checkedIngredients.contains(index);
-
-                    return GestureDetector(
-                      onTap: () => _toggleIngredient(index),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isChecked
-                              ? _p.green.withValues(
-                                  alpha: _p.isDark ? 0.15 : 0.08,
-                                )
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isChecked
-                                ? _p.green.withOpacity(0.4)
-                                : _p.border,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: 22,
-                              height: 22,
-                              decoration: BoxDecoration(
-                                color: isChecked
-                                    ? _p.green
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: isChecked
-                                      ? _p.green
-                                      : _p.textSecondary.withOpacity(0.4),
-                                  width: 2,
-                                ),
-                              ),
-                              child: isChecked
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: Colors.white,
-                                      size: 14,
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                ingredient.displayText,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: isChecked
-                                      ? _p.textSecondary
-                                      : _p.textPrimary,
-                                  decoration: isChecked
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCookingStep(int stepIndex) {
-    final instruction = widget.recipe.instructions[stepIndex];
-    final hasActiveTimer = _activeTimerStep == _currentStep;
-    final timerMinutes = _extractTimerMinutes(instruction);
-
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Step number with gradient circle
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [_p.accent, _p.accent.withOpacity(0.7)],
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: _p.accent.withOpacity(0.3),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  '${stepIndex + 1}',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Instruction card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: _p.card,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _p.border),
-              ),
-              child: Text(
-                instruction,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: _p.textPrimary,
-                  height: 1.6,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Timer button
-            if (timerMinutes != null && !hasActiveTimer)
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => _startTimer(timerMinutes),
-                  icon: Icon(Icons.timer, color: _p.accent),
-                  label: Text(
-                    context.tr(
-                      'cooking_mode_start_timer',
-                      params: {'minutes': '$timerMinutes'},
-                    ),
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _p.accent,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    side: BorderSide(color: _p.accent, width: 2),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavigationBar() {
-    final isFirstStep = _currentStep == 0;
-    final isLastStep = _currentStep == _totalSteps - 1;
-
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        decoration: BoxDecoration(
-          color: _p.card,
-          border: Border(top: BorderSide(color: _p.border, width: 0.5)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: _p.isDark ? 0.18 : 0.06),
-              blurRadius: 16,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 48,
-                child: OutlinedButton.icon(
-                  onPressed: isFirstStep ? null : _previousStep,
-                  icon: Icon(
-                    Icons.arrow_back_rounded,
-                    size: 18,
-                    color: isFirstStep
-                        ? _p.textSecondary.withOpacity(0.35)
-                        : _p.textSecondary,
-                  ),
-                  label: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      context.tr('back'),
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: isFirstStep
-                            ? _p.textSecondary.withOpacity(0.35)
-                            : _p.textSecondary,
-                      ),
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    side: BorderSide(
-                      color: isFirstStep
-                          ? _p.border.withOpacity(0.45)
-                          : _p.border,
-                    ),
-                    minimumSize: const Size(0, 48),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SizedBox(
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: isLastStep ? _closeCookingMode : _nextStep,
-                  icon: Icon(
-                    isLastStep
-                        ? Icons.check_rounded
-                        : Icons.arrow_forward_rounded,
-                    size: 18,
-                  ),
-                  label: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      isLastStep
-                          ? context.tr('done')
-                          : context.tr('continue_text'),
-                      maxLines: 1,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isLastStep ? _p.green : _p.accent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                    minimumSize: const Size(0, 48),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  int? _extractTimerMinutes(String text) {
-    final patterns = [
-      RegExp(
-        r'(\d+)\s*(?:Minuten|minuten|Min\.|min\.?|minutes?)',
-        caseSensitive: false,
-      ),
-      RegExp(
-        r'(\d+)-(\d+)\s*(?:Minuten|minuten|Min\.|min\.?|minutes?)',
-        caseSensitive: false,
-      ),
-    ];
-
-    for (final pattern in patterns) {
-      final match = pattern.firstMatch(text);
-      if (match != null) {
-        return int.tryParse(match.group(1)!);
-      }
-    }
-    return null;
-  }
 }
 
-/// Bottom sheet for selecting servings
-class _ServingsSelectorSheet extends StatelessWidget {
-  final int currentServings;
-  final RecipeEditorPalette palette;
-  final void Function(int) onServingsChanged;
+/// "Weiter bei Schritt 3 · Von vorn", once after reopening (Konzept 13
+/// §16.1).
+class _ResumeRow extends StatelessWidget {
+  const _ResumeRow({required this.step, required this.onStartOver});
 
-  const _ServingsSelectorSheet({
-    required this.currentServings,
-    required this.palette,
-    required this.onServingsChanged,
-  });
+  final int step;
+  final VoidCallback onStartOver;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AvoSpacing.screen,
+        AvoSpacing.xs,
+        AvoSpacing.screen,
+        0,
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: AvoSpacing.m,
         children: [
-          // Handle bar
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: palette.border,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Title
           Text(
-            context.tr('servings'),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: palette.textPrimary,
+            context.tr('recipe_cook_resumed', params: {'n': '$step'}),
+            style: context.text(
+              AvoTextStyle.subhead,
+              color: colors.secondaryLabel,
             ),
           ),
-          const SizedBox(height: 24),
-
-          // Servings grid
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: [1, 2, 3, 4, 5, 6, 8, 10, 12].map((servings) {
-              final isSelected = servings == currentServings;
-              final accentColor = AppColors.recipeAccentColor(context);
-              return GestureDetector(
-                onTap: () => onServingsChanged(servings),
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: isSelected ? accentColor : palette.input,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isSelected ? accentColor : palette.border,
-                      width: isSelected ? 2 : 1,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$servings',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: isSelected ? Colors.white : palette.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+          AppButton.plain(
+            label: context.tr('recipe_cook_start_over'),
+            onPressed: onStartOver,
           ),
-
-          SizedBox(height: MediaQuery.paddingOf(context).bottom + 16),
         ],
       ),
     );
   }
 }
 
-/// Opens the cooking mode for [recipe] full screen above the tab bar. The
-/// one entry point for every screen (A6 builds the D2 cooking mode behind
-/// it; the signature stays).
+/// Opens the cooking mode for [recipe] full screen above the tab bar (a
+/// cover from the bottom; Reduce Motion: a cross-fade). The one entry point
+/// for every screen.
 Future<void> openCookingMode(
   BuildContext context, {
   required Recipe recipe,
   required int servings,
-}) => Navigator.of(context, rootNavigator: true).push<void>(
-  MaterialPageRoute(
-    fullscreenDialog: true,
-    builder: (context) => CookingModeScreen(recipe: recipe, servings: servings),
-  ),
-);
+}) {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  Widget page(BuildContext _) =>
+      CookingModeScreen(recipe: recipe, servings: servings);
+  final PageRoute<void> route = context.reduceMotion
+      ? PageRouteBuilder<void>(
+          fullscreenDialog: true,
+          transitionDuration: AvoMotion.fadeReduced,
+          reverseTransitionDuration: AvoMotion.fadeReduced,
+          pageBuilder: (context, _, _) => page(context),
+          transitionsBuilder: (context, animation, _, child) =>
+              FadeTransition(opacity: animation, child: child),
+        )
+      : CupertinoPageRoute<void>(builder: page, fullscreenDialog: true);
+  return navigator.push<void>(route);
+}

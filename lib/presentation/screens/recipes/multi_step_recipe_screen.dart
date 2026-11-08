@@ -1,27 +1,43 @@
-import 'dart:io';
+import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/models/recipe_draft.dart';
-import 'package:shoply/data/services/recipe_draft_service.dart';
-import 'package:shoply/data/services/recipe_service.dart';
-import 'package:shoply/presentation/screens/recipes/recipe_draft_images.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/recipe_editor_palette.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/step_progress_ring.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_editor_backend.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_editor_form.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_editor_frame.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_editor_steps.dart';
 import 'package:shoply/presentation/state/recipes_provider.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
+import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
+import 'package:shoply/presentation/widgets/design/skeleton.dart';
+import 'package:shoply/presentation/widgets/design/status_row.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart';
+import 'package:shoply/routes/route_paths.dart';
 
-/// Multi-step recipe editor (photo & name, times, ingredients, steps) for
-/// new recipes, drafts and editing an existing recipe.
+/// A page spring has landed within half a point.
+const Tolerance _pageTolerance = Tolerance(distance: 0.5, velocity: 10);
+
+/// A draft is saved this long after the last change (Konzept 13 §17.1).
+const Duration _draftDelay = Duration(seconds: 1);
+
+/// The recipe editor (R-15, Konzept 13 §17): four steps (photo and name,
+/// times and servings, ingredients, preparation and visibility), full
+/// screen in the [FullScreenEditor] style.
 ///
-/// In edit mode the screen pops with `true` after a successful save so the
-/// caller can reload the recipe.
+/// New recipes and drafts are saved as a draft automatically 1 s after
+/// each change; X closes at once ("Als Entwurf gespeichert"), "Entwurf
+/// verwerfen" sits in the "Mehr" menu with a confirmation. Editing a
+/// published recipe ([recipeId]) saves nothing until "Änderungen
+/// speichern"; closing with changes asks first. In edit mode the screen
+/// pops with `true` after saving so the caller can reload.
 class MultiStepRecipeScreen extends ConsumerStatefulWidget {
   final String? draftId;
   final String? recipeId;
@@ -29,1064 +45,721 @@ class MultiStepRecipeScreen extends ConsumerStatefulWidget {
   const MultiStepRecipeScreen({super.key, this.draftId, this.recipeId});
 
   @override
-  ConsumerState<MultiStepRecipeScreen> createState() => _MultiStepRecipeScreenState();
+  ConsumerState<MultiStepRecipeScreen> createState() =>
+      _MultiStepRecipeScreenState();
 }
 
-class _MultiStepRecipeScreenState extends ConsumerState<MultiStepRecipeScreen> {
-  final _recipeService = RecipeService();
-  final _draftService = RecipeDraftService();
-  final _imagePicker = ImagePicker();
-  late PageController _pageController;
+enum _Status { none, offline, publishFailed, draftFailed, loadFailed }
 
-  int _currentStep = 0;
-  static const int _totalSteps = 4;
+class _MultiStepRecipeScreenState extends ConsumerState<MultiStepRecipeScreen>
+    with SingleTickerProviderStateMixin {
+  final RecipeEditorForm _form = RecipeEditorForm();
+  int _step = 0;
 
-  // Form controllers
-  final _nameController = TextEditingController();
-  final _prepTimeController = TextEditingController();
-  final _cookTimeController = TextEditingController();
-  final _servingsController = TextEditingController(text: '4');
+  late bool _loading = widget.draftId != null || widget.recipeId != null;
+  String? _draftId;
+  DateTime? _draftCreatedAt;
+  String? _draftImagePath;
 
-  File? _selectedImage;
-  String? _existingImageUrl;
-  bool _isLoading = false;
-  bool _isLoadingData = false;
-  String? _currentDraftId;
-  String? _currentDraftImagePath;
-  String? _editingRecipeId;
+  /// The photo file [_draftImagePath] was made from.
+  String? _keptPhotoSource;
 
-  // Original values for edit mode (to detect changes)
-  String? _originalName;
-  String? _originalPrepTime;
-  String? _originalCookTime;
-  String? _originalServings;
-  List<String>? _originalIngredientNames;
-  List<String>? _originalInstructions;
+  String? _editingId;
+  Recipe? _original;
+  String? _baseline;
 
-  final List<_IngredientInput> _ingredients = [_IngredientInput()];
-  final List<TextEditingController> _instructionControllers = [TextEditingController()];
+  Timer? _saveTimer;
+  Future<void>? _saving;
+  bool _publishing = false;
+  bool _discarded = false;
+  _Status _status = _Status.none;
+  String? _authorName;
 
-  RecipeEditorPalette _p = const RecipeEditorPalette(false);
+  /// Issues shown since the last "Weiter" / "Veröffentlichen".
+  final Set<RecipeEditorIssue> _shown = {};
+
+  late PageController _pages = PageController();
+  late final AnimationController _pageSpring = AnimationController.unbounded(
+    vsync: this,
+  );
+  bool _springing = false;
+
+  late final StateController<AvoScreenContext?> _avoContext;
+  AvoScreenContext? _previousContext;
+  static const _ownContext = AvoScreenContext(screen: 'recipes');
+
+  bool get _editing => _editingId != null || widget.recipeId != null;
+
+  String get _lang => Localizations.localeOf(context).languageCode;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _form.addListener(_onFormChanged);
+    _pageSpring.addListener(() {
+      if (_pages.hasClients) _pages.jumpTo(_pageSpring.value);
+    });
+    _avoContext = ref.read(avoScreenContextProvider.notifier);
+    _previousContext = _avoContext.state;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _avoContext.state = _ownContext;
+      if (!_loading && mounted) _form.nameFocus.requestFocus();
+    });
     if (widget.recipeId != null) {
-      _loadExistingRecipe(widget.recipeId!);
+      unawaited(_loadRecipe(widget.recipeId!));
     } else if (widget.draftId != null) {
-      _loadDraft(widget.draftId!);
+      unawaited(_loadDraft(widget.draftId!));
     }
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
-    _nameController.dispose();
-    _prepTimeController.dispose();
-    _servingsController.dispose();
-    _cookTimeController.dispose();
-    for (final ing in _ingredients) {
-      ing.dispose();
-    }
-    for (final controller in _instructionControllers) {
-      controller.dispose();
-    }
+    _saveTimer?.cancel();
+    _form
+      ..removeListener(_onFormChanged)
+      ..dispose();
+    _pageSpring.dispose();
+    _pages.dispose();
+    final controller = _avoContext;
+    final previous = _previousContext;
+    scheduleMicrotask(() {
+      if (controller.mounted && controller.state == _ownContext) {
+        controller.state = previous;
+      }
+    });
     super.dispose();
   }
 
-  /// Replaces the ingredient and instruction rows (disposing the old
-  /// controllers); always leaves at least one empty row of each.
-  void _populateRows({
-    required List<({String name, String amount, String unit})> ingredients,
-    required List<String> instructions,
-  }) {
-    for (final ing in _ingredients) {
-      ing.dispose();
-    }
-    _ingredients
-      ..clear()
-      ..addAll(ingredients.map((i) => _IngredientInput()
-        ..nameController.text = i.name
-        ..amountController.text = i.amount
-        ..unitController.text = i.unit));
-    if (_ingredients.isEmpty) _ingredients.add(_IngredientInput());
+  // ---------------------------------------------------------------- loading
 
-    for (final controller in _instructionControllers) {
-      controller.dispose();
-    }
-    _instructionControllers
-      ..clear()
-      ..addAll(instructions.map((text) => TextEditingController(text: text)));
-    if (_instructionControllers.isEmpty) {
-      _instructionControllers.add(TextEditingController());
-    }
-  }
-
-  Future<void> _loadExistingRecipe(String recipeId) async {
-    setState(() => _isLoadingData = true);
-
+  Future<void> _loadDraft(String id) async {
+    final drafts = ref.read(recipeEditorDraftsProvider);
     try {
-      final recipe = await _recipeService.getRecipeById(recipeId);
+      final draft = await drafts.get(id);
+      final photo = await drafts.photo(draft?.localImagePath);
       if (!mounted) return;
-      _editingRecipeId = recipe.id;
-      _nameController.text = recipe.name;
-      _existingImageUrl = recipe.imageUrl;
-      _prepTimeController.text = recipe.prepTimeMinutes.toString();
-      _cookTimeController.text = recipe.cookTimeMinutes.toString();
-      _servingsController.text = recipe.defaultServings.toString();
-
-      _originalName = recipe.name;
-      _originalPrepTime = recipe.prepTimeMinutes.toString();
-      _originalCookTime = recipe.cookTimeMinutes.toString();
-      _originalServings = recipe.defaultServings.toString();
-      _originalIngredientNames = recipe.ingredients.map((i) => i.name).toList();
-      _originalInstructions = recipe.instructions.toList();
-
-      _populateRows(
-        ingredients: [
-          for (final ing in recipe.ingredients)
-            (name: ing.name, amount: ing.amount.toString(), unit: ing.unit),
-        ],
-        instructions: recipe.instructions,
-      );
-      setState(() => _isLoadingData = false);
+      if (draft != null) {
+        _draftId = draft.id;
+        _draftCreatedAt = draft.createdAt;
+        _draftImagePath = photo?.path;
+        _keptPhotoSource = photo?.path;
+        _form.fillFromDraft(draft, photo: photo);
+      }
     } catch (e) {
-      debugPrint('❌ [RECIPE_EDITOR] Failed to load recipe $recipeId: $e');
+      debugPrint('❌ [RECIPE_EDITOR] Draft $id not loaded: $e');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _loadRecipe(String id) async {
+    setState(() {
+      _loading = true;
+      _status = _Status.none;
+    });
+    try {
+      final recipe = await ref.read(recipeEditorBackendProvider).load(id);
       if (!mounted) return;
-      setState(() => _isLoadingData = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('recipe_load_failed'))),
-      );
+      _editingId = recipe.id;
+      _original = recipe;
+      _form.fillFromRecipe(recipe, languageCode: _lang);
+      _baseline = _form.signature();
+      setState(() => _loading = false);
+    } catch (e) {
+      debugPrint('❌ [RECIPE_EDITOR] Recipe $id not loaded: $e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _status = _Status.loadFailed;
+      });
     }
   }
 
-  Future<void> _loadDraft(String draftId) async {
-    setState(() => _isLoadingData = true);
+  // ------------------------------------------------------------ the draft
 
+  void _onFormChanged() {
+    if (!mounted) return;
+    setState(() {
+      _shown.removeWhere(
+        (issue) => !_currentIssues(issue.step).contains(issue),
+      );
+      if (_status == _Status.publishFailed || _status == _Status.offline) {
+        _status = _Status.none;
+      }
+    });
+    if (_loading || _editing || _discarded) return;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(_draftDelay, () => unawaited(_saveDraft()));
+  }
+
+  /// Saves the draft now (waits for a save already running).
+  Future<void> _saveDraft() async {
+    _saveTimer?.cancel();
+    final running = _saving;
+    if (running != null) await running;
+    if (_editing || _discarded) return;
+    final future = _writeDraft();
+    _saving = future;
     try {
-      final draft = await _draftService.getDraft(draftId);
-      final image = await RecipeDraftImages.resolve(draft?.localImagePath);
-      if (draft != null && mounted) {
-        _currentDraftId = draft.id;
-        _currentDraftImagePath = image?.path;
-        _selectedImage = image;
-        _nameController.text = draft.name;
-        if (draft.prepTimeMinutes != null) _prepTimeController.text = draft.prepTimeMinutes.toString();
-        if (draft.cookTimeMinutes != null) _cookTimeController.text = draft.cookTimeMinutes.toString();
-        if (draft.defaultServings != null) _servingsController.text = draft.defaultServings.toString();
+      await future;
+    } finally {
+      if (identical(_saving, future)) _saving = null;
+    }
+  }
 
-        _populateRows(
-          ingredients: [
-            for (final ing in draft.ingredients)
-              (name: ing.name, amount: ing.amount, unit: ing.unit),
-          ],
-          instructions: draft.instructions,
+  Future<void> _writeDraft() async {
+    final drafts = ref.read(recipeEditorDraftsProvider);
+    final lang = _lang;
+    try {
+      if (!_form.hasContent) {
+        // Everything emptied again: no draft.
+        final id = _draftId;
+        if (id != null) {
+          await drafts.delete(id);
+          await drafts.deletePhoto(_draftImagePath);
+          _draftId = null;
+          _draftImagePath = null;
+          _keptPhotoSource = null;
+        }
+        return;
+      }
+      final id = _draftId ??= 'draft_${DateTime.now().millisecondsSinceEpoch}';
+      _draftCreatedAt ??= DateTime.now();
+      final photo = _form.photo;
+      if (photo == null) {
+        if (_draftImagePath != null) {
+          await drafts.deletePhoto(_draftImagePath);
+          _draftImagePath = null;
+          _keptPhotoSource = null;
+        }
+      } else if (photo.path != _keptPhotoSource) {
+        // The picker's file lives in tmp, which iOS purges.
+        _draftImagePath = await drafts.keepPhoto(id, photo);
+        _keptPhotoSource = photo.path;
+      }
+      await drafts.save(
+        _form.toDraft(
+          id: id,
+          languageCode: lang,
+          imagePath: _draftImagePath,
+          createdAt: _draftCreatedAt,
+        ),
+      );
+      if (mounted && _status == _Status.draftFailed) {
+        setState(() => _status = _Status.none);
+      }
+    } catch (e) {
+      debugPrint('❌ [RECIPE_EDITOR] Draft not saved: $e');
+      if (mounted) setState(() => _status = _Status.draftFailed);
+    }
+  }
+
+  // ------------------------------------------------------------ validation
+
+  bool get _needsAuthorName =>
+      !_editing && ref.read(recipeEditorAuthorNameProvider) == null;
+
+  List<RecipeEditorIssue> _currentIssues(int step) => _form.issuesFor(
+    step,
+    languageCode: _lang,
+    needsAuthorName: step == 3 && _needsAuthorName,
+  );
+
+  String? _messageFor(RecipeEditorIssue issue) =>
+      _shown.contains(issue) ? context.tr(issue.messageKey) : null;
+
+  void _focusIssue(RecipeEditorIssue issue) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      switch (issue) {
+        case RecipeEditorIssue.name:
+          _form.nameFocus.requestFocus();
+        case RecipeEditorIssue.ingredients:
+          _form.ingredients.first.focus.requestFocus();
+        case RecipeEditorIssue.steps:
+          _form.steps.first.focus.requestFocus();
+        case RecipeEditorIssue.authorName:
+          FocusScope.of(context).unfocus();
+      }
+    });
+  }
+
+  /// Shows what blocks [steps]; returns false when something does.
+  bool _check(Iterable<int> steps) {
+    final issues = [for (final s in steps) ..._currentIssues(s)];
+    if (issues.isEmpty) return true;
+    unawaited(AvoHaptics.error());
+    setState(() {
+      _shown
+        ..clear()
+        ..addAll(issues);
+    });
+    final first = issues.first;
+    if (first.step != _step) _goTo(first.step);
+    _focusIssue(first);
+    return false;
+  }
+
+  // ------------------------------------------------------------ navigation
+
+  void _goTo(int step) {
+    final target = step.clamp(0, kEditorStepCount - 1);
+    if (target == _step) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _step = target);
+    if (context.reduceMotion || !_pages.hasClients) return;
+    final position = _pages.position;
+    final to = target * position.viewportDimension;
+    _springing = true;
+    _pageSpring.value = position.pixels;
+    // Completes only when it lands (an interrupted spring never does).
+    _pageSpring
+        .animateWith(
+          SpringSimulation(
+            AvoMotion.standard,
+            position.pixels,
+            to,
+            0,
+            tolerance: _pageTolerance,
+            snapToEnd: true,
+          ),
+        )
+        .then((_) {
+          _springing = false;
+          if (mounted && _pages.hasClients) _pages.jumpTo(to);
+        });
+  }
+
+  void _next() {
+    if (_step < kEditorStepCount - 1) {
+      if (_check([_step])) _goTo(_step + 1);
+      return;
+    }
+    unawaited(_publish());
+  }
+
+  void _back() => _goTo(_step - 1);
+
+  Future<void> _openStepMenu(BuildContext anchor) => showAvoMenu(
+    anchor,
+    semanticLabel: context.tr('recipe_editor_switch_step'),
+    items: [
+      for (var i = 0; i < kEditorStepCount; i++)
+        AvoMenuItem(
+          label: _stepTitle(i),
+          checked: i == _step,
+          subtitle: _form.stepComplete(i, languageCode: _lang)
+              ? null
+              : context.tr('recipe_editor_step_incomplete'),
+          onSelected: () => _goTo(i),
+        ),
+    ],
+  );
+
+  // --------------------------------------------------------------- actions
+
+  Future<void> _close() async {
+    if (_publishing) return;
+    final navigator = Navigator.of(context);
+    if (_editing) {
+      final dirty = _baseline != null && _form.signature() != _baseline;
+      if (dirty) {
+        final discard = await showAvoConfirm(
+          context,
+          title: context.tr('recipe_editor_discard_changes_title'),
+          message: context.tr('recipe_editor_discard_changes_message'),
+          confirmLabel: context.tr('recipe_editor_discard'),
+          cancelLabel: context.tr('common_keep_editing'),
+        );
+        if (!discard || !mounted) return;
+      }
+      navigator.pop();
+      return;
+    }
+    final hadContent = _form.hasContent;
+    await _saveDraft();
+    if (!mounted) return;
+    if (hadContent && _status != _Status.draftFailed) {
+      AvoToast.show(context, message: context.tr('recipe_editor_saved_draft'));
+    }
+    navigator.pop();
+  }
+
+  Future<void> _discard() async {
+    final discard = await showAvoConfirm(
+      context,
+      title: context.tr(
+        _editing
+            ? 'recipe_editor_discard_changes_title'
+            : 'recipe_editor_discard_title',
+      ),
+      message: context.tr(
+        _editing
+            ? 'recipe_editor_discard_changes_message'
+            : 'recipe_editor_discard_message',
+      ),
+      confirmLabel: context.tr('recipe_editor_discard'),
+    );
+    if (!discard || !mounted) return;
+    _discarded = true;
+    _saveTimer?.cancel();
+    final navigator = Navigator.of(context);
+    final id = _draftId;
+    if (id != null) {
+      final running = _saving;
+      if (running != null) await running;
+      final drafts = ref.read(recipeEditorDraftsProvider);
+      await drafts.delete(id);
+      await drafts.deletePhoto(_draftImagePath);
+    }
+    navigator.pop();
+  }
+
+  Future<void> _pickPhoto(RecipePhotoSource source) async {
+    try {
+      final file = await ref.read(recipeEditorPhotoPickerProvider)(source);
+      if (file != null && mounted) _form.setPhoto(file);
+    } catch (e) {
+      debugPrint('❌ [RECIPE_EDITOR] Photo not picked: $e');
+      if (mounted) {
+        AvoToast.show(
+          context,
+          message: context.tr('recipe_editor_photo_failed'),
         );
       }
-
-      if (mounted) setState(() => _isLoadingData = false);
-    } catch (e) {
-      debugPrint('❌ [RECIPE_EDITOR] Failed to load draft $draftId: $e');
-      if (!mounted) return;
-      setState(() => _isLoadingData = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('error_generic', params: {'error': '$e'}))),
-      );
     }
   }
 
-  void _goToStep(int step) {
-    if (step >= 0 && step < _totalSteps) {
+  void _removePhoto() {
+    final undo = _form.removePhoto();
+    AvoToast.show(
+      context,
+      message: context.tr('recipe_editor_photo_removed'),
+      actionLabel: context.tr('common_undo'),
+      onAction: undo,
+    );
+  }
+
+  Future<void> _openPhotoMenu(BuildContext anchor) => showAvoMenu(
+    anchor,
+    items: [
+      AvoMenuItem(
+        label: context.tr(
+          _form.hasPhoto
+              ? 'recipe_editor_photo_retake'
+              : 'recipe_editor_photo_camera',
+        ),
+        onSelected: () => unawaited(_pickPhoto(RecipePhotoSource.camera)),
+      ),
+      AvoMenuItem(
+        label: context.tr(
+          _form.hasPhoto
+              ? 'recipe_editor_photo_replace'
+              : 'recipe_editor_photo_library',
+        ),
+        onSelected: () => unawaited(_pickPhoto(RecipePhotoSource.library)),
+      ),
+      if (_form.hasPhoto) ...[
+        const AvoMenuDivider(),
+        AvoMenuItem(
+          label: context.tr('recipe_editor_photo_remove'),
+          icon: AvoIcons.trash,
+          destructive: true,
+          onSelected: _removePhoto,
+        ),
+      ],
+    ],
+  );
+
+  void _focusLater(RecipeEditorLine line) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) line.focus.requestFocus();
+    });
+  }
+
+  void _ingredientSubmitted(RecipeEditorLine line) {
+    final lines = _form.ingredients;
+    final isLast = lines.last == line;
+    if (line.text.trim().isEmpty && isLast) {
       FocusScope.of(context).unfocus();
-      setState(() => _currentStep = step);
-      _pageController.animateToPage(
-        step,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+      return;
+    }
+    _focusLater(_form.insertLine(lines, after: line));
+  }
+
+  void _ingredientChanged(RecipeEditorLine line) {
+    if (!line.text.contains('\n')) return;
+    _focusLater(_form.splitPastedIngredient(line));
+  }
+
+  void _deleteLine(List<RecipeEditorLine> lines, RecipeEditorLine line) {
+    final text = line.text.trim();
+    final lang = _lang;
+    final undo = _form.removeLine(lines, line);
+    if (text.isEmpty) return;
+    final parsed = identical(lines, _form.ingredients)
+        ? parseIngredientLine(text, lang)
+        : null;
+    final label = parsed != null && parsed.hasName
+        ? context.tr('recipe_editor_removed', params: {'name': parsed.name})
+        : context.tr('recipe_editor_removed_step');
+    AvoToast.show(
+      context,
+      message: label,
+      actionLabel: context.tr('common_undo'),
+      onAction: undo,
+    );
+  }
+
+  Future<void> _publish() async {
+    if (_publishing) return;
+    if (!_check(List.generate(kEditorStepCount, (i) => i))) return;
+    if (ref.read(isOfflineProvider)) {
+      unawaited(AvoHaptics.error());
+      setState(() => _status = _Status.offline);
+      unawaited(_saveDraft());
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    _saveTimer?.cancel();
+    setState(() {
+      _publishing = true;
+      _status = _Status.none;
+    });
+    final backend = ref.read(recipeEditorBackendProvider);
+    final drafts = ref.read(recipeEditorDraftsProvider);
+    final lang = _lang;
+    try {
+      final photo = _form.photo;
+      final imageUrl = photo != null
+          ? await backend.uploadPhoto(photo)
+          : (_form.photoUrl ?? '');
+      final base = _original;
+      final recipe = Recipe(
+        id: _editingId ?? '',
+        name: _form.name.text.trim(),
+        description: _form.description.text.trim(),
+        imageUrl: imageUrl,
+        prepTimeMinutes: _form.prepMinutes,
+        cookTimeMinutes: _form.cookMinutes,
+        defaultServings: _form.servings,
+        ingredients: _form.toIngredients(lang),
+        instructions: _form.stepTexts,
+        authorId: base?.authorId ?? '',
+        authorName: base?.authorName ?? '',
+        createdAt: base?.createdAt ?? DateTime.now(),
+      );
+      final String recipeId;
+      if (_editing) {
+        await backend.update(recipe);
+        recipeId = recipe.id;
+      } else {
+        recipeId = await backend.create(recipe, difficulty: _form.difficulty);
+      }
+      final draftId = _draftId;
+      if (draftId != null) {
+        _discarded = true;
+        final running = _saving;
+        if (running != null) await running;
+        await drafts.delete(draftId);
+        await drafts.deletePhoto(_draftImagePath);
+      }
+      if (!mounted) return;
+      refreshRecipeData(ref);
+      unawaited(AvoHaptics.success());
+      AvoToast.show(
+        context,
+        message: context.tr(
+          _editing ? 'recipe_editor_saved_changes' : 'recipe_editor_published',
+        ),
+      );
+      final router = GoRouter.maybeOf(context);
+      if (_editing) {
+        Navigator.of(context).pop(true);
+      } else if (router != null) {
+        router.pushReplacement(RoutePaths.recipe(recipeId));
+      } else {
+        Navigator.of(context).pop(recipeId);
+      }
+    } catch (e) {
+      debugPrint('❌ [RECIPE_EDITOR] Publishing failed: $e');
+      if (!mounted) return;
+      unawaited(AvoHaptics.error());
+      setState(() {
+        _publishing = false;
+        _status = _Status.publishFailed;
+      });
+      if (!_editing) unawaited(_saveDraft());
+    }
+  }
+
+  // ----------------------------------------------------------------- build
+
+  String _stepTitle(int step) => context.tr(switch (step) {
+    0 => 'recipe_editor_step_photo',
+    1 => 'recipe_editor_step_times',
+    2 => 'recipe_editor_step_ingredients',
+    _ => 'recipe_editor_step_preparation',
+  });
+
+  String _subtitle(int step) {
+    final mode = context.tr(
+      _editing ? 'recipe_editor_mode_edit' : 'recipe_editor_mode_new',
+    );
+    final where = context.tr(
+      'recipe_editor_step_of',
+      params: {'n': '${step + 1}', 'total': '$kEditorStepCount'},
+    );
+    return '$mode · $where';
+  }
+
+  String _nextLabel() {
+    if (_step < kEditorStepCount - 1) return context.tr('recipe_editor_next');
+    return context.tr(
+      _editing ? 'recipe_editor_save_changes' : 'recipe_editor_publish',
+    );
+  }
+
+  Widget? _statusRow() {
+    return switch (_status) {
+      _Status.none => null,
+      _Status.offline => StatusRow(
+        kind: StatusKind.offline,
+        text: context.tr('recipe_editor_offline'),
+      ),
+      _Status.publishFailed => StatusRow(
+        kind: StatusKind.failed,
+        text: context.tr(
+          _editing
+              ? 'recipe_editor_save_failed'
+              : 'recipe_editor_publish_failed',
+        ),
+        actionLabel: context.tr('common_try_again'),
+        onAction: () => unawaited(_publish()),
+      ),
+      _Status.draftFailed => StatusRow(
+        kind: StatusKind.failed,
+        text: context.tr('recipe_editor_draft_failed'),
+        actionLabel: context.tr('common_try_again'),
+        onAction: () => unawaited(_saveDraft()),
+      ),
+      _Status.loadFailed => StatusRow(
+        kind: StatusKind.sectionError,
+        text: context.tr('recipe_editor_load_failed'),
+        actionLabel: context.tr('common_try_again'),
+        onAction: () => unawaited(_loadRecipe(widget.recipeId!)),
+      ),
+    };
+  }
+
+  Widget _stepBody(int step) {
+    switch (step) {
+      case 0:
+        return RecipeEditorPhotoNameStep(
+          form: _form,
+          onPhotoTap: (anchor) => unawaited(_openPhotoMenu(anchor)),
+          nameError: _messageFor(RecipeEditorIssue.name),
+        );
+      case 1:
+        return RecipeEditorTimesStep(form: _form);
+      case 2:
+        return RecipeEditorIngredientsStep(
+          form: _form,
+          onSubmitted: _ingredientSubmitted,
+          onChanged: _ingredientChanged,
+          onDelete: (line) => _deleteLine(_form.ingredients, line),
+          onAdd: () => _focusLater(_form.insertLine(_form.ingredients)),
+          error: _messageFor(RecipeEditorIssue.ingredients),
+        );
+      default:
+        return RecipeEditorInstructionsStep(
+          form: _form,
+          onDelete: (line) => _deleteLine(_form.steps, line),
+          onAdd: () => _focusLater(_form.insertLine(_form.steps)),
+          authorName: _authorName,
+          onSetName: () => unawaited(context.push(RoutePaths.profile)),
+          stepsError: _messageFor(RecipeEditorIssue.steps),
+          authorError: _messageFor(RecipeEditorIssue.authorName),
+        );
+    }
+  }
+
+  Widget _page(BuildContext context, int step) => RecipeEditorStepPage(
+    title: _stepTitle(step),
+    subtitle: _subtitle(step),
+    onTitleTap: (anchor) => unawaited(_openStepMenu(anchor)),
+    child: _stepBody(step),
+  );
+
+  Widget _body(BuildContext context) {
+    if (_loading) {
+      return ListView(
+        padding: const EdgeInsets.only(top: AvoSpacing.l),
+        children: const [SkeletonSection(rows: 4, withImage: false)],
       );
     }
-  }
-
-  void _nextStep() => _goToStep(_currentStep + 1);
-
-  void _previousStep() => _goToStep(_currentStep - 1);
-
-  bool get _canProceed {
-    switch (_currentStep) {
-      case 0:
-        return _nameController.text.trim().isNotEmpty &&
-            (_selectedImage != null || _existingImageUrl != null);
-      case 1:
-        return _prepTimeController.text.trim().isNotEmpty &&
-            _cookTimeController.text.trim().isNotEmpty &&
-            _servingsController.text.trim().isNotEmpty;
-      case 2:
-        return _ingredients.any((i) => i.nameController.text.isNotEmpty);
-      case 3:
-        return _instructionControllers.any((c) => c.text.isNotEmpty);
-      default:
-        return false;
+    if (_status == _Status.loadFailed) return const SizedBox.expand();
+    if (context.reduceMotion) {
+      return AnimatedSwitcher(
+        duration: AvoMotion.fadeReduced,
+        child: KeyedSubtree(key: ValueKey(_step), child: _page(context, _step)),
+      );
     }
-  }
-
-  bool get _hasDraftData {
-    return _nameController.text.trim().isNotEmpty ||
-        _selectedImage != null ||
-        _ingredients.any((i) => i.nameController.text.isNotEmpty) ||
-        _instructionControllers.any((c) => c.text.isNotEmpty);
-  }
-
-  bool get _hasChanges {
-    if (_originalName == null) return _hasDraftData;
-
-    if (_nameController.text.trim() != _originalName) return true;
-    if (_prepTimeController.text.trim() != _originalPrepTime) return true;
-    if (_cookTimeController.text.trim() != _originalCookTime) return true;
-    if (_servingsController.text.trim() != _originalServings) return true;
-    if (_selectedImage != null) return true; // New image selected
-
-    bool differs(List<String> current, List<String>? original) {
-      if (current.length != (original?.length ?? 0)) return true;
-      for (int i = 0; i < current.length; i++) {
-        if (current[i] != original![i]) return true;
-      }
-      return false;
+    if (!_pages.hasClients && _pages.initialPage != _step) {
+      final old = _pages;
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+      _pages = PageController(initialPage: _step);
     }
-
-    final currentIngredients = _ingredients
-        .map((i) => i.nameController.text.trim())
-        .where((n) => n.isNotEmpty)
-        .toList();
-    final currentInstructions = _instructionControllers
-        .map((c) => c.text.trim())
-        .where((t) => t.isNotEmpty)
-        .toList();
-    return differs(currentIngredients, _originalIngredientNames) ||
-        differs(currentInstructions, _originalInstructions);
+    return PageView.builder(
+      controller: _pages,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: kEditorStepCount,
+      onPageChanged: (page) {
+        if (!_springing && page != _step) setState(() => _step = page);
+      },
+      itemBuilder: _page,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    _p = RecipeEditorPalette.of(context);
-
-    if (_isLoadingData) {
-      return Scaffold(
-        backgroundColor: _p.bg,
-        body: const Center(child: CupertinoActivityIndicator()),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: _p.bg,
-      body: Stack(
-        children: [
-          SafeArea(
-            child: Column(
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: PageView(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    onPageChanged: (index) => setState(() => _currentStep = index),
-                    children: [
-                      _buildPhotoNameStep(),
-                      _buildTimesStep(),
-                      _buildIngredientsStep(),
-                      _buildInstructionsStep(),
-                    ],
-                  ),
-                ),
-                // Space for the fixed bottom navigation
-                const SizedBox(height: 100),
-              ],
-            ),
-          ),
-          // Fixed bottom navigation - positioned above the tab bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: MediaQuery.paddingOf(context).bottom + 60,
-            child: _buildNavigationBar(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final stepTitles = [
-      context.tr('recipe_step_photo'),
-      context.tr('recipe_step_times'),
-      context.tr('ingredients'),
-      context.tr('instructions'),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: _p.bg,
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: _showExitConfirmation,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: _p.card,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(Icons.close, color: _p.textPrimary, size: 22),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              children: [
-                Text(
-                  context.tr(_editingRecipeId != null ? 'edit_recipe' : 'add_recipe_title'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: _p.textPrimary),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  stepTitles[_currentStep],
-                  style: TextStyle(fontSize: 13, color: _p.textSecondary),
-                ),
-              ],
-            ),
-          ),
-          StepProgressRing(
-            currentStep: _currentStep,
-            totalSteps: _totalSteps,
-            color: _p.accent,
-            trackColor: _p.border,
-            textColor: _p.textPrimary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Shared layout of every step: hero icon, title, subtitle and a card.
-  Widget _buildStepPage({
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-    required Widget card,
-    Widget? beforeCard,
-  }) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      child: Column(
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-              border: Border.all(color: color.withValues(alpha: 0.2), width: 2),
-            ),
-            child: Icon(icon, color: color, size: 36),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _p.textPrimary),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: _p.textSecondary),
-          ),
-          const SizedBox(height: 24),
-          if (beforeCard != null) ...[
-            beforeCard,
-            const SizedBox(height: 16),
-          ],
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _p.card,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _p.border),
-            ),
-            child: card,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddRowButton({required String label, required Color color, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: color),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPhotoNameStep() {
-    final hasImage = _selectedImage != null || _existingImageUrl != null;
-    return _buildStepPage(
-      icon: Icons.camera_alt_rounded,
-      color: _p.accent,
-      title: context.tr('recipe_add_photo_title'),
-      subtitle: context.tr('recipe_add_photo_subtitle'),
-      beforeCard: GestureDetector(
-        onTap: _pickImage,
-        child: Container(
-          height: 180,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: _p.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _p.border),
-            image: _selectedImage != null
-                ? DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover)
-                : _existingImageUrl != null
-                    ? DecorationImage(
-                        image: CachedNetworkImageProvider(_existingImageUrl!),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-          ),
-          child: hasImage
-              ? null
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: _p.accent.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.add_photo_alternate, size: 28, color: _p.accent),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      context.tr('tap_to_add_photo'),
-                      style: TextStyle(fontSize: 15, color: _p.textSecondary),
-                    ),
-                  ],
-                ),
-        ),
-      ),
-      card: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.tr('recipe_name'),
-            style: TextStyle(fontSize: 13, color: _p.textSecondary),
-          ),
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              hintText: context.tr('recipe_name_hint'),
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: const EdgeInsets.only(top: 8),
-              hintStyle: TextStyle(color: _p.textSecondary, fontSize: 17),
-            ),
-            style: TextStyle(fontSize: 17, color: _p.textPrimary),
-            onChanged: (_) => setState(() {}),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimesStep() {
-    return _buildStepPage(
-      icon: Icons.schedule_rounded,
-      color: _p.accent,
-      title: context.tr('recipe_times_title'),
-      subtitle: context.tr('recipe_times_subtitle'),
-      card: Column(
-        children: [
-          _buildTimeRow(
-            icon: Icons.timer_outlined,
-            color: _p.accent,
-            label: context.tr('prep_time'),
-            controller: _prepTimeController,
-            suffix: context.tr('minutes_short'),
-          ),
-          Divider(height: 16, color: _p.border),
-          _buildTimeRow(
-            icon: Icons.local_fire_department,
-            color: _p.orange,
-            label: context.tr('cook_time'),
-            controller: _cookTimeController,
-            suffix: context.tr('minutes_short'),
-          ),
-          Divider(height: 16, color: _p.border),
-          _buildTimeRow(
-            icon: Icons.people,
-            color: _p.green,
-            label: context.tr('servings'),
-            controller: _servingsController,
-            suffix: context.tr('portions'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeRow({
-    required IconData icon,
-    required Color color,
-    required String label,
-    required TextEditingController controller,
-    required String suffix,
-  }) {
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color, size: 22),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: TextStyle(fontSize: 13, color: _p.textSecondary)),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 50,
-                    child: TextField(
-                      controller: controller,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        hintText: '0',
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        hintStyle: TextStyle(color: _p.textSecondary, fontSize: 20, fontWeight: FontWeight.w600),
-                      ),
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: _p.textPrimary),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  Text(suffix, style: TextStyle(fontSize: 15, color: _p.textSecondary)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildIngredientsStep() {
-    InputDecoration fieldDecoration(String hint) => InputDecoration(
-          hintText: hint,
-          border: InputBorder.none,
-          isDense: true,
-          hintStyle: TextStyle(color: _p.textSecondary),
-        );
-    final fieldStyle = TextStyle(fontSize: 16, color: _p.textPrimary);
-
-    return _buildStepPage(
-      icon: Icons.restaurant_rounded,
-      color: _p.green,
-      title: context.tr('ingredients'),
-      subtitle: context.tr('recipe_ingredients_subtitle'),
-      card: Column(
-        children: [
-          for (int index = 0; index < _ingredients.length; index++) ...[
-            if (index > 0) const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: TextField(
-                    controller: _ingredients[index].nameController,
-                    decoration: fieldDecoration(context.tr('ingredient')),
-                    style: fieldStyle,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                SizedBox(
-                  width: 50,
-                  child: TextField(
-                    controller: _ingredients[index].amountController,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    decoration: fieldDecoration('0'),
-                    style: fieldStyle,
-                  ),
-                ),
-                SizedBox(
-                  width: 70,
-                  child: TextField(
-                    controller: _ingredients[index].unitController,
-                    decoration: fieldDecoration(context.tr('unit')),
-                    style: fieldStyle,
-                  ),
-                ),
-                if (_ingredients.length > 1)
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      final removed = _ingredients.removeAt(index);
-                      setState(() {});
-                      // Dispose after the row's TextFields left the tree.
-                      WidgetsBinding.instance.addPostFrameCallback((_) => removed.dispose());
-                    },
-                    child: Icon(Icons.close, color: _p.textSecondary, size: 20),
-                  ),
-              ],
-            ),
-            if (index < _ingredients.length - 1) Divider(height: 12, color: _p.border),
-          ],
-          const SizedBox(height: 16),
-          _buildAddRowButton(
-            label: context.tr('add_ingredient'),
-            color: _p.green,
-            onTap: () => setState(() => _ingredients.add(_IngredientInput())),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInstructionsStep() {
-    return _buildStepPage(
-      icon: Icons.format_list_numbered_rounded,
-      color: _p.accent,
-      title: context.tr('instructions'),
-      subtitle: context.tr('recipe_instructions_subtitle'),
-      card: Column(
-        children: [
-          for (int index = 0; index < _instructionControllers.length; index++) ...[
-            if (index > 0) const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(color: _p.accent, shape: BoxShape.circle),
-                  child: Center(
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _instructionControllers[index],
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      hintText: context.tr('instruction_step'),
-                      border: InputBorder.none,
-                      isDense: true,
-                      hintStyle: TextStyle(color: _p.textSecondary),
-                    ),
-                    style: TextStyle(fontSize: 16, color: _p.textPrimary, height: 1.4),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                if (_instructionControllers.length > 1)
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      final removed = _instructionControllers.removeAt(index);
-                      setState(() {});
-                      WidgetsBinding.instance.addPostFrameCallback((_) => removed.dispose());
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Icon(Icons.close, color: _p.textSecondary, size: 20),
-                    ),
-                  ),
-              ],
-            ),
-            if (index < _instructionControllers.length - 1) Divider(height: 16, color: _p.border),
-          ],
-          const SizedBox(height: 16),
-          _buildAddRowButton(
-            label: context.tr('add_step'),
-            color: _p.accent,
-            onTap: () => setState(() => _instructionControllers.add(TextEditingController())),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavigationBar() {
-    final isFirstStep = _currentStep == 0;
-    final isLastStep = _currentStep == _totalSteps - 1;
-    final backColor = isFirstStep ? _p.textSecondary.withValues(alpha: 0.4) : _p.textSecondary;
-
-    // iOS 26 has very tall bottom safe area - put buttons ABOVE the navbar
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-      decoration: BoxDecoration(
-        color: _p.card,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 52,
-              child: OutlinedButton.icon(
-                onPressed: isFirstStep ? null : _previousStep,
-                icon: Icon(Icons.arrow_back, size: 18, color: backColor),
-                label: Text(
-                  context.tr('back'),
-                  style: TextStyle(fontWeight: FontWeight.w500, color: backColor),
-                ),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: _p.card,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  side: BorderSide(color: isFirstStep ? _p.border.withValues(alpha: 0.5) : _p.border),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: SizedBox(
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: isLastStep
-                    ? (_isLoading ? null : _publishRecipe)
-                    : (_canProceed ? _nextStep : null),
-                icon: _isLoading
-                    ? const CupertinoActivityIndicator(radius: 10, color: Colors.white)
-                    : Icon(isLastStep ? Icons.publish : Icons.arrow_forward, size: 18),
-                label: Text(
-                  context.tr(isLastStep ? 'publish' : 'continue_text'),
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isLastStep ? _p.green : _p.accent,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: _p.border,
-                  disabledForegroundColor: _p.textSecondary,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 0,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showExitConfirmation() {
-    // Nothing to keep: editing without changes, or a new recipe without data.
-    if ((_editingRecipeId != null && !_hasChanges) ||
-        (_editingRecipeId == null && !_hasDraftData)) {
-      context.pop();
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _p.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(context.tr('save_draft_question'), textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: _p.textPrimary)),
-        content: Text(context.tr('save_draft_question_desc'), textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: _p.textSecondary)),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.pop();
-            },
-            child: Text(context.tr('discard'), style: const TextStyle(color: Colors.red)),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _saveDraft();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _p.accent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text(context.tr('save_draft'), style: const TextStyle(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
-      );
-      if (image != null && mounted) {
-        setState(() => _selectedImage = File(image.path));
-      }
-    } catch (e) {
-      debugPrint('❌ [RECIPE_EDITOR] Image picker failed: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('error_generic', params: {'error': '$e'}))),
-      );
-    }
-  }
-
-  Future<void> _saveDraft() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final now = DateTime.now();
-      final draftId = _currentDraftId ?? 'draft_${now.millisecondsSinceEpoch}';
-
-      // Keep a durable copy of the photo; the picker's file lives in tmp.
-      final imagePath = _selectedImage == null
-          ? null
-          : await RecipeDraftImages.persist(draftId, _selectedImage!);
-
-      final draft = RecipeDraft(
-        id: draftId,
-        name: _nameController.text.trim(),
-        description: '',
-        localImagePath: imagePath,
-        prepTimeMinutes: int.tryParse(_prepTimeController.text.trim()),
-        cookTimeMinutes: int.tryParse(_cookTimeController.text.trim()),
-        defaultServings: int.tryParse(_servingsController.text.trim()),
-        ingredients: _ingredients
-            .map((i) => DraftIngredient(
-                  name: i.nameController.text.trim(),
-                  amount: i.amountController.text.trim(),
-                  unit: i.unitController.text.trim(),
-                ))
-            .toList(),
-        instructions: _instructionControllers.map((c) => c.text.trim()).toList(),
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      await _draftService.saveDraft(draft);
-
-      if (mounted) context.go('/recipes/drafts');
-    } catch (e) {
-      debugPrint('❌ [RECIPE_EDITOR] Failed to save draft: $e');
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.tr('error_generic', params: {'error': '$e'})),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _publishRecipe() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final prepTime = int.tryParse(_prepTimeController.text.trim());
-      final cookTime = int.tryParse(_cookTimeController.text.trim());
-      final servings = int.tryParse(_servingsController.text.trim());
-
-      if (prepTime == null || cookTime == null || servings == null) {
-        throw _EditorException(context.tr('invalid_numbers_error'));
-      }
-
-      final ingredients = <Ingredient>[];
-      for (final ing in _ingredients) {
-        final name = ing.nameController.text.trim();
-        if (name.isEmpty) continue;
-        final amount = _parseAmount(ing.amountController.text);
-        if (amount == null) {
-          throw _EditorException('${context.tr('invalid_amount_error')}: $name');
+    // Watched here, not in the page builder (which runs during layout).
+    _authorName = ref.watch(recipeEditorAuthorNameProvider);
+    final blocked = _loading || _status == _Status.loadFailed;
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_step > 0) {
+          _back();
+        } else {
+          unawaited(_close());
         }
-        ingredients.add(Ingredient(name: name, amount: amount, unit: ing.unitController.text.trim()));
-      }
-
-      final instructions = _instructionControllers
-          .map((c) => c.text.trim())
-          .where((text) => text.isNotEmpty)
-          .toList();
-      if (instructions.isEmpty) {
-        throw _EditorException(context.tr('no_instructions_error'));
-      }
-
-      final String imageUrl;
-      if (_selectedImage != null) {
-        imageUrl = await _recipeService.uploadRecipeImage(
-          _selectedImage!.path,
-          'recipe_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        );
-      } else if (_existingImageUrl != null) {
-        imageUrl = _existingImageUrl!;
-      } else {
-        throw _EditorException(context.tr('image_required_error'));
-      }
-
-      final name = _nameController.text.trim();
-      final String resultRecipeId;
-      var resultRecipeName = name;
-
-      if (_editingRecipeId != null) {
-        await _recipeService.updateRecipe(
-          _editingRecipeId!,
-          name: name,
-          // The editor has no description field: null keeps the stored
-          // description ('' used to erase it on every edit).
-          description: null,
-          imageUrl: imageUrl,
-          prepTimeMinutes: prepTime,
-          cookTimeMinutes: cookTime,
-          defaultServings: servings,
-          ingredients: ingredients,
-          instructions: instructions,
-        );
-        resultRecipeId = _editingRecipeId!;
-      } else {
-        final createdRecipe = await _recipeService.createRecipe(Recipe(
-          id: '',
-          name: name,
-          description: '',
-          imageUrl: imageUrl,
-          prepTimeMinutes: prepTime,
-          cookTimeMinutes: cookTime,
-          defaultServings: servings,
-          ingredients: ingredients,
-          instructions: instructions,
-          authorId: '',
-          authorName: '',
-          createdAt: DateTime.now(),
-        ));
-        resultRecipeId = createdRecipe.id;
-        resultRecipeName = createdRecipe.name;
-      }
-
-      if (_currentDraftId != null) {
-        await _draftService.deleteDraft(_currentDraftId!);
-        await RecipeDraftImages.delete(_currentDraftImagePath);
-      }
-
-      if (!mounted) return;
-      // New/changed recipe must show up in every recipe list.
-      refreshRecipeData(ref);
-      HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${context.tr('recipe_published')}: "$resultRecipeName"'),
-          backgroundColor: _p.green,
-        ),
-      );
-
-      if (_editingRecipeId != null) {
-        // Back to the (still open) detail page, which reloads on `true`.
-        context.pop(true);
-      } else {
-        context.pushReplacement('/recipes/$resultRecipeId');
-      }
-    } catch (e) {
-      debugPrint('❌ [RECIPE_EDITOR] Failed to publish recipe: $e');
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      final message = e is _EditorException
-          ? e.message
-          : context.tr('error_generic', params: {'error': '$e'});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
-  }
-
-  /// Parses "1", "1,5", "0.5" or "1/2".
-  double? _parseAmount(String input) {
-    final cleaned = input.trim().replaceAll(',', '.');
-    final simple = double.tryParse(cleaned);
-    if (simple != null) return simple;
-
-    final parts = cleaned.split('/');
-    if (parts.length == 2) {
-      final numerator = double.tryParse(parts[0].trim());
-      final denominator = double.tryParse(parts[1].trim());
-      if (numerator != null && denominator != null && denominator != 0) {
-        return numerator / denominator;
-      }
-    }
-    return null;
-  }
-}
-
-/// A validation message that is already localized for the user.
-class _EditorException implements Exception {
-  final String message;
-  const _EditorException(this.message);
-}
-
-class _IngredientInput {
-  final nameController = TextEditingController();
-  final amountController = TextEditingController();
-  final unitController = TextEditingController();
-
-  void dispose() {
-    nameController.dispose();
-    amountController.dispose();
-    unitController.dispose();
+      },
+      child: RecipeEditorFrame(
+        step: _step,
+        stepCount: kEditorStepCount,
+        onClose: () => unawaited(_close()),
+        nextLabel: _nextLabel(),
+        onNext: blocked ? null : _next,
+        working: _publishing,
+        status: _statusRow(),
+        onSwipeBack: _step > 0 && !blocked ? _back : null,
+        menuItems: [
+          if (!blocked)
+            AvoMenuItem(
+              label: context.tr(
+                _editing
+                    ? 'recipe_editor_discard_changes'
+                    : 'recipe_editor_discard_draft',
+              ),
+              icon: AvoIcons.trash,
+              destructive: true,
+              enabled: _editing || _form.hasContent || _draftId != null,
+              onSelected: () => unawaited(_discard()),
+            ),
+        ],
+        body: _body(context),
+      ),
+    );
   }
 }
