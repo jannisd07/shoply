@@ -260,16 +260,18 @@ class AvoTileGrid extends StatelessWidget {
     final rows = <Widget>[];
     for (var i = 0; i < children.length; i += 2) {
       final second = i + 1 < children.length ? children[i + 1] : null;
-      rows.add(IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: children[i]),
-            const SizedBox(width: _kTileGap),
-            Expanded(child: second ?? const SizedBox.shrink()),
-          ],
+      rows.add(
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: children[i]),
+              const SizedBox(width: _kTileGap),
+              Expanded(child: second ?? const SizedBox.shrink()),
+            ],
+          ),
         ),
-      ));
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -359,11 +361,14 @@ class _HeaderAction extends StatelessWidget {
         onPressed: onPressed,
         enabled: onPressed != null,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
+          constraints: const BoxConstraints(
+            minHeight: AvoSizes.hitTarget,
+            minWidth: AvoSizes.hitTarget,
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.s),
             child: Align(
-              alignment: AlignmentDirectional.centerStart,
+              alignment: AlignmentDirectional.centerEnd,
               widthFactor: 1,
               heightFactor: 1,
               child: Text(
