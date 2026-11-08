@@ -131,16 +131,35 @@ class HomeAvoCard extends StatelessWidget {
         const SizedBox(height: AvoSpacing.l),
         const _AskAvoField(),
         const SizedBox(height: AvoSpacing.s),
-        Wrap(
-          spacing: AvoSpacing.s,
-          children: [
-            for (final chip in chips)
-              _AskChip(
-                label: chip,
-                onTap: () => openAvoWithQuestion(context, chip),
-              ),
-          ],
-        ),
+        // D2: one row of chips; it scrolls sideways when they don't fit.
+        // At accessibility sizes they wrap instead.
+        if (large)
+          Wrap(
+            spacing: AvoSpacing.s,
+            children: [
+              for (final chip in chips)
+                _AskChip(
+                  label: chip,
+                  onTap: () => openAvoWithQuestion(context, chip),
+                ),
+            ],
+          )
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            child: Row(
+              children: [
+                for (var i = 0; i < chips.length; i++) ...[
+                  if (i > 0) const SizedBox(width: AvoSpacing.s),
+                  _AskChip(
+                    label: chips[i],
+                    onTap: () => openAvoWithQuestion(context, chips[i]),
+                  ),
+                ],
+              ],
+            ),
+          ),
       ],
     );
 
