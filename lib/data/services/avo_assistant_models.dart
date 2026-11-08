@@ -85,6 +85,9 @@ class AvoListChange {
     this.previousQuantity,
     this.newQuantity,
     this.undo,
+    this.pendingOffline = false,
+    this.failedCount = 0,
+    this.retryFailed,
   });
 
   final AvoListChangeKind kind;
@@ -114,6 +117,17 @@ class AvoListChange {
   /// Takes the change back if the data is unchanged since; null when it
   /// cannot be taken back.
   final Future<AvoUndoResult> Function()? undo;
+
+  /// The change waits in the offline queue ("Wird gesendet, sobald du online
+  /// bist"); it has no undo yet.
+  final bool pendingOffline;
+
+  /// Items that could not be changed ("2 Artikel nicht verschoben").
+  final int failedCount;
+
+  /// Tries the [failedCount] items again and returns the whole change after
+  /// it (null when nothing could be done).
+  final Future<AvoListChange?> Function()? retryFailed;
 }
 
 enum AvoExpressionType {

@@ -1,5 +1,5 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/semantics.dart';
-import 'package:flutter/widgets.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -141,11 +141,18 @@ enum AvoSectionState {
 /// and **what happened** (subtitle), optional detail rows, up to two text
 /// buttons (the destination first, then "Widerrufen").
 ///
-/// VoiceOver reads the head as one sentence ([semanticLabel]) with the
-/// buttons as custom actions too; detail rows stay their own elements (check
-/// circles are switches). From AX1 the object image goes and the buttons
-/// stack, left aligned.
-class AvoResultSection extends StatelessWidget {
+/// - At most [maxCollapsed] detail rows show; tapping the head unfolds up to
+///   [maxExpanded] (with [onSeeAll] "Alle in {Liste} ansehen" beyond that).
+///   Without more rows a tap on the head runs [onOpen] (Kap. 3.5).
+/// - [partialText] adds the "2 Artikel nicht verschoben · Erneut versuchen"
+///   row, [pendingOffline] the sync mark with "Wird gesendet, sobald du
+///   online bist" (Kap. 2.5).
+///
+/// VoiceOver reads the head as one sentence ([semanticLabel]); double tap
+/// unfolds or opens. The footer buttons are their own buttons (heard once),
+/// detail rows stay their own elements (check circles are switches). From
+/// AX1 the object image goes and the buttons stack, left aligned.
+class AvoResultSection extends StatefulWidget {
   const AvoResultSection({
     super.key,
     required this.title,
@@ -159,6 +166,15 @@ class AvoResultSection extends StatelessWidget {
     this.titleColor,
     this.semanticLabel,
     this.trailingTitle,
+    this.maxCollapsed = 8,
+    this.maxExpanded = 20,
+    this.onOpen,
+    this.seeAllLabel,
+    this.onSeeAll,
+    this.partialText,
+    this.onRetryPartial,
+    this.partialWorking = false,
+    this.pendingOffline = false,
   });
 
   final String title;
@@ -187,40 +203,88 @@ class AvoResultSection extends StatelessWidget {
   /// After the title on its line (the Pro badge).
   final Widget? trailingTitle;
 
+  /// Rows shown folded and unfolded (Kap. 2.5: 8, Kap. 3.5: 20).
+  final int maxCollapsed;
+  final int maxExpanded;
+
+  /// A tap on the head when there is nothing to unfold (open the list).
+  final VoidCallback? onOpen;
+
+  /// "Alle in {Liste} ansehen" under the unfolded rows beyond [maxExpanded].
+  final String? seeAllLabel;
+  final VoidCallback? onSeeAll;
+
+  /// "2 Artikel nicht verschoben"; with [onRetryPartial] "Erneut versuchen".
+  final String? partialText;
+  final VoidCallback? onRetryPartial;
+  final bool partialWorking;
+
+  /// The change waits in the offline queue.
+  final bool pendingOffline;
+
+  @override
+  State<AvoResultSection> createState() => _AvoResultSectionState();
+}
+
+// Kap. 3.5: details unfold on the standard spring (0.35 s, no overshoot).
+const Duration _unfold = Duration(milliseconds: 350); // D2 AvoMotion.standard
+const double _syncGlyph = 13; // D2 arrow.triangle.2.circlepath 13 pt
+
+class _AvoResultSectionState extends State<AvoResultSection> {
+  bool _expanded = false;
+
   @override
   Widget build(BuildContext context) {
+    final w = widget;
     final colors = context.colors;
     final ax = context.isAccessibilityText;
-    final undone = state == AvoSectionState.undone;
-    final changed = state == AvoSectionState.changedSince;
+    final undone = w.state == AvoSectionState.undone;
+    final changed = w.state == AvoSectionState.changedSince;
 
-    var sub = subtitle;
+    var sub = w.subtitle;
     if (undone) sub = context.tr('avo_row_undone');
     if (changed) {
       final note = context.tr('avo_row_changed_since');
       sub = sub == null || sub.isEmpty ? note : '$sub · $note';
     }
+    final pendingNote = w.pendingOffline && !undone
+        ? context.tr('avo_row_pending_offline')
+        : null;
     final visibleActions = [
-      for (final a in actions)
+      for (final a in w.actions)
         if (!(a.isUndo && (undone || changed))) a,
     ];
     final showFooter =
-        state != AvoSectionState.running && visibleActions.isNotEmpty;
+        w.state != AvoSectionState.running && visibleActions.isNotEmpty;
+    final canExpand = w.details.length > w.maxCollapsed;
+    final shownCount = _expanded
+        ? w.details.length.clamp(0, w.maxExpanded)
+        : w.details.length.clamp(0, w.maxCollapsed);
+    final showSeeAll =
+        _expanded &&
+        w.details.length > w.maxExpanded &&
+        w.seeAllLabel != null &&
+        w.onSeeAll != null;
 
-    final Widget? lead = state == AvoSectionState.running
+    final Widget? lead = w.state == AvoSectionState.running
         ? const SizedBox.square(
             dimension: _leadingSize,
             child: Center(child: AvoActivityDots()),
           )
-        : leading;
+        : w.leading;
 
     final titleText = Text(
-      title,
+      w.title,
       style: context.text(
         AvoTextStyle.subhead,
         weight: FontWeight.w600,
-        color: titleColor ?? (undone ? colors.secondaryLabel : colors.label),
+        color: w.titleColor ?? (undone ? colors.secondaryLabel : colors.label),
       ),
+    );
+    final footnoteStyle = context.text(
+      AvoTextStyle.footnote,
+      color: colors.secondaryLabel,
+      tabular: true,
     );
     final head = Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -237,22 +301,33 @@ class AvoResultSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (trailingTitle == null)
+                if (w.trailingTitle == null)
                   titleText
                 else
                   Wrap(
                     spacing: AvoSpacing.s,
                     crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [titleText, trailingTitle!],
+                    children: [titleText, w.trailingTitle!],
                   ),
                 if (sub != null && sub.isNotEmpty)
-                  Text(
-                    sub,
-                    style: context.text(
-                      AvoTextStyle.footnote,
-                      color: colors.secondaryLabel,
-                      tabular: true,
-                    ),
+                  Text(sub, style: footnoteStyle),
+                if (pendingNote != null)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          top: AvoSpacing.xxs,
+                          right: AvoSpacing.xs,
+                        ),
+                        child: Icon(
+                          CupertinoIcons.arrow_2_circlepath,
+                          size: _syncGlyph,
+                          color: colors.secondaryLabel,
+                        ),
+                      ),
+                      Flexible(child: Text(pendingNote, style: footnoteStyle)),
+                    ],
                   ),
               ],
             ),
@@ -262,12 +337,13 @@ class AvoResultSection extends StatelessWidget {
     );
 
     final sentence =
-        semanticLabel ??
-        [title, if (sub != null && sub.isNotEmpty) sub].join(', ');
+        w.semanticLabel ??
+        [w.title, if (sub != null && sub.isNotEmpty) sub].join(', ');
+    void toggle() => setState(() => _expanded = !_expanded);
+    final VoidCallback? headTap = canExpand ? toggle : w.onOpen;
     final customActions = <CustomSemanticsAction, VoidCallback>{
-      for (final a in visibleActions)
-        if (a.onPressed != null)
-          CustomSemanticsAction(label: a.label): a.onPressed!,
+      if (canExpand && !_expanded)
+        CustomSemanticsAction(label: context.tr('avo_show_details')): toggle,
     };
 
     final buttons = [
@@ -279,23 +355,102 @@ class AvoResultSection extends StatelessWidget {
         ),
     ];
 
+    final partial = w.partialText;
+    final rows = <Widget>[
+      for (var i = 0; i < shownCount; i++) ...[
+        if (i > 0) AvoHairline(indent: w.detailIndent),
+        w.details[i],
+      ],
+      if (showSeeAll)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.l),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: AppButton.plain(
+              label: w.seeAllLabel!,
+              onPressed: w.onSeeAll,
+            ),
+          ),
+        ),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         Semantics(
           container: true,
+          button: headTap != null,
           label: sentence,
-          customSemanticsActions: customActions,
-          child: ExcludeSemantics(child: head),
+          onTap: headTap,
+          customSemanticsActions: customActions.isEmpty ? null : customActions,
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: headTap,
+            child: ConstrainedBox(
+              // A tappable head keeps a 44 pt target.
+              constraints: BoxConstraints(
+                minHeight: headTap == null ? 0 : AvoSizes.hitTarget,
+              ),
+              child: head,
+            ),
+          ),
         ),
-        if (details.isNotEmpty) ...[
+        if (rows.isNotEmpty) ...[
           const SizedBox(height: AvoSpacing.xs),
-          for (var i = 0; i < details.length; i++) ...[
-            if (i > 0) AvoHairline(indent: detailIndent),
-            details[i],
-          ],
+          AnimatedSize(
+            duration: context.reduceMotion ? Duration.zero : _unfold,
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: rows,
+            ),
+          ),
         ],
+        if (partial != null && !undone)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AvoSpacing.l,
+              AvoSpacing.xs,
+              AvoSpacing.l,
+              0,
+            ),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AvoSpacing.s,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.exclamationmark_circle,
+                      size: _syncGlyph + AvoSpacing.xs,
+                      color: colors.destructive,
+                    ),
+                    const SizedBox(width: AvoSpacing.xs),
+                    Flexible(
+                      child: Text(
+                        partial,
+                        style: context.text(
+                          AvoTextStyle.footnote,
+                          color: colors.destructive,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (w.onRetryPartial != null)
+                  AppButton.plain(
+                    label: context.tr('avo_retry'),
+                    working: w.partialWorking,
+                    onPressed: w.partialWorking ? null : w.onRetryPartial,
+                  ),
+              ],
+            ),
+          ),
         if (showFooter)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -314,7 +469,7 @@ class AvoResultSection extends StatelessWidget {
           )
         else
           const SizedBox(height: _bodyBottom),
-        if (footnote != null)
+        if (w.footnote != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AvoSpacing.l,
@@ -322,14 +477,7 @@ class AvoResultSection extends StatelessWidget {
               AvoSpacing.l,
               _bodyBottom,
             ),
-            child: Text(
-              footnote!,
-              style: context.text(
-                AvoTextStyle.footnote,
-                color: colors.secondaryLabel,
-                tabular: true,
-              ),
-            ),
+            child: Text(w.footnote!, style: footnoteStyle),
           ),
       ],
     );

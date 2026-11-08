@@ -123,10 +123,16 @@ class AvoErrorSection extends StatelessWidget {
     required this.onRetry,
     required this.onSignIn,
     this.retryAt,
+    this.partlyDone = false,
   });
 
   final String code;
-  final VoidCallback onRetry;
+
+  /// Null hides "Erneut versuchen" (the question was asked again already).
+  final VoidCallback? onRetry;
+
+  /// Changes of this answer are done and keep their cards: says so.
+  final bool partlyDone;
   final VoidCallback onSignIn;
   final DateTime? retryAt;
 
@@ -179,7 +185,7 @@ class AvoErrorSection extends StatelessWidget {
           context,
           error,
           context.tr('avo_err_title'),
-          subtitle: context.tr('avo_err_unreachable'),
+          subtitle: partlyDone ? null : context.tr('avo_err_unreachable'),
         );
     }
   }
@@ -190,17 +196,20 @@ class AvoErrorSection extends StatelessWidget {
     String title, {
     String? subtitle,
   }) {
+    final sub = partlyDone ? context.tr('avo_err_partly_done') : subtitle;
+    final retry = onRetry;
     return _RetryLater(
       retryAt: retryAt,
       builder: (ready) => AvoResultSection(
         title: title,
-        subtitle: subtitle,
+        subtitle: sub,
         leading: leading,
         actions: [
-          AvoCardAction(
-            label: context.tr('avo_retry'),
-            onPressed: ready ? onRetry : null,
-          ),
+          if (retry != null)
+            AvoCardAction(
+              label: context.tr('avo_retry'),
+              onPressed: ready ? retry : null,
+            ),
         ],
       ),
     );

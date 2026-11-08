@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shoply/presentation/screens/avo/avo_hand_over.dart';
 import 'package:shoply/presentation/screens/avo/avo_tab_screen.dart';
 import 'package:shoply/routes/app_branch.dart';
 
@@ -7,14 +8,19 @@ import 'package:shoply/routes/app_branch.dart';
 // builder (if the area has a root screen) and four lists. Teil A places them;
 // Teil B only edits this file. See docs/redesign/status-A.md, "Routen".
 
-/// Root of the Avo tab at RoutePaths.avo. `?q=` hands a question over
-/// (the "Frag Avo …" field on Home); Avo sends it exactly once. `?prompt=`
-/// (deep links `shoply://avo?prompt=`) only fills the composer and never
-/// sends, so another app or a web page cannot make Avo act.
-Widget buildAvoRoot(BuildContext context, GoRouterState state) => AvoTabScreen(
-      initialQuestion: state.uri.queryParameters['q'],
-      prompt: state.uri.queryParameters['prompt'],
-    );
+/// Root of the Avo tab at RoutePaths.avo. A URL's `?prompt=` or `?q=`
+/// (deep links like `shoply://avo?q=`) only fills the composer and never
+/// sends, so another app or a web page cannot make Avo act. In-app callers
+/// that want Avo to answer at once use `openAvoWithQuestion`, which hands the
+/// question over as `extra` ([AvoAsk]); Avo sends it exactly once.
+Widget buildAvoRoot(BuildContext context, GoRouterState state) {
+  final query = state.uri.queryParameters;
+  final extra = state.extra;
+  return AvoTabScreen(
+    prompt: query['prompt'] ?? query['q'],
+    ask: extra is AvoAsk ? extra : null,
+  );
+}
 
 /// Children of the area root, with paths relative to it. They open in the
 /// root's navigator; add `parentNavigatorKey: rootNavigatorKey` to open one

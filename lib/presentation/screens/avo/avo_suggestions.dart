@@ -95,6 +95,18 @@ const _peanutAllergy = AvoSuggestion(
 );
 const _modules = AvoSuggestion('avo_sugg_modules', AvoSuggestionSymbol.toggles);
 
+/// Names from shared lists (other members write them) go into suggestions
+/// that send at once only when short and on one line (W1 review).
+const int _maxNameLength = 40;
+
+String? _safeName(String name) {
+  final n = name.trim();
+  if (n.isEmpty || n.length > _maxNameLength || n.contains(RegExp(r'[\r\n]'))) {
+    return null;
+  }
+  return n;
+}
+
 /// Fills up when a context row drops suggestions (Kap. 4.2: "rückt der
 /// nächste Kern-Vorschlag nach").
 const _reserve = [_whatsOnList, _cookToday, _lastSaturday];
@@ -131,7 +143,7 @@ List<AvoSuggestion> avoEmptySuggestions({
       rows.add(_whatsMissing);
       final names = [
         for (final n in openItemNames)
-          if (n.trim().isNotEmpty) n.trim(),
+          if (_safeName(n) case final safe?) safe,
       ];
       if (names.length >= 2) {
         rows.add(
@@ -173,8 +185,8 @@ List<AvoSuggestion> avoFollowUps(
   final hasRecipes = payloads.any(
     (p) => p.kind == AvoPayloadKind.recipes && (p.recipes?.isNotEmpty ?? false),
   );
-  final target = targetList?.trim();
-  if (hasRecipes && target != null && target.isNotEmpty) {
+  final target = targetList == null ? null : _safeName(targetList);
+  if (hasRecipes && target != null) {
     out.add(
       AvoSuggestion('avo_chip_ingredients_to', AvoSuggestionSymbol.plus, {
         'list': target,

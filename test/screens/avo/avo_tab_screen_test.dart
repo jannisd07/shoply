@@ -1,16 +1,22 @@
 // The Avo tab (B5 §3, §4, §5.1, §6): states, interactions, semantics.
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/avo_conversation.dart';
 import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
+import 'package:shoply/presentation/screens/avo/avo_hand_over.dart';
 import 'package:shoply/presentation/screens/avo/avo_tab_screen.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_status_line.dart';
 import 'package:shoply/presentation/widgets/design/check_circle.dart';
 import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/areas/avo_routes.dart';
 
 import 'avo_fakes.dart';
 
@@ -22,6 +28,7 @@ Future<void> _pump(
   bool subscribed = false,
   String? q,
   String? prompt,
+  AvoAsk? ask,
   AvoScreenContext? screen,
   FakeItemRepository? items,
 }) async {
@@ -39,7 +46,7 @@ Future<void> _pump(
     if (screen != null) avoScreenContextProvider.overrideWith((ref) => screen),
   ];
   await tester.pumpWidget(
-    avoHarness(AvoTabScreen(initialQuestion: q, prompt: prompt), overrides),
+    avoHarness(AvoTabScreen(prompt: prompt ?? q, ask: ask), overrides),
   );
   await settle(tester);
 }
@@ -337,29 +344,86 @@ void main() {
     });
   });
 
-  group('hand-overs', () {
-    testWidgets('?q= sends exactly once', (tester) async {
-      final backend = FakeAvoBackend();
-      await _pump(tester, backend, q: 'Was ist bei Lidl im Angebot?');
-      expect(backend.asked, ['Was ist bei Lidl im Angebot?']);
+  group('hand-overs (§1, W1 review Important 1)', () {
+    Future<GoRouter> router(
+      WidgetTester tester,
+      FakeAvoBackend backend,
+      String location,
+    ) async {
+      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final r = GoRouter(
+        initialLocation: location,
+        routes: [
+          GoRoute(path: '/avo', builder: buildAvoRoot),
+          GoRoute(
+            path: '/home',
+            builder: (context, _) => Center(
+              child: TextButton(
+                onPressed: () =>
+                    openAvoWithQuestion(context, 'Plan für Freitag'),
+                child: const Text('Frag Avo'),
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(r.dispose);
       await tester.pumpWidget(
-        avoHarness(
-          const AvoTabScreen(initialQuestion: 'Was ist bei Lidl im Angebot?'),
-          avoOverrides(backend: backend),
+        ProviderScope(
+          overrides: avoOverrides(backend: backend),
+          child: MaterialApp.router(
+            routerConfig: r,
+            builder: (context, child) =>
+                AvoDesignScope(child: AvoToastHost(child: child!)),
+          ),
         ),
       );
       await settle(tester);
-      expect(backend.asked, hasLength(1));
+      return r;
+    }
+
+    String field(WidgetTester tester) =>
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text;
+
+    testWidgets('a URL q (shoply://avo?q=) only fills the composer', (
+      tester,
+    ) async {
+      final backend = FakeAvoBackend();
+      await router(tester, backend, '/avo?q=Entferne%20meine%20Allergie');
+      expect(backend.asked, isEmpty);
+      expect(field(tester), 'Entferne meine Allergie');
     });
 
-    testWidgets('?prompt= only fills the composer', (tester) async {
+    testWidgets('a URL prompt only fills the composer', (tester) async {
       final backend = FakeAvoBackend();
-      await _pump(tester, backend, prompt: 'Milch auf die Liste');
+      await router(tester, backend, '/avo?prompt=Milch%20auf%20die%20Liste');
       expect(backend.asked, isEmpty);
-      expect(
-        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
-        'Milch auf die Liste',
-      );
+      expect(field(tester), 'Milch auf die Liste');
+    });
+
+    testWidgets('openAvoWithQuestion sends exactly once', (tester) async {
+      final backend = FakeAvoBackend();
+      final r = await router(tester, backend, '/home');
+      await tester.tap(find.text('Frag Avo'));
+      await settle(tester);
+      expect(backend.asked, ['Plan für Freitag']);
+      // Leaving and coming back does not send it again.
+      r.go('/home');
+      await settle(tester);
+      r.go('/avo');
+      await settle(tester);
+      expect(backend.asked, ['Plan für Freitag']);
+    });
+
+    testWidgets('a hand-over with the AI switched off only fills the field', (
+      tester,
+    ) async {
+      final backend = FakeAvoBackend();
+      await _pump(tester, backend, aiOn: false, ask: AvoAsk('Hallo'));
+      expect(backend.asked, isEmpty);
+      expect(field(tester), 'Hallo');
     });
   });
 

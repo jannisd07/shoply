@@ -12,17 +12,21 @@ import 'package:shoply/core/constants/legal_links.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
+import 'package:shoply/presentation/screens/avo/avo_hand_over.dart';
 import 'package:shoply/presentation/screens/avo/avo_initial_question.dart';
 import 'package:shoply/presentation/screens/avo/avo_suggestions.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_composer.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_context_chip.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_glyphs.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_large_title.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_list_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_status_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_suggestion_views.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_turn_view.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -46,14 +50,14 @@ const double _contextChipGap = AvoSpacing.s; // D2: 8 above the composer
 /// figure, the conversation (or the empty chat with suggestions), the
 /// context capsule and the glass composer above the tab bar.
 ///
-/// [initialQuestion] is the route's `q` (the "Frag Avo …" field on Home):
-/// sent exactly once. [prompt] is the route's `prompt` (deep links): it only
-/// fills the composer and never sends, so no other app can make Avo act.
+/// [prompt] comes from the URL (`?prompt=`, `?q=`, deep links): it only
+/// fills the composer and never sends, so no other app or web page can make
+/// Avo act. [ask] is an in-app hand-over (`openAvoWithQuestion`): sent once.
 class AvoTabScreen extends ConsumerStatefulWidget {
-  const AvoTabScreen({super.key, this.initialQuestion, this.prompt});
+  const AvoTabScreen({super.key, this.prompt, this.ask});
 
-  final String? initialQuestion;
   final String? prompt;
+  final AvoAsk? ask;
 
   @override
   ConsumerState<AvoTabScreen> createState() => _AvoTabScreenState();
@@ -69,32 +73,53 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
     vsync: this,
   )..addListener(_onSpring);
 
-  final _question = AvoInitialQuestion();
   final _prefill = AvoInitialQuestion();
+  int? _lastAsk;
 
   AvoChat? _chat;
   int _turnCount = -1;
+  bool _visible = false;
+  late final AppLifecycleListener _lifecycle = AppLifecycleListener(
+    onResume: () => _chat?.expireIfStale(),
+  );
 
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
-    _handOver(widget.initialQuestion);
+    _lifecycle;
+    _handOver(widget.ask);
     _prefillWith(widget.prompt);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The tab root stays mounted: TickerMode is off while another tab shows,
+    // and the route is not current while something is pushed on top.
+    final visible =
+        TickerMode.valuesOf(context).enabled &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
+    if (visible && !_visible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.read(avoChatProvider).expireIfStale();
+      });
+    }
+    _visible = visible;
   }
 
   @override
   void didUpdateWidget(covariant AvoTabScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialQuestion != oldWidget.initialQuestion) {
-      _handOver(widget.initialQuestion);
-    }
+    if (widget.ask?.id != oldWidget.ask?.id) _handOver(widget.ask);
     if (widget.prompt != oldWidget.prompt) _prefillWith(widget.prompt);
   }
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _chat?.onTurnFinished = null;
+    _chat?.onChangeMade = null;
     _scroll.removeListener(_onScroll);
     _scrollSpring.dispose();
     _scroll.dispose();
@@ -106,21 +131,24 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
 
   // ------------------------------------------------------------ hand-overs
 
-  /// `?q=`: sends the question once, after the first frame.
-  void _handOver(String? question) {
-    final q = _question.take(question);
-    if (q == null) return;
+  /// An in-app [AvoAsk]: sent once, after the first frame (with the AI
+  /// switched off it only fills the composer).
+  void _handOver(AvoAsk? ask) {
+    if (ask == null || ask.id == _lastAsk) return;
+    _lastAsk = ask.id;
+    final q = ask.question.trim();
+    if (q.isEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (!ref.read(aiRemoteEnabledProvider)) {
-        _controller.text = q;
+        _prefillWith(q);
         return;
       }
       _send(q, clearField: false);
     });
   }
 
-  /// `?prompt=`: fills the composer, never sends.
+  /// A URL's `?prompt=` / `?q=`: fills the composer, never sends.
   void _prefillWith(String? prompt) {
     final p = _prefill.take(prompt);
     if (p == null) return;
@@ -135,16 +163,35 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
 
   // --------------------------------------------------------------- actions
 
+  /// Free with a known Pro limit: only then may the Pro row show (and use
+  /// up the week's one showing).
+  bool get _proHintAllowed =>
+      !ref.read(isSubscribedProvider) &&
+      ref.read(avoProQuestionLimitProvider) != null;
+
   void _send(String text, {bool clearField = true}) {
-    final turn = ref
-        .read(avoChatProvider)
-        .send(
-          text,
-          ref,
-          offline: ref.read(isOfflineProvider),
-          isFree: !ref.read(isSubscribedProvider),
-        );
+    final chat = ref.read(avoChatProvider)..attach(ref);
+    final turn = chat.send(
+      text,
+      offline: ref.read(isOfflineProvider),
+      proHintAllowed: _proHintAllowed,
+    );
     if (turn != null && clearField) _controller.clear();
+  }
+
+  /// Kap. 3.2: a change made while the tab is not visible also shows as a
+  /// toast on the current screen, without Avo's name, with "Widerrufen".
+  void _changeMade(AvoWidgetPayload p) {
+    if (!mounted || _visible) return;
+    final chat = ref.read(avoChatProvider);
+    final change = chat.changeOf(p);
+    if (change == null) return;
+    AvoToast.show(
+      context,
+      message: avoChangeToast(context, change),
+      actionLabel: change.undo == null ? null : context.tr('avo_undo'),
+      onAction: change.undo == null ? null : () => chat.undo(p),
+    );
   }
 
   void _newConversation() {
@@ -270,10 +317,16 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
   @override
   Widget build(BuildContext context) {
     final chat = ref.watch(avoChatProvider);
+    // Everything that runs later works with this long-lived ref, never with
+    // the ref of a round that may scroll away.
+    chat.attach(ref);
     if (!identical(chat, _chat)) {
       _chat?.onTurnFinished = null;
+      _chat?.onChangeMade = null;
       _chat = chat;
-      chat.onTurnFinished = _announce;
+      chat
+        ..onTurnFinished = _announce
+        ..onChangeMade = _changeMade;
       _turnCount = -1;
     }
     final offline = ref.watch(isOfflineProvider);
@@ -325,11 +378,18 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
           )
         : offline
         ? StatusRow(kind: StatusKind.offline, text: context.tr('avo_offline'))
+        : chat.slowConnection
+        ? StatusRow(
+            kind: StatusKind.pending,
+            text: context.tr('avo_slow_connection'),
+          )
         : null;
 
     final followUpTarget = contextName ?? contextList?.name;
     final body = <Widget>[
-      AvoLargeTitle(pose: pose),
+      // VoiceOver reads the title from the head ([_TitleForVoiceOver]), so it
+      // comes before "Neues Gespräch" (Kap. 3.6).
+      ExcludeSemantics(child: AvoLargeTitle(pose: pose)),
       if (status != null) ...[const SizedBox(height: AvoSpacing.s), status],
       const SizedBox(height: _historyStart),
       if (turns.isEmpty)
@@ -367,21 +427,31 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       child: Stack(
         children: [
           Positioned.fill(
-            // VoiceOver: toolbar, then title and conversation, then the
-            // composer (Kap. 3.6), whatever scrolls under what.
+            // VoiceOver (Kap. 3.6): title, "Neues Gespräch", status row and
+            // conversation, then the composer, whatever scrolls under what.
             child: Semantics(
               container: true,
-              sortKey: const OrdinalSortKey(1),
-              child: CustomScrollView(
-                controller: _scroll,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                slivers: [
-                  SliverPadding(
-                    padding: EdgeInsets.only(top: top, bottom: bottom),
-                    sliver: SliverList(delegate: SliverChildListDelegate(body)),
-                  ),
-                ],
+              sortKey: const OrdinalSortKey(2),
+              // A finger on the list stops the glide to the newest round at
+              // once (interruptible, apple-design §3).
+              child: NotificationListener<UserScrollNotification>(
+                onNotification: (_) {
+                  if (_scrollSpring.isAnimating) _scrollSpring.stop();
+                  return false;
+                },
+                child: CustomScrollView(
+                  controller: _scroll,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  slivers: [
+                    SliverPadding(
+                      padding: EdgeInsets.only(top: top, bottom: bottom),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate(body),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -399,7 +469,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
               valueListenable: _collapsed,
               builder: (context, collapsed, _) => Semantics(
                 container: true,
-                sortKey: const OrdinalSortKey(0),
+                sortKey: const OrdinalSortKey(1),
                 child: GlassToolbar(
                   title: collapsed ? AppBrand.name : null,
                   trailing: [
@@ -420,10 +490,11 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
             height: bottom - AvoSpacing.l + _bottomFade,
             child: _BottomEdgeFade(fade: _bottomFade),
           ),
+          _TitleForVoiceOver(scroll: _scroll, collapsed: _collapsed, top: top),
           AccessoryDock(
             child: Semantics(
               container: true,
-              sortKey: const OrdinalSortKey(2),
+              sortKey: const OrdinalSortKey(3),
               child: AvoComposer(
                 controller: _controller,
                 focusNode: _focus,
@@ -469,6 +540,48 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
     return ConstrainedBox(
       constraints: BoxConstraints(minHeight: minHeight),
       child: Align(alignment: Alignment.topCenter, child: view),
+    );
+  }
+}
+
+/// The large title "Avo" for VoiceOver, placed over the scrolling title so
+/// it is read first (Kap. 3.6). Once the title has collapsed into the
+/// toolbar, the toolbar's title takes over.
+class _TitleForVoiceOver extends StatelessWidget {
+  const _TitleForVoiceOver({
+    required this.scroll,
+    required this.collapsed,
+    required this.top,
+  });
+
+  final ScrollController scroll;
+  final ValueListenable<bool> collapsed;
+  final double top;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = context.typography.lineHeightOf(AvoTextStyle.largeTitle);
+    return ListenableBuilder(
+      listenable: Listenable.merge([scroll, collapsed]),
+      builder: (context, _) {
+        if (collapsed.value) return const SizedBox.shrink();
+        final offset = scroll.hasClients ? scroll.offset : 0.0;
+        return Positioned(
+          top: top - offset,
+          left: AvoSpacing.screen,
+          right: AvoSpacing.screen,
+          height: height,
+          child: IgnorePointer(
+            child: Semantics(
+              container: true,
+              header: true,
+              label: AppBrand.name,
+              sortKey: const OrdinalSortKey(0),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -56,12 +56,14 @@ class AvoTurnView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isFree = !ref.watch(isSubscribedProvider);
+    final limit = ref.watch(avoProQuestionLimitProvider);
+    // The weekly Pro slot is only spent when the row can really show.
+    final proHintAllowed = isFree && limit != null;
     final scope = AvoCardScope(
       chat: chat,
-      ref: ref,
       turn: turn,
       offline: offline,
-      isFree: isFree,
+      proHintAllowed: proHintAllowed,
     );
 
     String? note;
@@ -74,7 +76,11 @@ class AvoTurnView extends ConsumerWidget {
         note = context.tr('avo_not_sent');
         noteAction = context.tr('avo_resend');
         onNoteAction = aiEnabled
-            ? () => chat.retry(turn, ref, offline: offline, isFree: isFree)
+            ? () => chat.retry(
+                turn,
+                offline: offline,
+                proHintAllowed: proHintAllowed,
+              )
             : null;
       default:
         break;
@@ -103,16 +109,29 @@ class AvoTurnView extends ConsumerWidget {
 
     final sections = avoSectionsFor(context, scope);
     if (turn.phase == AvoTurnPhase.failed && turn.errorCode != null) {
+      final done = avoDoneChanges(context, scope);
       sections.add(
         AvoErrorSection(
           code: turn.errorCode!,
           retryAt: turn.retryAt,
-          onRetry: () =>
-              chat.retry(turn, ref, offline: offline, isFree: isFree),
+          partlyDone: done.isNotEmpty,
+          // Asked again as a new round: the retry is that round now.
+          onRetry: turn.retried
+              ? null
+              : () => chat.retry(
+                  turn,
+                  offline: offline,
+                  proHintAllowed: proHintAllowed,
+                  doneNote: done.isEmpty
+                      ? null
+                      : context.tr(
+                          'avo_retry_done_note',
+                          params: {'changes': done},
+                        ),
+                ),
           onSignIn: () => context.push(RoutePaths.login),
         ),
       );
-      final limit = ref.watch(avoProQuestionLimitProvider);
       if (turn.errorCode == 'quota_exceeded' &&
           turn.proHint &&
           isFree &&

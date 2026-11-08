@@ -42,10 +42,11 @@ void main() {
     ]);
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
 
-    final first = chat.send('Eins', ref)!;
-    final second = chat.send('Zwei', ref)!;
+    final first = chat.send('Eins')!;
+    final second = chat.send('Zwei')!;
     await tester.pump();
     expect(first.phase, AvoTurnPhase.working);
     expect(second.phase, AvoTurnPhase.queued);
@@ -66,14 +67,15 @@ void main() {
     final backend = FakeAvoBackend();
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
 
-    expect(chat.send('   ', ref), isNull);
-    final turn = chat.send('Hallo', ref, offline: true)!;
+    expect(chat.send('   '), isNull);
+    final turn = chat.send('Hallo', offline: true)!;
     expect(turn.phase, AvoTurnPhase.notSent);
     expect(backend.asked, isEmpty);
 
-    chat.retry(turn, ref);
+    chat.retry(turn);
     await tester.pump();
     expect(backend.asked, ['Hallo']);
     expect(turn.phase, AvoTurnPhase.done);
@@ -85,8 +87,9 @@ void main() {
     final backend = FakeAvoBackend([const AvoScript.error('network_error')]);
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
-    final turn = chat.send('Hallo', ref)!;
+    final turn = chat.send('Hallo')!;
     await tester.pump();
     expect(turn.phase, AvoTurnPhase.notSent);
   });
@@ -97,8 +100,9 @@ void main() {
     ]);
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, now: () => kNow, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
-    final turn = chat.send('Hallo', ref)!;
+    final turn = chat.send('Hallo')!;
     await tester.pump();
     expect(turn.phase, AvoTurnPhase.failed);
     expect(turn.errorCode, 'rate_limited');
@@ -114,11 +118,13 @@ void main() {
     ]);
     final ref = await _ref(tester, backend);
     final allowed = AvoChat(backend, proHints: FakeProHints());
+    allowed.attach(ref);
     final blocked = AvoChat(backend, proHints: FakeProHints(allow: false));
+    blocked.attach(ref);
     addTearDown(allowed.dispose);
     addTearDown(blocked.dispose);
-    final a = allowed.send('x', ref)!;
-    final b = blocked.send('x', ref)!;
+    final a = allowed.send('x', proHintAllowed: true)!;
+    final b = blocked.send('x', proHintAllowed: true)!;
     await tester.pump();
     await tester.pump();
     expect(a.proHint, isTrue);
@@ -139,8 +145,9 @@ void main() {
     ]);
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
-    final turn = chat.send('Mach was', ref)!;
+    final turn = chat.send('Mach was')!;
     await tester.pump();
     chat.stop();
     await tester.pump();
@@ -162,8 +169,9 @@ void main() {
     ]);
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
-    final turn = chat.send('Rezept', ref)!;
+    final turn = chat.send('Rezept')!;
     await tester.pump();
     // The fake runs tools before text: the text stays, the step is set.
     expect(turn.step, const AvoWorkStep('avo_status_recipes'));
@@ -179,8 +187,9 @@ void main() {
     final backend = FakeAvoBackend();
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, now: () => now, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
-    chat.send('Hallo', ref);
+    chat.send('Hallo');
     await tester.pump();
     now = now.add(const Duration(hours: 23));
     chat.expireIfStale();
@@ -197,15 +206,16 @@ void main() {
     final backend = FakeAvoBackend();
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
-    chat.send('Eins', ref);
+    chat.send('Eins');
     await tester.pump();
     chat.newConversation();
     expect(chat.isEmpty, isTrue);
     chat.undoNewConversation();
     expect(chat.turns, hasLength(1));
     chat.newConversation();
-    chat.send('Neu', ref);
+    chat.send('Neu');
     await tester.pump();
     expect(backend.resets, 1);
     expect(chat.turns.single.question, 'Neu');
@@ -218,11 +228,12 @@ void main() {
     ]);
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
-    chat.send('Milch', ref);
+    chat.send('Milch');
     await tester.pump();
     expect(chat.isChoiceStale(pick), isFalse);
-    chat.send('Lieber nicht', ref);
+    chat.send('Lieber nicht');
     await tester.pump();
     expect(chat.isChoiceStale(pick), isTrue);
   });
@@ -240,13 +251,14 @@ void main() {
     final backend = FakeAvoBackend()..deleteOutcome = AvoDeleteOutcome.failed;
     final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, now: () => now, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
 
     expect(chat.confirmPhaseOf(p), AvoConfirmPhase.asking);
-    await chat.confirmDelete(p, ref);
+    await chat.confirmDelete(p);
     expect(chat.confirmPhaseOf(p), AvoConfirmPhase.failed);
     backend.deleteOutcome = AvoDeleteOutcome.deleted;
-    await chat.confirmDelete(p, ref);
+    await chat.confirmDelete(p);
     expect(chat.confirmPhaseOf(p), AvoConfirmPhase.deleted);
 
     final late = AvoWidgetPayload.confirmDelete(
@@ -256,7 +268,7 @@ void main() {
     );
     now = now.add(const Duration(minutes: 11));
     expect(chat.confirmPhaseOf(late), AvoConfirmPhase.expired);
-    await chat.confirmDelete(late, ref);
+    await chat.confirmDelete(late);
     expect(backend.deleted, hasLength(2), reason: 'expired cards never delete');
   });
 
@@ -264,8 +276,9 @@ void main() {
     tester,
   ) async {
     final backend = FakeAvoBackend();
-    await _ref(tester, backend);
+    final ref = await _ref(tester, backend);
     final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
     addTearDown(chat.dispose);
     final health = AvoWidgetPayload.consentRequest(AvoConsentKind.health);
     final body = AvoWidgetPayload.consentRequest(AvoConsentKind.body);
@@ -276,6 +289,114 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('avo_consent_health'), isTrue);
     expect(prefs.getBool('avo_consent_body'), isNull);
+  });
+
+  testWidgets('"Neues Gespräch" never resets under a finishing answer', (
+    tester,
+  ) async {
+    final backend = FakeAvoBackend([
+      const AvoScript(hold: true, message: 'alt'),
+      const AvoScript.text('neu'),
+    ])..releaseOnStop = false;
+    final ref = await _ref(tester, backend);
+    final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
+    addTearDown(chat.dispose);
+    final finished = <String>[];
+    chat.onTurnFinished = (t) => finished.add(t.question);
+
+    chat.send('Alte Frage');
+    await tester.pump();
+    chat.newConversation();
+    expect(backend.stops, 1);
+    final fresh = chat.send('Neue Frage')!;
+    await tester.pump();
+    expect(fresh.phase, AvoTurnPhase.queued);
+    expect(backend.resets, 0, reason: 'the old answer is still finishing');
+
+    backend.release();
+    await tester.pump();
+    await tester.pump();
+    expect(backend.resets, 1);
+    expect(fresh.phase, AvoTurnPhase.done);
+    expect(fresh.text.value, 'neu');
+    expect(finished, ['Neue Frage'], reason: 'the cleared answer stays quiet');
+  });
+
+  testWidgets('retry without done changes starts over in place', (
+    tester,
+  ) async {
+    final backend = FakeAvoBackend([
+      const AvoScript.error('timeout'),
+      const AvoScript.text('ok'),
+    ]);
+    final ref = await _ref(tester, backend);
+    final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
+    addTearDown(chat.dispose);
+    final turn = chat.send('Hallo')!;
+    await tester.pump();
+    expect(chat.slowConnection, isTrue, reason: 'a timeout');
+    chat.retry(turn, doneNote: 'egal');
+    await tester.pump();
+    expect(chat.turns, hasLength(1));
+    expect(backend.asked, ['Hallo', 'Hallo']);
+    expect(turn.phase, AvoTurnPhase.done);
+    expect(chat.slowConnection, isFalse, reason: 'a fast answer clears it');
+  });
+
+  testWidgets('retry with done changes is a new round with the note', (
+    tester,
+  ) async {
+    final change = AvoWidgetPayload.listChange(
+      AvoListChange(
+        kind: AvoListChangeKind.added,
+        listId: 'w',
+        listName: 'Wocheneinkauf',
+        undo: () async => AvoUndoResult.undone,
+      ),
+    );
+    final backend = FakeAvoBackend([
+      AvoScript(payloads: [change], errorCode: 'provider_error'),
+    ]);
+    final ref = await _ref(tester, backend);
+    final chat = AvoChat(backend, proHints: FakeProHints());
+    chat.attach(ref);
+    addTearDown(chat.dispose);
+    final failed = chat.send('Milch und Eier')!;
+    await tester.pump();
+    chat.retry(
+      failed,
+      doneNote: 'Schon erledigt: Wocheneinkauf: 1 hinzugefügt',
+    );
+    await tester.pump();
+    expect(chat.turns, hasLength(2));
+    expect(failed.payloads, [change]);
+    expect(failed.retried, isTrue);
+    expect(chat.turns.last.question, 'Milch und Eier');
+    expect(
+      backend.asked.last,
+      'Milch und Eier\n\nSchon erledigt: Wocheneinkauf: 1 hinzugefügt',
+    );
+    await chat.undo(change);
+    expect(chat.undoPhaseOf(change), AvoUndoPhase.undone);
+  });
+
+  testWidgets('a throwing undo ends as failed, not as a crash', (tester) async {
+    final change = AvoWidgetPayload.listChange(
+      AvoListChange(
+        kind: AvoListChangeKind.added,
+        listId: 'w',
+        listName: 'Wocheneinkauf',
+        undo: () async => throw StateError('ref disposed'),
+      ),
+    );
+    final backend = FakeAvoBackend();
+    await _ref(tester, backend);
+    final chat = AvoChat(backend, proHints: FakeProHints());
+    addTearDown(chat.dispose);
+    await chat.undo(change);
+    expect(chat.undoPhaseOf(change), AvoUndoPhase.idle);
   });
 
   test('AvoPendingDeletes.restore puts a failed token back while valid', () {

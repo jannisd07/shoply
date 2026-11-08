@@ -76,6 +76,11 @@ export 'package:shoply/presentation/widgets/home_sections/home_sections.dart'
 export 'package:shoply/presentation/providers/avo_screen_context_provider.dart'
     show AvoScreenContext, avoScreenContextProvider;
 
+// Avo tab: open it with a question Avo answers at once (in-app only; a URL
+// only fills the composer).
+export 'package:shoply/presentation/screens/avo/avo_hand_over.dart'
+    show AvoAsk, openAvoWithQuestion;
+
 // Onboarding, settings, modules.
 export 'package:shoply/presentation/providers/app_flags_provider.dart'
     show offersAvailableProvider, offersRemoteEnabledProvider;

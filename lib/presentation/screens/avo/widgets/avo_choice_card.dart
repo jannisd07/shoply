@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/screens/avo/avo_l10n.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
@@ -184,7 +185,7 @@ class _AvoChoiceCardState extends State<AvoChoiceCard> {
     return Semantics(
       container: true,
       explicitChildNodes: true,
-      label: context.tr('avo_choice_label', params: {'n': '${options.length}'}),
+      label: avoTrCount(context, 'avo_choice_label', options.length),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AvoRadii.group),
         child: ColoredBox(

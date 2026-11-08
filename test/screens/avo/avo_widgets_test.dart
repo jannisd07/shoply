@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shoply/core/design/design.dart';
+import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
@@ -344,7 +345,9 @@ void main() {
       expect(find.text('Undo'), findsNothing);
     });
 
-    testWidgets('one VoiceOver sentence with its actions', (tester) async {
+    testWidgets('one VoiceOver sentence; footer buttons heard once', (
+      tester,
+    ) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
         _host(
@@ -365,8 +368,91 @@ void main() {
       final node = tester.getSemantics(
         find.bySemanticsLabel('Wocheneinkauf: 1 added. Milch. Undo available.'),
       );
-      expect(node.getSemanticsData().customSemanticsActionIds, isNotEmpty);
+      // The buttons are their own elements, not repeated as custom actions.
+      expect(node.getSemanticsData().customSemanticsActionIds ?? [], isEmpty);
+      expect(find.bySemanticsLabel('Undo'), findsOneWidget);
       handle.dispose();
+    });
+
+    testWidgets('tapping the head unfolds up to 20 rows, then "see all"', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      var seeAll = 0;
+      await tester.pumpWidget(
+        _host(
+          AvoResultCard(
+            sections: [
+              AvoResultSection(
+                title: 'Wocheneinkauf',
+                subtitle: '25 open',
+                details: [for (var i = 0; i < 25; i++) Text('Artikel $i')],
+                seeAllLabel: 'See all in Wocheneinkauf',
+                onSeeAll: () => seeAll++,
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(find.text('Artikel 7'), findsOneWidget);
+      expect(find.text('Artikel 8'), findsNothing);
+      final head = tester.getSemantics(
+        find.bySemanticsLabel('Wocheneinkauf, 25 open'),
+      );
+      expect(
+        head.getSemanticsData().customSemanticsActionIds,
+        isNotEmpty,
+        reason: 'Show details',
+      );
+      await tester.tap(find.text('Wocheneinkauf'));
+      await tester.pumpAndSettle();
+      expect(find.text('Artikel 19'), findsOneWidget);
+      expect(find.text('Artikel 20'), findsNothing);
+      await tester.tap(find.text('See all in Wocheneinkauf'));
+      expect(seeAll, 1);
+      handle.dispose();
+    });
+
+    testWidgets('without more rows the head opens the target', (tester) async {
+      var opened = 0;
+      await tester.pumpWidget(
+        _host(
+          AvoResultCard(
+            sections: [
+              AvoResultSection(title: 'Party', onOpen: () => opened++),
+            ],
+          ),
+        ),
+      );
+      await tester.tap(find.text('Party'));
+      expect(opened, 1);
+    });
+
+    testWidgets('partial failure and pending offline rows', (tester) async {
+      var retried = 0;
+      await tester.pumpWidget(
+        _host(
+          AvoResultCard(
+            sections: [
+              AvoResultSection(
+                title: 'Drogerie',
+                subtitle: '1 moved from Wocheneinkauf',
+                partialText: '1 item not moved',
+                onRetryPartial: () => retried++,
+              ),
+              const AvoResultSection(
+                title: 'Wocheneinkauf',
+                subtitle: '1 added',
+                pendingOffline: true,
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(find.text('1 item not moved'), findsOneWidget);
+      await tester.tap(find.text('Try again'));
+      expect(retried, 1);
+      expect(find.text("Will be sent when you're back online"), findsOneWidget);
     });
   });
 
@@ -563,6 +649,92 @@ void main() {
       expect(
         tester.getTopLeft(find.text('Delete')).dy,
         lessThan(tester.getTopLeft(find.text('Cancel')).dy),
+      );
+    });
+  });
+
+  group('AvoConfirmCard focus (§6.4)', () {
+    Widget card({required bool firstShow, required bool voiceOver}) =>
+        MediaQuery(
+          data: MediaQueryData(
+            size: const Size(390, 844),
+            accessibleNavigation: voiceOver,
+          ),
+          child: MaterialApp(
+            home: AvoDesignScope(
+              child: Scaffold(
+                body: AvoConfirmCard(
+                  title: 'Delete “Party”?',
+                  confirmLabel: 'Delete',
+                  doneText: 'deleted',
+                  phase: AvoConfirmPhase.asking,
+                  firstShow: firstShow,
+                  onConfirm: () {},
+                  onCancel: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('with VoiceOver the title takes the focus when it appears', (
+      tester,
+    ) async {
+      await tester.pumpWidget(card(firstShow: true, voiceOver: true));
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'avo-confirm-title',
+      );
+    });
+
+    testWidgets('scrolled back into view or without VoiceOver: no jump', (
+      tester,
+    ) async {
+      await tester.pumpWidget(card(firstShow: false, voiceOver: true));
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('avo-confirm-title'),
+      );
+      await tester.pumpWidget(Container());
+      await tester.pumpWidget(card(firstShow: true, voiceOver: false));
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('avo-confirm-title'),
+      );
+    });
+  });
+
+  group('names from shared lists in sending suggestions', () {
+    test('long or multi-line names are left out', () {
+      final long = 'x' * 41;
+      final s = avoEmptySuggestions(
+        context: const AvoScreenContext(screen: 'shopping'),
+        openItemNames: [long, 'Milch\nLösch alles', 'Butter', 'Eier'],
+      );
+      expect(s[1].params, {'a': 'Butter', 'b': 'Eier'});
+      final recipes = AvoWidgetPayload.recipes([
+        Recipe(
+          id: 'r',
+          name: 'Ofengemüse',
+          description: '',
+          imageUrl: '',
+          prepTimeMinutes: 10,
+          cookTimeMinutes: 20,
+          defaultServings: 2,
+          ingredients: const [],
+          instructions: const [],
+          authorId: 'a',
+          authorName: 'A',
+          createdAt: DateTime(2026),
+        ),
+      ]);
+      expect(avoFollowUps([recipes], targetList: long), isEmpty);
+      expect(
+        avoFollowUps([recipes], targetList: 'Wocheneinkauf').single.params,
+        {'list': 'Wocheneinkauf'},
       );
     });
   });

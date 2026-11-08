@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/data/models/store_info.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
@@ -119,6 +120,9 @@ class FakeAvoBackend implements AvoBackend {
   final List<String> added = [];
   int stops = 0;
   int resets = 0;
+
+  /// False: "Stopp" does not end a held answer (it is still finishing).
+  bool releaseOnStop = true;
   AvoDeleteOutcome deleteOutcome = AvoDeleteOutcome.deleted;
   Completer<AvoResponse>? _pending;
   AvoResponse? _held;
@@ -164,7 +168,7 @@ class FakeAvoBackend implements AvoBackend {
   @override
   void stop() {
     stops++;
-    release();
+    if (releaseOnStop) release();
   }
 
   @override
@@ -191,7 +195,12 @@ class FakeAvoBackend implements AvoBackend {
       listName: sampleLists.firstWhere((l) => l.id == listId).name,
       count: 1,
       items: [sampleItem('new', name, listId: listId, quantity: quantity)],
-      undo: () async => AvoUndoResult.undone,
+      // Uses the ref it was given, like the real undo closures do: it must
+      // still work after the round's widget is gone.
+      undo: () async {
+        ref.read(avoListsProvider);
+        return AvoUndoResult.undone;
+      },
     );
   }
 }
@@ -229,17 +238,20 @@ List<Override> avoOverrides({
   int? proLimit = 60,
   FakeItemRepository? items,
   bool allowProHint = true,
+  Map<String, StoreInfo> stores = const {},
+  AvoChat? chat,
 }) => [
   avoBackendProvider.overrideWithValue(backend),
   avoChatProvider.overrideWith(
-    (ref) => AvoChat(backend, proHints: FakeProHints(allow: allowProHint)),
+    (ref) =>
+        chat ?? AvoChat(backend, proHints: FakeProHints(allow: allowProHint)),
   ),
   isOfflineProvider.overrideWithValue(offline),
   aiRemoteEnabledProvider.overrideWithValue(aiOn),
   isSubscribedProvider.overrideWithValue(subscribed),
   authUserIdProvider.overrideWithValue('u1'),
   avoListsProvider.overrideWithValue(lists ?? sampleLists),
-  storeForListProvider.overrideWith((ref, id) => null),
+  storeForListProvider.overrideWith((ref, id) => stores[id]),
   avoProQuestionLimitProvider.overrideWithValue(proLimit),
   itemRepositoryProvider.overrideWithValue(items ?? FakeItemRepository()),
 ];

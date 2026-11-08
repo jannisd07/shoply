@@ -88,11 +88,14 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 - `avo_assistant_service.dart` ist der Ablauf (Werkzeug-Schleife über `ClaudeService.streamAvo`, Edge Function `ai`),
   dazu `avo_assistant_models.dart` (Antwortkarten als `AvoWidgetPayload`) und `avo_conversation.dart` (Verlauf,
   Einmal-Schlüssel fürs Löschen).
-- Der Avo-Tab liegt in `lib/presentation/screens/avo/`: `AvoTabScreen` (Wurzel `/avo`, `?q=` sendet einmal,
-  `?prompt=` füllt nur vor), `avoChatProvider` (`AvoChat`, ein Gespräch pro Konto, lebt über Tab-Wechsel hinweg,
-  hält auch den Zustand jeder Karte) und `AvoBackend` (Schnittstelle zum Dienst, in Tests ein Fake). Schreibende
-  Listen-Werkzeuge liefern `AvoListChange` mit einer Gegen-Aktion für „Widerrufen“, die vorher prüft, ob die Daten
-  unverändert sind.
+- Der Avo-Tab liegt in `lib/presentation/screens/avo/`: `AvoTabScreen` (Wurzel `/avo`; `?prompt=` und `?q=` aus
+  einer URL füllen nur vor und senden nie; sofort senden nur über `openAvoWithQuestion`, das die Frage als
+  `extra`/`AvoAsk` übergibt), `avoChatProvider` (`AvoChat`, ein Gespräch pro Konto, lebt über Tab-Wechsel hinweg,
+  hält den Zustand jeder Karte und arbeitet nur mit dem `WidgetRef` der Tab-Wurzel) und `AvoBackend`
+  (Schnittstelle zum Dienst, in Tests ein Fake). Schreibende Listen-Werkzeuge liefern über `AvoListChanges`
+  (`lib/data/services/avo_list_changes.dart`, testbar über `AvoListWriter`) ein `AvoListChange` mit Gegen-Aktion
+  für „Widerrufen“: Sie prüft vorher, ob die Daten unverändert sind; ein zusammengeführtes Hinzufügen bekommt nur
+  die alte Menge zurück.
 - Die Sitzung setzt sich bei Account-Wechsel selbst zurück, der Verlauf wird auf die letzten 10 Nutzerzüge gekürzt.
 - Schreibende Tools (Artikel hinzufügen, abhaken, Rezept auf Liste) gehen über `ItemRepository` und schicken
   **eine** Push-Nachricht statt einer pro Artikel.

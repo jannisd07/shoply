@@ -39,6 +39,7 @@ class AvoConfirmCard extends StatefulWidget {
     this.offline = false,
     this.expiresAt,
     this.onExpired,
+    this.firstShow = false,
   });
 
   final String title;
@@ -62,17 +63,47 @@ class AvoConfirmCard extends StatefulWidget {
   final DateTime? expiresAt;
   final VoidCallback? onExpired;
 
+  /// The card just appeared (not scrolled back into view): VoiceOver focus
+  /// moves to its title, and from AX3 the conversation scrolls it fully into
+  /// view (Kap. 6.4).
+  final bool firstShow;
+
   @override
   State<AvoConfirmCard> createState() => _AvoConfirmCardState();
 }
 
+// Kap. 6.4: from AX3 the card scrolls fully into view, its top a quarter
+// down the screen so the question above stays visible.
+const double _revealAlignment = 0.25; // D2
+const Duration _reveal = Duration(milliseconds: 350); // D2 AvoMotion.standard
+
 class _AvoConfirmCardState extends State<AvoConfirmCard> {
   Timer? _timer;
+  final _titleFocus = FocusNode(debugLabel: 'avo-confirm-title');
 
   @override
   void initState() {
     super.initState();
     _schedule();
+    if (widget.firstShow && widget.phase == AvoConfirmPhase.asking) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _appear());
+    }
+  }
+
+  void _appear() {
+    if (!mounted) return;
+    // Input focus on the title makes iOS move the VoiceOver cursor there.
+    if (MediaQuery.accessibleNavigationOf(context)) _titleFocus.requestFocus();
+    final large =
+        context.typography.category.index >= ContentSizeCategory.ax3.index;
+    if (large) {
+      Scrollable.ensureVisible(
+        context,
+        alignment: _revealAlignment,
+        duration: context.reduceMotion ? Duration.zero : _reveal,
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   @override
@@ -93,6 +124,7 @@ class _AvoConfirmCardState extends State<AvoConfirmCard> {
   @override
   void dispose() {
     _timer?.cancel();
+    _titleFocus.dispose();
     super.dispose();
   }
 
@@ -196,11 +228,14 @@ class _AvoConfirmCardState extends State<AvoConfirmCard> {
                 ),
                 const SizedBox(width: AvoSpacing.m),
                 Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      widget.title,
-                      style: context.text(AvoTextStyle.headline),
+                  child: Focus(
+                    focusNode: _titleFocus,
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        widget.title,
+                        style: context.text(AvoTextStyle.headline),
+                      ),
                     ),
                   ),
                 ),
