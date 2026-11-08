@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -149,6 +150,7 @@ class HomeAvoCard extends StatelessWidget {
           // clipped there.
           LayoutBuilder(
             builder: (context, constraints) => OverflowBox(
+              fit: OverflowBoxFit.deferToChild,
               minWidth: constraints.maxWidth + 2 * _kCardPadding.left,
               maxWidth: constraints.maxWidth + 2 * _kCardPadding.left,
               child: SingleChildScrollView(
