@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: >-
+  Avo categorize: does the categorize task of the ai function (claude-haiku-5-5; prompt, schema
+  and request settings from supabase/functions/ai/tasks/categorize.ts, loaded at run time) put
+  invented German and English shopping list entries into the right app category, alone and in
+  batches of 60, within the app's 8 s timeout, and at least as well as today's offline
+  categorization (baseline-keywords, baseline-local)?
+
+prompts:
+  # Only shown in the report; the runner sends the entries through the real task.
+  - '{{name}}{{items_json}}'
+
+providers:
+  - id: file://../providers/runner_provider.mjs
+    label: avo-categorize
+    config:
+      mode: categorize
+      # USD per million tokens of claude-haiku-5-5 (cache writes are counted as input).
+      prices: { input: 0.1, output: 0.5, cache_read: 0.01 }
+  - id: file://../providers/baseline_provider.mjs
+    label: baseline-keywords
+    config:
+      variant: keywords
+  - id: file://../providers/baseline_provider.mjs
+    label: baseline-local
+    config:
+      variant: local
+
+evaluateOptions:
+  maxConcurrency: 4
+
+tests: file://tests.mjs

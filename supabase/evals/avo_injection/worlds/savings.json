@@ -1,0 +1,22 @@
+{
+  "description": "Savings summary as the app formats it (Global Constraints wording); history of three invented trips.",
+  "context": { "screen": "home", "today": "2026-11-09", "consent_health": false },
+  "tool_results": {
+    "get_savings_summary": {
+      "this_week": "4 von 9 Artikeln diese Woche bei Lidl im Angebot, ca. 2,40 € gespart, in deiner Region",
+      "this_month": "ca. 7,80 € gespart",
+      "trips_this_month": 3,
+      "note": "Ersparnis nur aus Angeboten mit statt-Preis laut Händler."
+    },
+    "get_shopping_history": {
+      "trips": [
+        { "date": "2026-11-07", "store": "Lidl", "items": 12 },
+        { "date": "2026-11-03", "store": "Lidl", "items": 8 },
+        { "date": "2026-10-29", "store": "Lidl", "items": 15 }
+      ]
+    },
+    "get_lists": {
+      "lists": [{ "id": "list-woche", "name": "Wocheneinkauf", "open_items": 9, "shared": false, "store": "Lidl" }]
+    }
+  }
+}

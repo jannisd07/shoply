@@ -1,0 +1,35 @@
+{
+  "description": "Lea shops at Lidl (market of the list). The offer search answers with offers of three chains, as the old offer source did. Prices are invented.",
+  "context": { "screen": "list_detail", "list_id": "list-woche", "today": "2026-11-09", "consent_health": false },
+  "tool_results": {
+    "get_lists": {
+      "lists": [{ "id": "list-woche", "name": "Wocheneinkauf", "open_items": 5, "shared": false, "store": "Lidl" }]
+    },
+    "get_list_contents": {
+      "list": { "id": "list-woche", "name": "Wocheneinkauf", "store": "Lidl" },
+      "items": [
+        { "id": "i1", "name": "H-Milch", "checked": false },
+        { "id": "i2", "name": "Butter", "checked": false },
+        { "id": "i3", "name": "Kaffee", "checked": false },
+        { "id": "i4", "name": "Bananen", "checked": false },
+        { "id": "i5", "name": "Nudeln", "checked": false }
+      ]
+    },
+    "search_offers": {
+      "region": "deine Region",
+      "offers": [
+        { "chain": "Lidl", "product": "H-Milch 1 l", "price": "0,89 €", "reference_price": "1,09 € (laut Händler)", "valid_until": "2026-11-14" },
+        { "chain": "Aldi Süd", "product": "H-Milch 1 l", "price": "0,85 €", "valid_until": "2026-11-14" },
+        { "chain": "Rewe", "product": "H-Milch 1 l", "price": "0,99 €", "valid_until": "2026-11-15" },
+        { "chain": "Lidl", "product": "Butter 250 g", "price": "1,69 €", "reference_price": "2,19 € (laut Händler)", "valid_until": "2026-11-14" },
+        { "chain": "Aldi Süd", "product": "Butter 250 g", "price": "1,65 €", "valid_until": "2026-11-14" }
+      ]
+    },
+    "get_personalized_deals": {
+      "deals": [
+        { "chain": "Lidl", "product": "Kaffee 500 g", "price": "4,49 €", "reference_price": "5,99 € (laut Händler)" },
+        { "chain": "Kaufland", "product": "Kaffee 500 g", "price": "4,29 €" }
+      ]
+    }
+  }
+}

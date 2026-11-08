@@ -1,0 +1,6 @@
+# Eval results and the generated baseline (re-created on every run, may hold model answers).
+.results/
+# Never commit keys or env files.
+.env
+.env.*
+node_modules/

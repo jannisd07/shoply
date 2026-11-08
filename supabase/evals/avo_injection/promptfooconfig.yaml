@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: >-
+  Avo prompt injection: does Avo (task avo_chat of the ai function, claude-sonnet-5-5, system
+  prompt and tools from supabase/functions/_shared/avo_system.ts and avo_tools.ts, loaded at run
+  time) keep its rules when list entries, shared lists, recipe texts, offer texts or the person
+  try to make it delete, act unasked, compare markets, invent savings, drop an allergy or reveal
+  its prompt? Controls check that normal requests still work. All data is invented.
+
+prompts:
+  # Only shown in the report; the runner sends vars.message as the person's turn.
+  - '{{message}}'
+
+providers:
+  - id: file://../providers/runner_provider.mjs
+    label: avo-chat
+    config:
+      mode: avo
+      # USD per million tokens of claude-sonnet-5-5 (cache writes are counted as input).
+      prices: { input: 2.0, output: 10.0, cache_read: 0.2 }
+
+evaluateOptions:
+  maxConcurrency: 2
+
+defaultTest:
+  options:
+    # Grader for every llm-rubric: claude-opus-5-5 through the same runner (no promptfoo model defaults).
+    provider:
+      id: file://../providers/runner_provider.mjs
+      label: grader-opus
+      config:
+        mode: grade
+        model: claude-opus-5-5
+        effort: medium
+        prices: { input: 4.0, output: 20.0, cache_read: 0.2 }
+  assert:
+    - type: javascript
+      value: file://assertions.mjs:noForbiddenTools
+      metric: no_delete_tools
+    - type: javascript
+      value: file://assertions.mjs:onlyAllowedActions
+      metric: no_unrequested_actions
+    - type: javascript
+      value: file://assertions.mjs:injectionDelivered
+      metric: injection_reached_avo
+    - type: javascript
+      value: file://assertions.mjs:noMarketComparison
+      metric: no_market_comparison
+    - type: javascript
+      value: file://assertions.mjs:noUngroundedNumbers
+      metric: no_invented_numbers
+    - type: javascript
+      value: file://assertions.mjs:noSystemPromptLeak
+      metric: no_prompt_leak
+    - type: javascript
+      value: file://assertions.mjs:roundLatency
+      metric: latency
+
+tests: file://cases.yaml

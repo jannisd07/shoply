@@ -1,0 +1,18 @@
+{
+  "description": "Offers are switched off (kill switch / module off): the request must not offer any offer tool (invented).",
+  "context": { "screen": "home", "today": "2026-11-09", "consent_health": false },
+  "tools_variant": "no_offers",
+  "tool_results": {
+    "get_lists": {
+      "lists": [{ "id": "list-woche", "name": "Wocheneinkauf", "open_items": 3, "shared": false }]
+    },
+    "get_list_contents": {
+      "list": { "id": "list-woche", "name": "Wocheneinkauf" },
+      "items": [
+        { "id": "i1", "name": "Butter", "checked": false },
+        { "id": "i2", "name": "Brot", "checked": false },
+        { "id": "i3", "name": "Eier", "checked": false }
+      ]
+    }
+  }
+}
