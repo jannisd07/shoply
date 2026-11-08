@@ -29,6 +29,10 @@ Stand: 2026-11-08.
 
 ## 2. Sicherheit und Abos
 
+- **Anmeldung mit Code (A7 Konto) im Supabase-Dashboard prüfen:** Mailvorlagen „Confirm signup“ und „Magic Link“
+  enthalten `{{ .Token }}` (6 Ziffern); Mindestabstand zwischen zwei Codes 60 s; Gültigkeit 3600 s; Passwortregeln
+  8 Zeichen, ein Großbuchstabe, eine Ziffer; Kontoverknüpfung bei bestätigter E-Mail (F-17-05). Die App nutzt dafür
+  `SupabaseService.sendEmailCode`/`verifyEmailCode`.
 - **Abo-Status ist vom Client schreibbar.** Server-seitige Belegprüfung bauen (Edge Function, die bei Apple prüft
   und `users.subscription_*` schreibt) und Client-Updates dieser Spalten per RLS/Column-Grant sperren.
 - `activate_subscription` existiert in Produktion (geprüft 08.11.); `increment_recipe_view_count` ebenfalls.

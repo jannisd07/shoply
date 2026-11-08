@@ -226,6 +226,18 @@ class SupabaseService {
     }
   }
 
+  /// Sends a 6-digit code to [email] (Supabase OTP). With [createUser] the
+  /// address may register a new account; without it only an existing
+  /// account gets a code. Errors are rethrown unchanged ([AuthException]
+  /// carries `code`), so the caller can tell them apart.
+  Future<void> sendEmailCode(String email, {required bool createUser}) =>
+      client.auth.signInWithOtp(email: email, shouldCreateUser: createUser);
+
+  /// Signs in with the code [sendEmailCode] sent. Errors are rethrown
+  /// unchanged.
+  Future<AuthResponse> verifyEmailCode(String email, String code) =>
+      client.auth.verifyOTP(email: email, token: code, type: OtpType.email);
+
   // Update user
   Future<UserResponse> updateUser(UserAttributes attributes) async {
     return await client.auth.updateUser(attributes);

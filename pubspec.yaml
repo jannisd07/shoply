@@ -73,6 +73,7 @@ dependencies:
   # Authentication - Disabled iOS-specific implementations for macOS compatibility
   google_sign_in: ^6.2.1  # Re-enabled for native Google Sign In
   sign_in_with_apple: ^7.0.0
+  crypto: ^3.0.6  # SHA-256 of the Sign in with Apple nonce
   # local_auth: ^2.1.8  # Commented out - iOS/macOS darwin implementation issues
   # webview_flutter: ^4.4.4  # Commented out - iOS/macOS implementation issues
   # webview_flutter_wkwebview: ^3.9.4  # Commented out - iOS only
