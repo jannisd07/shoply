@@ -55,7 +55,8 @@ nutzen beide direkt.
 
 - **A6 (1) Allergene** (Commit mit dieser Zeile): `allergen_matcher.dart` kennt Feta, Halloumi, Gouda, Emmentaler,
   Cheddar, Camembert, Brie, Pecorino, Gorgonzola, Burrata, Ghee, Skyr, Paneer, Frischkäse, Buttermilch, Crème fraîche
-  und Crème double unter Milch **und** Laktose („Brief“ ist ausgenommen). Die lokale Ergänzung im Rezeptdetail kann
+  Crème double, Edamer, Labneh, Raclette und Manchego unter Milch **und** Laktose („Brief“ und „Edamame“ sind
+  ausgenommen). Die lokale Ergänzung im Rezeptdetail kann
   raus. **A6 (2)** `RecipeOfferSummary`, `IngredientOfferBadge` kommen mit Angebote S15, `addRecipeToPlan` mit B7.
 - **Simulator-Funde A** (Commit mit dieser Zeile): (1) Fälschlich „Offline“: `connectivity_plus` 5 meldet auf iOS
   `none`, wenn der Netzpfad eine unbekannte Schnittstelle nutzt. `ConnectivityService` prüft ein „none“ jetzt mit

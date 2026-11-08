@@ -48,6 +48,7 @@ void main() {
       'Feta', 'Halloumi', 'Gouda', 'Emmentaler', 'Cheddar', 'Camembert', 'Brie', 'Pecorino',
       'Gorgonzola', 'Burrata', 'Ghee', 'Skyr', 'Paneer', 'Frischkäse', 'Buttermilch',
       'Crème fraîche', '200 g Feta, zerbröselt', '1 Becher Crème fraîche',
+      'Edamer', 'Labneh', 'Raclette', 'Manchego',
     ];
 
     test('Milch and Laktose find cheeses and dairy by their own names', () {
@@ -65,6 +66,7 @@ void main() {
       expect(milk.contains('Briefumschlag'), isFalse);
       expect(milk.contains('Fettuccine'), isFalse);
       expect(milk.contains('Gemüsebrühe'), isFalse);
+      expect(milk.contains('Edamame'), isFalse);
     });
 
     test('Gluten finds Weizenmehl, Dinkel and pasta but not Buchweizen', () {

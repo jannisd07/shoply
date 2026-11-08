@@ -203,14 +203,15 @@ const Map<AllergyType, List<String>> _extraKeywords = {
 /// lactose too: a warning too many is safer than a missed one.
 const _dairyByName = [
   'feta', 'halloumi', 'gouda', 'emmentaler', 'cheddar', 'camembert', 'brie', 'pecorino',
-  'gorgonzola', 'burrata', 'ghee', 'skyr', 'paneer', 'creme fraiche', 'creme double',
+  'gorgonzola', 'burrata', 'ghee', 'skyr', 'paneer', 'creme fraiche', 'creme double', 'edamer',
+  'labneh', 'raclette', 'manchego',
 ];
 
 /// Words that contain a keyword but are something else (token is skipped).
 const Map<AllergyType, List<String>> _lookAlikes = {
   AllergyType.nuts: ['muskatnuss', 'kokos', 'butternut', 'nutmeg', 'coconut', 'donut', 'doughnut'],
-  AllergyType.milk: ['butternut', 'kokos', 'brief'],
-  AllergyType.lactose: ['butternut', 'kokos', 'brief'],
+  AllergyType.milk: ['butternut', 'kokos', 'brief', 'edamame'],
+  AllergyType.lactose: ['butternut', 'kokos', 'brief', 'edamame'],
   AllergyType.gluten: ['buchweizen', 'buckwheat', 'glasnudel', 'glutenfrei'],
   AllergyType.eggs: ['eggplant'],
 };
