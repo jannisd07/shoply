@@ -10,13 +10,11 @@ Stand: 2026-11-08.
   `extract-shopping-list` deployt. Es bleiben zwei Schritte für den Owner:
   1. Den alten Gemini-Key in Google AI Studio widerrufen; er steckt in ausgelieferten Builds.
   2. In der Claude Console eine harte Monatsgrenze setzen.
-- **Abo-RPCs sind ohne Anmeldung aufrufbar, das kostet jetzt KI-Geld.** `activate_subscription(user_uuid, …)` ist
-  `security definer`, prüft weder `auth.uid()` noch einen Beleg und darf von der Rolle `anon` ausgeführt werden: Jeder mit
-  dem öffentlichen Anon-Key kann sich (oder jede andere Person) dauerhaft auf Pro setzen und bekommt damit die
-  Pro-KI-Limits. Gleiches für `activate_trial` und `expire_subscriptions`; `get_recommended_items` liefert die
-  Kaufstatistik jeder Person. Sofortmaßnahme liegt bereit, nicht angewendet:
-  `supabase/migrations/20261108003000_b_lock_subscription_rpcs.sql` (nur noch das eigene Konto, kein `anon`,
-  Cron-Funktionen nur `service_role`). Die richtige Lösung steht unter 2. (Belegprüfung).
+- **Abo-RPCs: Sofortmaßnahme angewendet (08.11., `20261108003000_b_lock_subscription_rpcs`).** `anon` kann
+  `activate_subscription`, `activate_trial`, `expire_subscriptions`, `get_recommended_items` und `is_premium_user`
+  nicht mehr aufrufen; Abo und Testphase gehen nur noch fürs eigene Konto. **Offen bleibt:** Eine angemeldete Person
+  kann sich weiter selbst ohne Beleg auf Pro setzen und bekommt damit die Pro-KI-Limits, bis die Belegprüfung unter 2.
+  steht.
 - **Firebase-Konfiguration auf Jannis' Mac (`~/Apps/shoply-neu`) ist veraltet.** Richtig ist das Projekt
   `shoply-92f28` (CLAUDE.md, Edge Function `send-push-notification`). Dort ist aber `lib/firebase_options.dart`
   ein Platzhalter und `ios/Runner/GoogleService-Info.plist` gehört zum alten Projekt `shoplyai-1554e`. Folge:

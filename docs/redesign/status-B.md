@@ -97,8 +97,8 @@ Entschieden am 07.11.2026:
   am Ende Simulator-Durchgang mit Screenshots aller Screens und Überarbeitung von allem, was nicht perfekt aussieht.
 
 Offen:
-- **Abo-RPCs ohne Anmeldung aufrufbar** (Advisor, alt): `activate_subscription` setzt jede Person ohne Beleg auf Pro
-  und hebt damit die KI-Limits auf. Sofort-Migration vorbereitet, wartet auf dein Ja (`docs/OPEN-ISSUES.md` oben).
+- **Abo-RPCs** (Advisor, alt): Sofortmaßnahme angewendet (`20261108003000`), kein `anon` mehr, nur das eigene Konto.
+  Selbst-Pro ohne Beleg bleibt bis zur Belegprüfung möglich (`docs/OPEN-ISSUES.md` oben).
 - Gemini-Key widerrufen und Monatsgrenze in der Claude Console setzen (Owner).
 - Kontakt-E-Mail für den Open-Food-Facts-User-Agent (`Avo/<version> (<E-Mail>)`).
 - Berechtigungstexte (Mikrofon, Spracherkennung, Kamera, Health) und HealthKit-Capability im Developer-Portal.

@@ -1,6 +1,6 @@
 -- Teil B: stop-gap for the subscription RPCs the Supabase advisor flagged
--- (security definer, callable by `anon`). NOT APPLIED: the owner applies it
--- after an explicit yes.
+-- (security definer, callable by `anon`). Applied 2026-11-08 after the
+-- owner's yes.
 --
 -- Why now: since S3 the AI quota (`ai_consume_quota_b`) gives Pro limits to
 -- everyone `is_premium_user` says yes to. `activate_subscription(user_uuid,
