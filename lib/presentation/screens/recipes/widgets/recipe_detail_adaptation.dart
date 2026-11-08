@@ -319,15 +319,10 @@ AdaptedIngredient _check(
   );
 }
 
-/// Milk products the shared [AllergenMatcher] does not list yet (cheeses
-/// by name; Konzept 13 §12.2 uses Feta). Folded, matched as words or word
-/// ends ("Schafsfeta"). Reported to Teil B for the matcher itself.
-const _moreMilkWords = [
-  'feta', 'halloumi', 'gouda', 'emmentaler', 'edamer', 'cheddar', //
-  'camembert', 'brie', 'pecorino', 'gorgonzola', 'burrata', 'ghee', 'skyr',
-  'labneh', 'paneer', 'raclette', 'manchego', 'bergkase', 'frischkase',
-  'buttermilch', 'creme fraiche', 'cremefraiche', 'kondensmilch',
-];
+/// Cheeses the shared [AllergenMatcher] does not list yet (it knows Feta,
+/// Gouda, Ghee … since 0e1d0e8). Folded, matched as words or word ends.
+/// Reported to Teil B for the matcher itself.
+const _moreMilkWords = ['edamer', 'labneh', 'raclette', 'manchego'];
 
 const _lactoseFree = ['laktosefrei', 'lactose free', 'lactosefree'];
 
