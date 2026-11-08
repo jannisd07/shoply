@@ -1,97 +1,54 @@
-# A5 Stand je Teil (Unterbrechung 08.11.2026, Mac-Neustart)
+# A5 Listen: Ergebnis und offene Punkte (08.11.2026)
 
-Berichte der vier A5-Agenten beim Anhalten. Nichts davon ist committet; die Dateien liegen im Arbeitsordner.
-Auftrag: [`a5-auftrag.md`](a5-auftrag.md). Dateizuordnung: `status-A.md`, Abschnitt „Unterbrechung“.
+A5 ist auf `main`: Einkaufsmodus `0e1f753`, Listen-Übersicht/Teilen/Listen-Info `c53e84f`, Artikel-Vollbild und
+Zettel-Import `5efc97f`, Liste `5e943ba`. Auftrag: [`a5-auftrag.md`](a5-auftrag.md). Tests: 3.701 grün (Listen, Design,
+Home, Routen, Übersetzungen), `dart analyze` ohne Errors/Warnings. Auf dem Gerät noch nicht geprüft.
 
-## item (Artikel-Vollbild, Import)
+## Fehlende Daten (A, eigene Aufgaben)
 
-| Datei | Stand |
-|---|---|
-| `translations/lists_item.dart` | fertig (Präfixe `list_item_`, `list_item_unit_`, `list_item_import_`, keine Doppelungen) |
-| `widgets/item_editor_parts.dart` (neu) | halb: Fehler `:584` `kTouchSlop` unbekannt (`import 'package:flutter/gestures.dart';` fehlt), Info `:148` `library_private_types_in_public_api` (`covariant RenderObject` + Cast); kein Test |
-| `item_editor_screen.dart` | halb: Code vollständig (`ItemEditorScreen` für Bearbeiten/Hinzufügen/Entwurf, `openItemDraftEditor`/`ItemDraft`, Löschen mit Rückgängig, offline/Fehler); kein Test. `openItemEditor` öffnet schon das D2-Vollbild |
-| `widgets/item_form_dialog.dart` | nicht begonnen: zur Weiterleitung kürzen (`showItemFormDialog` → `openItemEditor`), `PaperPrimaryButton` vorerst behalten (Importe in `share_list_dialog.dart`, `list_detail_screen.dart`) |
-| `widgets/attachment_sheet.dart`, `import_review_sheet.dart` | nicht begonnen (alte Bottom-Sheets) |
-| Tests `test/screens/lists/item_editor_*`, `import_*` | nicht begonnen; `test/attachment_sheet_test.dart` erwartet alte Texte „Kamera / Fotos / Dateien“ |
+- **Präsenz** („Lena kauft gerade ein“): kein `list_presence_service.dart`; `shoppingCompanionsProvider` (Einkaufsmodus)
+  meldet niemanden, die Liste zeigt nur Mitglieder-Avatare (`listDetailMembersProvider`).
+- **Wer hat abgehakt:** keine Spalte `shopping_items.checked_by`, kein `ShoppingItemModel.checkedBy`; es steht „gerade
+  abgehakt“ ohne Namen (`list_shop_just_by` liegt bereit).
+- **Reihenfolge je Markt und Gang-Nummern:** keine Daten; genutzt wird die Kategorie-Reihenfolge der Liste
+  (`CategoryOrderService`, nur auf dem Gerät gespeichert).
+- **„Zuletzt geändert“ in der Listen-Info** bleibt leer: `ListActivityService` hat keine Aufrufer, Tabelle `list_events`
+  fehlt.
+- **Offline:** `ItemsNotifier` hat keine Warteschlange; Abhaken offline wird zurückgerollt.
+- **Rückgängig beim Artikel-Löschen** legt den Artikel neu an (neue ID); kein Restore im Repository.
 
-Abweichung: „Artikel löschen“ ohne Rückfrage, mit Rückgängig (Konzept 11 §4). Für B: `ArticleImageCredit` und
-`articleImagesShown` sind nicht über `b_slots.dart` exportiert (auch detail und shopping brauchen `articleImagesShown`,
-sonst bleibt bei ausgeschalteten Bildern eine Lücke).
+## Router und Repository (A)
 
-Nächste Schritte: (1) Analyse-Meldungen beheben, `item_form_dialog.dart` zur Weiterleitung. (2)
-`item_editor_screen_test.dart` (layoutMatrix + Verhalten mit ersetzten Providern). (3) Import: `showAttachmentSheet` →
-`AvoMenu` am Plus mit „Foto aufnehmen / Foto wählen / Datei wählen / Text einfügen“ + Status-Kapsel;
-`showImportReviewSheet` → Vollbild „14 Artikel erkannt“ mit Häkchen, Hinzufügen über `addItems` mit Rückgängig; neu
-`openListImport(context, listId:, anchorKey:)` für „detail“; Tests.
+- Routen fehlen: `/join/:code` (geteilter Link `https://shoplyai.app/join/<CODE>` führt ins Leere), `/lists/join`
+  (kollidiert mit `/lists/:listId`), `/lists/:id/info`, `/lists/:id/share`.
+- `ListRepository.removeMember(listId, userId)` fehlt (heute direkt in `list_members`); `createList` nicht atomar.
+- Teilen-Codes sind 6 Zeichen `A-Z0-9`, nicht 6 Ziffern wie entschieden (nicht geändert).
+- `NewItem` (`item_batch.dart`) hat kein `isDietWarning`; `addItem` meldet kein Zusammenführen („Menge jetzt 4“).
 
-## detail (Liste)
+## Komponenten (A)
 
-**Baut nicht**: die alte `list_detail_screen.dart` nutzt Klassen, die in den Widget-Dateien schon ersetzt sind. Nicht
-committen, bevor der Screen neu geschrieben ist.
+- `AvoToast` verdeckt auf der Liste kurz das Eingabefeld (braucht `aboveAccessory`), `ShellInsets` kennt die Höhe des
+  Eingabefelds je Textgröße nicht.
+- `ValueStepper` nur ganze Zahlen, kein Tippen auf den Wert (Artikel-Vollbild nutzt bei Kommazahlen ein Zahlenfeld);
+  `ValueRow` richtet den Wert nicht rechtsbündig aus.
+- `AvoIcons` fehlen Kamera, Foto, Ordner, Zwischenablage, Glocke (liegen privat in `attachment_sheet.dart` bzw. als
+  `CupertinoIcons.bell`).
+- `ListDetailActions` und `ListActions` überschneiden sich (Umbenennen, Löschen, Verlassen); zusammenführen.
+- Die Texte liegen in vier Dateien `lists_{detail,item,shopping,overview}.dart`; nach A5 in `lists.dart` zusammenführen.
+- Listenfarben stehen als Tabelle in `list_info_colors.dart`, passender wäre `AvoColors`.
 
-| Datei | Stand |
-|---|---|
-| `widgets/list_detail_data.dart` (neu) | fertig: Provider für Liste, Mitglieder (`getListMembers`), Besitzer, Summe „≈ … €“, `ListDetailActions` (Aufrufe der anderen Teile) |
-| `widgets/list_item_tile.dart` | fertig: `ListItemTile` (ItemRow, `ArticleImage`, `ItemOfferBadge`, Wischen löschen, Langdruck ziehen/Menü), `formatItemQuantity`, `itemSubtitle` |
-| `widgets/list_drag_controller.dart` | fertig: Konstruktor braucht jetzt `vsync` |
-| `widgets/list_category_section.dart` | fertig: `ListAisleSection` (SectionCaps + InsetSection + Ablegen); `ListCategorySection` entfernt; Import `list_item_tile.dart` evtl. unbenutzt |
-| `widgets/list_detail_menu.dart` | fertig: neue `ListDetailMenuAction`-Werte, `listDetailMenuEntries(...)`; `ListDetailMenuButton` entfernt |
-| `widgets/list_detail_parts.dart` | fertig: `ListDetailToolbar`, `ListDetailHeader`, `ListDoneSection`, `RenameListDialog` |
-| `widgets/list_detail_composer.dart` (neu) | fertig: `AddItemAccessory` mit Summe und `OfferSuggestionsBar(listId:, query:, onAdded:)`, ohne Mikrofon |
-| `list_detail_screen.dart` | nicht begonnen (alte Fassung; Fehler `:66` vsync, `:351–361`, `:376`, `:450`, `:462`) |
-| `widgets/add_item_composer.dart` | nach dem Screen löschen (kein anderer Importeur) |
-| `translations/lists_detail.dart` | leer; gebraucht: `list_detail_share`, `_shop`, `_progress`, `_done`, `_done_summary`, `_delete_item`, `_rows_count`, `_diet_warning`, `_add_placeholder`, `_add_hint`, `_menu_shop`, `_menu_checkout`, `_menu_info`, `_menu_rename`, `_menu_order`, `_menu_hide_offers`, `_menu_show_offers`, `_menu_import`, `_menu_delete`, `_menu_leave`, `list_detail_unit_*` (pcs, kg, g, l, ml, dozen, pack, bottle, can, box, bunch) |
-| Tests | nicht begonnen; `add_item_composer_test.dart` wird A3-Nachweis für `ListDetailComposer` |
+## Von D2 bzw. Konzept bewusst abgewichen
 
-Nächste Schritte: (1) Screen aus den Teilen neu schreiben (Toolbar mit Teilen+Mehr als `GlassButtonGroup`, Gänge,
-Erledigt eingeklappt, Abhaken mit Rückgängig, Löschen nach Ablauf des Rückgängig-Fensters, `parseItemInput`+`addItems`,
-`avoScreenContextProvider`, `?focus=add`, Zustände), dann `add_item_composer.dart` löschen. (2) Schlüssel eintragen,
-analyze 0/0/0. (3) Tests. Offen: Präsenz-Datenquelle fehlt; `AvoToast` verdeckt kurz das Eingabefeld; `lists_routes.dart`
-könnte `focusAdd` durchreichen.
+- Artikel löschen ohne Rückfrage, mit Rückgängig (Konzept 11 §4).
+- Einheit: St./g/kg wie D2 plus Segment „Mehr“ für die übrigen Einheiten.
+- Im Einkaufsmodus „+“ unten links (Konzept 5.2, nicht in D2); Kapsel ab AX3 nur Häkchen.
+- Kein Wischen mit halb aufgezogenen Knöpfen, kein Untermenü im Langdruck-Menü (`AvoMenu` kennt keine Untermenüs).
+- „Oben anheften“ statt „Beim Start zeigen“ (keine Start-Logik); kein Listen-Symbol (keine Spalte, keine Icons);
+  kein Foto-Upload für neue Listen.
+- „Vielleicht auch“ fehlt (Empfehlungs-API von B), ebenso Mitteilungen pro Liste und „Kosten teilen einschalten“.
 
-## shopping (Einkaufsmodus)
+## Für Teil B
 
-| Datei | Stand |
-|---|---|
-| `translations/lists_shopping.dart` | fertig (Präfix `list_shop_`) |
-| `widgets/shopping_mode_{aisles,header,bars,view}.dart` | fertig (Gänge in Kategorie-Reihenfolge, Kopf mit `StoreChip`/rollender Zahl/`ListOfferSummary`, Leisten, Abhaken mit Haptik, alle Zustände) |
-| `shopping_mode_screen.dart` | fertig (Bildschirm bleibt an, Avo-Kontext, `openCheckoutFlow` → Erfolgsmoment) |
-| `routes/areas/lists_routes.dart` | fertig (`list-shopping` im Root-Navigator); letzte Info-Korrektur nicht neu geprüft |
-| `test/routes/app_routes_test.dart` | Zeile `list-shopping` nur im Arbeitsordner |
-| `shopping_trip_completion.dart` | bewusst unverändert (B's `checkout_flow.dart` braucht `completeShoppingTrip`) |
-| `test/screens/lists/shopping_mode_aisles_test.dart` | fertig, 5 grün |
-| `test/screens/lists/shopping_mode_view_test.dart` | geschrieben (13), nie gelaufen |
-| Layout- und Screen-Test | nicht begonnen |
-
-Nächste Schritte: (1) analyze + Tests (`shopping_mode_*`, `test/routes/`). (2) Layout- und Screen-Test. (3) committen.
-Offen: keine Präsenz-Datenquelle (`shoppingCompanionsProvider` meldet niemanden, `list_presence_service.dart` fehlt), kein
-`checked_by` („gerade abgehakt“ ohne Namen), keine Gang-Nummern je Markt, Abhaken offline wird zurückgerollt statt
-vorgemerkt.
-
-## overview (Listen-Übersicht, Teilen, Listen-Info)
-
-| Datei | Stand |
-|---|---|
-| `translations/lists_overview.dart` | fertig (Präfix `list_ov_`) |
-| `widgets/list_info_colors.dart`, `share_members.dart`, `all_lists_data.dart`, `all_lists_quick_add.dart`, `list_info_actions.dart`, `all_lists_body.dart`, `list_info_header.dart`, `all_lists_new_list.dart`, `share_join_screen.dart` (alle neu) | fertig geschrieben, nie analysiert/getestet |
-| `all_lists_screen.dart` | fertig, kompiliert erst, wenn `ListSettingsScreen` den Parameter `focusName` hat (`:129`) |
-| `widgets/share_list_dialog.dart` | nicht begonnen (alter Dialog, importiert noch `item_form_dialog.dart`) |
-| `widgets/share_list_screen.dart` (neu) | nicht begonnen |
-| `list_settings_screen.dart`, `category_order_screen.dart`, `list_activities_screen.dart` | nicht begonnen |
-| Tests `all_lists_*`, `share_*`, `list_settings_*` | nicht begonnen |
-
-Vermutete Analyse-Fehler: `share_members.dart:193` (`import 'package:flutter/semantics.dart';` für
-`CustomSemanticsAction`), `debugPrint` ohne `foundation`-Import in `all_lists_new_list.dart:66`/`share_join_screen.dart`,
-`IntrinsicHeight` in `all_lists_quick_add.dart` mit `LayoutBuilder` (sonst `crossAxisAlignment.start`).
-
-Nächste Schritte: (1) `list_settings_screen.dart` als Listen-Info (Vollbild, `focusName`, Name, Farbe/Foto, Markt,
-Mitglieder, Anheften, Zuletzt geändert, Löschen/Verlassen mit `showAvoConfirm`), dann Kategorie-Reihenfolge und
-Aktivitäten. (2) `share_list_screen.dart`, `showShareListDialog` (gleiche Signatur) darauf umleiten, ohne
-`item_form_dialog`. (3) analyze 0/0/0, Tests, `translations_test`.
-
-Fakten für den Owner bzw. B: „Schnell wieder hinzufügen“ nutzt direkt B's `restockSuggestionsProvider`
-(`state/avo_nudge_provider.dart`; Anfrage an B: über `b_slots.dart` exportieren). Teilen-Codes sind heute 6 Zeichen
-`A-Z0-9`, nicht 6 Ziffern (nicht geändert). Router kennt `https://shoplyai.app/join/<CODE>` nicht (`/join/:code` fehlt,
-`/lists/join` kollidiert mit `/lists/:listId`); `ListRepository` kann kein Mitglied entfernen (direkt in
-`list_members`); `createList` nicht atomar; keine Spalte für Listen-Symbole. „Schnell wieder hinzufügen“ steht wie in
-D2-Home über der großen Karte.
+- `restockSuggestionsProvider` über `b_slots.dart` exportieren (Übersicht importiert ihn direkt).
+- `OfferSuggestionsBar`: `onSelect` und nullbare `listId` können weg; `ListPriceSummaryBar` nutzt A nicht mehr.
+- Abschluss: Bis B8 erscheint nach `openCheckoutFlow` zweimal „gespeichert“ (B's Zwischen-Screen und A's Erfolgsmoment).

@@ -26,25 +26,13 @@ gesperrt.
 
 Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`. Vorrang-Aufgaben für B: `docs/redesign/prompt-b-vorrang.md`.
 
-## Unterbrechung 08.11.2026 abends (Mac-Neustart): A5 halb fertig im Arbeitsordner
+## A5 Listen fertig (08.11.2026)
 
-S2 ist bis auf das Abschluss-Review fertig (Galerie `56baf55`). **A5 lief in vier Teilen parallel und ist nicht
-committet.** Die Dateien liegen ungespeichert in `~/Apps/shoply-neu` und kompilieren noch nicht alle (`dart analyze`
-meldet Fehler u. a. in `list_detail_screen.dart`, `list_category_section.dart`, `share_members.dart`). **B: diese
-Fehler bitte ignorieren, sie gehören zu A.** Auftrag aller Teile: [`a5-auftrag.md`](a5-auftrag.md).
-
-| Teil | Dateien (ungespeichert) | Ziel |
-|---|---|---|
-| detail | `list_detail_screen.dart`, `widgets/list_detail_parts.dart`, `list_category_section.dart`, `list_item_tile.dart`, `list_detail_menu.dart`, `list_drag_controller.dart`, neu `widgets/list_detail_composer.dart`, `list_detail_data.dart`, Texte `lists_detail.dart` | Liste nach D2-Liste: Toolbar, Wagen-Knopf, Gänge mit `ItemRow`, `AddItemAccessory` mit „2 Milch“, B-Slots, Mehr-Menü |
-| item | `item_editor_screen.dart`, `widgets/item_form_dialog.dart`, `import_review_sheet.dart`, `attachment_sheet.dart`, neu `widgets/item_editor_parts.dart`, Texte `lists_item.dart` | Artikel bearbeiten im Vollbild (D2-Artikel), Zettel-Import ohne Sheets |
-| shopping | neu `shopping_mode_screen.dart`, `widgets/shopping_mode_{aisles,bars,header,view}.dart`, `routes/areas/lists_routes.dart`, Zeile `list-shopping` in `test/routes/app_routes_test.dart`, Test `test/screens/lists/shopping_mode_aisles_test.dart`, Texte `lists_shopping.dart` | Einkaufsmodus (X-Einkaufsmodus) unter `/lists/:id/shopping` |
-| overview | `all_lists_screen.dart`, neu `widgets/all_lists_{body,data,new_list,quick_add}.dart`, `share_list_dialog.dart`, neu `share_join_screen.dart`, `share_members.dart`, `list_settings_screen.dart`, neu `list_info_{actions,colors,header}.dart`, `category_order_screen.dart`, `list_activities_screen.dart`, Texte `lists_overview.dart` | Listen-Übersicht (D2-Home), Teilen und Listen-Info als Vollbild |
-
-Weiter nach dem Neustart: je Teil den Stand prüfen (`dart analyze` auf die Dateien), fertig bauen, testen und einzeln
-committen; erst dann S2-Review. Funde aus der Galerie (offen): `ValueStepper` läuft bei AX5 mit langer Einheit über;
-`AvoIcon` übernimmt die Farbe/Größe aus `IconTheme` nicht (Icons auf grünen Knöpfen dunkel); `GlassToolbar`-Titel
-verschwindet bei AX5 auf 320 pt neben „Fertig“; Wörter brechen mitten im Wort um (`QuickAddTile`, `AppFilterChip` bei
-AX5); `AvoSearchField` kürzt den Platzhalter bei AX5.
+Liste, Artikel-Vollbild mit Zettel-Import, Einkaufsmodus (`/lists/:id/shopping`) und Listen-Übersicht mit Teilen und
+Listen-Info sind auf `main` (`0e1f753`, `c53e84f`, `5efc97f`, `5e943ba`). Offene Punkte und fehlende Daten:
+[`a5-stand.md`](a5-stand.md). Galerie-Funde behoben: Icon-Farbe auf Knöpfen (`832b3e5`), Stepper-Überlauf (`38e0d56`),
+Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen Kacheln/Chips, Platzhalter von
+`AvoSearchField` bei AX5.
 
 ## Meilensteine
 
@@ -56,6 +44,7 @@ AX5); `AvoSearchField` kürzt den Platzhalter bei AX5.
 | S2a Fundament Teil 1 | **erledigt**: D2-Tab-Bar (Home, Listen, Avo, Rezepte, Profil; Avo-Tab auf `/avo`), Kalorien als Push im Home-Tab, Fehlerseite, Modul-Wächter, Deep-Link-Übersetzung, Komponenten Teil 1 (Liste in `prompt-b-vorrang.md`) | 07.11.2026 | `ce66d9f`, `f16e071` |
 | S2 Fundament (S2b: Editor, Eingabefeld, Menüs, Zeilen/Karten, Charts, `ProGate.run`, `AppBrand`) | Komponenten und Galerie auf `main`; Abschluss-Review offen | 08.11.2026 | `ad2a9c4` … `56baf55` |
 | A4 Home (D2 „Für dich“) | **gebaut**, ohne „Tipp von Avo“ (kommt mit A5) | 08.11.2026 | `4618daf`, `22a7153`, `41a974d` |
+| A5 Listen | **gebaut** (Liste, Artikel, Einkaufsmodus, Übersicht, Teilen, Listen-Info); Daten-Lücken in `a5-stand.md` | 08.11.2026 | `0e1f753`, `c53e84f`, `5efc97f`, `5e943ba` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
