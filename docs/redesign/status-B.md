@@ -61,6 +61,31 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
     `ProFeatures`-Eintrag `avo_questions` (A9); Punkt am Avo-Tab bei neuer Antwort; `home_avo_card.dart` auf
     `openAvoWithQuestion` aus `b_slots.dart` umstellen (die eigene gleichnamige Funktion dort löschen).
 
+15. **Nach den Angebots-Screens (W4, S9–S16):**
+    - **A-R2 `/offers`:** `app_router.dart` legt A's `ModuleGate` um `buildOffersRoot`. Wird das Modul ausgeschaltet,
+      während „Angebote der Woche“ offen ist, fragt dieser Wächter mit dem Dialog; laut angebote.md 1.3 schließt der
+      Screen still. B's `_OffersGate` in `buildOffersRoot` deckt Kill-Switch, Modul aus beim Öffnen und den stillen
+      Wechsel schon ab: bitte den `ModuleGate` um `/offers` weglassen (oder ihm einen stillen Modus geben).
+    - **A-P1 Profil:** Zeile „Preise & Angebote · Lidl, REWE“ (bei Kill-Switch „Märkte · …“) öffnet
+      `offersSettingsPath`; die Märkte liefert `favoriteStoresProvider`, beides aus `b_slots.dart`.
+    - **A-L1 Listenmenü:** „Angebote dieser Liste“ → `context.push(offerListLocation(listId))`; „Angebote der Woche“ in
+      der Listen-Übersicht → `weeklyOffersLocation()` (beide aus `b_slots.dart`).
+    - **A-R3 Deep Links:** `shoply://offers?filter=regulars&q=…` → `weeklyOffersLocation(regulars:, query:)`.
+    - **A-C6 Rezept:** `RecipeOfferSummary(recipe:, listId:)` als letzte Zeile der Gruppe „Zutaten“ und
+      `IngredientOfferBadge(listId:, ingredient:)` an den Zutatenzeilen (beide exportiert). Bis dahin steht
+      `RecipeOffersCard(recipe:)` mit eigener Gruppe; das `SizedBox(height: AvoSpacing.l)` davor in
+      `recipe_detail_screen.dart` bleibt als Lücke stehen, wenn die Karte nichts zeigt (bitte einklappend).
+    - **Datenquellen:** S12 braucht eine Seite „Datenquellen“ unter Rechtliches als Route; heute ist sie ein
+      Bottom-Sheet im Profil. Bis dahin fehlt die Zeile in S12.
+    - **A-C2, A-C5, A-C8, A-C9** sind weiter offen; B nutzt solange eigene Bausteine: `StoreFilterChip` (Chip mit
+      `StoreMark`), `PostcodeFieldRow`, sortierbare Zeilen mit Auswahl-Kreis in S13. Sobald A's Komponenten da sind,
+      stellt B um.
+    - **A-L3:** „Neue Liste …“ im Menü „Auf welche Liste?“ öffnet `openNewListEditor` und setzt den Markt danach
+      selbst; ein vorausgewählter Markt im Editor wäre schöner.
+    - **A-C4:** Nach der Rückkehr von `/stores/region` (Hinweis im Vorschlags-Panel) den Fokus wieder ins Eingabefeld.
+    - **Onboarding:** `OffersSetupStep` zeichnet seine Gruppen ohne eigenen Seitenrand, weil `OnboardingStepPage` die
+      Kinder schon 16 pt einrückt.
+
 Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
 5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald
 `categorizeLocal` gepusht ist). Danke auch für `addItems`/`undoAddItems` und `parseItemInput`: Der Wochenplan und Avo

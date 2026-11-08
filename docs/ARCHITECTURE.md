@@ -116,8 +116,19 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   Was die Person an Angebotsflächen ein- und ausschaltet und welche Listen sie ausblendet, liegt pro Konto auf dem
   Gerät (`offers_display_prefs_v1:<uid>`, `offers_hidden_lists_v1:<uid>`); ein anderes Konto sieht nichts davon.
 - Markt pro Liste: Tabelle `list_store_assignments_b` plus Gerätecache `list_store_guess_v1` (`ListStoreRepository`).
-  Angebots- und Markt-Screens von Teil B liegen als Vollbild über der Tab-Leiste (`offersRootRoutes`:
-  `/offers/offer/:offerId`, `/stores/pick`), geöffnet mit den Helfern in `screens/offers/offer_paths.dart`.
+  Angebots- und Markt-Screens von Teil B, geöffnet mit den Helfern in `screens/offers/offer_paths.dart`:
+  „Angebote der Woche“ `/offers` und „Angebote bei {Markt}“ `/offers/list/:listId` im Listen-Tab; als Vollbild über
+  der Tab-Leiste (`offersRootRoutes`) `/offers/offer/:offerId`, `/offers/recipe/:recipeId`, `/stores/pick`,
+  `/stores/region`; im Profil-Tab `/settings/offers`, `/settings/offers/region`, `/settings/offers/markets`.
+  `/offers*` laufen durch `_OffersGate` (Kill-Switch: Fehlerseite, Modul aus: Dialog, Wechsel im offenen Screen:
+  still schließen); `/stores/*` und `/settings/offers*` sind Kern und ohne Wächter.
+- Lieblingsmärkte (Reihenfolge), „Markt automatisch erkennen“, „Nicht interessiert“ und die Pause des Hinweises
+  „Postleitzahl festlegen“ liegen in denselben Konto-Einstellungen (`offers_display_prefs_v1:<uid>`). Im Onboarding
+  (noch ohne Konto) gewählte Märkte warten unter `offers_pending_favorites_v1` und gehen an das erste Konto, das
+  keine eigenen hat.
+- Region: `RegionController` (`region_provider.dart`). „Standort verwenden“ (`locate()`) fragt einmal nach der
+  Erlaubnis, ortet mit 3 s Zeitlimit und speichert nichts; gespeichert wird erst mit „Fertig“ (`saveRegion`).
+  „Region entfernen“ (`remove()`) setzt `offers_region_removed_v1`, damit der Hintergrund keine Region nachlädt.
 
 ## Backend (Supabase)
 

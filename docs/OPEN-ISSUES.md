@@ -68,7 +68,10 @@ Stand: 2026-11-08.
 | Versionsanzeige | Profil/Hilfe zeigen fest "1.0.0". `package_info_plus` direkt einbinden (ist schon transitiv da)? |
 | `macos/`, `web/` | Behalten? `web/` enthält die Deep-Link-Seite und die AASA-Datei. |
 | Eigener Markt pro Liste | „Markt wählen“ bietet „„Bio Kaiser“ als eigenen Markt verwenden“ nur ohne Liste an: `list_store_assignments_b.chain_id` nimmt nur Ketten-IDs. Für eigene Märkte eine Spalte (z. B. `custom_name`) per Migration ergänzen? |
-| Angebots-Einstellungen pro Konto | Schalter „Angebote an Artikeln / Vorschläge beim Tippen / Ersparnis in der Liste“, „Diese Woche ausblenden“, „Nicht dieses Angebot“ und ausgeblendete Listen liegen pro Konto, aber nur auf diesem Gerät (ein zweites Gerät kennt sie nicht). Migration `user_offer_prefs` (angebote.md Owner-Frage 14) freigeben? |
+| Angebots-Einstellungen pro Konto | Die fünf Schalter aus „Preise & Angebote“, Lieblingsmärkte, „Markt automatisch erkennen“, „Diese Woche ausblenden“, „Nicht dieses Angebot“, „Nicht interessiert“ und ausgeblendete Listen liegen pro Konto, aber nur auf diesem Gerät (ein zweites Gerät kennt sie nicht). Migration `user_offer_prefs` (angebote.md Owner-Frage 14) freigeben? |
+| PLZ-Tabelle (Ort zur Postleitzahl) | Ohne Tabelle zeigt „Region“ für eine getippte PLZ nur „PLZ 79098“ (den Ort gibt es nur über den Standort), und „Diese Postleitzahl kennen wir nicht.“ prüft nur Zone 00 und 99999. Quelle und Lizenz einer offenen PLZ-Liste wählen (angebote.md Owner-Frage 11, Lücke L10)? |
+| Angebote für Listen ohne Markt | Laut Spec zeigen Listen ohne festen Markt die Angebote der Lieblingsmärkte in deren Reihenfolge (K12-03, Owner-Frage 7). Die Daten dafür (Abgleich über mehrere Märkte pro Artikel) sind noch nicht gebaut: solche Listen zeigen keine Angebote, und „Lieblingsmärkte“ sagt deshalb nur „Diese Märkte stehen oben, wenn du für eine Liste einen Markt wählst.“ Als Nächstes bauen? |
+| Standort-Abfrage | Text in `Info.plist` (`NSLocationWhenInUseUsageDescription`) wie in angebote.md Owner-Frage 10 setzen: „Avo nutzt deinen Standort, um deine Postleitzahl für Angebote zu finden und den Markt vorzuschlagen, in dem du gerade bist.“ |
 
 ## 5. Bekannte Restarbeiten im Code (kann Claude machen)
 

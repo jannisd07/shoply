@@ -2,6 +2,16 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Angebots-Screens (Teil B, W4)
+
+Die übrigen Angebots-Screens im D2-Stil (`docs/redesign/b-screens/angebote.md` S9–S16): „Angebote bei {Markt}“
+(`/offers/list/:listId`, aus der Ersparnis-Zeile), „Angebote der Woche“ (`/offers`) mit „Deine Listen“, „Oft
+gekauft“, Suche nach Markt gruppiert und dem Menü „Auf welche Liste?“, Region als Vollbild (`/stores/region`,
+`/settings/offers/region`) statt Postleitzahl-Sheet, „Preise & Angebote“ (`/settings/offers`), Lieblingsmärkte
+(`/settings/offers/markets`), der Onboarding-Schritt `OffersSetupStep` mit Inhalt und die Rezept-Zeile mit „Angebote
+für {Rezept}“ (`/offers/recipe/:recipeId`). Ohne Region zeigen Liste und Eingabefeld „Postleitzahl festlegen“. Weg
+sind `weekly_deals_screen.dart`, `zip_code_sheet.dart`, die alte Rezept-Angebotskarte und ihre Texte.
+
 ## 2026-11-08: Avo-Tab im D2-Design (Teil B, B5 W1)
 
 - Neuer Avo-Tab (`lib/presentation/screens/avo/`) nach `docs/redesign/b-screens/avo.md` §1–§6: großer Titel mit
