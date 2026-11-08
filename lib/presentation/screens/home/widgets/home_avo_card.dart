@@ -32,16 +32,9 @@ const List<(double alpha, double y, double blur)> _kAskShadows = [
 const double _kChipHeight = 34; // D2
 const double _kChipShadowAlpha = 0.07; // D2
 
-/// Opens the Avo tab with [question] sent once (`/avo?q=`, Teil B).
-void openAvoWithQuestion(BuildContext context, String question) {
-  final q = question.trim();
-  if (q.isEmpty) return;
-  context.go(Uri(path: RoutePaths.avo, queryParameters: {'q': q}).toString());
-}
-
 /// The first card on Home (D2 "Avo-Karte"): Avo waving, the savings hint of
 /// Teil B when there is one (else a short intro), the field "Frag Avo …"
-/// and question chips that open the Avo tab.
+/// and question chips that open the Avo tab (`openAvoWithQuestion`, Teil B).
 class HomeAvoCard extends StatelessWidget {
   const HomeAvoCard({
     super.key,
