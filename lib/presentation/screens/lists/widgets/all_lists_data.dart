@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
-import 'package:shoply/presentation/state/avo_nudge_provider.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 
 /// The lists the overview shows: the local state of [listsNotifierProvider]

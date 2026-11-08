@@ -73,7 +73,6 @@ const Map<String, String> listsEn = {
   'item_added_success': 'Added to list!',
   'empty_list_hint': 'Add products to start shopping',
   'item_added_named': '{name} added to the list',
-  'trip_completed_items': '✅ {count} items completed!',
   'share_list_text': 'Check out my shopping list "{name}"!',
   'share_list_join_code':
       'Join with this code: {code}\nOpen Avo and tap "Join list".',
@@ -191,7 +190,6 @@ const Map<String, String> listsDe = {
   'item_added_success': 'Zur Liste hinzugefügt!',
   'empty_list_hint': 'Füge Produkte hinzu, um mit dem Einkaufen zu beginnen',
   'item_added_named': '{name} zur Liste hinzugefügt',
-  'trip_completed_items': '✅ {count} Artikel erfolgreich abgeschlossen!',
   'share_list_text': 'Schau dir meine Einkaufsliste "{name}" an!',
   'share_list_join_code':
       'Trete mit diesem Code bei: {code}\nÖffne Avo und tippe auf "Liste beitreten".',
