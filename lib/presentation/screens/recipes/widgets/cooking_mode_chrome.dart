@@ -295,7 +295,14 @@ class CookingBottomBar extends StatelessWidget {
                   child: Center(child: timer ?? const SizedBox.shrink()),
                 ),
                 const SizedBox(width: _itemGap),
-                Flexible(child: next),
+                // At most half the row, but always flush right (a Flexible
+                // would leave its unused share as a gap after it).
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth / 2,
+                  ),
+                  child: next,
+                ),
               ],
             ),
           );
