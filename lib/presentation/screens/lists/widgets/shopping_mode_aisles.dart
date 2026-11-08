@@ -11,6 +11,7 @@ import 'package:shoply/data/services/category_order_service.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/item_row.dart';
+import 'package:shoply/core/utils/item_quantity.dart';
 
 /// The aisle order of one list: the saved category order and the list's
 /// own categories (Konzept 11 §5.2 item 6, §12).
@@ -132,20 +133,11 @@ List<ShoppingItemModel> _sorted(List<ShoppingItemModel> items) {
 /// "500 g", "3 St.", "2 L · still": quantity (left out for a single piece
 /// without unit) and note, the second line of a shopping-mode row.
 String shoppingItemSubtitle(BuildContext context, ShoppingItemModel item) {
-  final german = Localizations.maybeLocaleOf(context)?.languageCode == 'de';
-  final q = item.quantity;
-  final number = q % 1 == 0
-      ? q.toInt().toString()
-      : (german ? q.toString().replaceAll('.', ',') : q.toString());
-  final unit = item.unit?.trim();
-  final String? quantity;
-  if (unit != null && unit.isNotEmpty) {
-    quantity = '$number $unit';
-  } else if (q != 1) {
-    quantity = context.tr('list_shop_pieces', params: {'count': number});
-  } else {
-    quantity = null;
-  }
+  final quantity = formatQuantity(
+    item.quantity,
+    item.unit,
+    languageCode: Localizations.maybeLocaleOf(context)?.languageCode ?? 'de',
+  );
   final note = item.notes?.trim();
   return [?quantity, if (note != null && note.isNotEmpty) note].join(' · ');
 }

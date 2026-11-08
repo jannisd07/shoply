@@ -50,7 +50,7 @@ void main() {
   group('quantity', () {
     test('pieces, units and decimals in the app language', () {
       expect(formatItemQuantity(_item('a', quantity: 2)), '2 St.');
-      expect(formatItemQuantity(_item('a', quantity: 1.5, unit: 'l')), '1,5 l');
+      expect(formatItemQuantity(_item('a', quantity: 1.5, unit: 'l')), '1,5 L');
       expect(formatItemQuantity(_item('a', quantity: 500, unit: 'g')), '500 g');
       expect(formatItemQuantity(_item('a', unit: 'bunch')), '1 Bund');
       expect(formatItemQuantity(_item('a', quantity: 3, unit: 'Stk')), '3 St.');

@@ -360,9 +360,9 @@ void main() {
       );
       expect(_row('Avocados'), findsOneWidget);
       expect(_row('Feta'), findsOneWidget);
-      // "3 pcs", "2 l · ungesüßt": quantity, unit and note.
+      // "3 pcs", "2 L · ungesüßt": quantity, unit and note.
       expect(find.text('3 pcs'), findsOneWidget);
-      expect(find.text('2 l · ungesüßt'), findsOneWidget);
+      expect(find.text('2 L · ungesüßt'), findsOneWidget);
       expect(find.text('1 bunch'), findsOneWidget);
       // Avatar stack of the other member.
       expect(find.text('L'), findsOneWidget);

@@ -2,12 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import 'package:shoply/core/design/design.dart';
-import 'package:shoply/core/localization/app_translations.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/category_detector.dart';
+import 'package:shoply/core/utils/item_quantity.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_drag_controller.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -35,59 +34,22 @@ const double _insertLine = 2;
 
 /// Unit ids the item parser and the editor store (`Categories.units` plus
 /// `bunch`); anything else is shown as typed.
-const Set<String> _knownUnits = {
-  'kg',
-  'g',
-  'l',
-  'ml',
-  'dozen',
-  'pack',
-  'bottle',
-  'can',
-  'box',
-  'bunch',
-};
-
-/// Spellings of "pieces" in older rows.
-const Set<String> _pieceUnits = {
-  'pcs',
-  'pc',
-  'stk',
-  'stk.',
-  'st',
-  'st.',
-  'stück',
-  'x',
-  'piece',
-  'pieces',
-};
-
-/// "2 St.", "1,5 l", "500 g": quantity without a trailing ",0" in the app
-/// language, plus the unit (pieces when none is stored).
+/// "2 St.", "1,5 L", "500 g": the shared quantity format
+/// ([formatQuantity]); empty for a single piece without a unit.
 String formatItemQuantity(
   ShoppingItemModel item, {
   String languageCode = 'de',
-}) {
-  final number = NumberFormat('0.##', languageCode).format(item.quantity);
-  final unit = item.unit?.trim() ?? '';
-  final lower = unit.toLowerCase();
-  final key = lower.isEmpty || _pieceUnits.contains(lower)
-      ? 'list_detail_unit_pcs'
-      : (_knownUnits.contains(lower) ? 'list_detail_unit_$lower' : null);
-  if (key == null) return '$number $unit';
-  return '$number ${_unitLabel(key, languageCode)}';
-}
-
-String _unitLabel(String key, String languageCode) =>
-    AppTranslations.get(key, languageCode);
+}) =>
+    formatQuantity(item.quantity, item.unit, languageCode: languageCode) ?? '';
 
 /// Second line of a row: quantity, note, diet warning ("500 g · für
 /// Lasagne").
 String itemSubtitle(BuildContext context, ShoppingItemModel item) {
   final lang = Localizations.localeOf(context).languageCode;
   final note = item.notes?.trim();
+  final quantity = formatItemQuantity(item, languageCode: lang);
   return [
-    formatItemQuantity(item, languageCode: lang),
+    if (quantity.isNotEmpty) quantity,
     if (note != null && note.isNotEmpty) note,
     if (item.isDietWarning) context.tr('list_detail_diet_warning'),
   ].join(' · ');
