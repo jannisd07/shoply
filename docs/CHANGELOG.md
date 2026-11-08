@@ -2,6 +2,16 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-08: Avo-Tab im D2-Design (Teil B, B5 W1)
+
+- Neuer Avo-Tab (`lib/presentation/screens/avo/`) nach `docs/redesign/b-screens/avo.md` §1–§6: großer Titel mit
+  Avo-Figur, Nutzer-Blase, Avo-Text Wort für Wort, Arbeits-Zeile mit Stopp, eine Ergebniskarte pro Antwort,
+  Auswahlkarte „Auf welche Liste?“, Rückfrage-Karte Löschen, Pro- und Modul-Zeile, Kontext-Kapsel, Folge-Chips,
+  leerer Chat mit Vorschlägen nach Herkunfts-Screen, alle Fehlerzustände (offline, Limit, Kill-Switch, Anmeldung).
+- Antwortkarten für Listen und Artikel mit „Widerrufen“ (hinzufügen, abhaken, ändern, verschieben, anlegen,
+  umbenennen); `?prompt=` füllt das Feld nur vor.
+- Alte Chat-Dateien unter `screens/ai/` und ihre Texte (`chip_*`, `how_can_i_help` …) entfernt.
+
 ## 2026-11-08: Angebote an Artikeln und Markt pro Liste (Teil B, W2)
 
 Die Angebots-Slots, die Teil A in Liste, Artikel, Einkaufsmodus und Listen-Übersicht setzt, zeigen jetzt echte

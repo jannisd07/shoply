@@ -13,6 +13,7 @@ import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/shopping_history.dart';
+import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/weekly_nutrition_summary.dart';
 import 'package:shoply/data/models/workout.dart';
@@ -131,12 +132,26 @@ class AvoAssistantService {
   /// Send a message to Avo. The chat screen passes its [ref] so the
   /// service can call Riverpod notifiers (settings bridge, item provider,
   /// etc.) while running tool calls.
+  ///
+  /// [onText] gets the answer text while it is written, [onTool] each tool
+  /// right before the app runs it (the tab's "Schreibt auf Wocheneinkauf"),
+  /// [onPayload] each card as soon as its tool is done.
   Future<AvoResponse> chat(
     String userMessage, {
     required WidgetRef ref,
     AvoContext? context,
+    void Function(String delta)? onText,
+    void Function(String name, Map<String, Object?> input)? onTool,
+    void Function(AvoWidgetPayload payload)? onPayload,
   }) async {
-    return _ask(userMessage, ref, context, onText: (_) {});
+    return _ask(
+      userMessage,
+      ref,
+      context,
+      onText: onText ?? (_) {},
+      onTool: onTool,
+      onPayload: onPayload,
+    );
   }
 
   /// Like [chat], but reports the answer text while it is written.
@@ -158,6 +173,8 @@ class AvoAssistantService {
     WidgetRef ref,
     AvoContext? context, {
     required void Function(String delta) onText,
+    void Function(String name, Map<String, Object?> input)? onTool,
+    void Function(AvoWidgetPayload payload)? onPayload,
   }) async {
     if (!_initialized) await initialize();
     if (_conversation.isExpired) resetChat();
@@ -187,7 +204,12 @@ class AvoAssistantService {
 
         final results = <Map<String, dynamic>>[];
         for (final call in done.toolCalls) {
+          onTool?.call(call.name, call.input);
+          final before = payloads.length;
           results.add(await _runToolCall(call, ref, context, payloads, consents));
+          for (var i = before; i < payloads.length; i++) {
+            onPayload?.call(payloads[i]);
+          }
         }
         _conversation.addToolResults(results);
         if (round == _maxRounds - 1) {
@@ -213,6 +235,8 @@ class AvoAssistantService {
         message: _t(ref, _errorKeyFor(failure.code)),
         payloads: payloads,
         expression: AvoExpressionType.confused,
+        errorCode: failure.code,
+        retryAfterS: failure.retryAfterS,
       );
     } catch (e) {
       _conversation.rollback(mark);
@@ -221,6 +245,7 @@ class AvoAssistantService {
         message: _t(ref, 'avo_error_generic'),
         payloads: payloads,
         expression: AvoExpressionType.confused,
+        errorCode: 'generic',
       );
     }
   }
@@ -244,8 +269,8 @@ class AvoAssistantService {
           onText(text);
         case AvoMessageDone():
           done = event;
-        case AvoStreamError(:final code):
-          throw _AvoStreamFailure(code);
+        case AvoStreamError(:final code, :final retryAfterS):
+          throw _AvoStreamFailure(code, retryAfterS: retryAfterS);
       }
     }
     final result = done;
@@ -320,6 +345,14 @@ class AvoAssistantService {
       );
     }
     final result = await _runTool(call.name, call.input, ref, context, payloads);
+    // A calories tool with the module off: the card offers "Einschalten"
+    // (once per answer). Never for the meal plan while it is unreleased.
+    if (result['tracking_enabled'] == false &&
+        !payloads.any((p) =>
+            p.kind == AvoPayloadKind.moduleOff &&
+            p.module == AppModule.calories)) {
+      payloads.add(AvoWidgetPayload.moduleOff(AppModule.calories));
+    }
     final failed = result['error'] != null || result['not_available'] == true;
     return AvoConversation.toolResult(call.id, result, isError: failed);
   }
@@ -356,13 +389,13 @@ class AvoAssistantService {
         case 'get_list_contents':
           return await _toolGetListContents(args, context, payloads);
         case 'add_item_to_list':
-          return await _toolAddItem(args, ref);
+          return await _toolAddItem(args, ref, payloads);
         case 'ask_pick_list':
           return await _toolPickList(args, payloads);
         case 'check_items':
-          return await _toolCheckItems(args, ref);
+          return await _toolCheckItems(args, ref, payloads);
         case 'complete_list':
-          return await _toolCompleteList(args, ref);
+          return await _toolCompleteList(args, ref, payloads);
         case 'add_history_items_to_list':
           return await _toolAddHistoryItems(args, ref);
         case 'update_setting':
@@ -380,13 +413,13 @@ class AvoAssistantService {
         case 'split_trip_cost':
           return await _toolSplitTripCost(args);
         case 'update_item':
-          return await _toolUpdateItem(args, ref);
+          return await _toolUpdateItem(args, ref, payloads);
         case 'move_items':
-          return await _toolMoveItems(args, ref);
+          return await _toolMoveItems(args, ref, payloads);
         case 'create_list':
-          return await _toolCreateList(args, ref);
+          return await _toolCreateList(args, ref, payloads);
         case 'rename_list':
-          return await _toolRenameList(args, ref);
+          return await _toolRenameList(args, ref, payloads);
         case 'get_user_profile':
           return await _toolGetUserProfile(ref);
         case 'setup_nutrition_goal':
@@ -745,6 +778,7 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolAddItem(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final listId = args['list_id'] as String?;
     final name = args['name'] as String?;
@@ -753,10 +787,228 @@ class AvoAssistantService {
     }
     final quantity = (args['quantity'] as num?)?.toDouble() ?? 1.0;
     final unit = args['unit'] as String?;
-    await ref
-        .read(itemsNotifierProvider(listId).notifier)
-        .addItem(name: name, quantity: quantity, unit: unit);
+    final added = await addItemForAvo(
+      ref,
+      listId: listId,
+      name: name,
+      quantity: quantity,
+      unit: unit,
+    );
+    payloads.add(AvoWidgetPayload.listChange(added));
     return {'success': true, 'list_id': listId, 'name': name};
+  }
+
+  /// Puts one item on [listId] the way the list screen does and describes
+  /// the change for the answer card, with "Widerrufen" when the new row is
+  /// known. Also used by the tab's own "Auf welche Liste?" card.
+  Future<AvoListChange> addItemForAvo(
+    WidgetRef ref, {
+    required String listId,
+    required String name,
+    double quantity = 1,
+    String? unit,
+  }) async {
+    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
+    await notifier.addItem(name: name, quantity: quantity, unit: unit);
+    final listName = await _listNameOf(ref, listId);
+    final added = _newestNamed(
+      ref.read(itemsNotifierProvider(listId)).valueOrNull,
+      name,
+    );
+    final now = DateTime.now();
+    return AvoListChange(
+      kind: AvoListChangeKind.added,
+      listId: listId,
+      listName: listName,
+      count: 1,
+      items: [
+        added ??
+            ShoppingItemModel(
+              id: '',
+              listId: listId,
+              name: name,
+              quantity: quantity,
+              unit: unit,
+              createdAt: now,
+              updatedAt: now,
+            ),
+      ],
+      undo: added == null ? null : () => _undoAdded(ref, listId, added),
+    );
+  }
+
+  /// The newest saved (not pending) item called [name].
+  static ShoppingItemModel? _newestNamed(
+    List<ShoppingItemModel>? items,
+    String name,
+  ) {
+    ShoppingItemModel? best;
+    final wanted = name.trim().toLowerCase();
+    for (final item in items ?? const <ShoppingItemModel>[]) {
+      if (item.id.startsWith('pending-')) continue;
+      if (item.name.trim().toLowerCase() != wanted) continue;
+      if (best == null || item.createdAt.isAfter(best.createdAt)) best = item;
+    }
+    return best;
+  }
+
+  Future<String> _listNameOf(WidgetRef ref, String listId) async {
+    try {
+      for (final l in await _fetchLists(ref)) {
+        if (l.id == listId) return l.name;
+      }
+    } catch (e) {
+      debugPrint('⚠️ [AVO] List name not loaded: $e');
+    }
+    return '';
+  }
+
+  // ── Undo of list changes ("Widerrufen" on the answer card) ──────────
+  //
+  // Each one first checks that the data is still as Avo left it; if someone
+  // changed it since, nothing is touched (Kap. 5, "Inzwischen geändert").
+
+  Future<AvoUndoResult> _undoAdded(
+    WidgetRef ref,
+    String listId,
+    ShoppingItemModel added,
+  ) async {
+    try {
+      final now = await ItemRepository.instance.getListItems(listId);
+      final current = now.where((i) => i.id == added.id).firstOrNull;
+      if (current == null ||
+          current.isChecked ||
+          current.quantity != added.quantity ||
+          current.name != added.name) {
+        return AvoUndoResult.changedSince;
+      }
+      await ref.read(itemsNotifierProvider(listId).notifier).deleteItem(added.id);
+      ref.invalidate(listsNotifierProvider);
+      return AvoUndoResult.undone;
+    } catch (e) {
+      debugPrint('❌ [AVO] Undo add failed: $e');
+      return AvoUndoResult.failed;
+    }
+  }
+
+  /// Sets every item in [previous] (id → checked before Avo) back, if each
+  /// one still has the state [setTo] that Avo gave it.
+  Future<AvoUndoResult> _undoChecked(
+    WidgetRef ref,
+    String listId,
+    Map<String, bool> previous,
+    bool setTo,
+  ) async {
+    try {
+      final now = await ItemRepository.instance.getListItems(listId);
+      final byId = {for (final i in now) i.id: i};
+      for (final id in previous.keys) {
+        final current = byId[id];
+        if (current == null || current.isChecked != setTo) {
+          return AvoUndoResult.changedSince;
+        }
+      }
+      final repository = ref.read(itemRepositoryProvider);
+      await Future.wait([
+        for (final e in previous.entries)
+          if (e.value != setTo) repository.toggleItemChecked(e.key, e.value),
+      ]);
+      ref.invalidate(itemsNotifierProvider(listId));
+      ref.invalidate(listsNotifierProvider);
+      return AvoUndoResult.undone;
+    } catch (e) {
+      debugPrint('❌ [AVO] Undo check failed: $e');
+      return AvoUndoResult.failed;
+    }
+  }
+
+  Future<AvoUndoResult> _undoUpdated(
+    WidgetRef ref,
+    String listId,
+    String itemId,
+    Map<String, dynamic> applied,
+    Map<String, dynamic> previous,
+  ) async {
+    try {
+      final now = await ItemRepository.instance.getListItems(listId);
+      final current = now.where((i) => i.id == itemId).firstOrNull;
+      if (current == null) return AvoUndoResult.changedSince;
+      final json = current.toJson();
+      for (final e in applied.entries) {
+        if (!_sameValue(json[e.key], e.value)) return AvoUndoResult.changedSince;
+      }
+      await ref
+          .read(itemsNotifierProvider(listId).notifier)
+          .updateItem(itemId, previous);
+      ref.invalidate(listsNotifierProvider);
+      return AvoUndoResult.undone;
+    } catch (e) {
+      debugPrint('❌ [AVO] Undo update failed: $e');
+      return AvoUndoResult.failed;
+    }
+  }
+
+  static bool _sameValue(Object? a, Object? b) {
+    if (a is num && b is num) return a.toDouble() == b.toDouble();
+    return a == b;
+  }
+
+  Future<AvoUndoResult> _undoMoved(
+    WidgetRef ref,
+    String fromListId,
+    String toListId,
+    List<String> itemIds,
+  ) async {
+    try {
+      final now = await ItemRepository.instance.getListItems(toListId);
+      final ids = {for (final i in now) i.id};
+      if (!itemIds.every(ids.contains)) return AvoUndoResult.changedSince;
+      final notifier = ref.read(itemsNotifierProvider(toListId).notifier);
+      for (final id in itemIds) {
+        await notifier.updateItem(id, {'list_id': fromListId});
+      }
+      ref.invalidate(itemsNotifierProvider(fromListId));
+      ref.invalidate(listsNotifierProvider);
+      return AvoUndoResult.undone;
+    } catch (e) {
+      debugPrint('❌ [AVO] Undo move failed: $e');
+      return AvoUndoResult.failed;
+    }
+  }
+
+  /// A new list goes again only while it is still empty.
+  Future<AvoUndoResult> _undoCreated(WidgetRef ref, String listId) async {
+    try {
+      final items = await ItemRepository.instance.getListItems(listId);
+      if (items.isNotEmpty) return AvoUndoResult.changedSince;
+      await ref.read(listsNotifierProvider.notifier).deleteList(listId);
+      return AvoUndoResult.undone;
+    } catch (e) {
+      debugPrint('❌ [AVO] Undo create failed: $e');
+      return AvoUndoResult.failed;
+    }
+  }
+
+  Future<AvoUndoResult> _undoRenamed(
+    WidgetRef ref,
+    String listId,
+    String previousName,
+    String newName,
+  ) async {
+    try {
+      final lists = await ListRepository.instance.getUserLists();
+      final current = lists.where((l) => l.id == listId).firstOrNull;
+      if (current == null || current.name != newName) {
+        return AvoUndoResult.changedSince;
+      }
+      await ref
+          .read(listsNotifierProvider.notifier)
+          .updateList(listId, {'name': previousName});
+      return AvoUndoResult.undone;
+    } catch (e) {
+      debugPrint('❌ [AVO] Undo rename failed: $e');
+      return AvoUndoResult.failed;
+    }
   }
 
   Future<Map<String, Object?>> _toolPickList(
@@ -778,6 +1030,7 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolCheckItems(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final listId = args['list_id'] as String?;
     final itemIds = _stringList(args['item_ids']);
@@ -786,27 +1039,85 @@ class AvoAssistantService {
       return {'error': 'list_id and item_ids are required'};
     }
     final repository = ref.read(itemRepositoryProvider);
+    final before = await _itemsOrEmpty(repository, listId);
     await Future.wait(
         itemIds.map((id) => repository.toggleItemChecked(id, checked)));
     ref.invalidate(itemsNotifierProvider(listId));
     await _afterBulkListChange(ref, listId);
+    payloads.add(AvoWidgetPayload.listChange(await _checkedChange(
+      ref,
+      listId,
+      before,
+      itemIds,
+      checked,
+    )));
     return {'updated': itemIds.length, 'checked': checked};
   }
 
   Future<Map<String, Object?>> _toolCompleteList(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final listId = args['list_id'] as String?;
     if (listId == null) return {'error': 'list_id is required'};
     final repository = ref.read(itemRepositoryProvider);
-    final unchecked =
-        (await repository.getListItems(listId)).where((i) => !i.isChecked).toList();
+    final all = await repository.getListItems(listId);
+    final unchecked = all.where((i) => !i.isChecked).toList();
     await Future.wait(
         unchecked.map((item) => repository.toggleItemChecked(item.id, true)));
     ref.invalidate(itemsNotifierProvider(listId));
     await _afterBulkListChange(ref, listId);
+    if (unchecked.isNotEmpty) {
+      payloads.add(AvoWidgetPayload.listChange(await _checkedChange(
+        ref,
+        listId,
+        all,
+        [for (final i in unchecked) i.id],
+        true,
+      )));
+    }
     return {'checked_count': unchecked.length};
+  }
+
+  static Future<List<ShoppingItemModel>> _itemsOrEmpty(
+    ItemRepository repository,
+    String listId,
+  ) async {
+    try {
+      return await repository.getListItems(listId);
+    } catch (e) {
+      debugPrint('⚠️ [AVO] Items not loaded for the card: $e');
+      return const [];
+    }
+  }
+
+  /// The card for [itemIds] set to [checked], from the items [before].
+  Future<AvoListChange> _checkedChange(
+    WidgetRef ref,
+    String listId,
+    List<ShoppingItemModel> before,
+    List<String> itemIds,
+    bool checked,
+  ) async {
+    final byId = {for (final i in before) i.id: i};
+    final previous = {
+      for (final id in itemIds)
+        if (byId[id] != null) id: byId[id]!.isChecked,
+    };
+    return AvoListChange(
+      kind: checked ? AvoListChangeKind.checked : AvoListChangeKind.unchecked,
+      listId: listId,
+      listName: await _listNameOf(ref, listId),
+      count: itemIds.length,
+      items: [
+        for (final id in itemIds)
+          if (byId[id] != null) byId[id]!.copyWith(isChecked: checked),
+      ],
+      undo: previous.isEmpty
+          ? null
+          : () => _undoChecked(ref, listId, previous, checked),
+    );
   }
 
   Future<Map<String, Object?>> _toolAddHistoryItems(
@@ -1084,6 +1395,7 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolUpdateItem(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final listId = args['list_id'] as String?;
     final itemId = args['item_id'] as String?;
@@ -1108,16 +1420,42 @@ class AvoAssistantService {
             'Nothing to change — pass new_name, quantity, unit, or notes',
       };
     }
+    final before = (await _itemsOrEmpty(ref.read(itemRepositoryProvider), listId))
+        .where((i) => i.id == itemId)
+        .firstOrNull;
     await ref
         .read(itemsNotifierProvider(listId).notifier)
         .updateItem(itemId, updates);
     ref.invalidate(listsNotifierProvider);
+    if (before != null) {
+      final old = before.toJson();
+      final previous = {for (final k in updates.keys) k: old[k]};
+      final after = before.copyWith(
+        name: updates['name'] as String? ?? before.name,
+        quantity: (updates['quantity'] as num?)?.toDouble() ?? before.quantity,
+        unit: updates.containsKey('unit') ? updates['unit'] as String? : before.unit,
+        notes: updates.containsKey('notes') ? updates['notes'] as String? : before.notes,
+      );
+      payloads.add(AvoWidgetPayload.listChange(AvoListChange(
+        kind: AvoListChangeKind.updated,
+        listId: listId,
+        listName: await _listNameOf(ref, listId),
+        count: 1,
+        items: [after],
+        itemName: after.name,
+        previousQuantity:
+            updates.containsKey('quantity') ? before.quantity : null,
+        newQuantity: updates.containsKey('quantity') ? after.quantity : null,
+        undo: () => _undoUpdated(ref, listId, itemId, updates, previous),
+      )));
+    }
     return {'success': true, 'updated_fields': updates.keys.toList()};
   }
 
   Future<Map<String, Object?>> _toolMoveItems(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final fromListId = args['from_list_id'] as String?;
     final toListId = args['to_list_id'] as String?;
@@ -1132,6 +1470,7 @@ class AvoAssistantService {
     // price. RLS only permits this when the user is a member of BOTH lists
     // (the UPDATE policy's USING clause applies to old and new row alike),
     // so a move to a foreign list fails closed instead of silently leaking.
+    final before = await _itemsOrEmpty(ref.read(itemRepositoryProvider), fromListId);
     final notifier = ref.read(itemsNotifierProvider(fromListId).notifier);
     var moved = 0;
     String? failure;
@@ -1146,6 +1485,22 @@ class AvoAssistantService {
     }
     ref.invalidate(itemsNotifierProvider(toListId));
     ref.invalidate(listsNotifierProvider);
+    if (moved > 0) {
+      final movedIds = itemIds.take(moved).toList();
+      final byId = {for (final i in before) i.id: i};
+      payloads.add(AvoWidgetPayload.listChange(AvoListChange(
+        kind: AvoListChangeKind.moved,
+        listId: toListId,
+        listName: await _listNameOf(ref, toListId),
+        fromListName: await _listNameOf(ref, fromListId),
+        count: moved,
+        items: [
+          for (final id in movedIds)
+            if (byId[id] != null) byId[id]!.copyWith(listId: toListId),
+        ],
+        undo: () => _undoMoved(ref, fromListId, toListId, movedIds),
+      )));
+    }
     if (failure != null) {
       return {
         'error': 'Move failed after $moved of ${itemIds.length} items: $failure',
@@ -1158,11 +1513,18 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolCreateList(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final name = (args['name'] as String?)?.trim();
     if (name == null || name.isEmpty) return {'error': 'name is required'};
     final newList =
         await ref.read(listsNotifierProvider.notifier).createList(name);
+    payloads.add(AvoWidgetPayload.listChange(AvoListChange(
+      kind: AvoListChangeKind.created,
+      listId: newList.id,
+      listName: newList.name,
+      undo: () => _undoCreated(ref, newList.id),
+    )));
     return {
       'success': true,
       'list_id': newList.id,
@@ -1174,15 +1536,26 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolRenameList(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final listId = args['list_id'] as String?;
     final newName = (args['new_name'] as String?)?.trim();
     if (listId == null || newName == null || newName.isEmpty) {
       return {'error': 'list_id and new_name are required'};
     }
+    final previousName = await _listNameOf(ref, listId);
     await ref
         .read(listsNotifierProvider.notifier)
         .updateList(listId, {'name': newName});
+    payloads.add(AvoWidgetPayload.listChange(AvoListChange(
+      kind: AvoListChangeKind.renamed,
+      listId: listId,
+      listName: newName,
+      previousName: previousName.isEmpty ? null : previousName,
+      undo: previousName.isEmpty
+          ? null
+          : () => _undoRenamed(ref, listId, previousName, newName),
+    )));
     return {'success': true, 'renamed_to': newName};
   }
 
@@ -2043,22 +2416,33 @@ class AvoAssistantService {
   Future<bool> confirmPendingDelete(String token, WidgetRef ref) async {
     final pending = _pendingDeletes.take(token);
     if (pending == null) return false;
-    final current = await _lookUpDeleteTarget(pending.target, pending.targetId);
-    if (current == null || current.version != pending.version) return false;
-    switch (pending.target) {
-      case AvoDeleteTarget.item:
-        final listId = pending.parentId;
-        if (listId == null) return false;
-        await ref.read(itemsNotifierProvider(listId).notifier).deleteItem(pending.targetId);
-      case AvoDeleteTarget.list:
-        await ref.read(listsNotifierProvider.notifier).deleteList(pending.targetId);
-      case AvoDeleteTarget.foodLog:
-        await FoodLogService.instance.deleteEntry(pending.targetId);
-        invalidateNutritionLog(ref);
-      case AvoDeleteTarget.planEntry:
-      case AvoDeleteTarget.historyTrip:
-      case AvoDeleteTarget.listMember:
-        return false;
+    try {
+      final current =
+          await _lookUpDeleteTarget(pending.target, pending.targetId);
+      if (current == null || current.version != pending.version) return false;
+      switch (pending.target) {
+        case AvoDeleteTarget.item:
+          final listId = pending.parentId;
+          if (listId == null) return false;
+          await ref
+              .read(itemsNotifierProvider(listId).notifier)
+              .deleteItem(pending.targetId);
+        case AvoDeleteTarget.list:
+          await ref
+              .read(listsNotifierProvider.notifier)
+              .deleteList(pending.targetId);
+        case AvoDeleteTarget.foodLog:
+          await FoodLogService.instance.deleteEntry(pending.targetId);
+          invalidateNutritionLog(ref);
+        case AvoDeleteTarget.planEntry:
+        case AvoDeleteTarget.historyTrip:
+        case AvoDeleteTarget.listMember:
+          return false;
+      }
+    } catch (_) {
+      // Nothing was deleted (network): the card may try again.
+      _pendingDeletes.restore(pending);
+      rethrow;
     }
     return true;
   }
@@ -2166,7 +2550,8 @@ class AvoAssistantService {
 /// An answer stream that ended with an error event (code as in
 /// [ClaudeException]).
 class _AvoStreamFailure implements Exception {
-  const _AvoStreamFailure(this.code);
+  const _AvoStreamFailure(this.code, {this.retryAfterS});
 
   final String code;
+  final int? retryAfterS;
 }

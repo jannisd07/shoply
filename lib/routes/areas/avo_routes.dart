@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shoply/presentation/screens/ai/avo_chat_screen.dart';
+import 'package:shoply/presentation/screens/avo/avo_tab_screen.dart';
 import 'package:shoply/routes/app_branch.dart';
 
 // Avo (Teil B). The contract for all Teil-B route files is the same: a root
@@ -8,9 +8,13 @@ import 'package:shoply/routes/app_branch.dart';
 // Teil B only edits this file. See docs/redesign/status-A.md, "Routen".
 
 /// Root of the Avo tab at RoutePaths.avo. `?q=` hands a question over
-/// (the "Frag Avo …" field on Home); Avo sends it exactly once.
-Widget buildAvoRoot(BuildContext context, GoRouterState state) =>
-    AvoChatScreen(initialQuestion: state.uri.queryParameters['q']);
+/// (the "Frag Avo …" field on Home); Avo sends it exactly once. `?prompt=`
+/// (deep links `shoply://avo?prompt=`) only fills the composer and never
+/// sends, so another app or a web page cannot make Avo act.
+Widget buildAvoRoot(BuildContext context, GoRouterState state) => AvoTabScreen(
+      initialQuestion: state.uri.queryParameters['q'],
+      prompt: state.uri.queryParameters['prompt'],
+    );
 
 /// Children of the area root, with paths relative to it. They open in the
 /// root's navigator; add `parentNavigatorKey: rootNavigatorKey` to open one

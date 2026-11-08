@@ -1,3 +1,4 @@
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
@@ -15,11 +16,104 @@ class AvoResponse {
   final List<AvoWidgetPayload> payloads;
   final AvoExpressionType expression;
 
+  /// Why the answer failed (server code such as `quota_exceeded`,
+  /// `rate_limited`, `network_error`, `timeout`, `refused`, `unauthorized`,
+  /// `ai_disabled`, or `generic`); null for an answer. The tab picks its
+  /// error state from it, [message] is only the fallback text.
+  final String? errorCode;
+
+  /// Seconds until "Erneut versuchen" makes sense again (`rate_limited`).
+  final int? retryAfterS;
+
   const AvoResponse({
     required this.message,
     this.payloads = const [],
     this.expression = AvoExpressionType.happy,
+    this.errorCode,
+    this.retryAfterS,
   });
+}
+
+/// What a change Avo made on a list was (Kap. 5.1 answer cards).
+enum AvoListChangeKind {
+  /// `add_item_to_list`: "1 hinzugefügt".
+  added,
+
+  /// `check_items` and `complete_list`: "2 abgehakt".
+  checked,
+
+  /// `check_items` with `checked: false`: opened again.
+  unchecked,
+
+  /// `update_item`: "Milch: Menge 3, vorher 2".
+  updated,
+
+  /// `move_items`: "2 verschoben aus Wocheneinkauf" (card on the target).
+  moved,
+
+  /// `create_list`: "Neue Liste".
+  created,
+
+  /// `rename_list`: "Umbenannt, vorher Party".
+  renamed,
+}
+
+/// How taking back one of Avo's changes went.
+enum AvoUndoResult {
+  /// The change is taken back.
+  undone,
+
+  /// The data changed since (by the person or someone else): nothing was
+  /// touched, "Widerrufen" goes away.
+  changedSince,
+
+  /// It could not be taken back (network, rights).
+  failed,
+}
+
+/// A change Avo made on a list, with the way back.
+class AvoListChange {
+  const AvoListChange({
+    required this.kind,
+    required this.listId,
+    required this.listName,
+    this.items = const [],
+    this.count = 0,
+    this.fromListName,
+    this.previousName,
+    this.itemName,
+    this.previousQuantity,
+    this.newQuantity,
+    this.undo,
+  });
+
+  final AvoListChangeKind kind;
+
+  /// The list the card is about (the target list of a move).
+  final String listId;
+  final String listName;
+
+  /// The items as they are after the change (rows of the card).
+  final List<ShoppingItemModel> items;
+
+  /// How many items changed.
+  final int count;
+
+  /// [AvoListChangeKind.moved]: where the items came from.
+  final String? fromListName;
+
+  /// [AvoListChangeKind.renamed]: the old name.
+  final String? previousName;
+
+  /// [AvoListChangeKind.updated]: the item and its quantity before / after
+  /// (null when the quantity did not change).
+  final String? itemName;
+  final double? previousQuantity;
+  final double? newQuantity;
+
+  /// Takes the change back if the data is unchanged since; null when it
+  /// cannot be taken back.
+  final Future<AvoUndoResult> Function()? undo;
 }
 
 enum AvoExpressionType {
@@ -44,6 +138,12 @@ enum AvoPayloadKind {
   appInfo,
   confirmDelete,
   consentRequest,
+
+  /// A change Avo made on a list ([AvoListChange]).
+  listChange,
+
+  /// A tool needed a module that is switched off ([AvoWidgetPayload.module]).
+  moduleOff,
 }
 
 class AvoWidgetPayload {
@@ -60,6 +160,8 @@ class AvoWidgetPayload {
   final AvoAppInfoData? appInfo;
   final AvoPendingDelete? pendingDelete;
   final AvoConsentKind? consentKind;
+  final AvoListChange? listChange;
+  final AppModule? module;
 
   const AvoWidgetPayload._({
     required this.kind,
@@ -75,7 +177,17 @@ class AvoWidgetPayload {
     this.appInfo,
     this.pendingDelete,
     this.consentKind,
+    this.listChange,
+    this.module,
   });
+
+  /// A change on a list, shown as a result card with "Widerrufen".
+  factory AvoWidgetPayload.listChange(AvoListChange change) =>
+      AvoWidgetPayload._(kind: AvoPayloadKind.listChange, listChange: change);
+
+  /// [module] is switched off; the card offers to switch it on.
+  factory AvoWidgetPayload.moduleOff(AppModule module) =>
+      AvoWidgetPayload._(kind: AvoPayloadKind.moduleOff, module: module);
 
   factory AvoWidgetPayload.recipes(List<Recipe> recipes) =>
       AvoWidgetPayload._(kind: AvoPayloadKind.recipes, recipes: recipes);

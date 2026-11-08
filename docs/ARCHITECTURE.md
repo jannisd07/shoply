@@ -85,8 +85,14 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 
 ## Avo (KI-Assistent)
 
-- `avo_assistant_service.dart` ist der Ablauf, aufgeteilt in `avo_system_prompt.dart`, `avo_tool_declarations.dart`
-  und `avo_assistant_models.dart`. Modell: `gemini-2.0-flash-lite`.
+- `avo_assistant_service.dart` ist der Ablauf (Werkzeug-Schleife über `ClaudeService.streamAvo`, Edge Function `ai`),
+  dazu `avo_assistant_models.dart` (Antwortkarten als `AvoWidgetPayload`) und `avo_conversation.dart` (Verlauf,
+  Einmal-Schlüssel fürs Löschen).
+- Der Avo-Tab liegt in `lib/presentation/screens/avo/`: `AvoTabScreen` (Wurzel `/avo`, `?q=` sendet einmal,
+  `?prompt=` füllt nur vor), `avoChatProvider` (`AvoChat`, ein Gespräch pro Konto, lebt über Tab-Wechsel hinweg,
+  hält auch den Zustand jeder Karte) und `AvoBackend` (Schnittstelle zum Dienst, in Tests ein Fake). Schreibende
+  Listen-Werkzeuge liefern `AvoListChange` mit einer Gegen-Aktion für „Widerrufen“, die vorher prüft, ob die Daten
+  unverändert sind.
 - Die Sitzung setzt sich bei Account-Wechsel selbst zurück, der Verlauf wird auf die letzten 10 Nutzerzüge gekürzt.
 - Schreibende Tools (Artikel hinzufügen, abhaken, Rezept auf Liste) gehen über `ItemRepository` und schicken
   **eine** Push-Nachricht statt einer pro Artikel.

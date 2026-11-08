@@ -248,5 +248,11 @@ class AvoPendingDeletes {
     return pending;
   }
 
+  /// Puts a deletion back after [take] when deleting failed (network), so
+  /// "Erneut versuchen" on the card can use the same token while it lasts.
+  void restore(AvoPendingDelete pending) {
+    if (_now().isBefore(pending.expiresAt)) _byToken[pending.token] = pending;
+  }
+
   void clear() => _byToken.clear();
 }
