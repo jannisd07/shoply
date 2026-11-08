@@ -206,7 +206,9 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
   void _pauseTimer() {
     HapticFeedback.lightImpact();
     final endsAt = _timerEndsAt;
-    final left = endsAt == null ? _remainingSeconds.value : _secondsLeft(endsAt);
+    final left = endsAt == null
+        ? _remainingSeconds.value
+        : _secondsLeft(endsAt);
     _stopTimer(remaining: left < 0 ? 0 : left);
     setState(() => _timerRunning = false);
   }
@@ -315,7 +317,10 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(context.tr('cancel'), style: TextStyle(color: _p.textSecondary)),
+            child: Text(
+              context.tr('cancel'),
+              style: TextStyle(color: _p.textSecondary),
+            ),
           ),
           const SizedBox(width: 8),
           ElevatedButton(
@@ -422,10 +427,13 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
                 Text(
                   _currentStep == 0
                       ? context.tr('cooking_mode_ingredients')
-                      : context.tr('cooking_mode_step_of', params: {
-                          'current': '$_currentStep',
-                          'total': '${widget.recipe.instructions.length}',
-                        }),
+                      : context.tr(
+                          'cooking_mode_step_of',
+                          params: {
+                            'current': '$_currentStep',
+                            'total': '${widget.recipe.instructions.length}',
+                          },
+                        ),
                   style: TextStyle(fontSize: 13, color: _p.textSecondary),
                 ),
               ],
@@ -450,10 +458,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            _p.accent.withOpacity(0.1),
-            _p.accent.withOpacity(0.05),
-          ],
+          colors: [_p.accent.withOpacity(0.1), _p.accent.withOpacity(0.05)],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _p.accent.withOpacity(0.3)),
@@ -546,10 +551,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
                   ],
                 ),
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: _p.green.withOpacity(0.3),
-                  width: 2,
-                ),
+                border: Border.all(color: _p.green.withOpacity(0.3), width: 2),
               ),
               child: Icon(Icons.restaurant_menu, color: _p.green, size: 36),
             ),
@@ -658,7 +660,9 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
                         ),
                         decoration: BoxDecoration(
                           color: isChecked
-                              ? _p.green.withValues(alpha: _p.isDark ? 0.15 : 0.08)
+                              ? _p.green.withValues(
+                                  alpha: _p.isDark ? 0.15 : 0.08,
+                                )
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
@@ -797,9 +801,10 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
                   onPressed: () => _startTimer(timerMinutes),
                   icon: Icon(Icons.timer, color: _p.accent),
                   label: Text(
-                    context.tr('cooking_mode_start_timer', params: {
-                      'minutes': '$timerMinutes',
-                    }),
+                    context.tr(
+                      'cooking_mode_start_timer',
+                      params: {'minutes': '$timerMinutes'},
+                    ),
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -900,7 +905,9 @@ class _CookingModeScreenState extends State<CookingModeScreen> {
                   label: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      isLastStep ? context.tr('done') : context.tr('continue_text'),
+                      isLastStep
+                          ? context.tr('done')
+                          : context.tr('continue_text'),
                       maxLines: 1,
                       style: const TextStyle(
                         fontSize: 15,
@@ -1033,3 +1040,17 @@ class _ServingsSelectorSheet extends StatelessWidget {
     );
   }
 }
+
+/// Opens the cooking mode for [recipe] full screen above the tab bar. The
+/// one entry point for every screen (A6 builds the D2 cooking mode behind
+/// it; the signature stays).
+Future<void> openCookingMode(
+  BuildContext context, {
+  required Recipe recipe,
+  required int servings,
+}) => Navigator.of(context, rootNavigator: true).push<void>(
+  MaterialPageRoute(
+    fullscreenDialog: true,
+    builder: (context) => CookingModeScreen(recipe: recipe, servings: servings),
+  ),
+);
