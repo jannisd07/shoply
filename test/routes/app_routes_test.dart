@@ -52,6 +52,8 @@ void main() {
       'avo-chat': '/avo',
       'list-detail': '/lists/:listId',
       'list-activities': '/lists/:listId/activities',
+      // New in A5: shopping mode above the tab bar.
+      'list-shopping': '/lists/:listId/shopping',
       'author-profile': '/author/:authorId',
       'diet-preferences': '/diet-preferences',
       'shared-recipe': '/recipe/:recipeId',
