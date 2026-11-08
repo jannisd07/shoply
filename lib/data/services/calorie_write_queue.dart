@@ -378,7 +378,7 @@ class CalorieWriteQueue {
       final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
       _writes.addAll(list.map(QueuedWrite.fromJson));
     } catch (e) {
-      debugPrint('❌ [CalorieQueue] Stored queue unreadable, starting empty: $e');
+      debugPrint('❌ [CalorieQueue] Stored queue unreadable, starting empty: ${e.runtimeType}');
     }
   }
 

@@ -141,10 +141,12 @@ NutritionGoal goal({int kcal = 2000, int water = 2000}) => NutritionGoal(
 CalorieDay usualDay({String date = kToday}) => CalorieDay(
       dateKey: date,
       entries: [
-        food('e1', 'Haferflocken', 220, meal: MealType.breakfast, date: date, quantity: 60, unit: 'g'),
-        food('e2', 'Banane', 200, meal: MealType.breakfast, date: date),
+        food('e1', 'Haferflocken', 220, meal: MealType.breakfast, date: date, quantity: 60, unit: 'g',
+            created: parseCalorieDayKey(date).add(const Duration(hours: 8))),
+        food('e2', 'Banane', 200, meal: MealType.breakfast, date: date,
+            created: parseCalorieDayKey(date).add(const Duration(hours: 8, minutes: 5))),
         food('e3', 'Spaghetti Bolognese', 940, date: date, estimated: true, quantity: 1, unit: 'serving',
-            protein: 42, carbs: 86, fat: 21),
+            protein: 42, carbs: 86, fat: 21, created: parseCalorieDayKey(date).add(const Duration(hours: 12, minutes: 30))),
       ],
       water: [
         water('w1', 750, date: date),
@@ -195,16 +197,18 @@ class CalorieTestEnv {
     Object? recentError,
     int ideas = 6,
     DateTime? now,
+    DateTime Function()? clock,
   }) {
     final g = identical(goalValue, _defaultGoal) ? goal() : goalValue as NutritionGoal?;
     return [
       calorieSharedPreferencesProvider.overrideWith((ref) => prefs),
       calorieRemoteProvider.overrideWithValue(remote),
       authUserIdProvider.overrideWithValue(kUser),
-      calorieClockProvider.overrideWithValue(() => now ?? kNow),
+      calorieClockProvider.overrideWithValue(clock ?? () => now ?? kNow),
       calorieOnlineStreamProvider.overrideWithValue(const Stream<bool>.empty()),
       healthBridgeProvider.overrideWithValue(null),
-      isOfflineProvider.overrideWithValue(offline),
+      testOfflineProvider.overrideWith((ref) => offline),
+      isOfflineProvider.overrideWith((ref) => ref.watch(testOfflineProvider)),
       moduleEnabledProvider(AppModule.calories).overrideWithValue(module),
       moduleStoreProvider.overrideWithValue(modules),
       nutritionGoalProvider.overrideWith((ref) {
@@ -243,6 +247,9 @@ class CalorieTestEnv {
 }
 
 const Object _defaultGoal = Object();
+
+/// The connection in tests; set it to false to "come back online".
+final testOfflineProvider = StateProvider<bool>((ref) => false);
 
 class FakeModuleStore implements ModuleStore {
   Map<String, bool>? written;

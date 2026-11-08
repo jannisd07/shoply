@@ -34,7 +34,7 @@ class FoodLogService {
       return await run();
     } catch (e) {
       final error = CalorieDataException.from(e);
-      debugPrint('❌ [FoodLog] $what failed: ${error.code.name} ($e)');
+      debugPrint('❌ [FoodLog] $what failed: ${error.code.name} (${e is PostgrestException ? e.code : e.runtimeType})');
       throw error;
     }
   }

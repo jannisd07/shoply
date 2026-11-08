@@ -44,10 +44,10 @@ void main() {
     expect(find.byType(CalorieRing), findsOneWidget);
     expect(find.text('kcal left'), findsOneWidget);
     expect(find.text('1,360 eaten · goal 2,000'), findsOneWidget);
-    expect(
-      find.bySemanticsLabel(RegExp(r'^Calories today: 640 of 2,000 left, 1,360 eaten\. Protein 82 of 133 grams')),
-      findsOneWidget,
-    );
+    expect(find.bySemanticsLabel('Calories today: 640 of 2,000 left, 1,360 eaten.'), findsOneWidget);
+    // The macros are their own elements (S1 Barrierefreiheit).
+    final protein = tester.getSemantics(find.bySemanticsLabel('Protein'));
+    expect(protein.value, '82 of 133 grams');
     expect(find.text('Spaghetti Bolognese'), findsOneWidget);
     expect(find.text('1 serving · estimated'), findsOneWidget);
     expect(find.text('60 g'), findsOneWidget);
@@ -238,6 +238,126 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('midnight: the diary moves on to the new day by itself', (tester) async {
+    var now = DateTime(2026, 11, 7, 23, 59, 30);
+    final env = await CalorieTestEnv.create(server: {kToday: usualDay()});
+    final semantics = tester.ensureSemantics();
+    await pumpCalories(tester, const CaloriesDiaryScreen(), overrides: env.overrides(clock: () => now));
+    await settle(tester);
+    expect(find.bySemanticsLabel('Date: Today, Saturday, November 7'), findsOneWidget);
+
+    now = DateTime(2026, 11, 8, 0, 0, 31);
+    await tester.pump(const Duration(seconds: 31));
+    await settle(tester);
+    expect(find.bySemanticsLabel('Date: Today, Sunday, November 8'), findsOneWidget);
+    expect(find.text('Nothing eaten yet · goal 2,000'), findsOneWidget);
+
+    // A write after midnight lands on the new day.
+    await reveal(tester, find.text('+250 ml'));
+    await tester.tap(find.text('+250 ml'));
+    await settle(tester);
+    final c = containerOf(tester);
+    expect(c.read(calorieDayProvider('2026-11-08')).day!.waterMl, 250);
+    expect(c.read(calorieDayProvider(kToday)).day!.waterMl, 1250);
+    semantics.dispose();
+  });
+
+  testWidgets('a goal that fails to load with a known day: eaten kcal and a retry, never "no goal"',
+      (tester) async {
+    final env = await CalorieTestEnv.create(server: {kToday: usualDay()});
+    await pumpCalories(tester, const CaloriesDiaryScreen(), overrides: env.overrides(goalError: true));
+    await settle(tester);
+
+    expect(find.text('kcal eaten'), findsOneWidget);
+    expect(find.text('Couldn\'t load your goal.'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Set a goal'), findsNothing);
+    expect(find.text('How much do you want to eat each day?'), findsNothing);
+  });
+
+  testWidgets('an error without a stored day keeps the date line, so the day can still change', (tester) async {
+    final env = await CalorieTestEnv.create(server: {'2026-11-06': usualDay(date: '2026-11-06')});
+    env.remote.fetchError = const CalorieDataException(CalorieErrorCode.network);
+    await pumpCalories(tester, const CaloriesDiaryScreen(initialDateKey: '2026-11-03'),
+        overrides: env.overrides(offline: true));
+    await settle(tester);
+
+    expect(find.text('You\'re offline. Your diary will appear once you\'re back online.'), findsOneWidget);
+    expect(find.textContaining('Tue, Nov 3', findRichText: true), findsOneWidget);
+    await tester.tap(find.text('Today'));
+    await settle(tester);
+    expect(find.textContaining('Today, Sat, Nov 7', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('back online: the diary loads by itself', (tester) async {
+    final env = await CalorieTestEnv.create(server: {kToday: usualDay()});
+    env.remote.fetchError = const CalorieDataException(CalorieErrorCode.network);
+    await pumpCalories(tester, const CaloriesDiaryScreen(), overrides: env.overrides(offline: true));
+    await settle(tester);
+    expect(find.text('You\'re offline. Your diary will appear once you\'re back online.'), findsOneWidget);
+
+    env.remote.fetchError = null;
+    containerOf(tester).read(testOfflineProvider.notifier).state = false;
+    await settle(tester);
+    expect(find.text('kcal left'), findsOneWidget);
+    expect(find.text('Haferflocken'), findsOneWidget);
+  });
+
+  testWidgets('a new ?date= on the open diary shows that day', (tester) async {
+    final env = await CalorieTestEnv.create(server: {'2026-11-05': usualDay(date: '2026-11-05')});
+    final date = ValueNotifier<String?>(null);
+    await pumpCalories(
+      tester,
+      ValueListenableBuilder<String?>(
+        valueListenable: date,
+        builder: (_, key, __) => CaloriesDiaryScreen(initialDateKey: key),
+      ),
+      overrides: env.overrides(),
+    );
+    await settle(tester);
+    expect(find.textContaining('Today, Sat, Nov 7', findRichText: true), findsOneWidget);
+
+    date.value = '2026-11-05';
+    await settle(tester);
+    expect(find.textContaining('Thu, Nov 5', findRichText: true), findsOneWidget);
+    expect(find.text('Goal 2,000 · 640 under'), findsOneWidget);
+  });
+
+  testWidgets('swipe left deletes; "Undo" puts the same row back in its place', (tester) async {
+    final env = await CalorieTestEnv.create(server: {kToday: usualDay()});
+    await pumpCalories(tester, const CaloriesDiaryScreen(), overrides: env.overrides());
+    await settle(tester);
+
+    final before = containerOf(tester).read(calorieDayProvider(kToday)).day!.entries;
+    await tester.drag(find.text('Haferflocken'), const Offset(-380, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Haferflocken'), findsNothing);
+    expect(find.text('Haferflocken deleted'), findsOneWidget);
+    expect(env.remote.days[kToday]!.entries.map((e) => e.id), isNot(contains('e1')));
+
+    await tester.tap(find.text('Undo'));
+    await settle(tester);
+    final after = containerOf(tester).read(calorieDayProvider(kToday)).day!.entries;
+    expect(after, before);
+    expect(find.text('Haferflocken'), findsOneWidget);
+  });
+
+  testWidgets('a delete that fails brings the swiped row back and says so', (tester) async {
+    final env = await CalorieTestEnv.create(server: {kToday: usualDay()});
+    await pumpCalories(
+      tester,
+      const CaloriesDiaryScreen(),
+      overrides: [...env.overrides(), calorieDiaryProvider.overrideWith(_FailingDeleteDiary.new)],
+    );
+    await settle(tester);
+
+    await tester.drag(find.text('Haferflocken'), const Offset(-380, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Haferflocken'), findsOneWidget);
+    expect(find.text('Couldn\'t save that. Please try again.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the plus opens "Essen eintragen" with the meal of the time of day', (tester) async {
     final env = await CalorieTestEnv.create();
     final visited = await pumpCalories(tester, const CaloriesDiaryScreen(), overrides: env.overrides());
@@ -369,4 +489,13 @@ void main() {
     await settle(tester);
     expect(visited.last, '/calories/goals');
   });
+}
+
+/// A diary whose deletes fail (signed out in the meantime).
+class _FailingDeleteDiary extends CalorieDiary {
+  _FailingDeleteDiary(super.ref);
+
+  @override
+  Future<FoodLogEntry> deleteFood(FoodLogEntry entry) async =>
+      throw const CalorieDataException(CalorieErrorCode.notSignedIn);
 }

@@ -13,6 +13,7 @@ import 'package:shoply/data/models/calorie_day.dart';
 import 'package:shoply/data/models/water_log_entry.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_bar.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_colors.dart';
+import 'package:shoply/presentation/screens/calories/widgets/calorie_entry_actions.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart';
 import 'package:shoply/presentation/state/calorie_diary_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
@@ -41,15 +42,17 @@ const double _kTilePadding = 14; // D2 `.wtile` padding
 const double _kTileGridGap = AvoSpacing.m; // D2 grid gap 12
 const double _kTilePlusCircle = 32; // D2 "Nochmal kaufen" plus
 const double _kTilePlusGlyph = 14; // D2
+const double _kTilePlusStroke = 2.4; // D2
 const double _kTileIcon = 18; // D2 symbol in the 32 pt square
 
 /// Adds [ml] for [dateKey] (optimistic, queued, Health), plays the light
-/// impact in the same frame and offers "Widerrufen" (S12).
+/// impact in the same frame and offers "Widerrufen" (S12). A null [dateKey]
+/// means today at the moment of the tap.
 Future<void> addCalorieWater(
   BuildContext context,
   WidgetRef ref,
   int ml, {
-  required String dateKey,
+  required String? dateKey,
 }) async {
   final message = context.tr('cal_water_added', params: {'ml': '$ml'});
   final undo = context.tr('common_undo');
@@ -57,10 +60,10 @@ Future<void> addCalorieWater(
   unawaited(AvoHaptics.light());
   final WaterLogEntry entry;
   try {
-    entry = await diary.addWater(ml, dateKey: dateKey);
+    entry = await diary.addWater(ml, dateKey: dateKey ?? calorieTodayKeyNow(ref));
   } catch (e) {
-    debugPrint('❌ [CalorieWater] Adding water failed: $e');
-    unawaited(AvoHaptics.error());
+    debugPrint('❌ [CalorieWater] Adding water failed: ${calorieErrorKind(e)}');
+    if (context.mounted) showCalorieWriteFailed(context);
     return;
   }
   if (!context.mounted) return;
@@ -77,7 +80,13 @@ Future<void> _removeLastWater(BuildContext context, WidgetRef ref, WaterLogEntry
   final message = context.tr('cal_water_removed', params: {'ml': '${last.amountMl}'});
   final undo = context.tr('common_undo');
   final diary = ref.read(calorieDiaryProvider);
-  await diary.deleteWater(last);
+  try {
+    await diary.deleteWater(last);
+  } catch (e) {
+    debugPrint('❌ [CalorieWater] Removing water failed: ${calorieErrorKind(e)}');
+    if (context.mounted) showCalorieWriteFailed(context);
+    return;
+  }
   if (!context.mounted) return;
   AvoToast.show(
     context,
@@ -95,13 +104,14 @@ WaterLogEntry? lastWaterEntry(CalorieDay? day) {
 }
 
 /// The S12 pull-down menu: +150, +330, +500 ml, "Andere Menge …", and
-/// "Letzten Eintrag entfernen (250 ml, 16:10)" when there is one.
+/// "Letzten Eintrag entfernen (250 ml, 16:10)" when there is one. A null
+/// [dateKey] means today.
 Future<void> showWaterMenu(
   BuildContext context,
   WidgetRef ref, {
-  required String dateKey,
+  required String? dateKey,
 }) {
-  final day = ref.read(calorieDayProvider(dateKey)).day;
+  final day = ref.read(calorieDayProvider(dateKey ?? calorieTodayKeyNow(ref))).day;
   final last = lastWaterEntry(day);
   return showAvoMenu(
     context,
@@ -131,7 +141,7 @@ Future<void> showWaterMenu(
   );
 }
 
-Future<void> _askOtherAmount(BuildContext context, WidgetRef ref, String dateKey) async {
+Future<void> _askOtherAmount(BuildContext context, WidgetRef ref, String? dateKey) async {
   final ml = await showWaterAmountAlert(context);
   if (ml == null || !context.mounted) return;
   await addCalorieWater(context, ref, ml, dateKey: dateKey);
@@ -269,9 +279,15 @@ String _waterSpoken(BuildContext context, {required int ml, required int? goalMl
 /// "Letzten Eintrag entfernen" are its custom actions. The chip moves under
 /// the text from AX1 on (and from xxL on a 320 pt screen).
 class WaterRow extends ConsumerWidget {
-  const WaterRow({super.key, required this.dateKey, required this.day});
+  const WaterRow({super.key, required this.dateKey, required this.day, this.followsToday = false});
 
+  /// The shown day.
   final String dateKey;
+
+  /// The diary shows "today": writes go to today at the moment of the tap.
+  final bool followsToday;
+
+  String? get _writeKey => followsToday ? null : dateKey;
 
   /// The shown day; null while unknown (the row then shows 0).
   final CalorieDay? day;
@@ -286,7 +302,7 @@ class WaterRow extends ConsumerWidget {
     final reached = goalMl != null && ml >= goalMl;
     final last = lastWaterEntry(day);
 
-    void add() => addCalorieWater(context, ref, quick, dateKey: dateKey);
+    void add() => addCalorieWater(context, ref, quick, dateKey: _writeKey);
 
     final text = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,7 +359,7 @@ class WaterRow extends ConsumerWidget {
       onTap: add,
       customSemanticsActions: {
         CustomSemanticsAction(label: context.tr('cal_water_other')): () =>
-            _askOtherAmount(context, ref, dateKey),
+            _askOtherAmount(context, ref, _writeKey),
         if (last != null)
           CustomSemanticsAction(label: context.tr('cal_water_a11y_remove')): () =>
               _removeLastWater(context, ref, last),
@@ -351,7 +367,7 @@ class WaterRow extends ConsumerWidget {
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onLongPress: () => showWaterMenu(context, ref, dateKey: dateKey),
+        onLongPress: () => showWaterMenu(context, ref, dateKey: _writeKey),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: _kRowMinHeight),
           child: Padding(
@@ -370,9 +386,7 @@ class WaterRow extends ConsumerWidget {
 /// when the drops do not fit, a 4 pt bar replaces them. Tap opens the diary
 /// at the water row; long press opens the S12 menu.
 class WaterTile extends ConsumerWidget {
-  const WaterTile({super.key, required this.dateKey, required this.day});
-
-  final String dateKey;
+  const WaterTile({super.key, required this.day});
 
   /// Today; null while unknown (the value then shows a dash).
   final CalorieDay? day;
@@ -417,7 +431,8 @@ class WaterTile extends ConsumerWidget {
     );
 
     return GestureDetector(
-      onLongPress: () => showWaterMenu(context, ref, dateKey: dateKey),
+      // Today at the moment of the tap (Home may be open since yesterday).
+      onLongPress: () => showWaterMenu(context, ref, dateKey: null),
       child: Stack(
         children: [
           tile,
@@ -426,7 +441,7 @@ class WaterTile extends ConsumerWidget {
             end: _kTilePadding,
             child: _TilePlus(
               label: context.tr('cal_water_add_a11y', params: {'ml': '$quick'}),
-              onTap: () => addCalorieWater(context, ref, quick, dateKey: dateKey),
+              onTap: () => addCalorieWater(context, ref, quick, dateKey: null),
             ),
           ),
         ],
@@ -515,7 +530,7 @@ class _TilePlus extends StatelessWidget {
               child: SizedBox.square(
                 dimension: _kTilePlusCircle,
                 child: Center(
-                  child: AvoIcon(AvoIcons.plus, size: _kTilePlusGlyph, color: colors.onTint, strokeWidth: 2.4),
+                  child: AvoIcon(AvoIcons.plus, size: _kTilePlusGlyph, color: colors.onTint, strokeWidth: _kTilePlusStroke),
                 ),
               ),
             ),

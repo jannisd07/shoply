@@ -192,7 +192,7 @@ class NutritionGoalService {
       return await run();
     } catch (e) {
       final error = CalorieDataException.from(e);
-      debugPrint('❌ [NutritionGoal] $what failed: ${error.code.name} ($e)');
+      debugPrint('❌ [NutritionGoal] $what failed: ${error.code.name} (${e is PostgrestException ? e.code : e.runtimeType})');
       throw error;
     }
   }

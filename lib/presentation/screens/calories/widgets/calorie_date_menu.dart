@@ -111,6 +111,7 @@ Future<String?> showCalorieDatePicker(
 }
 
 const double _kChevronGlyph = 13; // D2
+const double _kChevronStroke = 2.6; // D2 chevron.down, semibold
 const double _kDateLineMin = AvoSizes.hitTarget; // D2 44
 
 /// The diary's date line (S1 #3): "Heute, Sa., 7. Nov." with a chevron, the
@@ -162,7 +163,7 @@ class CalorieDateLine extends StatelessWidget {
                       AvoIcons.chevronDown,
                       size: _kChevronGlyph,
                       color: colors.secondaryLabel,
-                      strokeWidth: 2.6,
+                      strokeWidth: _kChevronStroke,
                     ),
                   ),
                 ]),

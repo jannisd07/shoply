@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/services/calorie_recipe_nudge_service.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_ring.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_water.dart';
@@ -41,13 +44,25 @@ final homeWaterHasContentProvider = Provider<bool>(_caloriesShown);
 
 String _hintHiddenKey(String userId) => 'cal_hint_hidden_v1_$userId';
 
+/// The evening hint shows from 16:00 until 21:00 (S0).
+const int _kHintFrom = 16;
+const int _kHintUntil = 21;
+
 /// The evening hint "Noch 640 kcal heute. Ideen fürs Abendessen": 16 to 21
 /// o'clock, a goal, at least 150 kcal left, fitting recipes known on this
 /// device for today, and not hidden today. Decided in the first frame.
 final homeCalorieIdeasHintHasContentProvider = Provider<bool>((ref) {
   if (!_caloriesShown(ref)) return false;
   final now = ref.watch(calorieClockProvider)();
-  if (now.hour < 16 || now.hour >= 21) return false;
+  // Decided again at 16:00, 21:00 and midnight, also when Home stays open.
+  final next = [
+    DateTime(now.year, now.month, now.day, _kHintFrom),
+    DateTime(now.year, now.month, now.day, _kHintUntil),
+    DateTime(now.year, now.month, now.day + 1),
+  ].firstWhere((t) => t.isAfter(now));
+  final timer = Timer(next.difference(now), ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+  if (now.hour < _kHintFrom || now.hour >= _kHintUntil) return false;
   final left = _remainingToday(ref);
   if (left == null || left < CalorieRecipeNudgeService.minRemainingCalories) return false;
   if ((ref.watch(calorieStoredIdeasCountProvider) ?? 0) == 0) return false;
@@ -79,6 +94,16 @@ class HomeCaloriesToday extends ConsumerWidget {
     final dayState = ref.watch(calorieDayProvider(today));
     final day = dayState.day;
 
+    void retry() {
+      ref.invalidate(nutritionGoalProvider);
+      ref.read(calorieDayProvider(today).notifier).refresh();
+    }
+
+    // Back online: load again by itself (S0 "Wartet / offline").
+    ref.listen<bool>(isOfflineProvider, (was, now) {
+      if (was == true && !now) retry();
+    });
+
     void openDiary() => context.push(RoutePaths.calories);
     void openAdd() => context.push(Uri(
           path: '${RoutePaths.calories}/add',
@@ -104,13 +129,7 @@ class HomeCaloriesToday extends ConsumerWidget {
             Text(context.tr('cal_home_error'), style: context.text(AvoTextStyle.subhead)),
             Align(
               alignment: AlignmentDirectional.centerStart,
-              child: AppButton.plain(
-                label: context.tr('retry'),
-                onPressed: () {
-                  ref.invalidate(nutritionGoalProvider);
-                  ref.read(calorieDayProvider(today).notifier).refresh();
-                },
-              ),
+              child: AppButton.plain(label: context.tr('retry'), onPressed: retry),
             ),
             const SizedBox(height: AvoSpacing.s),
             addButton,
@@ -121,6 +140,53 @@ class HomeCaloriesToday extends ConsumerWidget {
 
     if (day == null || goal.status == CalorieGoalStatus.loading) {
       return AvoCard(child: _CardSkeleton(label: context.tr('cal_loading')));
+    }
+
+    if (goal.status == CalorieGoalStatus.error) {
+      // The day is known, the goal is not: what was eaten, and why the rest
+      // is missing. Never "Ziel einrichten" (an error is not "no goal").
+      final eaten = day.totals.calories;
+      return AvoCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              container: true,
+              button: true,
+              label: context.tr('cal_summary_a11y_eaten',
+                  params: {'title': context.tr('cal_summary_title_today'), 'eaten': context.kcal(eaten)}),
+              hint: context.tr('cal_opens_diary'),
+              onTap: openDiary,
+              excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: openDiary,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CalorieKicker(),
+                    Text(context.tr('cal_today'), style: context.text(AvoTextStyle.title3)),
+                    Text(
+                      '${context.kcal(eaten)} ${context.tr('cal_unit_eaten')}',
+                      style: context.text(AvoTextStyle.footnote, color: context.colors.secondaryLabel),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AvoSpacing.s),
+            Text(context.tr('cal_goal_error'), style: context.text(AvoTextStyle.subhead)),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AppButton.plain(label: context.tr('retry'), onPressed: retry),
+            ),
+            const SizedBox(height: AvoSpacing.s),
+            addButton,
+          ],
+        ),
+      );
     }
 
     if (goal.status != CalorieGoalStatus.set) {
@@ -350,7 +416,7 @@ class HomeWaterTile extends ConsumerWidget {
     if (!ref.watch(homeWaterHasContentProvider)) return const SizedBox.shrink();
     final today = ref.watch(calorieTodayKeyProvider);
     final day = ref.watch(calorieDayProvider(today)).day;
-    return WaterTile(dateKey: today, day: day);
+    return WaterTile(day: day);
   }
 }
 

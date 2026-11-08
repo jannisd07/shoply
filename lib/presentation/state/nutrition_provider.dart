@@ -65,6 +65,37 @@ final openFoodFactsServiceProvider = Provider<OpenFoodFactsService>((ref) {
 /// Clock for day keys; override in tests.
 final calorieClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
+/// How often "today" is checked against the clock besides the midnight
+/// timer: timers pause while iOS suspends the app, so after a night in the
+/// background the next check comes at most this long after the return.
+const Duration _kTodayCheck = Duration(minutes: 1);
+
+/// Today's day key (`YYYY-MM-DD`). Moves on by itself at the next local
+/// midnight (and on the first check after the app comes back from the
+/// background), so a screen that stays open overnight shows the new day.
+/// Writes meant for "today" read [calorieTodayKeyNow] at tap time instead.
+final calorieTodayKeyProvider = Provider.autoDispose<String>((ref) {
+  final clock = ref.watch(calorieClockProvider);
+  final now = clock();
+  final key = calorieDayKey(now);
+  final midnight = DateTime(now.year, now.month, now.day + 1);
+  final timers = [
+    Timer(midnight.difference(now), ref.invalidateSelf),
+    Timer.periodic(_kTodayCheck, (_) {
+      if (calorieDayKey(clock()) != key) ref.invalidateSelf();
+    }),
+  ];
+  ref.onDispose(() {
+    for (final t in timers) {
+      t.cancel();
+    }
+  });
+  return key;
+});
+
+/// Today's key at this moment, for a write the person just tapped.
+String calorieTodayKeyNow(WidgetRef ref) => calorieDayKey(ref.read(calorieClockProvider)());
+
 final calorieRemoteProvider = Provider<CalorieRemote>((ref) => const SupabaseCalorieRemote());
 
 /// SharedPreferences for the day store and the write queue. Override with an
@@ -217,14 +248,24 @@ class CalorieDayNotifier extends StateNotifier<CalorieDayState> {
     final backend = _backend;
     if (backend == null || !mounted) return;
     state = state.copyWith(refreshing: true);
+    // The server may read the day before a write that is made while this
+    // fetch runs, and the write may be confirmed (and leave the queue)
+    // before the answer arrives. Local changes made during the fetch
+    // therefore win over the answer, so a row is never lost, brought back
+    // or doubled; the next refresh sees the server with them.
+    final before = state.day;
     try {
       final server = await backend.remote.fetchDay(dateKey);
       if (!mounted) return;
-      final merged = mergeServerDay(
-        server: server,
-        writes: backend.queue.writes,
-        local: state.day,
-        syncedAt: DateTime.now().toUtc(),
+      final merged = applyLocalChanges(
+        mergeServerDay(
+          server: server,
+          writes: backend.queue.writes,
+          local: state.day,
+          syncedAt: DateTime.now().toUtc(),
+        ),
+        before: before,
+        after: state.day,
       );
       state = CalorieDayState(dateKey: dateKey, day: merged);
       await backend.store.save(merged);
@@ -303,10 +344,13 @@ CalorieDay? _storedDay(Ref ref, String dateKey) {
 }
 
 /// What the diary screen watches: [dateKey] with the day before and (up to
-/// today) the day after already loading, so swiping never waits.
+/// today) the day after already loading, so swiping never waits. Only ±1
+/// from the server, not the ±7 of concept §3.1: that would be 42 queries on
+/// every open, and the 14 days kept by [CalorieDayStore] open with their
+/// numbers in the first frame anyway.
 final calorieDiaryDayProvider =
     Provider.autoDispose.family<CalorieDayState, String>((ref, dateKey) {
-  final today = calorieDayKey(ref.watch(calorieClockProvider)());
+  final today = ref.watch(calorieTodayKeyProvider);
   ref.listen(calorieDayProvider(shiftCalorieDayKey(dateKey, -1)), (_, __) {});
   final next = shiftCalorieDayKey(dateKey, 1);
   if (next.compareTo(today) <= 0) ref.listen(calorieDayProvider(next), (_, __) {});
@@ -331,7 +375,7 @@ final calorieWeekProvider =
   ref.watch(calorieWeekRevisionProvider(weekStartKey));
   final backend = ref.watch(calorieBackendProvider).valueOrNull;
   final server = ref.watch(calorieWeekServerProvider(weekStartKey));
-  final todayKey = calorieDayKey(ref.watch(calorieClockProvider)());
+  final todayKey = ref.watch(calorieTodayKeyProvider);
   final local = <String, CalorieDay>{};
   if (backend != null) {
     for (var i = 0; i < 7; i++) {
@@ -476,8 +520,9 @@ class CalorieDiary {
       dateKey: entry.dateKey,
       payload: entry.toJson(),
     ));
+    // Back at its old place: the day is in the order it was logged.
     await _day(entry.dateKey).apply((d) => d.copyWith(
-          entries: [...d.entries.where((e) => e.id != entry.id), entry],
+          entries: insertByCreation(d.entries.where((e) => e.id != entry.id).toList(), entry, (e) => e.createdAt),
         ));
     unawaited(_health?.foodRestored(entry));
   }
@@ -523,7 +568,9 @@ class CalorieDiary {
       dateKey: key,
       payload: waterEntryToJson(entry),
     ));
-    await _day(key).apply((d) => d.copyWith(water: [...d.water.where((w) => w.id != entry.id), entry]));
+    await _day(key).apply((d) => d.copyWith(
+          water: insertByCreation(d.water.where((w) => w.id != entry.id).toList(), entry, (w) => w.createdAt),
+        ));
     await _health?.cancelDelete(HealthSyncIds.water(entry.id));
   }
 

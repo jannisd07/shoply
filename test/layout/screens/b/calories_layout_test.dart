@@ -15,6 +15,9 @@ import '../../layout_matrix.dart';
 
 late CalorieTestEnv _env;
 
+/// Nothing stored and the server unreachable.
+late CalorieTestEnv _failing;
+
 const _past = '2026-11-05';
 
 final _history = [
@@ -53,6 +56,8 @@ void main() {
       storedGoal: goal(),
       extraPrefs: {'cal_ideas_v1_$kUser': '{"date":"$kToday","count":4}'},
     );
+    _failing = await CalorieTestEnv.create();
+    _failing.remote.fetchError = StateError('server');
   });
 
   layoutMatrix(
@@ -132,6 +137,28 @@ void main() {
       const Padding(padding: EdgeInsets.all(16), child: HomeCaloriesToday()),
       _env.overrides(goalLoading: true),
     ),
+    scrollable: true,
+  );
+
+  layoutMatrix(
+    'Calories diary, error without a stored day (S1)',
+    (context) => _scope(const CaloriesDiaryScreen(initialDateKey: '2026-10-01'), _failing.overrides()),
+  );
+
+  layoutMatrix(
+    'Calories diary, the goal failed to load (S1)',
+    (context) => _scope(const CaloriesDiaryScreen(), _env.overrides(goalError: true)),
+  );
+
+  layoutMatrix(
+    'Home: error without a stored day (S0)',
+    (context) => _scope(_home(), _failing.overrides()),
+    scrollable: true,
+  );
+
+  layoutMatrix(
+    'Home: the goal failed to load (S0)',
+    (context) => _scope(_home(), _env.overrides(goalError: true)),
     scrollable: true,
   );
 }

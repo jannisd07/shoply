@@ -106,6 +106,39 @@ void main() {
     expect(day.entries.map((e) => e.foodName), contains('Apfel'));
   });
 
+  testWidgets('left open over midnight: a tap logs for the new day', (tester) async {
+    var now = DateTime(2026, 11, 7, 23, 58);
+    final env = await CalorieTestEnv.create();
+    await pumpCalories(tester, const CaloriesAddScreen(meal: MealType.snack),
+        overrides: env.overrides(recent: _history, clock: () => now));
+    await settle(tester);
+
+    now = DateTime(2026, 11, 8, 0, 3);
+    await tester.tap(find.text('Apfel'));
+    await settle(tester);
+    final c = containerOf(tester);
+    expect(c.read(calorieDayProvider('2026-11-08')).day!.entries.single.foodName, 'Apfel');
+    expect(c.read(calorieDayProvider(kToday)).day?.entries ?? const [], isEmpty);
+  });
+
+  testWidgets('the history fails to load: says so with retry, never the first-run note', (tester) async {
+    final env = await CalorieTestEnv.create();
+    await pumpCalories(tester, const CaloriesAddScreen(),
+        overrides: env.overrides(recentError: StateError('server')));
+    await settle(tester);
+
+    expect(find.text('Couldn\'t load what you ate recently.'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Foods you eat often will show up here. One tap logs them.'), findsNothing);
+  });
+
+  testWidgets('a picked day starts loading at once', (tester) async {
+    final env = await CalorieTestEnv.create(server: {'2026-11-05': usualDay(date: '2026-11-05')});
+    await pumpCalories(tester, const CaloriesAddScreen(dateKey: '2026-11-05'), overrides: env.overrides());
+    await settle(tester);
+    expect(containerOf(tester).read(calorieDayProvider('2026-11-05')).day!.entries, hasLength(3));
+  });
+
   testWidgets('search filters the history by name and brand; nothing found says so', (tester) async {
     final env = await CalorieTestEnv.create();
     await pumpCalories(tester, const CaloriesAddScreen(), overrides: env.overrides(recent: _history));

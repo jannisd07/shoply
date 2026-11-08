@@ -93,7 +93,7 @@ class CalorieDayStore {
       _memory[dateKey] = day;
       return day;
     } catch (e) {
-      debugPrint('⚠️ [CalorieStore] Dropping unreadable day $dateKey: $e');
+      debugPrint('⚠️ [CalorieStore] Dropping unreadable day $dateKey: ${e.runtimeType}');
       _prefs.remove(keyFor(userId, dateKey));
       return null;
     }
@@ -178,6 +178,45 @@ CalorieDay mergeServerDay({
     syncStates: states,
     syncedAt: syncedAt,
   );
+}
+
+/// [merged] (the server's answer plus waiting writes) with every change made
+/// locally between [before] (the day when the fetch started) and [after]
+/// (the day now) on top: rows added or edited in that time keep their local
+/// version, rows deleted in that time stay deleted. Without local changes
+/// [merged] is returned as it is.
+CalorieDay applyLocalChanges(
+  CalorieDay merged, {
+  required CalorieDay? before,
+  required CalorieDay? after,
+}) {
+  if (after == null || identical(before, after)) return merged;
+  List<T> overlay<T>(List<T> base, List<T> was, List<T> now, String Function(T) id) {
+    final wasById = {for (final x in was) id(x): x};
+    final nowById = {for (final x in now) id(x): x};
+    final out = LinkedHashMap<String, T>.fromIterable(base, key: (x) => id(x as T));
+    nowById.forEach((key, value) {
+      if (wasById[key] != value) out[key] = value;
+    });
+    for (final key in wasById.keys) {
+      if (!nowById.containsKey(key)) out.remove(key);
+    }
+    return out.values.toList(growable: false);
+  }
+
+  final was = before ?? CalorieDay(dateKey: merged.dateKey);
+  return merged.copyWith(
+    entries: overlay(merged.entries, was.entries, after.entries, (e) => e.id),
+    water: overlay(merged.water, was.water, after.water, (w) => w.id),
+    workouts: overlay(merged.workouts, was.workouts, after.workouts, (w) => w.id),
+  );
+}
+
+/// [rows] with [row] inserted before the first row created after it, so a
+/// restored row is back at its old place (days are in the order logged).
+List<T> insertByCreation<T>(List<T> rows, T row, DateTime Function(T) createdAt) {
+  final at = rows.indexWhere((r) => createdAt(r).isAfter(createdAt(row)));
+  return [...rows]..insert(at < 0 ? rows.length : at, row);
 }
 
 /// The four meal sections in the order of the day (concept 15 3.1):

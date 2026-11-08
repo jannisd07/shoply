@@ -65,8 +65,7 @@ class CaloriesDiaryScreen extends ConsumerStatefulWidget {
   ConsumerState<CaloriesDiaryScreen> createState() => _CaloriesDiaryScreenState();
 }
 
-class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
-    with SingleTickerProviderStateMixin {
+class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen> with SingleTickerProviderStateMixin {
   /// The shown day; null follows today.
   String? _dateKey;
   final _waterKey = GlobalKey();
@@ -82,6 +81,15 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
 
   /// `?focus=water` waits until the diary (not a placeholder) is on screen.
   bool _focusWaterPending = false;
+
+  /// A new `?date=` or `?focus=water` on the open route (deep link, Home
+  /// tile while the diary is open) takes effect.
+  @override
+  void didUpdateWidget(CaloriesDiaryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialDateKey != oldWidget.initialDateKey) _dateKey = widget.initialDateKey;
+    if (widget.focusWater && !oldWidget.focusWater) _focusWaterPending = true;
+  }
 
   @override
   void dispose() {
@@ -214,6 +222,10 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
     final offline = ref.watch(isOfflineProvider);
     // Started early so the date menu has the week's kcal when it opens.
     ref.watch(calorieRecentDayTotalsProvider(today));
+    // Back online: load again by itself (S1 "lädt selbst, sobald online").
+    ref.listen<bool>(isOfflineProvider, (was, now) {
+      if (was == true && !now) _refresh(shown);
+    });
 
     final title = Padding(
       padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
@@ -225,27 +237,23 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
 
     final List<Widget> body;
     if (goal.status == CalorieGoalStatus.none && !withoutGoal) {
+      body = [const SizedBox(height: AvoSpacing.l), CalorieNoGoalState(onTurnedOff: _back)];
+    } else if (dayState.isUnknown && (dayState.error != null || goal.status == CalorieGoalStatus.error)) {
+      // Only the groups give way: the date line stays, so another day (or
+      // "Heute") can still be chosen.
       body = [
-        const SizedBox(height: AvoSpacing.l),
-        CalorieNoGoalState(onTurnedOff: _back),
+        _dateLine(shown, today),
+        offline
+            ? _message(context, 'cal_diary_offline_empty')
+            : _message(context, 'cal_diary_error', onRetry: () => _refresh(shown)),
       ];
-    } else if (goal.status == CalorieGoalStatus.error && dayState.isUnknown) {
-      body = [_message(context, 'cal_diary_error', onRetry: () => _refresh(shown))];
-    } else if (dayState.isUnknown && dayState.error != null) {
-      body = offline
-          ? [_message(context, 'cal_diary_offline_empty')]
-          : [_message(context, 'cal_diary_error', onRetry: () => _refresh(shown))];
     } else if (dayState.isUnknown || goal.status == CalorieGoalStatus.loading) {
       body = [
         _dateLine(shown, today),
         const SizedBox(height: AvoSpacing.s),
-        InsetSection(children: [
-          SkeletonSection(rows: 3, withImage: false, loadingLabel: context.tr('cal_loading')),
-        ]),
+        InsetSection(children: [SkeletonSection(rows: 3, withImage: false, loadingLabel: context.tr('cal_loading'))]),
         const SizedBox(height: AvoSpacing.section),
-        InsetSection(children: [
-          SkeletonSection(rows: 2, withImage: false, loadingLabel: context.tr('cal_loading')),
-        ]),
+        InsetSection(children: [SkeletonSection(rows: 2, withImage: false, loadingLabel: context.tr('cal_loading'))]),
       ];
     } else {
       body = _diary(context, shown: shown, today: today, goal: goal, dayState: dayState, offline: offline);
@@ -268,10 +276,7 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
                 // Not lazy: the day is a few dozen rows, and `?focus=water`
                 // needs the water row laid out.
                 sliver: SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [title, ...body],
-                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [title, ...body]),
                 ),
               ),
             ],
@@ -315,14 +320,14 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
   }
 
   Widget _dateLine(String shown, String today) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
-        child: CalorieDateLine(
-          shownKey: shown,
-          todayKey: today,
-          onOpenMenu: (anchor) => _openDateMenu(anchor, shown),
-          onToday: () => _setDay(today),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
+    child: CalorieDateLine(
+      shownKey: shown,
+      todayKey: today,
+      onOpenMenu: (anchor) => _openDateMenu(anchor, shown),
+      onToday: () => _setDay(today),
+    ),
+  );
 
   List<Widget> _diary(
     BuildContext context, {
@@ -336,30 +341,50 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
     final isToday = shown == today;
     final numbers = CalorieDayNumbers(day: day, goal: goal.goal, isToday: isToday);
     final pending = day.syncStates.values.where((s) => s == CalorieSyncState.pending).length;
-    final actions = CalorieEntryActions(context: context, ref: ref, todayKey: today);
+    final actions = CalorieEntryActions(context: context, ref: ref);
 
     final Widget? status = offline
         ? StatusRow(kind: StatusKind.offline, text: context.tr('cal_status_offline'))
         : pending > 0 && dayState.error != null
-            ? StatusRow(
-                kind: StatusKind.pending,
-                text: context.tr(pending == 1 ? 'cal_status_pending_one' : 'cal_status_pending_other',
-                    params: {'n': '$pending'}),
-              )
-            : null;
+        ? StatusRow(
+            kind: StatusKind.pending,
+            text: context.tr(
+              pending == 1 ? 'cal_status_pending_one' : 'cal_status_pending_other',
+              params: {'n': '$pending'},
+            ),
+          )
+        : null;
 
+    final goalFailed = goal.status == CalorieGoalStatus.error;
     final summaryRows = <Widget>[
-      _SwipeSemantics(
-        label: numbers.spoken(context, title: _summaryTitle(context, shown, today)),
-        value: context.diaryDateSpoken(shown, today),
-        canGoNext: _canGoNext(shown),
-        nextLabel: _canGoNext(shown) ? context.diaryDateSpoken(shiftCalorieDayKey(shown, 1), today) : null,
-        previousLabel: context.diaryDateSpoken(shiftCalorieDayKey(shown, -1), today),
-        onNext: () => _step(shown, 1),
-        onPrevious: () => _step(shown, -1),
-        child: CaloriesDiarySummary(numbers: numbers),
+      CaloriesDiarySummary(
+        numbers: numbers,
+        // The numbers are one adjustable element; the macros below it are
+        // their own elements (S1 Barrierefreiheit).
+        wrapLine: (line) => _SwipeSemantics(
+          label: numbers.spoken(context, title: _summaryTitle(context, shown, today), withMacros: false),
+          value: context.diaryDateSpoken(shown, today),
+          canGoNext: _canGoNext(shown),
+          nextLabel: _canGoNext(shown) ? context.diaryDateSpoken(shiftCalorieDayKey(shown, 1), today) : null,
+          previousLabel: context.diaryDateSpoken(shiftCalorieDayKey(shown, -1), today),
+          onNext: () => _step(shown, 1),
+          onPrevious: () => _step(shown, -1),
+          child: line,
+        ),
       ),
-      if (numbers.goalKcal == null)
+      if (goalFailed)
+        // The goal could not be loaded: eaten numbers only, and why. Never
+        // "Ziel festlegen", an error is not "no goal".
+        Padding(
+          padding: const EdgeInsets.only(bottom: AvoSpacing.s),
+          child: StatusRow(
+            kind: StatusKind.sectionError,
+            text: context.tr('cal_goal_error'),
+            actionLabel: context.tr('retry'),
+            onAction: () => _refresh(shown),
+          ),
+        )
+      else if (numbers.goalKcal == null)
         NavRow(
           title: context.tr('cal_set_goal_row'),
           leading: AvoIcon(AvoIcons.plus, size: _kNavGlyph, color: context.colors.tint),
@@ -372,28 +397,30 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
     final byMeal = entriesByMeal(day);
     return [
       // The date line and the "Heute" group move together under the finger.
-      LayoutBuilder(builder: (context, constraints) {
-        _swipeWidth = constraints.maxWidth;
-        return GestureDetector(
-          onHorizontalDragStart: (_) => _swipe.stop(),
-          onHorizontalDragUpdate: (d) => _dragUpdate(d, shown),
-          onHorizontalDragEnd: (d) => _dragEnd(d, shown),
-          child: AnimatedBuilder(
-            animation: _swipe,
-            builder: (context, child) => Transform.translate(offset: Offset(_swipe.value, 0), child: child),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _dateLine(shown, today),
-                if (status != null) status,
-                const SizedBox(height: AvoSpacing.s),
-                InsetSection(children: summaryRows),
-              ],
+      LayoutBuilder(
+        builder: (context, constraints) {
+          _swipeWidth = constraints.maxWidth;
+          return GestureDetector(
+            onHorizontalDragStart: (_) => _swipe.stop(),
+            onHorizontalDragUpdate: (d) => _dragUpdate(d, shown),
+            onHorizontalDragEnd: (d) => _dragEnd(d, shown),
+            child: AnimatedBuilder(
+              animation: _swipe,
+              builder: (context, child) => Transform.translate(offset: Offset(_swipe.value, 0), child: child),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _dateLine(shown, today),
+                  if (status != null) status,
+                  const SizedBox(height: AvoSpacing.s),
+                  InsetSection(children: summaryRows),
+                ],
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
       for (final meal in kMealOrder)
         MealSection(
           meal: meal,
@@ -406,7 +433,7 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
         key: _waterKey,
         child: InsetSection(
           header: context.tr('cal_water'),
-          children: [WaterRow(dateKey: shown, day: dayState.day)],
+          children: [WaterRow(dateKey: shown, day: dayState.day, followsToday: _dateKey == null)],
         ),
       ),
       const SizedBox(height: AvoSpacing.section),
@@ -422,8 +449,7 @@ class _CaloriesDiaryScreenState extends ConsumerState<CaloriesDiaryScreen>
   }
 
   /// Fitting recipes for [remaining] kcal; null while they load.
-  int? _ideasCount(int remaining) =>
-      ref.watch(calorieIdeasProvider(calorieIdeasBucket(remaining))).valueOrNull?.length;
+  int? _ideasCount(int remaining) => ref.watch(calorieIdeasProvider(calorieIdeasBucket(remaining))).valueOrNull?.length;
 
   String _summaryTitle(BuildContext context, String shown, String today) => shown == today
       ? context.tr('cal_summary_title_today')

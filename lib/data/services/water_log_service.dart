@@ -26,7 +26,7 @@ class WaterLogService {
       return await run();
     } catch (e) {
       final error = CalorieDataException.from(e);
-      debugPrint('❌ [WaterLog] $what failed: ${error.code.name} ($e)');
+      debugPrint('❌ [WaterLog] $what failed: ${error.code.name} (${e is PostgrestException ? e.code : e.runtimeType})');
       throw error;
     }
   }

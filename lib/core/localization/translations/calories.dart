@@ -156,6 +156,10 @@ const Map<String, String> caloriesEn = {
   'cal_water_tile_a11y_plain': 'Water today, {amount} litres.',
   'cal_water_glasses_a11y': '{n} of {total} glasses.',
   'cal_number_invalid': 'Enter a number, for example 450 or 450.5',
+  'cal_unit_kcal': 'kcal',
+  'cal_goal_error': 'Couldn\'t load your goal.',
+  'cal_write_failed': 'Couldn\'t save that. Please try again.',
+  'cal_recent_error': 'Couldn\'t load what you ate recently.',
   // P0.3 full-screen diary entry (Teil B)
   'cal_servings_less': 'Half a serving less',
   'cal_servings_more': 'Half a serving more',
@@ -375,6 +379,10 @@ const Map<String, String> caloriesDe = {
   'cal_water_tile_a11y_plain': 'Wasser heute, {amount} Liter.',
   'cal_water_glasses_a11y': '{n} von {total} Gläsern.',
   'cal_number_invalid': 'Bitte eine Zahl, zum Beispiel 450 oder 450,5',
+  'cal_unit_kcal': 'kcal',
+  'cal_goal_error': 'Dein Ziel konnte nicht geladen werden.',
+  'cal_write_failed': 'Das konnte nicht gespeichert werden. Versuch es noch einmal.',
+  'cal_recent_error': 'Zuletzt Gegessenes konnte nicht geladen werden.',
   // P0.3 full-screen diary entry (Teil B)
   'cal_servings_less': 'Eine halbe Portion weniger',
   'cal_servings_more': 'Eine halbe Portion mehr',

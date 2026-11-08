@@ -14,11 +14,6 @@ import 'package:shoply/presentation/state/nutrition_provider.dart';
 // sections (S0) of `docs/redesign/b-screens/kalorien.md`. Every provider
 // here answers in the first frame from this device and refines afterwards.
 
-/// Today's day key (`YYYY-MM-DD`) from [calorieClockProvider].
-final calorieTodayKeyProvider = Provider.autoDispose<String>(
-  (ref) => calorieDayKey(ref.watch(calorieClockProvider)()),
-);
-
 /// The "+250 ml" quick amount. Fixed until the settings screen (S23) makes
 /// it a choice.
 final calorieWaterQuickMlProvider = Provider<int>((ref) => 250);
@@ -187,12 +182,16 @@ class RecentFoodsHiddenNotifier extends StateNotifier<Set<String>> {
 /// shows the first 8 and searches all), from today's local day and the
 /// server history, stored history first.
 class RecentFoods {
-  const RecentFoods(this.foods, {required this.known});
+  const RecentFoods(this.foods, {required this.known, this.failed = false});
 
   final List<RecentFood> foods;
 
-  /// False only on a first start before the server answered.
+  /// False on a first start until the server answered (or failed).
   final bool known;
+
+  /// The history could not be loaded and none is stored: never shown as
+  /// "nothing eaten yet" (§3.1).
+  final bool failed;
 }
 
 final recentFoodsProvider = Provider.autoDispose<RecentFoods>((ref) {
@@ -211,7 +210,8 @@ final recentFoodsProvider = Provider.autoDispose<RecentFoods>((ref) {
           for (final row in jsonDecode(raw) as List) FoodLogEntry.fromJson(row as Map<String, dynamic>),
         ];
       } catch (e) {
-        debugPrint('⚠️ [CalorieRecent] Stored history unreadable: $e');
+        // The type only: the stored text holds food names.
+        debugPrint('⚠️ [CalorieRecent] Stored history unreadable: ${e.runtimeType}');
       }
     }
   }
@@ -222,8 +222,12 @@ final recentFoodsProvider = Provider.autoDispose<RecentFoods>((ref) {
   return RecentFoods(
     rankRecentFoods(byId.values, hidden: hidden),
     known: history != null || server.hasError || local.isNotEmpty,
+    failed: history == null && server.hasError,
   );
 });
+
+/// Asks the server for the history again ("Erneut versuchen").
+void retryRecentFoods(WidgetRef ref) => ref.invalidate(_recentServerProvider);
 
 // ── "Was passt noch?" (S0, S1) ─────────────────────────────────────────
 

@@ -10,6 +10,7 @@ import 'package:shoply/data/models/calorie_day.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_ring.dart';
 import 'package:shoply/presentation/widgets/design/home_card.dart';
 import 'package:shoply/presentation/widgets/home_sections/home_calories.dart';
+import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart' as slots;
 
 import '../screens/calories/calorie_fakes.dart';
@@ -168,6 +169,61 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('midnight: the card shows the new day and "+250 ml" writes to it', (tester) async {
+    var now = DateTime(2026, 11, 7, 23, 59, 30);
+    final env = await CalorieTestEnv.create(
+      stored: {kToday: usualDay()},
+      server: {kToday: usualDay()},
+      storedGoal: goal(),
+    );
+    final semantics = tester.ensureSemantics();
+    await pumpCalories(tester, _home(), overrides: env.overrides(clock: () => now));
+    await settle(tester);
+    expect(find.text('1,360 eaten · goal 2,000'), findsOneWidget);
+
+    // The tap comes after midnight, before any timer ran: it is for today.
+    now = DateTime(2026, 11, 8, 0, 0, 10);
+    await tester.tap(find.bySemanticsLabel('Add 250 ml of water'));
+    await settle(tester);
+    final c = ProviderScope.containerOf(tester.element(find.byType(HomeWaterTile)));
+    expect(c.read(calorieDayProvider('2026-11-08')).day!.waterMl, 250);
+    expect(c.read(calorieDayProvider(kToday)).day!.waterMl, 1250);
+
+    await tester.pump(const Duration(seconds: 30));
+    await settle(tester);
+    expect(find.text('Nothing eaten yet · goal 2,000'), findsOneWidget);
+    expect(find.text('0.25 / 2 L'), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('the goal fails to load, the day is known: eaten kcal and retry, no "Set a goal"', (tester) async {
+    final env = await CalorieTestEnv.create(stored: {kToday: usualDay()}, server: {kToday: usualDay()});
+    await pumpCalories(tester, _home(), overrides: env.overrides(goalError: true));
+    await settle(tester);
+
+    expect(find.text('1,360 kcal eaten'), findsOneWidget);
+    expect(find.text('Couldn\'t load your goal.'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Set a goal'), findsNothing);
+    expect(find.text('How much do you want to eat each day?'), findsNothing);
+    expect(find.text('Log food'), findsOneWidget);
+  });
+
+  testWidgets('back online: the card loads by itself', (tester) async {
+    final env = await CalorieTestEnv.create(server: {kToday: usualDay()});
+    env.remote.fetchError = const CalorieDataException(CalorieErrorCode.network);
+    await pumpCalories(tester, _home(), overrides: env.overrides(offline: true));
+    await settle(tester);
+    expect(find.text('Couldn\'t load today\'s calories.'), findsOneWidget);
+
+    env.remote.fetchError = null;
+    ProviderScope.containerOf(tester.element(find.byType(HomeCaloriesToday)))
+        .read(testOfflineProvider.notifier)
+        .state = false;
+    await settle(tester);
+    expect(find.text('1,360 eaten · goal 2,000'), findsOneWidget);
+  });
+
   test('evening hint: from 16 to 21 o\'clock with a goal, kcal left and stored ideas', () async {
     final ideas = jsonEncode({'date': kToday, 'count': 4});
     final env = await CalorieTestEnv.create(
@@ -191,6 +247,24 @@ void main() {
     final dismissed = ProviderContainer(overrides: hidden.overrides(now: DateTime(2026, 11, 7, 18)));
     addTearDown(dismissed.dispose);
     expect(dismissed.read(homeCalorieIdeasHintHasContentProvider), isFalse);
+  });
+
+  testWidgets('evening hint appears at 16:00 while Home stays open', (tester) async {
+    var now = DateTime(2026, 11, 7, 15, 59, 30);
+    final env = await CalorieTestEnv.create(
+      stored: {kToday: usualDay()},
+      server: {kToday: usualDay()},
+      storedGoal: goal(),
+      extraPrefs: {'cal_ideas_v1_$kUser': jsonEncode({'date': kToday, 'count': 4})},
+    );
+    await pumpCalories(tester, _home(), overrides: env.overrides(clock: () => now));
+    await settle(tester);
+    expect(find.text('640 kcal left today. Dinner ideas', skipOffstage: false), findsNothing);
+
+    now = DateTime(2026, 11, 7, 16, 0, 1);
+    await tester.pump(const Duration(seconds: 31));
+    await settle(tester);
+    expect(find.text('640 kcal left today. Dinner ideas', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('evening hint: text with what is left, "Hide for today" removes it', (tester) async {

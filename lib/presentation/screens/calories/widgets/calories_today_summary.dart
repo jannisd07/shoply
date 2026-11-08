@@ -85,7 +85,7 @@ class CalorieDayNumbers {
 
   /// The day as one sentence for VoiceOver ("Kalorien heute: 640 von 2.000
   /// übrig, 1.360 gegessen."), followed by the macros.
-  String spoken(BuildContext context, {required String title}) {
+  String spoken(BuildContext context, {required String title, bool withMacros = true}) {
     final g = goalKcal;
     final String head;
     if (isToday && g != null) {
@@ -105,6 +105,7 @@ class CalorieDayNumbers {
     } else {
       head = context.tr('cal_summary_a11y_eaten', params: {'title': title, 'eaten': context.kcal(eaten)});
     }
+    if (!withMacros) return head;
     return '$head ${calorieMacrosSpoken(context, totals, goal)}.';
   }
 }
@@ -170,9 +171,14 @@ class _Subline extends StatelessWidget {
 /// the three macro rows. Without a goal: "kcal gegessen", no ring, plain
 /// macros.
 class CaloriesDiarySummary extends StatelessWidget {
-  const CaloriesDiarySummary({super.key, required this.numbers});
+  const CaloriesDiarySummary({super.key, required this.numbers, this.wrapLine});
 
   final CalorieDayNumbers numbers;
+
+  /// Wraps the number-and-ring line (hidden from VoiceOver itself), for
+  /// example in the diary's adjustable day element. The macro rows below
+  /// stay their own VoiceOver elements.
+  final Widget Function(Widget line)? wrapLine;
 
   @override
   Widget build(BuildContext context) {
@@ -224,18 +230,17 @@ class CaloriesDiarySummary extends StatelessWidget {
       );
     }
 
-    return ExcludeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.all(AvoSpacing.l),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            line,
-            const SizedBox(height: AvoSpacing.l),
-            CalorieMacroRows(totals: numbers.totals, goal: numbers.goal),
-          ],
-        ),
+    final hidden = ExcludeSemantics(child: line);
+    return Padding(
+      padding: const EdgeInsets.all(AvoSpacing.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          wrapLine?.call(hidden) ?? hidden,
+          const SizedBox(height: AvoSpacing.l),
+          CalorieMacroRows(totals: numbers.totals, goal: numbers.goal),
+        ],
       ),
     );
   }

@@ -22,6 +22,7 @@ const double _kEntryMinHeight = 60; // D2
 const double _kLogRowMinHeight = 52; // D2
 const double _kRowVertical = 9; // D2 (60 - 22 - 20) / 2
 const double _kPlusGlyph = 17; // D2
+const double _kPlusStroke = 2.4; // D2 plus stroke
 const double _kSyncGlyph = 10; // D2 sync mark behind the kcal
 const double _kFailedGlyph = 17; // D2
 
@@ -35,7 +36,9 @@ class FoodEntryActions {
     this.onLogAgainToday,
   });
 
-  final VoidCallback onDelete;
+  /// Deletes (with undo); resolves to false when it failed, so a swiped row
+  /// slides back.
+  final Future<bool> Function() onDelete;
   final ValueChanged<MealType> onMove;
 
   /// Tap on a "Nicht gespeichert" row.
@@ -133,7 +136,7 @@ class FoodEntryRow extends StatelessWidget {
         label: context.tr('cal_menu_delete'),
         icon: AvoIcons.trash,
         destructive: true,
-        onSelected: actions.onDelete,
+        onSelected: () => actions.onDelete(),
       ),
     ]);
   }
@@ -180,7 +183,7 @@ class FoodEntryRow extends StatelessWidget {
                 TextSpan(children: [
                   TextSpan(text: kcalText),
                   TextSpan(
-                    text: ' kcal',
+                    text: ' ${context.tr('cal_unit_kcal')}',
                     style: context.text(AvoTextStyle.subhead, color: colors.secondaryLabel),
                   ),
                 ]),
@@ -238,7 +241,7 @@ class FoodEntryRow extends StatelessWidget {
         CustomSemanticsAction(label: context.tr('cal_menu_move')): () => _openMoveMenu(context),
         if (actions.onLogAgainToday case final again?)
           CustomSemanticsAction(label: context.tr('cal_menu_again')): again,
-        CustomSemanticsAction(label: context.tr('cal_menu_delete')): actions.onDelete,
+        CustomSemanticsAction(label: context.tr('cal_menu_delete')): () => actions.onDelete(),
       },
       excludeSemantics: true,
       child: GestureDetector(
@@ -270,7 +273,9 @@ class FoodEntryRow extends StatelessWidget {
       onUpdate: (details) {
         if (details.reached && !details.previousReached) unawaited(AvoHaptics.light());
       },
-      onDismissed: (_) => actions.onDelete(),
+      // Deleting is optimistic: the day drops the row at once. Only when it
+      // fails does the row slide back (with the error toast).
+      confirmDismiss: (_) => actions.onDelete(),
       background: ColoredBox(
         color: colors.destructive,
         child: Align(
@@ -312,7 +317,7 @@ class _LogRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.l, vertical: AvoSpacing.s),
             child: Row(
               children: [
-                AvoIcon(AvoIcons.plus, size: _kPlusGlyph, color: tint, strokeWidth: 2.4),
+                AvoIcon(AvoIcons.plus, size: _kPlusGlyph, color: tint, strokeWidth: _kPlusStroke),
                 const SizedBox(width: AvoSpacing.s),
                 Expanded(child: Text(context.tr('cal_log'), style: context.text(AvoTextStyle.body, color: tint))),
               ],

@@ -22,6 +22,20 @@ sind `weekly_deals_screen.dart`, `zip_code_sheet.dart`, die alte Rezept-Angebots
   umbenennen); `?prompt=` füllt das Feld nur vor.
 - Alte Chat-Dateien unter `screens/ai/` und ihre Texte (`chip_*`, `how_can_i_help` …) entfernt.
 
+## 2026-11-08: Kalorien-Tagebuch im D2-Stil (Teil B, B6 W3)
+
+- **Tagebuch `/calories`** neu: wie viel heute noch geht (Zahl, Ring, Makros), vier Mahlzeiten mit Wischen zum
+  Löschen, Kontextmenü und Rückgängig, Wasser mit Menü und Mengen-Dialog, Woche, Links zu Gewicht, Challenges und
+  Zielen. Tageswechsel per Wischen oder Datums-Menü. Ohne Ziel der Einstieg „Wie viel willst du am Tag essen?“.
+- **„Essen eintragen“ `/calories/add`** als Vollbild statt Bottom-Sheet: Mahlzeit im Titel-Menü, „Zuletzt gegessen“
+  mit einem Tipp, Suche im eigenen Verlauf. Foto, Barcode, Menge und Manuell folgen mit den nächsten Paketen.
+- **Home:** Karte „Kalorien heute“ und Kachel „Wasser heute“ mit echten Zahlen aus dem Gerätespeicher im ersten Frame.
+- **Fehler behoben:** „Heute“ wechselt um Mitternacht (vorher schrieb ein über Nacht offener Screen in gestern); ein
+  Eintrag, der während eines Server-Abrufs geschrieben wurde, verschwindet nicht mehr; ein Ziel-Ladefehler sieht nicht
+  mehr wie „kein Ziel“ aus; nach der Rückkehr ins Netz lädt das Tagebuch selbst.
+- Weg: altes Kalorien-Dashboard, die Sheets `food_entry_sheet` und `log_recipe_sheet` (Rezept öffnet jetzt den
+  Vollbild-Screen „Ins Tagebuch“), 42 alte Texte.
+
 ## 2026-11-08: Angebote an Artikeln und Markt pro Liste (Teil B, W2)
 
 Die Angebots-Slots, die Teil A in Liste, Artikel, Einkaufsmodus und Listen-Übersicht setzt, zeigen jetzt echte

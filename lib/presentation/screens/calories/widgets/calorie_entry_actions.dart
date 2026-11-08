@@ -44,14 +44,25 @@ FoodLogEntry copyFoodEntry(
   );
 }
 
+/// What a failed write may log: the error code or type, never its text (it
+/// can hold food names).
+String calorieErrorKind(Object e) => e is CalorieDataException ? e.code.name : '${e.runtimeType}';
+
+/// "Das konnte nicht gespeichert werden." with the error haptic.
+void showCalorieWriteFailed(BuildContext context) {
+  unawaited(AvoHaptics.error());
+  if (context.mounted) AvoToast.show(context, message: context.tr('cal_write_failed'));
+}
+
 /// Logs [template] again for [dateKey]/[meal] with the light impact in the
-/// same frame and "{name} eingetragen · Widerrufen". Returns the new row,
-/// or null when it could not be queued.
+/// same frame and "{name} eingetragen · Widerrufen". A null [dateKey] means
+/// today at the moment of the tap. Returns the new row, or null when it
+/// could not be queued (the person then sees why).
 Future<FoodLogEntry?> logFoodAgain(
   BuildContext context,
   WidgetRef ref,
   FoodLogEntry template, {
-  required String dateKey,
+  required String? dateKey,
   required MealType meal,
 }) async {
   final message = context.tr('cal_logged_toast', params: {'name': template.foodName});
@@ -61,10 +72,12 @@ Future<FoodLogEntry?> logFoodAgain(
   unawaited(AvoHaptics.light());
   final FoodLogEntry saved;
   try {
-    saved = await diary.addFood(copyFoodEntry(template, dateKey: dateKey, meal: meal, now: now));
+    saved = await diary.addFood(
+      copyFoodEntry(template, dateKey: dateKey ?? calorieDayKey(now), meal: meal, now: now),
+    );
   } catch (e) {
-    debugPrint('❌ [CalorieDiary] Logging again failed: $e');
-    unawaited(AvoHaptics.error());
+    debugPrint('❌ [CalorieDiary] Logging again failed: ${calorieErrorKind(e)}');
+    if (context.mounted) showCalorieWriteFailed(context);
     return null;
   }
   if (context.mounted) {
@@ -77,11 +90,10 @@ Future<FoodLogEntry?> logFoodAgain(
 /// to another meal, retry a "Nicht gespeichert" row, log a past row again
 /// today.
 class CalorieEntryActions {
-  CalorieEntryActions({required this.context, required this.ref, required this.todayKey});
+  CalorieEntryActions({required this.context, required this.ref});
 
   final BuildContext context;
   final WidgetRef ref;
-  final String todayKey;
 
   FoodEntryActions forEntry(FoodLogEntry entry, {required bool pastDay}) {
     final diary = ref.read(calorieDiaryProvider);
@@ -90,22 +102,28 @@ class CalorieEntryActions {
       onMove: (meal) => diary.updateFood(entry, entry.copyWith(mealType: meal)),
       onRetry: () => diary.retry(entry.id),
       onLogAgainToday: pastDay
-          ? () => logFoodAgain(context, ref, entry, dateKey: todayKey, meal: entry.mealType)
+          // Today as it is at the tap (the screen may have been open since
+          // yesterday).
+          ? () => logFoodAgain(context, ref, entry, dateKey: null, meal: entry.mealType)
           : null,
     );
   }
 
-  Future<void> _delete(FoodLogEntry entry) async {
+  /// True when the row is gone; false brings a swiped row back.
+  Future<bool> _delete(FoodLogEntry entry) async {
     final message = context.tr('cal_deleted', params: {'name': entry.foodName});
     final undo = context.tr('common_undo');
     final diary = ref.read(calorieDiaryProvider);
     try {
       await diary.deleteFood(entry);
     } catch (e) {
-      debugPrint('❌ [CalorieDiary] Deleting failed: $e');
-      return;
+      debugPrint('❌ [CalorieDiary] Deleting failed: ${calorieErrorKind(e)}');
+      if (context.mounted) showCalorieWriteFailed(context);
+      return false;
     }
-    if (!context.mounted) return;
-    AvoToast.show(context, message: message, actionLabel: undo, onAction: () => diary.restoreFood(entry));
+    if (context.mounted) {
+      AvoToast.show(context, message: message, actionLabel: undo, onAction: () => diary.restoreFood(entry));
+    }
+    return true;
   }
 }

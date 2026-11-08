@@ -100,6 +100,34 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 - Schreibende Tools (Artikel hinzufügen, abhaken, Rezept auf Liste) gehen über `ItemRepository` und schicken
   **eine** Push-Nachricht statt einer pro Artikel.
 
+## Kalorien (Modul `AppModule.calories`, Teil B)
+
+- **Routen** (`routes/areas/calories_routes.dart`): Tagebuch `/calories` ist ein Push im Home-Tab (`?date=YYYY-MM-DD`,
+  nie nach heute; `?focus=water`). Kinder im Home-Tab: `week`, `weight`, `challenges`, `goals`, `ideas` (vorerst die
+  alten Screens), `water` leitet auf `/calories?focus=water` um. Vollbild über dem Tab, aus dem man kommt:
+  `/calories/add` („Essen eintragen“, `?meal=`, `?date=`) und `/calories/goals/setup`, beide mit `ModuleGate`.
+  go_router fällt von `/calories` auf diese Root-Routen zurück, deshalb dürfen sie hinter der Shell stehen.
+- **Lokal zuerst:** Jeder Tag ist ein `calorieDayProvider(dateKey)` (`state/nutrition_provider.dart`). Er startet mit
+  dem Tag aus `CalorieDayStore` (SharedPreferences, heute und 14 Tage davor), fragt danach den Server und führt die
+  Antwort mit der Schreib-Warteschlange zusammen (`mergeServerDay`). Änderungen, die während eines Abrufs lokal
+  passiert sind, gewinnen über diese Antwort (`applyLocalChanges`): Der Server kann den Tag vor dem Schreiben gelesen
+  haben, während das Schreiben schon bestätigt ist. So geht kein Eintrag verloren und keiner kommt doppelt.
+- **Schreiben** nur über `calorieDiaryProvider` (`CalorieDiary`): sofort im lokalen Tag, dann
+  `CalorieWriteQueue` (dauerhaft, Wiederholung mit Backoff, „Nicht gespeichert“ bei Ablehnung), dann Apple Health.
+  Rückgängig legt die Zeile an ihren alten Platz zurück (Reihenfolge nach `created_at`). Neue Spalten nur mit
+  `app_flags.calories_schema_v2` (prüfen die Services).
+- **Heute** ist `calorieTodayKeyProvider`: er rechnet sich um Mitternacht neu und prüft jede Minute, ob der Tag
+  gewechselt hat (Timer stehen still, solange iOS die App pausiert). Alles, was „für heute“ schreibt (Home-Wasser,
+  „Essen eintragen“ ohne Datum, „Heute nochmal eintragen“), liest die Uhr erst beim Tippen
+  (`calorieTodayKeyNow`), damit ein über Nacht offener Screen nie in gestern schreibt.
+- **Ziel:** `calorieGoalStateProvider` unterscheidet lädt / kein Ziel / gesetzt / Fehler und nimmt bis zur Antwort das
+  gespeicherte Ziel. Ein Ladefehler sieht nie wie „kein Ziel“ aus (S1a nur bei `none`).
+- **Nachbartage:** Das Tagebuch lädt den Tag davor und danach mit. ±7 Tage wie im Konzept wären 42 Abfragen beim
+  Öffnen; die 14 gespeicherten Tage öffnen ohnehin sofort mit Zahlen.
+- **Wieder online:** Tagebuch und Home-Karte laden von selbst neu, sobald `isOfflineProvider` wieder `false` ist.
+- **Home:** `widgets/home_sections/home_calories.dart` (`HomeCaloriesToday`, `HomeWaterTile`, Abend-Hinweis), in
+  `home_sections.dart` re-exportiert. Die `…HasContentProvider` sind synchron und lesen zuerst das Modul.
+
 ## Benachrichtigungen
 
 - Lokal: `flutter_local_notifications` (`NotificationService`, `MascotNotificationService`).

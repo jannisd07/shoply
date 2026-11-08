@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/physics.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,6 +12,7 @@ import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_date_menu.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_entry_actions.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart';
+import 'package:shoply/presentation/screens/calories/widgets/calorie_recent_row.dart';
 import 'package:shoply/presentation/state/calorie_diary_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
@@ -31,13 +30,8 @@ import 'package:shoply/routes/route_paths.dart';
 /// How many foods "Zuletzt gegessen" shows without a search (S3).
 const int _kRecentShown = 8;
 
-/// How long a logged row says "Eingetragen" (S3).
-const Duration _kLoggedShown = Duration(seconds: 2);
-
 const double _kTitleChevron = 11; // D2 X-Essen
-const double _kRowMin = 60; // D2
-const double _kPlusGlyph = 22; // D2 plus.circle
-const double _kRowVertical = 9; // D2 (60 - 22 - 20) / 2
+const double _kTitleChevronStroke = 2.8; // D2 semibold chevron
 
 /// "Essen eintragen" (`kalorien.md` S3, D2 `X-Essen`): the one place to log
 /// food, full screen above the tab bar at `/calories/add` (`?meal=`,
@@ -66,18 +60,6 @@ class _CaloriesAddScreenState extends ConsumerState<CaloriesAddScreen> {
   late MealType _meal = widget.meal ?? mealForTime(ref.read(calorieClockProvider)());
   late String? _dateKey = widget.dateKey;
   String _query = '';
-
-  /// Foods logged in the last two seconds ("Eingetragen").
-  final Set<String> _logged = {};
-  final List<Timer> _timers = [];
-
-  @override
-  void dispose() {
-    for (final t in _timers) {
-      t.cancel();
-    }
-    super.dispose();
-  }
 
   void _close() {
     if (context.canPop()) {
@@ -108,13 +90,11 @@ class _CaloriesAddScreenState extends ConsumerState<CaloriesAddScreen> {
     );
   }
 
-  Future<void> _log(RecentFood food, String dateKey) async {
-    final saved = await logFoodAgain(context, ref, food.template, dateKey: dateKey, meal: _meal);
-    if (saved == null || !mounted) return;
-    setState(() => _logged.add(food.key));
-    _timers.add(Timer(_kLoggedShown, () {
-      if (mounted) setState(() => _logged.remove(food.key));
-    }));
+  /// Logs [food] for the chosen day; "today" is read at the tap, so a screen
+  /// left open over midnight logs for the new day.
+  Future<bool> _log(RecentFood food) async {
+    final saved = await logFoodAgain(context, ref, food.template, dateKey: _dateKey, meal: _meal);
+    return saved != null;
   }
 
   @override
@@ -125,6 +105,11 @@ class _CaloriesAddScreenState extends ConsumerState<CaloriesAddScreen> {
       final k? when k.compareTo(today) < 0 => k,
       _ => today,
     };
+    // The chosen day starts loading at once, so its numbers are known
+    // before anything is logged for it.
+    ref.watch(calorieDayProvider(shown));
+    // The date menu shows the week's kcal from the server too.
+    ref.watch(calorieRecentDayTotalsProvider(today));
     final recents = ref.watch(recentFoodsProvider);
     final offline = ref.watch(isOfflineProvider);
     final query = _query.trim().toLowerCase();
@@ -147,17 +132,24 @@ class _CaloriesAddScreenState extends ConsumerState<CaloriesAddScreen> {
       if (offline) ...[
         const SizedBox(height: AvoSpacing.s),
         StatusRow(kind: StatusKind.offline, text: context.tr('cal_search_offline')),
+      ] else if (recents.failed) ...[
+        const SizedBox(height: AvoSpacing.s),
+        StatusRow(
+          kind: StatusKind.sectionError,
+          text: context.tr('cal_recent_error'),
+          actionLabel: context.tr('retry'),
+          onAction: () => retryRecentFoods(ref),
+        ),
       ],
       if (matches.isNotEmpty)
         InsetSection(
           header: context.tr('cal_sec_recent'),
           children: [
             for (final f in matches)
-              _RecentFoodRow(
+              RecentFoodRow(
                 key: ValueKey('cal-recent-${f.key}'),
                 food: f,
-                logged: _logged.contains(f.key),
-                onLog: () => _log(f, shown),
+                onLog: () => _log(f),
                 onRemove: () => ref.read(recentFoodsHiddenProvider.notifier).hide(f.key),
               ),
           ],
@@ -170,6 +162,9 @@ class _CaloriesAddScreenState extends ConsumerState<CaloriesAddScreen> {
             title: context.tr('cal_search_none', params: {'query': _query.trim()}),
           ),
         )
+      else if (recents.failed)
+        // Says so above; a failed load never looks like "nothing eaten yet".
+        const SizedBox.shrink()
       else if (!recents.known)
         Padding(
           padding: const EdgeInsets.only(top: AvoSpacing.section),
@@ -295,7 +290,7 @@ class _TitleBlock extends StatelessWidget {
                       const TextSpan(text: ' '),
                       WidgetSpan(
                         alignment: PlaceholderAlignment.middle,
-                        child: AvoIcon(AvoIcons.chevronDown, size: _kTitleChevron, strokeWidth: 2.8),
+                        child: AvoIcon(AvoIcons.chevronDown, size: _kTitleChevron, strokeWidth: _kTitleChevronStroke),
                       ),
                     ]),
                     textAlign: TextAlign.center,
@@ -332,130 +327,6 @@ class _TitleBlock extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// A "Zuletzt gegessen" row: name, "60 g · 220 kcal" and a green plus. One
-/// tap logs it at once; the plus turns into a check and the second line says
-/// "Eingetragen" for two seconds. Long press: "Aus „Zuletzt“ entfernen".
-class _RecentFoodRow extends StatelessWidget {
-  const _RecentFoodRow({
-    super.key,
-    required this.food,
-    required this.logged,
-    required this.onLog,
-    required this.onRemove,
-  });
-
-  final RecentFood food;
-  final bool logged;
-  final VoidCallback onLog;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final e = food.template;
-    final kcal = context.tr('cal_meal_sum', params: {'kcal': context.kcal(e.calories)});
-    final amount = context.entryAmount(e);
-    final subtitle = logged ? context.tr('cal_logged') : [?amount, kcal].join(' · ');
-    final spoken = [
-      e.foodName,
-      ?amount,
-      context.tr('cal_kcal_value', params: {'kcal': context.kcal(e.calories)}),
-    ].join(', ');
-
-    return Semantics(
-      container: true,
-      button: true,
-      label: spoken,
-      hint: context.tr('cal_log_item_a11y', params: {'name': e.foodName}),
-      onTap: onLog,
-      customSemanticsActions: {
-        CustomSemanticsAction(label: context.tr('cal_remove_recent')): onRemove,
-      },
-      excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onLog,
-        onLongPress: () => showAvoMenu(context, items: [
-          AvoMenuItem(
-            label: context.tr('cal_remove_recent'),
-            icon: AvoIcons.trash,
-            destructive: true,
-            onSelected: onRemove,
-          ),
-        ]),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: _kRowMin),
-          child: Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(AvoSpacing.l, _kRowVertical, AvoSpacing.xs, _kRowVertical),
-            child: Row(
-              crossAxisAlignment: context.isAccessibilityText ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(e.foodName, style: context.text(AvoTextStyle.body)),
-                      Text(subtitle, style: context.text(AvoTextStyle.subhead, color: colors.secondaryLabel)),
-                    ],
-                  ),
-                ),
-                SizedBox.square(
-                  dimension: AvoSizes.hitTarget,
-                  child: Center(child: _LogGlyph(logged: logged)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// `plus.circle` that springs into `checkmark.circle.fill` (springQuick;
-/// Reduce Motion: plain swap).
-class _LogGlyph extends StatefulWidget {
-  const _LogGlyph({required this.logged});
-
-  final bool logged;
-
-  @override
-  State<_LogGlyph> createState() => _LogGlyphState();
-}
-
-class _LogGlyphState extends State<_LogGlyph> with SingleTickerProviderStateMixin {
-  static const double _from = 0.6; // grows out of the plus
-  late final AnimationController _scale = AnimationController.unbounded(vsync: this, value: 1);
-
-  @override
-  void didUpdateWidget(_LogGlyph oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.logged == widget.logged || context.reduceMotion) return;
-    _scale.value = _from;
-    _scale.animateWith(SpringSimulation(AvoMotion.quick, _from, 1, 0));
-  }
-
-  @override
-  void dispose() {
-    _scale.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tint = context.colors.tint;
-    return ScaleTransition(
-      scale: _scale,
-      child: Icon(
-        widget.logged ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.plus_circle,
-        size: _kPlusGlyph,
-        color: tint,
-      ),
     );
   }
 }
