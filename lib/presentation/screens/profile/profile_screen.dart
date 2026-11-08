@@ -9,7 +9,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/legal_links.dart';
 import 'package:shoply/data/services/supabase_service.dart';
-import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/presentation/screens/profile/settings/display_name_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/personal_info_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/diet_preferences_screen.dart';
@@ -27,6 +26,8 @@ import 'package:shoply/presentation/state/saved_recipes_provider.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/presentation/screens/subscription/subscription_screen.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -229,21 +230,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     CupertinoPageRoute(builder: (context) => const HelpSupportScreen()),
                   ),
                 ),
+                // One-time tips come back (Konzept 17 §6.1, replaces the
+                // tutorial restart).
                 _SettingsItemData(
-                  icon: Icons.school_outlined,
-                  title: context.tr('restart_tutorial'),
-                  onTap: () async {
-                    HapticFeedback.mediumImpact();
-                    await DynamicTutorialService.instance.restartTutorial();
-                    if (context.mounted) {
-                      context.go('/home');
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(context.tr('tutorial_restarted')),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
+                  icon: Icons.lightbulb_outline_rounded,
+                  title: context.tr('tip_reset'),
+                  onTap: () {
+                    ref.read(tipServiceProvider).reset();
+                    AvoToast.show(
+                      context,
+                      message: context.tr('tip_reset_done'),
+                    );
                   },
                 ),
                 _SettingsItemData(

@@ -7,6 +7,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shoply/core/design/avo_design_scope.dart';
 import 'package:shoply/core/localization/app_localizations.dart';
+import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/core/theme/app_theme.dart';
 import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -16,7 +17,7 @@ import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
-import 'package:shoply/presentation/widgets/tutorial/tutorial_overlay.dart';
+import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 import 'package:shoply/routes/app_router.dart';
 import 'package:shoply/data/services/deep_link_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
@@ -43,6 +44,13 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // One-time tips (Konzept 17 §6.1) read their state before the first
+    // screen builds; main() has the preferences loaded already.
+    ref.listenManual(sharedPreferencesProvider, (_, next) {
+      final prefs = next.valueOrNull;
+      if (prefs != null) ref.read(tipServiceProvider).attach(prefs);
+    }, fireImmediately: true);
 
     // Initialize deep link service after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -242,9 +250,7 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
             data: AppTheme.of(isDarkUi ? Brightness.dark : Brightness.light),
             child: AnnotatedRegion<SystemUiOverlayStyle>(
               value: overlayStyle,
-              child: ScaffoldMessenger(
-                child: AvoToastHost(child: TutorialOverlay(child: child!)),
-              ),
+              child: ScaffoldMessenger(child: AvoToastHost(child: child!)),
             ),
           ),
         );

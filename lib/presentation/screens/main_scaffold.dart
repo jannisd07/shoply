@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/modules/app_modules.dart';
-import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/presentation/widgets/design/app_tab_bar.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/routes/app_branch.dart';
@@ -59,9 +58,6 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
       return;
     }
     widget.navigationShell.goBranch(index);
-    final tutorial = DynamicTutorialService.instance;
-    if (branch == AppBranch.home) tutorial.onRouteChanged('/home');
-    if (branch == AppBranch.recipes) tutorial.onRouteChanged('/recipes');
   }
 
   AppTabItem _item(BuildContext context, AppBranch branch) => switch (branch) {
