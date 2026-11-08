@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/presentation/screens/recipes/all_recipes_screen.dart';
@@ -11,6 +12,7 @@ import 'package:shoply/presentation/screens/recipes/recipe_drafts_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_screen.dart';
 import 'package:shoply/presentation/screens/recipes/saved_recipes_screen.dart';
+import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/areas/plan_routes.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -29,14 +31,23 @@ final List<RouteBase> recipesBranchRoutes = [
       ),
     ),
     routes: [
+      // The editor opens full screen above the tab bar (Konzept 13 §17);
+      // `?draftId=` / `?recipeId=` or the same keys in `extra`.
       GoRoute(
         path: 'add',
         name: 'add-recipe',
-        builder: (context, state) {
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) {
           final extra = state.extra as Map<String, dynamic>?;
-          final draftId = extra?['draftId'] as String?;
-          final recipeId = extra?['recipeId'] as String?;
-          return MultiStepRecipeScreen(draftId: draftId, recipeId: recipeId);
+          final query = state.uri.queryParameters;
+          return CupertinoPage(
+            key: state.pageKey,
+            fullscreenDialog: true,
+            child: MultiStepRecipeScreen(
+              draftId: query['draftId'] ?? extra?['draftId'] as String?,
+              recipeId: query['recipeId'] ?? extra?['recipeId'] as String?,
+            ),
+          );
         },
       ),
       GoRoute(
