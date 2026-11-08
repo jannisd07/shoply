@@ -1,39 +1,48 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:shoply/core/config/env.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import 'package:shoply/core/constants/app_brand.dart';
+import 'package:shoply/core/localization/app_translations.dart';
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/diet_challenge.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
+import 'package:shoply/data/models/meal_plan.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/weekly_nutrition_summary.dart';
+import 'package:shoply/data/models/workout.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
-import 'package:shoply/data/services/avo_app_knowledge.dart';
 import 'package:shoply/data/services/avo_assistant_models.dart';
+import 'package:shoply/data/services/avo_consents.dart';
+import 'package:shoply/data/services/avo_conversation.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
-import 'package:shoply/data/services/avo_system_prompt.dart';
-import 'package:shoply/data/services/avo_tool_declarations.dart';
+import 'package:shoply/data/services/claude_service.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
+import 'package:shoply/data/services/meal_plan_aggregator.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/recipe_offer_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
+import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/data/services/unread_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/data/services/water_log_service.dart';
 import 'package:shoply/data/services/weight_log_service.dart';
+import 'package:shoply/data/services/workout_log_service.dart';
+import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
+import 'package:shoply/presentation/providers/meal_plan_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
@@ -44,7 +53,7 @@ import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide FunctionResponse;
+
 
 export 'package:shoply/data/services/avo_assistant_models.dart';
 
@@ -66,41 +75,29 @@ class AvoAssistantService {
   static final AvoAssistantService instance = AvoAssistantService._();
   AvoAssistantService._();
 
-  GenerativeModel? _model;
-  ChatSession? _chatSession;
   final _supabase = Supabase.instance.client;
 
-  /// Number of user messages kept in the chat history. The SDK resends the
-  /// whole history every turn, so it is trimmed to bound latency and cost.
-  static const _maxHistoryUserTurns = 10;
+  final AvoConversation _conversation = AvoConversation();
+  final AvoPendingDeletes _pendingDeletes = AvoPendingDeletes();
 
-  /// Context string sent with the last message. Context is only resent when
-  /// it changed (or after the history was reset/trimmed).
-  String? _lastContextStr;
+  /// Answer rounds per question (answer → tool results → next answer).
+  static const _maxRounds = 8;
 
-  /// User the current chat session belongs to; a different user (sign-out,
-  /// account switch) gets a fresh session so no list names, items or
-  /// allergies leak between accounts.
+  /// User the conversation belongs to; a different user (sign-out, account
+  /// switch) gets a fresh one so no list names, items or allergies leak
+  /// between accounts.
   String? _sessionUserId;
   StreamSubscription<AuthState>? _authSubscription;
+  bool _initialized = false;
 
-  bool get isInitialized => _model != null && _chatSession != null;
+  bool get isInitialized => _initialized;
 
   // ── Lifecycle ────────────────────────────────────────────────────
 
+  /// Avo talks to Claude through the Edge Function `ai`; there is no key in
+  /// the app, so getting ready only means following the signed-in user.
   Future<void> initialize() async {
-    final apiKey = Env.geminiApiKey;
-    if (apiKey.isEmpty) {
-      debugPrint('❌ [AVO] Gemini API key is empty');
-      return;
-    }
-    _model = GenerativeModel(
-      model: 'gemini-2.0-flash-lite',
-      apiKey: apiKey,
-      systemInstruction: Content.text(avoSystemPrompt),
-      tools: buildAvoTools(),
-    );
-    _chatSession = _model!.startChat();
+    if (_initialized) return;
     _sessionUserId = _supabase.auth.currentUser?.id;
     _authSubscription ??= _supabase.auth.onAuthStateChange.listen((data) {
       final userId = data.session?.user.id;
@@ -109,129 +106,241 @@ class AvoAssistantService {
         resetChat();
       }
     });
-    debugPrint('✅ [AVO] Assistant initialized with function calling');
+    _initialized = true;
+    debugPrint('✅ [AVO] Assistant ready (Claude via Edge Function)');
   }
 
+  /// "Neues Gespräch": forgets the conversation and every pending deletion.
   void resetChat() {
-    if (_model != null) _chatSession = _model!.startChat();
-    _lastContextStr = null;
+    _conversation.reset();
+    _pendingDeletes.clear();
   }
 
   void dispose() {
     _authSubscription?.cancel();
     _authSubscription = null;
-    _chatSession = null;
-    _model = null;
+    _initialized = false;
+    resetChat();
   }
 
-  /// Restarts the session with only the last [_maxHistoryUserTurns] user
-  /// messages (and everything after them). Cuts only at a plain user text
-  /// turn so function call/response pairs stay together.
-  void _trimHistory() {
-    final session = _chatSession;
-    final model = _model;
-    if (session == null || model == null) return;
-    final history = session.history.toList();
-    final userTurnStarts = <int>[
-      for (var i = 0; i < history.length; i++)
-        if (history[i].role == 'user' &&
-            history[i].parts.any((p) => p is TextPart))
-          i,
-    ];
-    if (userTurnStarts.length <= _maxHistoryUserTurns) return;
-    final cut = userTurnStarts[userTurnStarts.length - _maxHistoryUserTurns];
-    _chatSession = model.startChat(history: history.sublist(cut));
-    // The trimmed history may have lost the context; resend it next turn.
-    _lastContextStr = null;
-  }
+  /// Stops the answer that is being written ("Stopp").
+  void stop() => ClaudeService.instance.cancelAvoStream();
 
   // ── Chat entry point ─────────────────────────────────────────────
 
   /// Send a message to Avo. The chat screen passes its [ref] so the
   /// service can call Riverpod notifiers (settings bridge, item provider,
-  /// etc.) while executing function calls.
+  /// etc.) while running tool calls.
   Future<AvoResponse> chat(
     String userMessage, {
     required WidgetRef ref,
     AvoContext? context,
   }) async {
-    if (!isInitialized) {
-      return const AvoResponse(
-        message: "I'm not ready yet — give me a moment!",
-        expression: AvoExpressionType.confused,
-      );
-    }
+    return _ask(userMessage, ref, context, onText: (_) {});
+  }
+
+  /// Like [chat], but reports the answer text while it is written.
+  Stream<String> chatStream(
+    String userMessage, {
+    required WidgetRef ref,
+    AvoContext? context,
+    void Function(AvoResponse response)? onDone,
+  }) {
+    final controller = StreamController<String>();
+    _ask(userMessage, ref, context, onText: controller.add).then((response) {
+      onDone?.call(response);
+    }).whenComplete(controller.close);
+    return controller.stream;
+  }
+
+  Future<AvoResponse> _ask(
+    String userMessage,
+    WidgetRef ref,
+    AvoContext? context, {
+    required void Function(String delta) onText,
+  }) async {
+    if (!_initialized) await initialize();
+    if (_conversation.isExpired) resetChat();
+
+    final consents = await AvoConsents.load();
+    _conversation.applyConsents(health: consents.health, body: consents.body);
+    _conversation.toolsVariant ??=
+        ref.read(offersRemoteEnabledProvider) ? 'full' : 'no_offers';
+
+    final payloads = <AvoWidgetPayload>[];
+    final mark = _conversation.addQuestion(userMessage);
+    _conversation.trim();
+    var answer = '';
 
     try {
-      // The context (lists, items, profile) is only sent when it changed:
-      // the chat history already carries the previous one.
-      final contextStr = _buildContextString(context);
-      final sendContext = contextStr.isNotEmpty && contextStr != _lastContextStr;
-      final fullMessage = sendContext
-          ? 'Context:\n$contextStr\n\nUser: $userMessage'
-          : userMessage;
-      if (sendContext) _lastContextStr = contextStr;
+      for (var round = 0; round < _maxRounds; round++) {
+        final done = await _streamOneAnswer(
+          ref,
+          context,
+          consents: consents,
+          onText: onText,
+        );
+        _conversation.addAnswer(done.content, contextMessage: done.contextMessage);
+        final text = AvoConversation.textOf(done.content);
+        if (text.isNotEmpty) answer = text;
+        if (done.stopReason != 'tool_use') break;
 
-      final payloads = <AvoWidgetPayload>[];
-      var response = await _chatSession!.sendMessage(Content.text(fullMessage));
-
-      // Function-calling loop. Bounded to avoid runaway chains.
-      for (var turn = 0; turn < 4; turn++) {
-        final calls = response.functionCalls.toList();
-        if (calls.isEmpty) break;
-
-        final responses = <FunctionResponse>[];
-        for (final call in calls) {
-          final result = await _runTool(call, ref, context, payloads);
-          responses.add(FunctionResponse(call.name, result));
+        final results = <Map<String, dynamic>>[];
+        for (final call in done.toolCalls) {
+          results.add(await _runToolCall(call, ref, context, payloads, consents));
         }
-        response =
-            await _chatSession!.sendMessage(Content.functionResponses(responses));
+        _conversation.addToolResults(results);
+        if (round == _maxRounds - 1) {
+          // Out of rounds with tool results pending: one more question
+          // would make the history end on unanswered tools, so close here.
+          _conversation.rollback(mark);
+          return AvoResponse(
+            message: _t(ref, 'avo_error_too_many_steps'),
+            payloads: payloads,
+            expression: AvoExpressionType.confused,
+          );
+        }
       }
-
-      _trimHistory();
-
-      final text = (response.text ?? '').trim();
       return AvoResponse(
-        message: text,
+        message: answer,
         payloads: payloads,
-        expression: _inferExpression(text, payloads),
+        expression: _inferExpression(answer, payloads),
+      );
+    } on _AvoStreamFailure catch (failure) {
+      _conversation.rollback(mark);
+      debugPrint('❌ [AVO] Answer failed: ${failure.code}');
+      return AvoResponse(
+        message: _t(ref, _errorKeyFor(failure.code)),
+        payloads: payloads,
+        expression: AvoExpressionType.confused,
       );
     } catch (e) {
+      _conversation.rollback(mark);
       debugPrint('❌ [AVO] Chat error: $e');
-      // A turn that failed mid function-call leaves an unanswered call in the
-      // history, which would break every later message; start over then.
-      // Either way the next message carries the context again.
-      final lastTurn = _chatSession?.history.lastOrNull;
-      if (lastTurn != null && lastTurn.parts.any((p) => p is FunctionCall)) {
-        resetChat();
-      }
-      _lastContextStr = null;
-      final err = e.toString().toLowerCase();
-      if (err.contains('429') || err.contains('quota') || err.contains('resource_exhausted')) {
-        return const AvoResponse(
-          message: "I've hit my thinking limit for now. Try again in a bit!",
-          expression: AvoExpressionType.confused,
-        );
-      }
-      return const AvoResponse(
-        message: "Something went wrong — could you try again?",
+      return AvoResponse(
+        message: _t(ref, 'avo_error_generic'),
+        payloads: payloads,
         expression: AvoExpressionType.confused,
       );
     }
   }
 
+  /// One streamed answer of the server task `avo_chat`.
+  Future<AvoMessageDone> _streamOneAnswer(
+    WidgetRef ref,
+    AvoContext? context, {
+    required ({bool health, bool body}) consents,
+    required void Function(String delta) onText,
+  }) async {
+    final input = {
+      'messages': _conversation.messages,
+      'context': _contextJson(ref, context, consents),
+      'tools_variant': _conversation.toolsVariant,
+    };
+    AvoMessageDone? done;
+    await for (final event in ClaudeService.instance.streamAvo(input)) {
+      switch (event) {
+        case AvoTextDelta(:final text):
+          onText(text);
+        case AvoMessageDone():
+          done = event;
+        case AvoStreamError(:final code):
+          throw _AvoStreamFailure(code);
+      }
+    }
+    final result = done;
+    if (result == null) throw const _AvoStreamFailure('provider_error');
+    return result;
+  }
+
+  static String _t(WidgetRef ref, String key) =>
+      AppTranslations.get(key, ref.read(languageProvider));
+
+  static String _errorKeyFor(String code) => switch (code) {
+        'quota_exceeded' || 'rate_limited' => 'avo_error_limit',
+        'network_error' || 'timeout' => 'avo_error_offline',
+        'ai_disabled' => 'avo_error_unavailable',
+        'refused' => 'avo_error_refused',
+        _ => 'avo_error_generic',
+      };
+
+  /// The context of the question (server `avo_chat`): today, where the
+  /// person is, which modules are on, and allergies or diet only with the
+  /// consent "Ernährung und Allergien".
+  Map<String, Object?> _contextJson(
+    WidgetRef ref,
+    AvoContext? context,
+    ({bool health, bool body}) consents,
+  ) {
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final screen = ref.read(avoScreenContextProvider);
+    final listId = screen?.listId ?? context?.currentListId;
+    return {
+      'today': '${now.year}-${two(now.month)}-${two(now.day)}',
+      if (screen != null) 'screen': screen.screen,
+      if (listId != null && RegExp(r'^[A-Za-z0-9_-]{1,64}$').hasMatch(listId))
+        'list_id': listId,
+      'modules': {
+        'offers': ref.read(offersAvailableProvider),
+        'calories': ref.read(moduleEnabledProvider(AppModule.calories)),
+        'meal_plan': ref.read(moduleEnabledProvider(AppModule.mealPlan)),
+        'cost_split': ref.read(moduleEnabledProvider(AppModule.costSplit)),
+      },
+      'consent_health': consents.health,
+      'consent_body': consents.body,
+      if (consents.health && (context?.allergies?.isNotEmpty ?? false))
+        'allergies': context!.allergies,
+      if (consents.health && (context?.dietPreferences?.isNotEmpty ?? false))
+        'diet': context!.dietPreferences,
+    };
+  }
+
   // ── Tool dispatcher ──────────────────────────────────────────────
 
+  /// Runs one checked tool call and answers with its tool_result block.
+  Future<Map<String, dynamic>> _runToolCall(
+    AvoToolCall call,
+    WidgetRef ref,
+    AvoContext? context,
+    List<AvoWidgetPayload> payloads,
+    ({bool health, bool body}) consents,
+  ) async {
+    final error = call.error;
+    if (error != null) {
+      return AvoConversation.toolResult(call.id, error, isError: true);
+    }
+    if (_bodyDataTools.contains(call.name) && !consents.body) {
+      payloads.add(AvoWidgetPayload.consentRequest(AvoConsentKind.body));
+      return AvoConversation.toolResult(
+        call.id,
+        'The person has not shared calories, weight and goals with Avo. The '
+            'app shows a card to share them; ask them to tap it.',
+        isError: true,
+      );
+    }
+    final result = await _runTool(call.name, call.input, ref, context, payloads);
+    final failed = result['error'] != null || result['not_available'] == true;
+    return AvoConversation.toolResult(call.id, result, isError: failed);
+  }
+
+  /// Tools that read calories, weight or goals (server BODY_DATA_TOOLS).
+  static const _bodyDataTools = {
+    'get_nutrition_status',
+    'get_weekly_nutrition_summary',
+    'setup_nutrition_goal',
+    'get_challenge_status',
+  };
+
   Future<Map<String, Object?>> _runTool(
-    FunctionCall call,
+    String name,
+    Map<String, Object?> args,
     WidgetRef ref,
     AvoContext? context,
     List<AvoWidgetPayload> payloads,
   ) async {
-    final args = call.args;
     try {
-      switch (call.name) {
+      switch (name) {
         case 'search_recipes':
           return await _toolSearchRecipes(args, payloads);
         case 'get_saved_recipes':
@@ -258,8 +367,10 @@ class AvoAssistantService {
           return await _toolAddHistoryItems(args, ref);
         case 'update_setting':
           return await _toolUpdateSetting(args, ref, payloads);
+        case 'set_module':
+          return await _toolSetModule(args, ref);
         case 'get_app_info':
-          return _toolAppInfo(args, payloads);
+          return _toolAppInfo(args);
         case 'search_offers':
           return await _toolSearchOffers(args, ref, context);
         case 'get_restock_suggestions':
@@ -268,10 +379,6 @@ class AvoAssistantService {
           return await _toolGetPersonalizedDeals(args, ref);
         case 'split_trip_cost':
           return await _toolSplitTripCost(args);
-        case 'delete_item':
-          return await _toolDeleteItem(args, ref);
-        case 'delete_list':
-          return await _toolDeleteList(args, ref);
         case 'update_item':
           return await _toolUpdateItem(args, ref);
         case 'move_items':
@@ -292,16 +399,29 @@ class AvoAssistantService {
           return await _toolLogWater(args, ref);
         case 'log_weight':
           return await _toolLogWeight(args, ref);
-        case 'delete_food_log':
-          return await _toolDeleteFoodLog(args, ref);
+        case 'log_workout':
+          return await _toolLogWorkout(args);
         case 'get_weekly_nutrition_summary':
           return await _toolWeeklyNutritionSummary(ref);
         case 'get_challenge_status':
           return await _toolChallengeStatus(ref);
         case 'get_savings_summary':
           return await _toolSavingsSummary();
+        case 'get_plan':
+          return _toolGetPlan(args, ref);
+        case 'add_to_plan':
+          return await _toolAddToPlan(args, ref);
+        case 'move_in_plan':
+          return await _toolMoveInPlan(args, ref);
+        case 'plan_to_list':
+          return await _toolPlanToList(args, ref);
+        case 'propose_delete':
+          return await _toolProposeDelete(args, ref, payloads);
         default:
-          return {'error': 'Unknown tool ${call.name}'};
+          return {
+            'not_available': true,
+            'error': _t(ref, 'avo_tool_not_available'),
+          };
       }
     } catch (e) {
       return {'error': e.toString()};
@@ -439,43 +559,6 @@ class AvoAssistantService {
       'source': 'estimated',
       ...estimate,
     };
-  }
-
-  Future<Map<String, Object?>> _estimateNutrition(Recipe recipe) async {
-    try {
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash-lite',
-        apiKey: Env.geminiApiKey,
-        generationConfig: GenerationConfig(
-          responseMimeType: 'application/json',
-          responseSchema: Schema.object(properties: {
-            'calories': Schema.integer(),
-            'protein_g': Schema.number(),
-            'carbs_g': Schema.number(),
-            'fat_g': Schema.number(),
-          }),
-        ),
-      );
-      final ingredientList = recipe.ingredients
-          .map((i) => '- ${i.amount} ${i.unit} ${i.name}'.trim())
-          .join('\n');
-      final prompt =
-          'Estimate the nutrition PER SERVING for this recipe (${recipe.defaultServings} servings total). '
-          'Return a JSON object with calories (int), protein_g, carbs_g, fat_g.\n\n'
-          'Recipe: ${recipe.name}\nIngredients:\n$ingredientList';
-      final resp = await model.generateContent([Content.text(prompt)]);
-      final text = resp.text ?? '{}';
-      // The response is JSON thanks to responseMimeType.
-      final decoded = _parseJson(text);
-      return {
-        'calories': decoded['calories'] as int?,
-        'protein_g': (decoded['protein_g'] as num?)?.toDouble(),
-        'carbs_g': (decoded['carbs_g'] as num?)?.toDouble(),
-        'fat_g': (decoded['fat_g'] as num?)?.toDouble(),
-      };
-    } catch (e) {
-      return {'error': e.toString()};
-    }
   }
 
   /// Adds every ingredient of a recipe to a list — "add ingredients for
@@ -781,22 +864,6 @@ class AvoAssistantService {
     return result.toJson();
   }
 
-  Map<String, Object?> _toolAppInfo(
-    Map<String, Object?> args,
-    List<AvoWidgetPayload> payloads,
-  ) {
-    final topic = (args['topic'] as String?) ?? '';
-    final answer = AvoAppKnowledge.lookup(topic);
-    if (answer == null) {
-      return {
-        'error': 'No info for topic "$topic"',
-        'available_topics': AvoAppKnowledge.topics.keys.toList(),
-      };
-    }
-    payloads.add(AvoWidgetPayload.appInfo(topic: topic, answer: answer));
-    return {'topic': topic, 'answer': answer};
-  }
-
   /// Offers for one product at the market of the list in context (Kap. 12:
   /// only that market, never a comparison across markets, prices "laut
   /// Händler", "in deiner Region"). Without a region or a confirmed market
@@ -1012,46 +1079,6 @@ class AvoAssistantService {
       'each_share': share,
       'participants': [currentUserName, ...names],
     };
-  }
-
-  Future<Map<String, Object?>> _toolDeleteItem(
-    Map<String, Object?> args,
-    WidgetRef ref,
-  ) async {
-    final listId = args['list_id'] as String?;
-    final itemId = args['item_id'] as String?;
-    final itemName = (args['item_name'] as String?) ?? 'this item';
-    final confirm = args['confirm'] as bool? ?? false;
-    if (listId == null || itemId == null) {
-      return {'error': 'list_id and item_id are required'};
-    }
-    if (!confirm) {
-      return {
-        'requires_confirmation': true,
-        'question': 'Remove "$itemName" from the list? This can\'t be undone.',
-      };
-    }
-    await ref.read(itemsNotifierProvider(listId).notifier).deleteItem(itemId);
-    return {'success': true, 'deleted': itemName};
-  }
-
-  Future<Map<String, Object?>> _toolDeleteList(
-    Map<String, Object?> args,
-    WidgetRef ref,
-  ) async {
-    final listId = args['list_id'] as String?;
-    final listName = (args['list_name'] as String?) ?? 'this list';
-    final confirm = args['confirm'] as bool? ?? false;
-    if (listId == null) return {'error': 'list_id is required'};
-    if (!confirm) {
-      return {
-        'requires_confirmation': true,
-        'question':
-            'Delete the whole list "$listName" and everything on it? This can\'t be undone.',
-      };
-    }
-    await ref.read(listsNotifierProvider.notifier).deleteList(listId);
-    return {'success': true, 'deleted': listName};
   }
 
   Future<Map<String, Object?>> _toolUpdateItem(
@@ -1576,30 +1603,6 @@ class AvoAssistantService {
     };
   }
 
-  Future<Map<String, Object?>> _toolDeleteFoodLog(
-    Map<String, Object?> args,
-    WidgetRef ref,
-  ) async {
-    final entryId = args['entry_id'] as String?;
-    final foodName = (args['food_name'] as String?) ?? 'this entry';
-    final confirm = args['confirm'] as bool? ?? false;
-    if (entryId == null || entryId.isEmpty) {
-      return {
-        'error': 'entry_id is required — call get_nutrition_status first '
-            'to find the entry id.',
-      };
-    }
-    if (!confirm) {
-      return {
-        'requires_confirmation': true,
-        'question': 'Remove "$foodName" from today\'s food diary?',
-      };
-    }
-    await FoodLogService.instance.deleteEntry(entryId);
-    invalidateNutritionLog(ref);
-    return {'success': true, 'deleted': foodName};
-  }
-
   Future<Map<String, Object?>> _toolWeeklyNutritionSummary(WidgetRef ref) async {
     if (!ref.read(calorieTrackingEnabledProvider)) {
       return {'tracking_enabled': false, 'note': _trackingDisabledNote};
@@ -1742,38 +1745,6 @@ class AvoAssistantService {
     return result;
   }
 
-  /// One-shot Gemini estimate for a free-text food description ("1 banana",
-  /// "200 g chicken breast") — same pattern as [_estimateNutrition] for
-  /// recipes. Returns null when no usable estimate came back.
-  Future<Map<String, Object?>?> _estimateFoodNutrition(String description) async {
-    try {
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash-lite',
-        apiKey: Env.geminiApiKey,
-        generationConfig: GenerationConfig(
-          responseMimeType: 'application/json',
-          responseSchema: Schema.object(properties: {
-            'calories': Schema.integer(),
-            'protein_g': Schema.number(),
-            'carbs_g': Schema.number(),
-            'fat_g': Schema.number(),
-          }),
-        ),
-      );
-      final prompt =
-          'Estimate the nutrition of this food as actually eaten: "$description". '
-          'If no amount is given, assume one typical portion. Return JSON with '
-          'calories (int), protein_g, carbs_g, fat_g.';
-      final resp = await model.generateContent([Content.text(prompt)]);
-      final decoded = _parseJson(resp.text ?? '{}');
-      if (decoded['calories'] == null) return null;
-      return decoded;
-    } catch (e) {
-      debugPrint('❌ [AVO] Food nutrition estimate failed: $e');
-      return null;
-    }
-  }
-
   static MealType _mealTypeFromArg(String? value) {
     switch (value?.toLowerCase().trim()) {
       case 'breakfast':
@@ -1793,6 +1764,342 @@ class AvoAssistantService {
   }
 
   static double _round1(double v) => (v * 10).round() / 10;
+
+  // ── Modules, workouts, meal plan, deletions ──────────────────────
+
+  static AppModule? _moduleFromId(String? id) {
+    for (final module in AppModule.values) {
+      if (module.storageKey == id) return module;
+    }
+    return null;
+  }
+
+  Future<Map<String, Object?>> _toolSetModule(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    final module = _moduleFromId(args['module'] as String?);
+    final enabled = args['enabled'] as bool?;
+    if (module == null || enabled == null) {
+      return {'error': 'module and enabled are required'};
+    }
+    if (!module.released) {
+      return {'not_available': true, 'error': _t(ref, 'avo_tool_not_available')};
+    }
+    await ref.read(appModulesProvider.notifier).setEnabled(module, enabled);
+    return {'success': true, 'module': module.storageKey, 'enabled': enabled};
+  }
+
+  /// What the app knows at runtime; the static app knowledge is in the
+  /// server's system prompt.
+  Map<String, Object?> _toolAppInfo(Map<String, Object?> args) {
+    final subscription = SubscriptionService.instance;
+    switch (args['topic']) {
+      case 'my_subscription':
+        return {'is_pro': subscription.isSubscribed, 'plan_name': AppBrand.proName};
+      case 'pro_plan':
+        return {
+          'plan_name': AppBrand.proName,
+          'offers_are_never_pro': true,
+          'prices_from_app_store': [
+            for (final p in subscription.products)
+              {'title': p.title, 'price': p.price},
+          ],
+        };
+      default:
+        return {'error': 'topic must be pro_plan or my_subscription'};
+    }
+  }
+
+  Future<Map<String, Object?>> _toolLogWorkout(Map<String, Object?> args) async {
+    final activity = (args['activity'] as String?)?.trim() ?? '';
+    final minutes = (args['duration_min'] as num?)?.toInt() ?? 0;
+    if (activity.isEmpty || minutes <= 0) {
+      return {'error': 'activity and duration_min are required'};
+    }
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return {'error': 'not signed in'};
+    final lower = activity.toLowerCase();
+    final type = WorkoutType.values.firstWhere(
+      (t) => lower.contains(t.name),
+      orElse: () => WorkoutType.other,
+    );
+    final given = (args['calories'] as num?)?.toInt();
+    final kcal = given ??
+        estimateWorkoutCalories(
+          type: type,
+          intensity: WorkoutIntensity.moderate,
+          durationMin: minutes,
+        ).kcal;
+    final now = DateTime.now();
+    await WorkoutLogService.instance.upsert(Workout(
+      id: const Uuid().v4(),
+      userId: userId,
+      startedAt: now.subtract(Duration(minutes: minutes)),
+      durationMin: minutes,
+      type: type,
+      calories: kcal,
+      createdAt: now,
+    ));
+    return {
+      'success': true,
+      'activity': type.name,
+      'duration_min': minutes,
+      'calories': kcal,
+      'calories_estimated': given == null,
+    };
+  }
+
+  bool _planOn(WidgetRef ref) => ref.read(moduleEnabledProvider(AppModule.mealPlan));
+
+  Map<String, Object?> _planOff(WidgetRef ref) =>
+      {'not_available': true, 'error': _t(ref, 'avo_plan_module_off')};
+
+  static String _ymd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  static DateTime? _day(Object? value) {
+    final parsed = DateTime.tryParse(value as String? ?? '');
+    return parsed == null ? null : DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  Map<String, Object?> _toolGetPlan(Map<String, Object?> args, WidgetRef ref) {
+    if (!_planOn(ref)) return _planOff(ref);
+    final now = DateTime.now();
+    final from = _day(args['from']) ?? DateTime(now.year, now.month, now.day);
+    final days = ((args['days'] as num?)?.toInt() ?? 7).clamp(1, 14);
+    return {
+      'from': _ymd(from),
+      'days': days,
+      'entries': [
+        for (var i = 0; i < days; i++)
+          for (final e in ref.read(planEntriesForDayProvider(from.add(Duration(days: i)))))
+            {
+              'entry_id': e.id,
+              'date': _ymd(e.planDate),
+              'recipe': e.snapshot.name,
+              'servings': e.servings,
+              if (e.snapshot.kcalPerServing != null)
+                'kcal_per_serving': e.snapshot.kcalPerServing,
+              'on_list': e.isSent,
+            },
+      ],
+    };
+  }
+
+  Future<Map<String, Object?>> _toolAddToPlan(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    if (!_planOn(ref)) return _planOff(ref);
+    final day = _day(args['date']);
+    if (day == null) return {'error': 'date must be YYYY-MM-DD'};
+    final recipe = await _resolveRecipe(
+      args['recipe_id'] as String?,
+      args['recipe_name'] as String?,
+    );
+    if (recipe == null) return {'error': 'Recipe not found'};
+    final servings = (args['servings'] as num?)?.toInt() ??
+        ref.read(mealPlanSettingsProvider).defaultServings;
+    final added = await ref
+        .read(mealPlanControllerProvider)
+        .addRecipeToPlan(recipe.id, day, servings, recipe: recipe);
+    if (added == null) return {'error': 'Recipe not found'};
+    return {
+      'success': true,
+      'entry_id': added.entry.id,
+      'date': _ymd(day),
+      'recipe': recipe.name,
+      'servings': servings,
+    };
+  }
+
+  Future<Map<String, Object?>> _toolMoveInPlan(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    if (!_planOn(ref)) return _planOff(ref);
+    final id = args['entry_id'] as String?;
+    final day = _day(args['date']);
+    if (id == null || day == null) return {'error': 'entry_id and date are required'};
+    await ref.read(mealPlanControllerProvider).moveEntry(id, day);
+    return {'success': true, 'entry_id': id, 'date': _ymd(day)};
+  }
+
+  Future<Map<String, Object?>> _toolPlanToList(
+    Map<String, Object?> args,
+    WidgetRef ref,
+  ) async {
+    if (!_planOn(ref)) return _planOff(ref);
+    final from = _day(args['from']);
+    final listId = args['list_id'] as String?;
+    if (from == null || listId == null) return {'error': 'from and list_id are required'};
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final result = await ref.read(mealPlanControllerProvider).sendToList(
+          weekStart: planWeekStart(from),
+          range: from.isAfter(today) || from == today
+              ? PlanRange.fromToday
+              : PlanRange.wholeWeek,
+          listId: listId,
+          noteFor: (names) => names.isEmpty ? null : names.join(', '),
+        );
+    return {
+      'success': result.failedNames.isEmpty,
+      'added': result.addedCount,
+      if (result.failedNames.isNotEmpty) 'failed': result.failedNames,
+    };
+  }
+
+  /// Avo cannot delete: it asks for a card, and only the person's tap on it
+  /// deletes ([confirmPendingDelete]). The card shows the app's own stored
+  /// name, never the model's [label].
+  Future<Map<String, Object?>> _toolProposeDelete(
+    Map<String, Object?> args,
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) async {
+    final target = avoDeleteTargetFromJson(args['target_type'] as String?);
+    final id = (args['target_id'] as String?)?.trim() ?? '';
+    final label = (args['label'] as String?)?.trim() ?? '';
+    if (target == null || id.isEmpty) {
+      return {'error': 'target_type and target_id are required'};
+    }
+    final found = await _lookUpDeleteTarget(target, id);
+    if (found == null) {
+      return {'error': 'Nothing with this id exists for the person, or it cannot be deleted from Avo yet.'};
+    }
+    if (label.isNotEmpty && !_sameName(found.name, label)) {
+      return {'error': 'This id belongs to "${found.name}", not "$label". Check the id first.'};
+    }
+    final pending = _pendingDeletes.propose(
+      target: target,
+      targetId: id,
+      name: found.name,
+      parentId: found.parentId,
+      version: found.version,
+    );
+    payloads.add(AvoWidgetPayload.confirmDelete(pending));
+    return {
+      'shown': true,
+      'note': 'The app shows a confirmation card. Nothing is deleted until the person taps it.',
+    };
+  }
+
+  static bool _sameName(String a, String b) =>
+      a.trim().toLowerCase() == b.trim().toLowerCase() ||
+      a.toLowerCase().contains(b.toLowerCase()) ||
+      b.toLowerCase().contains(a.toLowerCase());
+
+  /// The target as the person's own rights see it (RLS); null when it does
+  /// not exist for them or Avo cannot delete that kind yet.
+  Future<({String name, String? parentId, String? version})?> _lookUpDeleteTarget(
+    AvoDeleteTarget target,
+    String id,
+  ) async {
+    switch (target) {
+      case AvoDeleteTarget.item:
+        final row = await _supabase
+            .from('shopping_items')
+            .select('name, list_id, updated_at')
+            .eq('id', id)
+            .maybeSingle();
+        if (row == null) return null;
+        return (
+          name: row['name'] as String? ?? '',
+          parentId: row['list_id'] as String?,
+          version: row['updated_at']?.toString(),
+        );
+      case AvoDeleteTarget.list:
+        final row = await _supabase
+            .from('shopping_lists')
+            .select('name, updated_at')
+            .eq('id', id)
+            .maybeSingle();
+        if (row == null) return null;
+        return (
+          name: row['name'] as String? ?? '',
+          parentId: null,
+          version: row['updated_at']?.toString(),
+        );
+      case AvoDeleteTarget.foodLog:
+        final row = await _supabase
+            .from('food_log_entries')
+            .select('food_name')
+            .eq('id', id)
+            .maybeSingle();
+        if (row == null) return null;
+        return (name: row['food_name'] as String? ?? '', parentId: null, version: null);
+      case AvoDeleteTarget.planEntry:
+      case AvoDeleteTarget.historyTrip:
+      case AvoDeleteTarget.listMember:
+        return null;
+    }
+  }
+
+  /// Runs a deletion Avo proposed, from the tap on its card: only with the
+  /// one-time [token], within 10 minutes and while the target is unchanged.
+  /// A typed or spoken "ja" never gets here.
+  Future<bool> confirmPendingDelete(String token, WidgetRef ref) async {
+    final pending = _pendingDeletes.take(token);
+    if (pending == null) return false;
+    final current = await _lookUpDeleteTarget(pending.target, pending.targetId);
+    if (current == null || current.version != pending.version) return false;
+    switch (pending.target) {
+      case AvoDeleteTarget.item:
+        final listId = pending.parentId;
+        if (listId == null) return false;
+        await ref.read(itemsNotifierProvider(listId).notifier).deleteItem(pending.targetId);
+      case AvoDeleteTarget.list:
+        await ref.read(listsNotifierProvider.notifier).deleteList(pending.targetId);
+      case AvoDeleteTarget.foodLog:
+        await FoodLogService.instance.deleteEntry(pending.targetId);
+        invalidateNutritionLog(ref);
+      case AvoDeleteTarget.planEntry:
+      case AvoDeleteTarget.historyTrip:
+      case AvoDeleteTarget.listMember:
+        return false;
+    }
+    return true;
+  }
+
+  /// Nutrition per serving from the server task `nutrition_estimate`.
+  Future<Map<String, Object?>> _estimateNutrition(Recipe recipe) async {
+    final ingredients = recipe.ingredients
+        .map((i) => '- ${i.amount} ${i.unit} ${i.name}'.trim())
+        .join('\n');
+    final estimate = await _askNutrition(
+      '${recipe.name}\n$ingredients',
+      servings: recipe.defaultServings,
+    );
+    return estimate ?? {'error': 'No estimate available'};
+  }
+
+  /// Nutrition of a free-text food ("1 Banane", "200 g Hähnchenbrust").
+  Future<Map<String, Object?>?> _estimateFoodNutrition(String description) =>
+      _askNutrition(description);
+
+  Future<Map<String, Object?>?> _askNutrition(String text, {int? servings}) async {
+    try {
+      final result = await ClaudeService.instance.run(
+        'nutrition_estimate',
+        {'text': text, if (servings != null && servings > 0) 'servings': servings},
+        timeout: const Duration(seconds: 15),
+      );
+      final kcal = (result['kcal'] as num?)?.round();
+      if (kcal == null) return null;
+      return {
+        'calories': kcal,
+        'protein_g': (result['protein_g'] as num?)?.toDouble(),
+        'carbs_g': (result['carbs_g'] as num?)?.toDouble(),
+        'fat_g': (result['fat_g'] as num?)?.toDouble(),
+        'estimated': true,
+      };
+    } on ClaudeException catch (e) {
+      debugPrint('❌ [AVO] Nutrition estimate failed: ${e.code}');
+      return null;
+    }
+  }
 
   // ── Data access helpers ──────────────────────────────────────────
 
@@ -1829,67 +2136,6 @@ class AvoAssistantService {
 
   // ── Context builder ──────────────────────────────────────────────
 
-  String _buildContextString(AvoContext? context) {
-    if (context == null) return '';
-    final parts = <String>[];
-
-    if (context.lists != null && context.lists!.isNotEmpty) {
-      final info = context.lists!
-          .map((l) => '- "${l.name}" (ID:${l.id}, ${l.itemCount ?? 0} items)')
-          .join('\n');
-      parts.add('Lists:\n$info');
-    }
-    if (context.allListItems != null) {
-      for (final entry in context.allListItems!.entries) {
-        if (entry.value.isEmpty) continue;
-        String listName = 'Unknown';
-        if (context.lists != null) {
-          for (final l in context.lists!) {
-            if (l.id == entry.key) {
-              listName = l.name;
-              break;
-            }
-          }
-        }
-        final items = entry.value
-            .take(20)
-            .map((i) => '  - ${i.name} (id:${i.id})${i.isChecked ? ' ✓' : ''}')
-            .join('\n');
-        parts.add('"$listName" items:\n$items');
-      }
-    }
-    if (context.dietPreferences != null && context.dietPreferences!.isNotEmpty) {
-      parts.add('User diet: ${context.dietPreferences!.join(', ')}');
-    }
-    if (context.allergies != null && context.allergies!.isNotEmpty) {
-      parts.add('User allergies: ${context.allergies!.join(', ')}');
-    }
-    if (context.userName != null && context.userName!.isNotEmpty) {
-      parts.add('User name: ${context.userName}');
-    }
-    if (context.appPriorities != null && context.appPriorities!.isNotEmpty) {
-      final labels = context.appPriorities!
-          .map((id) => _appPriorityLabels[id])
-          .whereType<String>()
-          .toList();
-      if (labels.isNotEmpty) {
-        parts.add('What this user said matters to them: ${labels.join(', ')} '
-            '(see system instructions for how to use this)');
-      }
-    }
-    return parts.join('\n\n');
-  }
-
-  /// Human-readable form of each `AppPriority.id`
-  /// (`core/constants/app_priorities.dart`), for the model context only —
-  /// never shown to the user directly.
-  static const _appPriorityLabels = {
-    'save_money': 'saving money',
-    'share_lists': 'sharing lists with others',
-    'eat_healthier': 'eating healthier',
-    'discover_recipes': 'discovering new recipes',
-    'stay_organized': 'staying organized',
-  };
 
   AvoExpressionType _inferExpression(String text, List<AvoWidgetPayload> payloads) {
     final m = text.toLowerCase();
@@ -1915,17 +2161,12 @@ class AvoAssistantService {
     return [];
   }
 
-  static Map<String, Object?> _parseJson(String text) {
-    try {
-      final cleaned = text
-          .replaceAll(RegExp(r'```(?:json)?'), '')
-          .replaceAll('```', '')
-          .trim();
-      final decoded = jsonDecode(cleaned);
-      if (decoded is Map) return decoded.cast<String, Object?>();
-      return {};
-    } catch (_) {
-      return {};
-    }
-  }
+}
+
+/// An answer stream that ended with an error event (code as in
+/// [ClaudeException]).
+class _AvoStreamFailure implements Exception {
+  const _AvoStreamFailure(this.code);
+
+  final String code;
 }

@@ -7,7 +7,6 @@ import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
-import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
 
@@ -56,12 +55,13 @@ class AvoSettingsBridge {
     'language',
     'notifications',
     'display_name',
-    'diet_preferences',
-    'allergies',
+    'diet_add',
+    'diet_remove',
+    'allergies_add',
+    'allergies_remove',
     'age',
     'gender',
-    'height',
-    'calorie_tracking',
+    'height_cm',
     'zip_code',
   ];
 
@@ -78,9 +78,6 @@ class AvoSettingsBridge {
           return await _setLanguage(value);
         case 'notifications':
           return await _setNotifications(value);
-        case 'calorie_tracking':
-        case 'calorie_tracking_enabled':
-          return await _setCalorieTracking(value);
         case 'zip_code':
         case 'zip':
         case 'plz':
@@ -94,20 +91,23 @@ class AvoSettingsBridge {
             apply: (u, v) => u.copyWith(displayName: v),
             readCurrent: (u) => u.displayName,
           );
-        case 'diet_preferences':
-        case 'diet':
-          return await _setListField(
-            key: 'diet_preferences',
+        case 'diet_add':
+        case 'diet_remove':
+          return await _changeListEntry(
+            key: key,
             displayName: 'Diet preferences',
-            value: value,
+            entry: value,
+            add: key == 'diet_add',
             apply: (u, list) => u.copyWith(dietPreferences: list),
             readCurrent: (u) => u.dietPreferences,
           );
-        case 'allergies':
-          return await _setListField(
-            key: 'allergies',
+        case 'allergies_add':
+        case 'allergies_remove':
+          return await _changeListEntry(
+            key: key,
             displayName: 'Allergies',
-            value: value,
+            entry: value,
+            add: key == 'allergies_add',
             apply: (u, list) => u.copyWith(allergies: list),
             readCurrent: (u) => u.allergies,
           );
@@ -149,6 +149,7 @@ class AvoSettingsBridge {
             readCurrent: (u) => u.gender,
           );
         case 'height':
+        case 'height_cm':
           final h = value is num ? value.toDouble() : double.tryParse('$value');
           if (h == null || h < 50 || h > 300) {
             return SettingChangeResult(
@@ -311,31 +312,7 @@ class AvoSettingsBridge {
     return result;
   }
 
-  Future<SettingChangeResult> _setCalorieTracking(Object? value) async {
-    final enabled = _parseBool(value);
-    if (enabled == null) {
-      return SettingChangeResult(
-        success: false,
-        key: 'calorie_tracking',
-        displayName: 'Calorie tracking',
-        newValue: '$value',
-        error: 'Calorie tracking must be true or false',
-      );
-    }
-    final current = ref.read(calorieTrackingEnabledProvider);
-    await ref.read(calorieTrackingEnabledProvider.notifier).setEnabled(enabled);
-    await MascotNotificationService.instance
-        .rearmDinnerIdeasReminder(force: true);
-    return SettingChangeResult(
-      success: true,
-      key: 'calorie_tracking',
-      displayName: 'Calorie tracking',
-      oldValue: current ? 'on' : 'off',
-      newValue: enabled ? 'on' : 'off',
-    );
-  }
-
-  Future<SettingChangeResult> _setZipCode(Object? value) async {
+    Future<SettingChangeResult> _setZipCode(Object? value) async {
     final zip = value?.toString().trim() ?? '';
     // Empty clears the manual override; otherwise a 4-5 digit PLZ
     // (Germany uses 5, Austria 4 — same data the offer search expects).
@@ -391,21 +368,24 @@ class AvoSettingsBridge {
     );
   }
 
-  Future<SettingChangeResult> _setListField({
+  /// Adds or removes one entry of a list setting (allergies, diet), never
+  /// the whole list: one wrong word from Avo can't wipe someone's allergies.
+  Future<SettingChangeResult> _changeListEntry({
     required String key,
     required String displayName,
-    required Object? value,
+    required Object? entry,
+    required bool add,
     required UserModel Function(UserModel user, List<String> list) apply,
     required List<String> Function(UserModel user) readCurrent,
   }) async {
-    final list = _parseStringList(value);
-    if (list == null) {
+    final value = entry?.toString().trim() ?? '';
+    if (value.isEmpty) {
       return SettingChangeResult(
         success: false,
         key: key,
         displayName: displayName,
-        newValue: '$value',
-        error: '$displayName must be a list of strings',
+        newValue: '',
+        error: 'value must name one entry',
       );
     }
     final user = await ref.read(currentUserProvider.future);
@@ -414,20 +394,32 @@ class AvoSettingsBridge {
         success: false,
         key: key,
         displayName: displayName,
-        newValue: list.join(', '),
+        newValue: value,
         error: 'Not signed in',
       );
     }
-    final oldList = readCurrent(user);
-    final updated = apply(user, list);
-    await UserService().updateUserProfile(updated);
+    final current = readCurrent(user);
+    bool same(String a) => a.trim().toLowerCase() == value.toLowerCase();
+    final next = add
+        ? (current.any(same) ? current : [...current, value])
+        : current.where((e) => !same(e)).toList();
+    if (!add && next.length == current.length) {
+      return SettingChangeResult(
+        success: false,
+        key: key,
+        displayName: displayName,
+        newValue: value,
+        error: '"$value" is not in the list',
+      );
+    }
+    await UserService().updateUserProfile(apply(user, next));
     ref.invalidate(currentUserProvider);
     return SettingChangeResult(
       success: true,
       key: key,
       displayName: displayName,
-      oldValue: oldList.isEmpty ? 'none' : oldList.join(', '),
-      newValue: list.isEmpty ? 'none' : list.join(', '),
+      oldValue: current.isEmpty ? 'none' : current.join(', '),
+      newValue: next.isEmpty ? 'none' : next.join(', '),
     );
   }
 
@@ -440,16 +432,6 @@ class AvoSettingsBridge {
         s == 'enabled' || s == '1') return true;
     if (s == 'false' || s == 'off' || s == 'no' || s == 'disable' ||
         s == 'disabled' || s == '0') return false;
-    return null;
-  }
-
-  static List<String>? _parseStringList(Object? v) {
-    if (v == null) return [];
-    if (v is List) return v.map((e) => e.toString()).toList();
-    if (v is String) {
-      if (v.trim().isEmpty) return [];
-      return v.split(RegExp(r'[,;]')).map((e) => e.trim()).where((s) => s.isNotEmpty).toList();
-    }
     return null;
   }
 

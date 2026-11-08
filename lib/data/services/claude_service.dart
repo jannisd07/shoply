@@ -43,12 +43,47 @@ final class AvoTextDelta extends AvoStreamEvent {
 
 /// The finished assistant turn: all content blocks exactly as Claude sent
 /// them (text, tool_use, thinking), to be appended to the history unchanged.
+/// [contextMessage] is the server's context message for this question (store
+/// it right before the assistant turn); [toolCalls] are the checked tool
+/// calls in content order.
 final class AvoMessageDone extends AvoStreamEvent {
-  const AvoMessageDone(this.content, this.stopReason, {this.usage});
+  const AvoMessageDone(
+    this.content,
+    this.stopReason, {
+    this.usage,
+    this.contextMessage,
+    this.toolCalls = const [],
+  });
 
   final List<Map<String, dynamic>> content;
   final String stopReason;
   final Map<String, dynamic>? usage;
+  final Map<String, dynamic>? contextMessage;
+  final List<AvoToolCall> toolCalls;
+}
+
+/// One tool call of an Avo answer, checked by the server: run it with
+/// [input], or, when [error] is set, answer with an is_error tool_result
+/// carrying [error] and do not run it.
+final class AvoToolCall {
+  const AvoToolCall({
+    required this.id,
+    required this.name,
+    this.input = const {},
+    this.error,
+  });
+
+  factory AvoToolCall.fromJson(Map<String, dynamic> json) => AvoToolCall(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        input: (json['input'] as Map?)?.cast<String, Object?>() ?? const {},
+        error: json['error'] as String?,
+      );
+
+  final String id;
+  final String name;
+  final Map<String, Object?> input;
+  final String? error;
 }
 
 /// The stream failed and ends here; [code] as in [ClaudeException].
@@ -374,10 +409,19 @@ class _AvoStreamSession {
         }
         _sawMessage = true;
         final usage = data?['usage'];
+        final contextMessage = data?['context_message'];
+        final toolCalls = data?['tool_calls'];
         controller.add(AvoMessageDone(
           content.whereType<Map<String, dynamic>>().toList(),
           stopReason,
           usage: usage is Map<String, dynamic> ? usage : null,
+          contextMessage:
+              contextMessage is Map<String, dynamic> ? contextMessage : null,
+          toolCalls: [
+            if (toolCalls is List)
+              for (final call in toolCalls.whereType<Map<String, dynamic>>())
+                AvoToolCall.fromJson(call),
+          ],
         ));
       case 'error':
         final code = data?['code'];

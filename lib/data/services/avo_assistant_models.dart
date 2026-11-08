@@ -3,6 +3,8 @@ import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
+import 'package:shoply/data/services/avo_conversation.dart';
+import 'package:shoply/data/services/avo_consents.dart';
 
 // ════════════════════════════════════════════════════════════════════
 // RESPONSE / PAYLOAD MODELS
@@ -40,6 +42,8 @@ enum AvoPayloadKind {
   nutrition,
   settingChange,
   appInfo,
+  confirmDelete,
+  consentRequest,
 }
 
 class AvoWidgetPayload {
@@ -54,6 +58,8 @@ class AvoWidgetPayload {
   final AvoNutritionData? nutrition;
   final SettingChangeResult? settingChange;
   final AvoAppInfoData? appInfo;
+  final AvoPendingDelete? pendingDelete;
+  final AvoConsentKind? consentKind;
 
   const AvoWidgetPayload._({
     required this.kind,
@@ -67,6 +73,8 @@ class AvoWidgetPayload {
     this.nutrition,
     this.settingChange,
     this.appInfo,
+    this.pendingDelete,
+    this.consentKind,
   });
 
   factory AvoWidgetPayload.recipes(List<Recipe> recipes) =>
@@ -128,6 +136,14 @@ class AvoWidgetPayload {
         kind: AvoPayloadKind.settingChange,
         settingChange: result,
       );
+
+  /// A deletion Avo proposed; only a tap on this card deletes.
+  factory AvoWidgetPayload.confirmDelete(AvoPendingDelete pending) =>
+      AvoWidgetPayload._(kind: AvoPayloadKind.confirmDelete, pendingDelete: pending);
+
+  /// Asks to share data with Avo before a tool can use it.
+  factory AvoWidgetPayload.consentRequest(AvoConsentKind kind) =>
+      AvoWidgetPayload._(kind: AvoPayloadKind.consentRequest, consentKind: kind);
 
   factory AvoWidgetPayload.appInfo({
     required String topic,

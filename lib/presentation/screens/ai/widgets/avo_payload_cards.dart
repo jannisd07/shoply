@@ -10,6 +10,7 @@ import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/presentation/screens/ai/avo_chat_message.dart';
+import 'package:shoply/presentation/screens/ai/widgets/avo_action_cards.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 
 /// Shared card look for the rich chat payloads.
@@ -113,6 +114,10 @@ class AvoMessage extends StatelessWidget {
         return _SettingChangeCard(result: p.settingChange!);
       case AvoPayloadKind.appInfo:
         return _AppInfoCard(data: p.appInfo!);
+      case AvoPayloadKind.confirmDelete:
+        return AvoConfirmDeleteCard(pending: p.pendingDelete!);
+      case AvoPayloadKind.consentRequest:
+        return AvoConsentCard(kind: p.consentKind!);
     }
   }
 }
