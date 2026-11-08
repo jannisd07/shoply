@@ -1,641 +1,474 @@
-import 'dart:io' show Platform;
-import 'dart:ui';
+import 'dart:async';
 
-import 'package:dio/dio.dart';
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart'
     show openAppSettings;
-
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/core/widgets/design_system.dart';
+import 'package:shoply/core/design/design.dart';
+import 'package:shoply/core/localization/app_translations.dart';
+import 'package:shoply/core/utils/item_input_parser.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/list_import_service.dart';
-import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
+import 'package:shoply/presentation/screens/lists/widgets/import_review_sheet.dart';
+import 'package:shoply/presentation/screens/lists/widgets/import_status_capsule.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
+import 'package:shoply/presentation/widgets/design/status_row.dart';
 
-/// Opens the "+" attachment sheet: it morphs out of the button whose
-/// [plusButtonKey] is given, offers Kamera / Fotos / Dateien, runs the
-/// photo → items extraction inline (cancelable), and resolves with the
-/// extraction result — or null when dismissed/cancelled.
+/// Reading a note takes longer than this: "Dauert etwas länger …"
+/// (Konzept 11 §3.2). A display time, not an animation duration.
+const Duration _slowAfter = Duration(seconds: 8);
+
+/// How long a problem stays in the capsule before the field comes back
+/// (Konzept 11 §3.2). A display time, not an animation duration.
+const Duration _messageFor = Duration(seconds: 6);
+
+/// Where the items of an import come from.
+enum ListImportSource {
+  /// Take a photo of the note.
+  camera,
+
+  /// Pick a photo or screenshot.
+  photos,
+
+  /// Pick an image or PDF from Files.
+  files,
+
+  /// Paste text from the clipboard.
+  paste,
+}
+
+/// A picked picture.
+@immutable
+class ImportPick {
+  /// Creates a pick of [bytes].
+  const ImportPick(this.bytes, {this.isPdf = false});
+
+  /// The image or PDF.
+  final Uint8List bytes;
+
+  /// Whether [bytes] is a PDF.
+  final bool isPdf;
+}
+
+/// The camera is not allowed.
+class ImportPermissionDenied implements Exception {
+  /// Creates the exception.
+  const ImportPermissionDenied();
+}
+
+/// Everything the import needs from the device and from Avo; overridden in
+/// tests through [listImportPortProvider].
+class ListImportPort {
+  /// Creates the port of the app.
+  const ListImportPort();
+
+  /// Lets the person pick a picture; null when they cancel. Throws
+  /// [ImportPermissionDenied] when the camera is not allowed.
+  Future<ImportPick?> pick(ListImportSource source) async {
+    switch (source) {
+      case ListImportSource.camera:
+        try {
+          final file = await ImagePicker().pickImage(
+            source: ImageSource.camera,
+            imageQuality: 92,
+          );
+          return file == null ? null : ImportPick(await file.readAsBytes());
+        } on PlatformException catch (e) {
+          if (e.code == 'camera_access_denied') {
+            throw const ImportPermissionDenied();
+          }
+          rethrow;
+        }
+      case ListImportSource.photos:
+        // PHPicker: no permission prompt on iOS 14 and later.
+        final file = await ImagePicker().pickImage(source: ImageSource.gallery);
+        return file == null ? null : ImportPick(await file.readAsBytes());
+      case ListImportSource.files:
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: const [
+            'jpg',
+            'jpeg',
+            'png',
+            'heic',
+            'webp',
+            'pdf',
+          ],
+          withData: true,
+        );
+        final file = result?.files.firstOrNull;
+        final bytes = file?.bytes;
+        if (file == null || bytes == null) return null;
+        return ImportPick(bytes, isPdf: file.extension?.toLowerCase() == 'pdf');
+      case ListImportSource.paste:
+        return null;
+    }
+  }
+
+  /// The text on the clipboard, if any.
+  Future<String?> readClipboard() async =>
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+
+  /// Lets Avo read [pick] (Teil B's service).
+  Future<ListImportResult> read(ImportPick pick, CancelToken cancelToken) =>
+      ListImportService.instance.importFromBytes(
+        pick.bytes,
+        isPdf: pick.isPdf,
+        cancelToken: cancelToken,
+      );
+
+  /// Opens the app's page in Settings (camera permission).
+  Future<void> openSettings() async {
+    await openAppSettings();
+  }
+}
+
+/// The [ListImportPort] in use.
+final listImportPortProvider = Provider<ListImportPort>(
+  (ref) => const ListImportPort(),
+);
+
+/// "Zettel importieren" (Konzept 11 §3): a pull-down menu from
+/// [plusButtonKey] with "Foto aufnehmen", "Foto wählen", "Datei wählen" and
+/// "Text einfügen"; while Avo reads the note a glass status capsule floats
+/// where the add field is ("Zettel wird gelesen …", "Abbrechen"), the list
+/// stays usable. Problems stay in the capsule with an action ("Anderes
+/// Bild", "Erneut versuchen") for a few seconds.
 ///
-/// The route is interactively drag-dismissable: dragging down scrubs the
-/// morph animation 1:1, releasing decides by velocity.
+/// Resolves with what was recognized, or null when the person cancelled or
+/// gave up. No bottom sheet. The signature of the old sheet is kept; review
+/// the result with [showImportReviewSheet], or use [openListImport] for the
+/// whole flow.
 Future<ListImportResult?> showAttachmentSheet(
   BuildContext context, {
   required GlobalKey plusButtonKey,
 }) {
-  // Resolve the morph origin before pushing — the button's global center.
-  Alignment origin = const Alignment(-0.85, 1);
-  final renderBox =
-      plusButtonKey.currentContext?.findRenderObject() as RenderBox?;
-  if (renderBox != null && renderBox.hasSize) {
-    final center = renderBox.localToGlobal(renderBox.size.center(Offset.zero));
-    final screen = MediaQuery.sizeOf(context);
-    origin = Alignment(
-      (center.dx / screen.width) * 2 - 1,
-      (center.dy / screen.height) * 2 - 1,
-    );
-  }
-
-  return Navigator.of(context, rootNavigator: true).push<ListImportResult>(
-    _MorphSheetRoute<ListImportResult>(
-      origin: origin,
-      reduceMotion: MediaQuery.disableAnimationsOf(context),
-      barrierLabel: context.tr('cancel'),
-      builder: (routeContext, route) =>
-          _AttachmentSheetBody(route: route),
-    ),
-  );
+  FocusManager.instance.primaryFocus?.unfocus();
+  return _ImportRun(context, plusButtonKey).run();
 }
 
-/// A bottom-docked popup that expands from [origin] (the "+" button) into
-/// the sheet — Messages-attachment-menu style — with drag-to-scrub
-/// dismissal. With Reduce Motion the morph becomes a plain cross-fade of
-/// the same duration.
-class _MorphSheetRoute<T> extends PopupRoute<T> {
-  final Alignment origin;
-  final bool reduceMotion;
-  final Widget Function(BuildContext, _MorphSheetRoute<T>) builder;
-  @override
-  final String barrierLabel;
-
-  _MorphSheetRoute({
-    required this.origin,
-    required this.reduceMotion,
-    required this.builder,
-    required this.barrierLabel,
-  });
-
-  AnimationController? _dragController;
-
-  @override
-  AnimationController createAnimationController() {
-    _dragController = super.createAnimationController();
-    return _dragController!;
-  }
-
-  // Messages does NOT dim behind its attachment menu — the conversation stays
-  // fully lit and is only blurred *through* the glass panel itself. A scrim
-  // here is the single most obvious tell that it isn't Apple's menu.
-  @override
-  Color get barrierColor => Colors.transparent;
-
-  @override
-  bool get barrierDismissible => true;
-
-  @override
-  Duration get transitionDuration => const Duration(milliseconds: 380);
-
-  @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 260);
-
-  // Never trigger the Cupertino secondary slide on the screen below — the
-  // list stays put and only dims (the barrier).
-  @override
-  bool canTransitionTo(TransitionRoute nextRoute) => false;
-  @override
-  bool canTransitionFrom(TransitionRoute previousRoute) => false;
-
-  /// Scrub the animation from the sheet's drag gesture (1 == fully open).
-  void dragBy(double deltaFractionOfHeight) {
-    final c = _dragController;
-    if (c == null) return;
-    if (!(navigator?.userGestureInProgress ?? true)) {
-      navigator?.didStartUserGesture();
-    }
-    c.value = (c.value - deltaFractionOfHeight).clamp(0.0, 1.0);
-  }
-
-  /// Finish the drag: velocity (logical px/s, positive = downward) or
-  /// position decides between dismiss and settle-back.
-  void endDrag(double velocity, BuildContext sheetContext) {
-    final c = _dragController;
-    navigator?.didStopUserGesture();
-    if (c == null) return;
-    const dismissVelocity = 700.0;
-    final shouldDismiss =
-        velocity > dismissVelocity || (velocity > -dismissVelocity && c.value < 0.5);
-    if (shouldDismiss) {
-      Navigator.of(sheetContext).pop();
-    } else {
-      c.forward();
-    }
-  }
-
-  @override
-  Widget buildPage(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation) {
-    return builder(context, this);
-  }
-
-  @override
-  Widget buildTransitions(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation, Widget child) {
-    if (reduceMotion) {
-      return FadeTransition(opacity: animation, child: child);
-    }
-    final curved = CurvedAnimation(
-      parent: animation,
-      // Slight spring overshoot on the way in, clean ease on the way out.
-      curve: Curves.easeOutBack,
-      reverseCurve: Curves.easeInCubic,
-    );
-    return FadeTransition(
-      opacity: CurvedAnimation(
-        parent: animation,
-        curve: const Interval(0, 0.45, curve: Curves.easeOut),
-      ),
-      child: ScaleTransition(
-        scale: Tween<double>(begin: 0.15, end: 1).animate(curved),
-        alignment: origin,
-        child: child,
-      ),
-    );
-  }
+/// The whole import for list [listId]: menu from [anchorKey], reading,
+/// review full screen, adding in one batch with "Widerrufen".
+Future<void> openListImport(
+  BuildContext context, {
+  required String listId,
+  required GlobalKey anchorKey,
+}) async {
+  final result = await showAttachmentSheet(context, plusButtonKey: anchorKey);
+  if (result == null || !context.mounted) return;
+  await showImportReviewSheet(context, result: result, listId: listId);
 }
 
-enum _SheetState { menu, processing, error, permissionDenied }
+enum _Next { menu, retry, done }
 
-class _AttachmentSheetBody extends StatefulWidget {
-  final _MorphSheetRoute<ListImportResult> route;
+/// One import run: menu, picking, reading and its capsule.
+class _ImportRun {
+  _ImportRun(this.context, this.anchorKey)
+    : overlay = Overlay.of(context, rootOverlay: true),
+      lang = Localizations.localeOf(context).languageCode,
+      _container = _containerOf(context);
 
-  const _AttachmentSheetBody({required this.route});
+  final BuildContext context;
+  final GlobalKey anchorKey;
+  final OverlayState overlay;
+  final String lang;
+  final ProviderContainer? _container;
+  late final ImportStatusCapsule _capsule = ImportStatusCapsule(overlay);
 
-  @override
-  State<_AttachmentSheetBody> createState() => _AttachmentSheetBodyState();
-}
-
-class _AttachmentSheetBodyState extends State<_AttachmentSheetBody> {
-  _SheetState _state = _SheetState.menu;
-  String _errorCode = 'provider_error';
-  CancelToken? _cancelToken;
-
-  // Kept for "try again" without re-picking.
-  Uint8List? _lastBytes;
-  bool _lastWasPdf = false;
-
-  @override
-  void dispose() {
-    _cancelToken?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _pickFromCamera() async {
+  static ProviderContainer? _containerOf(BuildContext context) {
     try {
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        imageQuality: 92,
-      );
-      if (file == null) return;
-      await _process(await file.readAsBytes(), isPdf: false);
-    } on PlatformException catch (e) {
-      if (e.code == 'camera_access_denied') {
-        setState(() => _state = _SheetState.permissionDenied);
-      } else {
-        setState(() {
-          _errorCode = 'unreadable_image';
-          _state = _SheetState.error;
-        });
-      }
+      return ProviderScope.containerOf(context, listen: false);
+    } catch (_) {
+      return null; // No ProviderScope (isolated widget): app defaults.
     }
   }
 
-  Future<void> _pickFromPhotos() async {
-    // PHPicker — no permission prompt needed on iOS 14+.
-    final file = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (file == null) return;
-    await _process(await file.readAsBytes(), isPdf: false);
-  }
+  ListImportPort get _port =>
+      _container?.read(listImportPortProvider) ?? const ListImportPort();
 
-  Future<void> _pickFromFiles() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['jpg', 'jpeg', 'png', 'heic', 'webp', 'pdf'],
-      withData: true,
-    );
-    final file = result?.files.firstOrNull;
-    final bytes = file?.bytes;
-    if (file == null || bytes == null) return;
-    await _process(bytes, isPdf: file.extension?.toLowerCase() == 'pdf');
-  }
+  bool get _offline => _container?.read(isOfflineProvider) ?? false;
 
-  Future<void> _process(Uint8List bytes, {required bool isPdf}) async {
-    _lastBytes = bytes;
-    _lastWasPdf = isPdf;
-    final token = CancelToken();
-    _cancelToken = token;
-    setState(() => _state = _SheetState.processing);
+  String _t(String key, [Map<String, String>? params]) =>
+      AppTranslations.get(key, lang, params: params);
+
+  Future<ListImportResult?> run() async {
     try {
-      final result = await ListImportService.instance
-          .importFromBytes(bytes, isPdf: isPdf, cancelToken: token);
-      if (!mounted) return;
-      // Resolve the whole sheet with the result — the caller presents the
-      // review sheet after this one is fully gone (no stacked sheets).
-      Navigator.of(context).pop(result);
-    } on ListImportException catch (e) {
-      if (!mounted) return;
-      if (e.code == 'cancelled') {
-        setState(() => _state = _SheetState.menu);
-      } else {
-        setState(() {
-          _errorCode = e.code;
-          _state = _SheetState.error;
-        });
+      var source = await _choose();
+      while (source != null) {
+        final (result, next) = await _from(source);
+        if (result != null) return result;
+        if (next != _Next.menu) return null;
+        source = await _choose();
       }
+      return null;
+    } finally {
+      _capsule.dispose();
     }
   }
 
-  void _cancelProcessing() {
-    HapticFeedback.lightImpact();
-    _cancelToken?.cancel();
-  }
-
-  String _errorMessage(BuildContext context) {
-    return switch (_errorCode) {
-      'no_items_found' => context.tr('import_error_no_items'),
-      'unreadable_image' => context.tr('import_error_unreadable'),
-      'rate_limited' => context.tr('import_error_rate_limited'),
-      'timeout' => context.tr('import_error_timeout'),
-      'network_error' => context.tr('import_error_network'),
-      'not_signed_in' => context.tr('import_error_network'),
-      _ => context.tr('import_error_provider'),
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final reduceTransparency = MediaQuery.highContrastOf(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final safeBottom = MediaQuery.paddingOf(context).bottom;
-
-    final tint = reduceTransparency
-        ? AppColors.surface(context)
-        : (isDark
-              ? const Color(0xFF1C1C1E).withValues(alpha: 0.72)
-              : Colors.white.withValues(alpha: 0.72));
-
-    final body = switch (_state) {
-      _SheetState.menu => _MenuView(
-          onCamera: _pickFromCamera,
-          onPhotos: _pickFromPhotos,
-          onFiles: _pickFromFiles,
-        ),
-      _SheetState.processing => _ProcessingView(onCancel: _cancelProcessing),
-      _SheetState.error => _ErrorView(
-          message: _errorMessage(context),
-          canRetry: _lastBytes != null,
-          onRetry: () => _process(_lastBytes!, isPdf: _lastWasPdf),
-          onBack: () => setState(() => _state = _SheetState.menu),
-        ),
-      _SheetState.permissionDenied => _PermissionDeniedView(
-          onOpenSettings: openAppSettings,
-          onBack: () => setState(() => _state = _SheetState.menu),
-        ),
-    };
-
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final useNativeGlass = Platform.isIOS && !reduceTransparency;
-
-    return Align(
-      // Anchored bottom-LEFT over the "+" button, not docked full width.
-      alignment: Alignment.bottomLeft,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragUpdate: (details) {
-          // Positive delta = finger moving down = scrub the route toward
-          // dismissed, 1:1 with the panel's own height.
-          final height = context.size?.height ?? 320;
-          widget.route.dragBy((details.primaryDelta ?? 0) / height);
-        },
-        onVerticalDragEnd: (details) =>
-            widget.route.endDrag(details.primaryVelocity ?? 0, context),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(10, 0, 10, safeBottom > 0 ? 4 : 10),
-          child: ConstrainedBox(
-            // Messages' menu stops well short of the trailing edge.
-            constraints: BoxConstraints(maxWidth: screenWidth * 0.82),
-            child: _PanelSurface(
-              useNativeGlass: useNativeGlass,
-              tint: tint,
-              isDark: isDark,
-              reduceTransparency: reduceTransparency,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: safeBottom > 0 ? 4 : 12),
-                child: SafeArea(
-                  top: false,
-                  // A PopupRoute puts no Material in the tree, but the menu
-                  // rows use InkWell — without one the sheet throws
-                  // "No Material widget found" the moment it opens.
-                  // Transparency keeps the glass visible and lets the ink
-                  // ripple land on it; sitting inside the ClipRRect above,
-                  // the ripple stays inside the rounded corners.
-                  child: Material(
-                    type: MaterialType.transparency,
-                    // No grabber: Messages' attachment menu has none. The
-                    // whole panel is still drag-dismissable.
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          switchInCurve: Curves.easeOut,
-                          switchOutCurve: Curves.easeIn,
-                          child: KeyedSubtree(
-                            key: ValueKey(_state),
-                            child: body,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+  /// The menu; null when it was closed without a choice.
+  Future<ListImportSource?> _choose() async {
+    final anchor = anchorKey.currentContext;
+    final menuContext = anchor != null && anchor.mounted
+        ? anchor
+        : (context.mounted ? context : null);
+    if (menuContext == null) return null;
+    final offline = _offline;
+    final needsConnection = offline ? _t('common_needs_connection') : null;
+    ListImportSource? chosen;
+    AvoMenuItem picture(
+      ListImportSource source,
+      String key,
+      AvoIconData icon,
+    ) => AvoMenuItem(
+      label: _t(key),
+      icon: icon,
+      subtitle: needsConnection,
+      enabled: !offline,
+      onSelected: () => chosen = source,
     );
-  }
-}
-
-/// The panel background: real `UIGlassEffect` on iOS, blurred fallback
-/// elsewhere. Deliberately not wrapped in a `ClipRRect` on the native path —
-/// clipping a glass view removes the very edge treatment that distinguishes
-/// it from a plain blur, so the radius is handed to the native side instead.
-class _PanelSurface extends StatelessWidget {
-  static const double radius = 32;
-
-  final Widget child;
-  final bool useNativeGlass;
-  final Color tint;
-  final bool isDark;
-  final bool reduceTransparency;
-
-  const _PanelSurface({
-    required this.child,
-    required this.useNativeGlass,
-    required this.tint,
-    required this.isDark,
-    required this.reduceTransparency,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (useNativeGlass) {
-      return LiquidGlassContainer(cornerRadius: radius, child: child);
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: reduceTransparency
-            ? ImageFilter.blur(sigmaX: 0, sigmaY: 0)
-            : ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: tint,
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.12)
-                  : Colors.white.withValues(alpha: 0.7),
-              width: 0.8,
-            ),
-          ),
-          child: child,
+    await showAvoMenu(
+      menuContext,
+      anchorKey: anchor != null ? anchorKey : null,
+      semanticLabel: _t('list_item_import_menu'),
+      items: [
+        picture(
+          ListImportSource.camera,
+          'list_item_import_take_photo',
+          _ImportIcons.camera,
         ),
-      ),
-    );
-  }
-}
-
-class _MenuView extends StatelessWidget {
-  final VoidCallback onCamera;
-  final VoidCallback onPhotos;
-  final VoidCallback onFiles;
-
-  const _MenuView({
-    required this.onCamera,
-    required this.onPhotos,
-    required this.onFiles,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-          child: Text(
-            context.tr('import_sheet_explainer'),
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary(context),
-              height: 1.35,
-            ),
-          ),
+        picture(
+          ListImportSource.photos,
+          'list_item_import_choose_photo',
+          _ImportIcons.photo,
         ),
-        _SheetRow(
-          icon: CupertinoIcons.camera_fill,
-          iconColor: const Color(0xFF8E8E93),
-          label: context.tr('import_source_camera'),
-          onTap: onCamera,
+        picture(
+          ListImportSource.files,
+          'list_item_import_choose_file',
+          _ImportIcons.folder,
         ),
-        _SheetRow(
-          icon: CupertinoIcons.photo_fill,
-          iconColor: const Color(0xFF34C759),
-          label: context.tr('import_source_photos'),
-          onTap: onPhotos,
+        const AvoMenuDivider(),
+        AvoMenuItem(
+          label: _t('list_item_import_paste_text'),
+          icon: _ImportIcons.paste,
+          onSelected: () => chosen = ListImportSource.paste,
         ),
-        _SheetRow(
-          icon: CupertinoIcons.doc_fill,
-          iconColor: const Color(0xFF0A84FF),
-          label: context.tr('import_source_files'),
-          onTap: onFiles,
-        ),
-        const SizedBox(height: 6),
       ],
     );
+    return chosen;
+  }
+
+  Future<(ListImportResult?, _Next)> _from(ListImportSource source) async {
+    if (source == ListImportSource.paste) return _fromClipboard();
+
+    final ImportPick? pick;
+    try {
+      pick = await _port.pick(source);
+    } on ImportPermissionDenied {
+      final next = await _problem(
+        StatusKind.permission,
+        _t('list_item_import_camera_off'),
+        actionLabel: _t('list_item_import_allow_in_settings'),
+        onAction: () => unawaited(_port.openSettings()),
+      );
+      return (null, next);
+    } catch (e) {
+      // Any picker failure ends in a state with an action, never a hang.
+      debugPrint('❌ [LIST_IMPORT] Picking failed: $e');
+      final next = await _problem(
+        StatusKind.sectionError,
+        _t('list_item_import_unreadable'),
+        actionLabel: _t('list_item_import_other_picture'),
+        next: _Next.menu,
+      );
+      return (null, next);
+    }
+    if (pick == null) return (null, _Next.done);
+    return _read(pick);
+  }
+
+  Future<(ListImportResult?, _Next)> _fromClipboard() async {
+    String? text;
+    try {
+      text = await _port.readClipboard();
+    } catch (e) {
+      debugPrint('⚠️ [LIST_IMPORT] Clipboard not readable: $e');
+    }
+    if (text == null || text.trim().isEmpty) {
+      await _problem(
+        StatusKind.sectionError,
+        _t('list_item_import_clipboard_empty'),
+      );
+      return (null, _Next.done);
+    }
+    final parsed = parseItemInput(text, lang: lang);
+    if (parsed.isEmpty) {
+      await _problem(
+        StatusKind.sectionError,
+        _t('list_item_import_text_no_items'),
+      );
+      return (null, _Next.done);
+    }
+    final result = ListImportResult(
+      items: [
+        for (final p in parsed)
+          ExtractedListItem(
+            // The review has no note field; the note stays visible.
+            name: p.note == null ? p.name : '${p.name} (${p.note})',
+            quantity: p.quantityGiven ? p.quantity : null,
+            unit: p.unit,
+          ),
+      ],
+      unparsedLines: const [],
+    );
+    markPastedImport(result);
+    return (result, _Next.done);
+  }
+
+  Future<(ListImportResult?, _Next)> _read(ImportPick pick) async {
+    while (true) {
+      final token = CancelToken();
+      ImportStatus busy(String key) => ImportStatus.busy(
+        text: _t(key),
+        actionLabel: _t('cancel'),
+        onAction: () {
+          unawaited(AvoHaptics.light());
+          token.cancel();
+        },
+      );
+      _capsule.show(busy('list_item_import_reading'));
+      final slow = Timer(_slowAfter, () {
+        if (_capsule.current?.busy ?? false) {
+          _capsule.show(busy('list_item_import_slow'));
+        }
+      });
+      try {
+        final result = await _port.read(pick, token);
+        if (token.isCancelled) {
+          _capsule.hide();
+          return (null, _Next.done);
+        }
+        _capsule.hide();
+        return (result, _Next.done);
+      } on ListImportException catch (e) {
+        if (e.code == 'cancelled' || token.isCancelled) {
+          _capsule.hide();
+          return (null, _Next.done);
+        }
+        final next = await _failure(e.code);
+        if (next != _Next.retry) return (null, next);
+      } catch (e) {
+        debugPrint('❌ [LIST_IMPORT] Reading failed: $e');
+        if (token.isCancelled) {
+          _capsule.hide();
+          return (null, _Next.done);
+        }
+        final next = await _failure('provider_error');
+        if (next != _Next.retry) return (null, next);
+      } finally {
+        slow.cancel();
+      }
+    }
+  }
+
+  /// The capsule for a failed reading (Konzept 11 §3.2).
+  Future<_Next> _failure(String code) {
+    unawaited(AvoHaptics.error());
+    return switch (code) {
+      'no_items_found' => _problem(
+        StatusKind.sectionError,
+        _t('list_item_import_no_items'),
+        actionLabel: _t('list_item_import_other_picture'),
+        next: _Next.menu,
+      ),
+      'unreadable_image' => _problem(
+        StatusKind.sectionError,
+        _t('list_item_import_unreadable'),
+        actionLabel: _t('list_item_import_other_picture'),
+        next: _Next.menu,
+      ),
+      'rate_limited' => _problem(
+        StatusKind.sectionError,
+        _t('list_item_import_rate_limited'),
+      ),
+      'not_signed_in' => _problem(
+        StatusKind.sectionError,
+        _t('list_item_import_signed_out'),
+      ),
+      _ => _problem(
+        StatusKind.failed,
+        _t('list_item_import_failed'),
+        actionLabel: _t('common_try_again'),
+        next: _Next.retry,
+      ),
+    };
+  }
+
+  /// Shows a problem for [_messageFor]; resolves with [next] when its action
+  /// is tapped, otherwise with [_Next.done] once it is gone. [onAction]
+  /// runs instead of [next] for actions outside the import.
+  Future<_Next> _problem(
+    StatusKind kind,
+    String text, {
+    String? actionLabel,
+    VoidCallback? onAction,
+    _Next next = _Next.done,
+  }) async {
+    final done = Completer<_Next>();
+    final timer = Timer(_messageFor, () {
+      if (!done.isCompleted) done.complete(_Next.done);
+    });
+    _capsule.show(
+      ImportStatus.message(
+        kind: kind,
+        text: text,
+        actionLabel: actionLabel,
+        onAction: actionLabel == null
+            ? null
+            : () {
+                onAction?.call();
+                if (!done.isCompleted) done.complete(next);
+              },
+      ),
+    );
+    final result = await done.future;
+    timer.cancel();
+    _capsule.hide();
+    return result;
   }
 }
 
-/// One menu row: a filled circular app-style icon and a large label, at the
-/// row height Messages uses (roughly 60pt, icon 40pt, label at title3).
-class _SheetRow extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-  final VoidCallback onTap;
+/// Menu glyphs for the import sources. `AvoIcons` has no camera, photo,
+/// folder or clipboard yet; drawn on the same 24 grid with round strokes.
+abstract final class _ImportIcons {
+  static const camera = AvoIconData([
+    AvoIconPath(
+      'M4 7.5h3l1.6-2.5h6.8L17 7.5h3a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1'
+      '-1.5 1.5H4A1.5 1.5 0 0 1 2.5 18V9A1.5 1.5 0 0 1 4 7.5z',
+    ),
+    AvoIconCircle(12, 13, 3.6),
+  ]);
 
-  const _SheetRow({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.onTap,
-  });
+  static const photo = AvoIconData([
+    AvoIconRect(3, 4.5, 18, 15, radius: 2.5),
+    AvoIconCircle(8.5, 9.5, 1.6),
+    AvoIconPath('M3.5 17l5-5 4 4 2.5-2.5 5.5 5.5'),
+  ]);
 
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap();
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: iconColor,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 21, color: Colors.white),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 20,
-                  color: AppColors.textPrimary(context),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+  static const folder = AvoIconData([
+    AvoIconPath(
+      'M3 7.5A1.5 1.5 0 0 1 4.5 6h4.8l2 2h8.2A1.5 1.5 0 0 1 21 9.5v8'
+      'a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z',
+    ),
+  ]);
 
-class _ProcessingView extends StatelessWidget {
-  final VoidCallback onCancel;
-
-  const _ProcessingView({required this.onCancel});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CupertinoActivityIndicator(radius: 13),
-          const SizedBox(height: 12),
-          Text(
-            context.tr('import_processing'),
-            style: TextStyle(
-              fontSize: 14.5,
-              color: AppColors.textPrimary(context),
-            ),
-          ),
-          const SizedBox(height: 14),
-          AppOutlineButton(
-            text: context.tr('cancel'),
-            onPressed: onCancel,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final bool canRetry;
-  final VoidCallback onRetry;
-  final VoidCallback onBack;
-
-  const _ErrorView({
-    required this.message,
-    required this.canRetry,
-    required this.onRetry,
-    required this.onBack,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            CupertinoIcons.exclamationmark_circle,
-            size: 30,
-            color: AppColors.textSecondary(context),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textPrimary(context),
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 14),
-          if (canRetry)
-            AppButton(text: context.tr('import_retry'), onPressed: onRetry),
-          const SizedBox(height: 8),
-          AppOutlineButton(
-            text: context.tr('import_pick_other'),
-            onPressed: onBack,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PermissionDeniedView extends StatelessWidget {
-  final VoidCallback onOpenSettings;
-  final VoidCallback onBack;
-
-  const _PermissionDeniedView({
-    required this.onOpenSettings,
-    required this.onBack,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            CupertinoIcons.camera,
-            size: 30,
-            color: AppColors.textSecondary(context),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            context.tr('camera_permission_denied'),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textPrimary(context),
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 14),
-          AppButton(
-            text: context.tr('open_settings'),
-            onPressed: onOpenSettings,
-          ),
-          const SizedBox(height: 8),
-          AppOutlineButton(text: context.tr('back'), onPressed: onBack),
-        ],
-      ),
-    );
-  }
+  static const paste = AvoIconData([
+    AvoIconRect(5, 4.5, 14, 16.5, radius: 2),
+    AvoIconPath('M9 3.5h6v3H9zM8.5 11h7M8.5 14.5h7M8.5 18h4'),
+  ]);
 }

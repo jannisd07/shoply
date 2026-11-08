@@ -1,5 +1,5 @@
-// Guards against the "No Material widget found" regression: the attachment
-// sheet is a PopupRoute, which provides no Material ancestor for its InkWells.
+// "Zettel importieren" opens as a pull-down menu (no sheet) from the button,
+// also without a ProviderScope or Material ancestor around it.
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +7,7 @@ import 'package:shoply/core/localization/app_localizations.dart';
 import 'package:shoply/presentation/screens/lists/widgets/attachment_sheet.dart';
 
 void main() {
-  testWidgets('attachment sheet opens', (tester) async {
+  testWidgets('import menu opens', (tester) async {
     final plusKey = GlobalKey();
 
     await tester.pumpWidget(
@@ -41,10 +41,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
 
-    // The sheet rendered all three options without a "No Material widget
-    // found" exception (which would fail the test on its own).
-    expect(find.text('Kamera'), findsOneWidget);
-    expect(find.text('Fotos'), findsOneWidget);
-    expect(find.text('Dateien'), findsOneWidget);
+    // All four sources, without an exception (which would fail the test on
+    // its own).
+    expect(find.text('Foto aufnehmen'), findsOneWidget);
+    expect(find.text('Foto wählen'), findsOneWidget);
+    expect(find.text('Datei wählen'), findsOneWidget);
+    expect(find.text('Text einfügen'), findsOneWidget);
   });
 }
