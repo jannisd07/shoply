@@ -388,6 +388,128 @@ abstract final class AvoIcons {
     ),
   ]);
 
+  // Added for Konzept 17 §9.3 (A7) and B's offer screens (A-C10); drawn on
+  // the same 24 grid in the D2 style (round caps, stroke 1.8 to 2.2).
+
+  /// Location arrow ("Standort verwenden", 18 to 20 pt, stroke 2). Has a
+  /// filled variant.
+  static const location = AvoIconData([
+    AvoIconPath(
+      'M20.3 3.7 3.9 10.5c-.7.3-.6 1.2.1 1.4l7 1.6 1.6 7c.2.7 1.1.8 1.4.1z',
+      filledStyle: AvoIconStyle.fillAndStroke,
+    ),
+  ], strokeWidth: 2);
+
+  /// Storefront: awning over a shop with a door (market rows, 20 pt,
+  /// stroke 1.8).
+  static const storefront = AvoIconData([
+    AvoIconPath('M3.5 9 5 4.5h14L20.5 9'),
+    AvoIconPath(
+      'M3.5 9a2.83 2.83 0 0 0 5.67 0 2.83 2.83 0 0 0 5.66 0'
+      ' 2.83 2.83 0 0 0 5.67 0',
+    ),
+    AvoIconPath('M5 12.2V20h14v-7.8M10 20v-4.5h4V20'),
+  ]);
+
+  /// Eye: show password (20 pt, stroke 1.8).
+  static const eye = AvoIconData([
+    AvoIconPath(
+      'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z',
+    ),
+    AvoIconCircle(12, 12, 3),
+  ]);
+
+  /// Crossed-out eye: hide password, hide offers (20 pt, stroke 1.8).
+  static const eyeSlash = AvoIconData([
+    AvoIconPath(
+      'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z',
+    ),
+    AvoIconCircle(12, 12, 3),
+    AvoIconPath('M4 4l16 16'),
+  ]);
+
+  /// Plus in a circle (add row, 20 pt, stroke 2).
+  static const plusCircle = AvoIconData([
+    AvoIconCircle(12, 12, 9),
+    AvoIconPath('M12 8v8M8 12h8'),
+  ], strokeWidth: 2);
+
+  /// Question mark in a circle (help, 20 pt, stroke 2).
+  static const questionmarkCircle = AvoIconData([
+    AvoIconCircle(12, 12, 9),
+    AvoIconPath('M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7'),
+    AvoIconCircle(12, 17, 1.1, style: AvoIconStyle.fill),
+  ], strokeWidth: 2);
+
+  /// Exclamation mark in a circle (error rows, 18 pt, stroke 2).
+  static const exclamationmarkCircle = AvoIconData([
+    AvoIconCircle(12, 12, 9),
+    AvoIconPath('M12 7.5v5.5'),
+    AvoIconCircle(12, 16.3, 1.1, style: AvoIconStyle.fill),
+  ], strokeWidth: 2);
+
+  /// Filled warning triangle with the mark cut out (allergy and offer
+  /// caveats, 16 to 18 pt; colour `warning`).
+  static const exclamationmarkTriangleFill = AvoIconData([
+    AvoIconPath(
+      'M10.3 3.9 2.4 17.6a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9'
+      'a2 2 0 0 0-3.4 0zM11 8.8h2v5.6h-2zM12 15.8a1.2 1.2 0 1 0 0 2.4'
+      ' 1.2 1.2 0 1 0 0-2.4z',
+      style: AvoIconStyle.fill,
+      evenOdd: true,
+    ),
+  ]);
+
+  /// Three lines: drag handle of sortable rows (18 pt, stroke 2).
+  static const line3Horizontal = AvoIconData([
+    AvoIconPath('M4 7h16M4 12h16M4 17h16'),
+  ], strokeWidth: 2);
+
+  /// Empty circle: a rule not met yet (16 pt, stroke 2).
+  static const circle = AvoIconData([AvoIconCircle(12, 12, 9)], strokeWidth: 2);
+
+  /// Filled circle with the check cut out: a rule met, a selected row
+  /// (16 to 22 pt).
+  static const checkmarkCircleFill = AvoIconData([
+    AvoIconPath(
+      'M12 2.5a9.5 9.5 0 1 0 0 19 9.5 9.5 0 1 0 0-19zM10.6 16.2 6.7 12.3'
+      'l1.4-1.4 2.5 2.5 5.3-5.3 1.4 1.4z',
+      style: AvoIconStyle.fill,
+      evenOdd: true,
+    ),
+  ]);
+
+  /// Light bulb of tip rows (16 pt, stroke 1.8).
+  static const lightbulb = AvoIconData([
+    AvoIconPath(
+      'M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.4 1.1 2.2v.5h5V16'
+      'c0-.8.4-1.6 1.1-2.2A6 6 0 0 0 12 3z',
+    ),
+    AvoIconPath('M9.5 19h5M10.5 21.5h3'),
+  ]);
+
+  /// Envelope: continue with e-mail (20 pt, stroke 1.8).
+  static const envelope = AvoIconData([
+    AvoIconRect(3, 5.5, 18, 13, radius: 2.5),
+    AvoIconPath('M3.8 7.5 12 13l8.2-5.5'),
+  ]);
+
+  /// Person with a plus: invite (toolbar 22 pt, stroke 1.8).
+  static const personBadgePlus = AvoIconData([
+    AvoIconCircle(10, 8, 3.6),
+    AvoIconPath('M3.2 20c1-3.3 3.7-5 6.8-5 1.4 0 2.7.3 3.8 1'),
+    AvoIconPath('M18.5 13v6M15.5 16h6'),
+  ]);
+
+  /// Crossed-out bookmark: remove from saved (menu rows, 20 pt, stroke 1.8).
+  static const bookmarkSlash = AvoIconData([
+    AvoIconPath(
+      'M6.5 2.5h11A1.5 1.5 0 0 1 19 4v17.2a.6.6 0 0 1-.95.5L12 17.4'
+      'l-6.05 4.3a.6.6 0 0 1-.95-.5V4a1.5 1.5 0 0 1 1.5-1.5z',
+    ),
+    AvoIconPath('M3.5 3.5l17 17'),
+  ]);
+
   /// Every icon by name, for the component gallery and tests.
   static const Map<String, AvoIconData> all = {
     'home': home,
@@ -414,6 +536,21 @@ abstract final class AvoIcons {
     'people': people,
     'heart': heart,
     'bookmark': bookmark,
+    'location': location,
+    'storefront': storefront,
+    'eye': eye,
+    'eyeSlash': eyeSlash,
+    'plusCircle': plusCircle,
+    'questionmarkCircle': questionmarkCircle,
+    'exclamationmarkCircle': exclamationmarkCircle,
+    'exclamationmarkTriangleFill': exclamationmarkTriangleFill,
+    'line3Horizontal': line3Horizontal,
+    'circle': circle,
+    'checkmarkCircleFill': checkmarkCircleFill,
+    'lightbulb': lightbulb,
+    'envelope': envelope,
+    'personBadgePlus': personBadgePlus,
+    'bookmarkSlash': bookmarkSlash,
   };
 }
 
