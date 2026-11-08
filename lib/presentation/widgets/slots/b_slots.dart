@@ -29,7 +29,7 @@ export 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.
 export 'package:shoply/presentation/screens/lists/widgets/store_chip.dart'
     show StoreChip;
 export 'package:shoply/presentation/widgets/article_image.dart'
-    show ArticleImage;
+    show ArticleImage, ArticleImageCredit, articleImagesShown;
 
 // Recipes.
 export 'package:shoply/presentation/screens/calories/log_recipe.dart'
