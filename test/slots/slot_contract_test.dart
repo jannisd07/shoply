@@ -90,23 +90,11 @@ void main() {
     testWidgets('OfferSuggestionsBar', (tester) async {
       await _pumpSlot(
         tester,
-        OfferSuggestionsBar(listId: listId, query: 'milch', onSelect: (_) {}),
+        OfferSuggestionsBar(listId: listId, query: 'milch'),
         overrides: offersOff(),
       );
       _expectEmpty(tester, find.byType(OfferSuggestionsBar));
       expect(spy.calls, 0, reason: 'no request to the offers source');
-    });
-
-    testWidgets('OfferSuggestionsBar without a list (old call of Teil A)', (
-      tester,
-    ) async {
-      await _pumpSlot(
-        tester,
-        OfferSuggestionsBar(query: 'milch', onSelect: (_) {}),
-        overrides: offersOff(),
-      );
-      _expectEmpty(tester, find.byType(OfferSuggestionsBar));
-      expect(spy.calls, 0);
     });
 
     testWidgets('RecipeOffersCard(recipe:)', (tester) async {
@@ -172,7 +160,7 @@ void main() {
       });
       await _pumpSlot(
         tester,
-        OfferSuggestionsBar(listId: listId, query: 'milch', onSelect: (_) {}),
+        OfferSuggestionsBar(listId: listId, query: 'milch'),
         overrides: [
           offersAvailableProvider.overrideWithValue(true),
           ...spy.overrides,
@@ -188,7 +176,7 @@ void main() {
       final spy = _OfferSourceSpy(offer);
       await _pumpSlot(
         tester,
-        OfferSuggestionsBar(listId: listId, query: 'milch', onSelect: (_) {}),
+        OfferSuggestionsBar(listId: listId, query: 'milch'),
         overrides: [
           offersAvailableProvider.overrideWithValue(true),
           ...spy.overrides,
@@ -197,7 +185,7 @@ void main() {
       expect(find.text('Weidemilch 1,5 %'), findsOneWidget);
     });
 
-    testWidgets('without onSelect it adds the offer to its list', (
+    testWidgets('adds the tapped offer to its list', (
       tester,
     ) async {
       final spy = _OfferSourceSpy(offer);
@@ -224,30 +212,6 @@ void main() {
         isFalse,
         reason: 'the offer already has the real product name',
       );
-    });
-
-    testWidgets('onSelect wins over adding by itself', (tester) async {
-      final spy = _OfferSourceSpy(offer);
-      final items = _RecordingItemsNotifier(listId);
-      final selected = <StoreOffer>[];
-      await _pumpSlot(
-        tester,
-        OfferSuggestionsBar(
-          listId: listId,
-          query: 'milch',
-          onSelect: selected.add,
-        ),
-        overrides: [
-          offersAvailableProvider.overrideWithValue(true),
-          itemsNotifierProvider.overrideWith((ref, id) => items),
-          ...spy.overrides,
-        ],
-      );
-      await tester.tap(find.text('Weidemilch 1,5 %'));
-      await tester.pump();
-
-      expect(selected, [offer]);
-      expect(items.added, isEmpty);
     });
   });
 
@@ -395,7 +359,7 @@ void main() {
       expect(_LauncherResult.last, isFalse);
     });
 
-    testWidgets('stays on a done screen after the trip was saved', (
+    testWidgets('closes with true right after the trip was saved', (
       tester,
     ) async {
       await _pumpLauncher(
@@ -410,11 +374,7 @@ void main() {
 
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      expect(find.text('Trip saved'), findsOneWidget);
-
-      await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
-      expect(find.text('open'), findsOneWidget);
+      expect(find.text('open'), findsOneWidget, reason: 'no confirmation of its own');
       expect(_LauncherResult.last, isTrue);
     });
   });

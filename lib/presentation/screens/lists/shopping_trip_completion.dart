@@ -9,19 +9,19 @@ import 'package:shoply/core/localization/app_localizations.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/checkout_store_resolver.dart';
-import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/push_notification_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/store_locator_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
-import 'package:shoply/presentation/screens/history/widgets/split_cost_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/checkout_store_sheet.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 
 /// "Complete shopping": saves the checked items to history, removes them
-/// from the list, tells the other members and offers to split the cost.
+/// from the list and tells the other members. Confirms nothing on success:
+/// the host of `openCheckoutFlow` shows the success moment, and the home
+/// screen's SplitTripNudgeCard offers to split the cost.
 Future<void> completeShoppingTrip(
   BuildContext context,
   WidgetRef ref, {
@@ -94,7 +94,7 @@ Future<void> completeShoppingTrip(
   try {
     // Purchase tracking (for the "you usually buy X every N days" nudges)
     // happens inside this call.
-    final historyEntry = await ShoppingHistoryService().completeShoppingTrip(
+    await ShoppingHistoryService().completeShoppingTrip(
       listId: listId,
       listName: listName,
       items: itemsForHistory,
@@ -107,7 +107,6 @@ Future<void> completeShoppingTrip(
 
     unawaited(ref.read(itemsNotifierProvider(listId).notifier).loadItems());
 
-    // One members query serves both the push fan-out and the split offer.
     var members = const <Map<String, dynamic>>[];
     try {
       members = await ref.read(listRepositoryProvider).getListMembers(listId);
@@ -121,45 +120,6 @@ Future<void> completeShoppingTrip(
       members: members,
       listId: listId,
       listName: listName,
-    );
-
-    // On a trip-count milestone (10th, 25th, … trip), the confirmation
-    // becomes a small celebration instead of the generic line.
-    String? milestone;
-    try {
-      milestone = await MascotNotificationService.instance
-          .milestoneMessageForCompletedTrip();
-    } catch (_) {}
-    if (!context.mounted) return;
-
-    // Offer an immediate "split this trip" shortcut when the list has
-    // someone else to split with — the home-screen SplitTripNudgeCard
-    // covers the same case for anyone who doesn't act on it right now.
-    final canSplit = members.length >= 2;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          milestone ??
-              context.tr(
-                'trip_completed_items',
-                params: {'count': '${checkedItems.length}'},
-              ),
-        ),
-        backgroundColor: AppColors.success,
-        duration: canSplit
-            ? const Duration(seconds: 6)
-            : (milestone != null
-                ? const Duration(seconds: 5)
-                : const Duration(seconds: 4)),
-        action: canSplit
-            ? SnackBarAction(
-                label: context.tr('split_trip_cost'),
-                textColor: Colors.white,
-                onPressed: () =>
-                    showSplitCostSheet(context, ref, entry: historyEntry),
-              )
-            : null,
-      ),
     );
   } catch (e) {
     debugPrint('❌ [LIST_DETAIL] Failed to complete trip: $e');

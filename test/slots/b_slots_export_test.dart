@@ -37,12 +37,14 @@ void main() {
         setOffersHiddenForList;
     final ProviderListenable<bool> hidden = offersHiddenForListProvider('l');
     final ProviderListenable<StoreInfo?> store = storeForListProvider('l');
+    final ProviderListenable<AsyncValue<List<RestockSuggestion>>> restock =
+        restockSuggestionsProvider;
     final providers = <ProviderListenable<bool>>[
       offersAvailableProvider,
       offersRemoteEnabledProvider,
       calorieTrackingEnabledProvider,
     ];
-    expect([checkout, logRecipe, hide, hidden, store], hasLength(5));
+    expect([checkout, logRecipe, hide, hidden, store, restock], hasLength(6));
     expect(providers, hasLength(3));
   });
 

@@ -295,48 +295,10 @@ class MascotNotificationService {
     }
   }
 
-  /// Trip-count milestones worth a one-line in-app celebration. Sparse on
-  /// purpose — a milestone every few weeks feels earned, one every few days
-  /// feels like a slot machine.
-  static const List<int> _tripMilestones = [10, 25, 50, 100, 250, 500, 1000];
-
-  static const String _milestonesShownKey = 'avo_milestones_shown';
-
-  /// Call right after a shopping trip was completed. Returns a localized
-  /// celebration line when the user's own completed-trip count just hit a
-  /// milestone that hasn't been celebrated yet — else null. Each milestone
-  /// fires at most once (tracked locally).
-  Future<String?> milestoneMessageForCompletedTrip() async {
-    try {
-      final userId = SupabaseService.instance.currentUser?.id;
-      if (userId == null) return null;
-
-      final rows = await SupabaseService.instance.client
-          .from('shopping_history')
-          .select('id')
-          .eq('user_id', userId);
-      final count = (rows as List).length;
-      if (!_tripMilestones.contains(count)) return null;
-
-      final prefs = await SharedPreferences.getInstance();
-      final shown = prefs.getStringList(_milestonesShownKey) ?? <String>[];
-      if (shown.contains('$count')) return null;
-      shown.add('$count');
-      await prefs.setStringList(_milestonesShownKey, shown);
-
-      final lang = await _getLanguage();
-      debugPrint('🥑 [AVO] Trip milestone reached: $count');
-      return AppTranslations.get('milestone_trip_message', lang,
-          params: {'count': '$count'});
-    } catch (e) {
-      debugPrint('🥑 [AVO] Milestone check failed: $e');
-      return null;
-    }
-  }
-
   /// Meal counts (of recipe-cooked meals logged in the rolling last-7-days
   /// window, see [WeeklyNutritionSummary]) worth a one-line celebration.
-  /// Sparse on purpose, same philosophy as [_tripMilestones].
+  /// Sparse on purpose: a milestone every few weeks feels earned, one every
+  /// few days feels like a slot machine.
   static const List<int> _weeklyProteinMealMilestones = [3, 5, 7, 10];
 
   static const String _weeklyProteinMilestoneCountKey =

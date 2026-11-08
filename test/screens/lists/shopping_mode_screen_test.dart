@@ -215,8 +215,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(checkouts, ['l1']);
 
-    // Teil B's interim checkout screen confirms with "Done".
-    await tester.tap(find.text('Done').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Trip saved.'), findsOneWidget);

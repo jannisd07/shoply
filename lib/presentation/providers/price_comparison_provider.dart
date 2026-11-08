@@ -68,18 +68,16 @@ final offerSearchAllProvider =
   },
 );
 
-/// What [offerSuggestionsProvider] is asked for. [listId] is null only
-/// while Teil A still calls `OfferSuggestionsBar(query:, onSelect:)`.
-typedef OfferSuggestionsRequest = ({String? listId, String query});
+/// What [offerSuggestionsProvider] is asked for.
+typedef OfferSuggestionsRequest = ({String listId, String query});
 
 /// Offers for the text typed in a list's add field: only the list's market,
 /// in the order of the source; similar products of that market only when
-/// it has no exact hit. Empty without a list, without a confirmed market,
+/// it has no exact hit. Empty without a confirmed market,
 /// without a region, or while offers are off or hidden on the list.
 final offerSuggestionsProvider = FutureProvider.autoDispose
     .family<List<StoreOffer>, OfferSuggestionsRequest>((ref, request) async {
   final listId = request.listId;
-  if (listId == null) return const [];
   final service = ref.watch(offerPriceServiceProvider);
   final region = ref.watch(regionProvider);
   final chainId = ref.watch(storeForListProvider(listId))?.id;

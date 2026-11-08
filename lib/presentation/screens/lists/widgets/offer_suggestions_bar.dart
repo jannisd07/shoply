@@ -6,7 +6,6 @@ import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/diet_checker.dart';
 import 'package:shoply/data/models/store_offer.dart';
-import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
@@ -34,37 +33,27 @@ const int _visibleRows = 3;
 /// Renders nothing, and asks the offers source nothing, while offers are
 /// unavailable (module or kill switch) or hidden on [listId].
 class OfferSuggestionsBar extends ConsumerWidget {
-  /// The list the tapped offer goes to when [onSelect] is null, and whose
-  /// "hide offers" choice applies. Nullable only while Teil A's
-  /// `list_detail_screen.dart` still calls `OfferSuggestionsBar(query:,
-  /// onSelect:)`; becomes required once A switched.
-  final String? listId;
+  /// The list the tapped offer goes to, and whose "hide offers" choice
+  /// applies.
+  final String listId;
   final String query;
 
   /// Called after the tapped offer was added to [listId], so the host can
   /// clear its input field.
   final VoidCallback? onAdded;
 
-  /// Old entry point of Teil A: called with the tapped offer instead of
-  /// adding it to [listId]. Goes away once A switched to [onAdded].
-  final void Function(StoreOffer offer)? onSelect;
-
   const OfferSuggestionsBar({
     super.key,
-    this.listId,
+    required this.listId,
     required this.query,
     this.onAdded,
-    this.onSelect,
-  }) : assert(listId != null || onSelect != null,
-            'Without onSelect the bar needs a listId to add the offer to');
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final listId = this.listId;
-    final visible = listId == null
-        ? ref.watch(offersAvailableProvider)
-        : ref.watch(offersVisibleForListProvider(listId));
-    if (!visible) return const SizedBox.shrink();
+    if (!ref.watch(offersVisibleForListProvider(listId))) {
+      return const SizedBox.shrink();
+    }
 
     // No region: never ask the offers source, only nudge once for a zip code.
     if (!ref.watch(regionLoadedProvider)) return const SizedBox.shrink();
@@ -82,8 +71,7 @@ class OfferSuggestionsBar extends ConsumerWidget {
             .valueOrNull ??
         const <StoreOffer>[];
     if (offers.isEmpty) return const SizedBox.shrink();
-    final storeName =
-        listId == null ? '' : ref.watch(storeForListProvider(listId))?.name ?? '';
+    final storeName = ref.watch(storeForListProvider(listId))?.name ?? '';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -152,12 +140,7 @@ class OfferSuggestionsBar extends ConsumerWidget {
                   showTopDivider: i > 0,
                   onTap: () {
                     HapticFeedback.lightImpact();
-                    final select = onSelect;
-                    if (select != null) {
-                      select(offers[i]);
-                    } else if (listId != null) {
-                      _addToList(context, ref, listId, offers[i]);
-                    }
+                    _addToList(context, ref, offers[i]);
                   },
                 ),
               ),
@@ -173,7 +156,6 @@ class OfferSuggestionsBar extends ConsumerWidget {
   Future<void> _addToList(
     BuildContext context,
     WidgetRef ref,
-    String listId,
     StoreOffer offer,
   ) async {
     final user = ref.read(currentUserProvider).valueOrNull;

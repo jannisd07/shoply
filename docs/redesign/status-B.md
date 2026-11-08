@@ -45,9 +45,6 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
 10. **Prio 3 – Deep-Link-Übersetzung mit Fehlerseite (S2)** für Widgets und Siri: `shopping?list=`,
     `lists/<id>?focus=add`, `avo/voice`, `plan?day=`, `calories/water?ml=`.
 11. ~~Prio 4 – `ShoppingItemModel.barcode`~~ gibt es schon (laut A), erledigt.
-12. **Vorwarnung:** `ListPriceSummaryBar` und die Ein-Argument-Form von `OfferSuggestionsBar(query:, onSelect:)` bleiben
-    als Übergang. Bitte beim Listen-Umbau `ListOfferSummary(listId:)` und `OfferSuggestionsBar(listId:, query:)` nutzen,
-    dann lösche ich die Übergänge.
 
 Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
 5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald
@@ -56,6 +53,12 @@ nutzen beide direkt.
 
 ## Erledigte Anfragen von Teil A
 
+- **Nach A5** (Commit mit dieser Zeile): `OfferSuggestionsBar` braucht jetzt `listId`, `onSelect` und
+  `ListPriceSummaryBar` sind gelöscht. `b_slots.dart` exportiert `restockSuggestionsProvider` und `RestockSuggestion`.
+  `openCheckoutFlow` zeigt keine eigene Bestätigung mehr (kein Fertig-Screen, keine grüne Snackbar, keine
+  Meilenstein-Zeile) und kommt nach dem Speichern sofort mit `true` zurück; den Erfolgsmoment zeigt der Host. „Kosten
+  aufteilen“ bleibt über die Home-Karte erreichbar, bis B8 den Abschluss neu baut. Unbenutzt in A's Datei
+  `translations/lists.dart`: `trip_completed_items`.
 - **Vorrang Stufe 1 – Slot-Hüllen** (`d449d9c`): alles aus der Tabelle in `prompt-b-vorrang.md` mit der dortigen
   Signatur, exportiert aus `b_slots.dart`. Übergänge, bis A umgebaut hat: `OfferSuggestionsBar` nimmt zusätzlich
   noch `onSelect:` und `listId` ist so lange nullable; `RecipeOffersCard` nimmt zusätzlich noch `request:`.

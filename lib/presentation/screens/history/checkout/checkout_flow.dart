@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/core/widgets/design_system.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/presentation/screens/lists/shopping_trip_completion.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -23,7 +22,8 @@ final checkoutRunnerProvider = Provider<CheckoutRunner>(
 
 /// "Einkauf abschließen" for [listId] on its own full-screen route, pushed
 /// like any screen (contract `b_slots.dart`). True when the trip was saved,
-/// false when it was cancelled, failed or had nothing checked.
+/// false when it was cancelled, failed or had nothing checked. Shows no
+/// confirmation of its own: the host shows the success moment.
 Future<bool> openCheckoutFlow(BuildContext context, String listId) async {
   final saved = await Navigator.of(context).push<bool>(
     MaterialPageRoute(builder: (_) => CheckoutFlowScreen(listId: listId)),
@@ -31,8 +31,8 @@ Future<bool> openCheckoutFlow(BuildContext context, String listId) async {
   return saved ?? false;
 }
 
-/// Stub of the checkout screen: runs the checkout right away, closes again
-/// when nothing was saved and shows a short done state otherwise.
+/// Stub of the checkout screen until B8: runs the checkout right away and
+/// closes with its result.
 class CheckoutFlowScreen extends ConsumerStatefulWidget {
   const CheckoutFlowScreen({super.key, required this.listId});
 
@@ -44,19 +44,11 @@ class CheckoutFlowScreen extends ConsumerStatefulWidget {
 
 class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
   bool _running = true;
-  bool _saved = false;
-  ScaffoldMessengerState? _messenger;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _run());
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _messenger = ScaffoldMessenger.maybeOf(context);
   }
 
   Future<void> _run() async {
@@ -71,17 +63,8 @@ class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
       debugPrint('❌ [CHECKOUT] Checkout failed: $e');
     }
     if (!mounted) return;
-    setState(() {
-      _running = false;
-      _saved = saved;
-    });
-    if (!saved) Navigator.of(context).pop(false);
-  }
-
-  void _onPopped(bool didPop, Object? result) {
-    // The confirmation of the existing flow can carry a "split the cost"
-    // action that runs on this screen; it must not outlive it.
-    if (didPop && _saved) _messenger?.removeCurrentSnackBar();
+    setState(() => _running = false);
+    Navigator.of(context).pop(saved);
   }
 
   @override
@@ -89,7 +72,6 @@ class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
     return PopScope(
       // Leaving mid-checkout would skip the rest of it (push to the members).
       canPop: !_running,
-      onPopInvokedWithResult: _onPopped,
       child: Scaffold(
         backgroundColor: AppColors.background(context),
         appBar: AppBar(
@@ -104,55 +86,9 @@ class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
             ),
           ),
         ),
-        body: SafeArea(
-          child: _saved
-              ? _DoneView(onDone: () => Navigator.of(context).maybePop(true))
-              : const Center(child: CircularProgressIndicator.adaptive()),
+        body: const SafeArea(
+          child: Center(child: CircularProgressIndicator.adaptive()),
         ),
-      ),
-    );
-  }
-}
-
-class _DoneView extends StatelessWidget {
-  const _DoneView({required this.onDone});
-
-  final VoidCallback onDone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          const Spacer(),
-          const Icon(
-            Icons.check_circle_outline_rounded,
-            size: 56,
-            color: AppColors.success,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            context.tr('hist_checkout_done_title'),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary(context),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.tr('hist_checkout_done_body'),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 15,
-              color: AppColors.textSecondary(context),
-            ),
-          ),
-          const Spacer(),
-          AppButton(text: context.tr('done'), onPressed: onDone),
-        ],
       ),
     );
   }

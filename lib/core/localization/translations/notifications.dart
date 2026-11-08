@@ -15,8 +15,6 @@ const Map<String, String> notificationsEn = {
       'You have about {kcal} kcal left today — Avo found a recipe that fits: {recipe}.',
   'calorie_nudge_notification_body_many':
       'You have about {kcal} kcal left today — Avo found {count} recipes that fit, starting with {recipe}.',
-  'milestone_trip_message':
-      '🥑 Milestone: that was your {count}th shopping trip with Shoply!',
   // Recipe of the Week
   'recipe_of_the_day': 'Recipe of the Day',
   'push_notifications': 'Push Notifications',
@@ -37,8 +35,6 @@ const Map<String, String> notificationsDe = {
       'Du hast heute noch etwa {kcal} kcal übrig – Avo hat ein passendes Rezept gefunden: {recipe}.',
   'calorie_nudge_notification_body_many':
       'Du hast heute noch etwa {kcal} kcal übrig – Avo hat {count} passende Rezepte gefunden, z. B. {recipe}.',
-  'milestone_trip_message':
-      '🥑 Meilenstein: Das war dein {count}. Einkauf mit Shoply!',
   // Recipe of the Week
   'recipe_of_the_day': 'Rezept des Tages',
   'push_notifications': 'Push-Benachrichtigungen',

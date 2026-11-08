@@ -10,6 +10,8 @@ library;
 
 // Lists, items, shopping mode.
 export 'package:shoply/data/models/store_info.dart' show StoreInfo;
+export 'package:shoply/data/services/avo_nudge_service.dart'
+    show RestockSuggestion;
 export 'package:shoply/presentation/providers/list_offer_prefs_provider.dart'
     show offersHiddenForListProvider, setOffersHiddenForList;
 export 'package:shoply/presentation/providers/store_for_list_provider.dart'
@@ -28,6 +30,8 @@ export 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.
     show OfferSuggestionsBar;
 export 'package:shoply/presentation/screens/lists/widgets/store_chip.dart'
     show StoreChip;
+export 'package:shoply/presentation/state/avo_nudge_provider.dart'
+    show restockSuggestionsProvider;
 export 'package:shoply/presentation/widgets/article_image.dart'
     show ArticleImage, ArticleImageCredit, articleImagesShown;
 
