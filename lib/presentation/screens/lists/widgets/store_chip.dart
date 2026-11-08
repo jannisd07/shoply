@@ -28,15 +28,15 @@ const EdgeInsetsDirectional _kPaddingNoMark = EdgeInsetsDirectional.fromSTEB(
   0,
   12,
   0,
-);
+); // D2 storefront glyph sits 2 pt further in than the tile
 const double _kGap = 6; // D2
 const double _kChevron = 12; // D2
-const double _kStorefront = 16;
+const double _kStorefront = 16; // D2 storefront (angebote.md S1)
 const double _kShadowAlpha = 0.06; // D2 0 1 2 rgba(0,0,0,.06)
 const double _kShadowBlur = 2; // D2
 const Offset _kShadowOffset = Offset(0, 1); // D2
-const double _kDash = 3;
-const double _kDashGap = 2.5;
+const double _kDash = 3; // D2 dashed suggestion outline
+const double _kDashGap = 2.5; // D2
 const double _kBorder = 1; // D2 suggestion and Increase Contrast outline
 
 /// What the chip shows.
@@ -61,9 +61,6 @@ class StoreChip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
     final guess = ref.watch(storeGuessForListProvider(listId)).valueOrNull;
-    final dontAsk = ref.watch(
-      offerDisplayPrefsProvider.select((p) => p?.dontAskStore[listId]),
-    );
     // Keeps the trip history ready for the menu.
     ref.listen(listStoreHistoryProvider(listId), (_, __) {});
 
@@ -73,7 +70,13 @@ class StoreChip extends ConsumerWidget {
         ? _ChipState.none
         : guess.confirmed
         ? _ChipState.store
-        : dontAsk == guess.chainId
+        // "Nicht fragen" is only read for a suggestion.
+        : ref.watch(
+                offerDisplayPrefsProvider.select(
+                  (p) => p?.dontAskStore[listId],
+                ),
+              ) ==
+              guess.chainId
         ? _ChipState.none
         : _ChipState.suggestion;
     final name = known ? storeNameOf(guess.chainId) : null;

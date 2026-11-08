@@ -15,7 +15,7 @@ import 'package:shoply/presentation/screens/offers/offer_text.dart';
 // D2-Artikel offer card (`angebote.md` 2.1).
 const EdgeInsets _kPadding = EdgeInsets.fromLTRB(16, 14, 16, 4); // D2
 const double _kKickerTracking = 0.4; // D2 +0.4 on the caps kicker
-const double _kKickerGap = 2;
+const double _kKickerGap = AvoSpacing.xxs; // D2 kicker to title
 
 /// The green offer card in the full-screen item editor (S4, D2-Artikel,
 /// contract `b_slots.dart`): kicker "ANGEBOT", "Lidl · 0,99 €", the product
@@ -159,8 +159,10 @@ class _OfferCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            // One element whose kicker makes it a heading ("Angebot: …").
             Semantics(
               container: true,
+              header: true,
               label: context.tr(
                 'offer_card_a11y',
                 params: {

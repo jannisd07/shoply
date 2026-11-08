@@ -150,6 +150,28 @@ class OfferPriceService {
     ];
   }
 
+  /// What an earlier search for [query] around [zipCode] left in the cache
+  /// (at most 30 min old), only [chainId]'s offers when given, without any
+  /// request; null when nothing is cached. For surfaces that may show only
+  /// what the device has ("Weitere Angebote" in the offer detail).
+  List<StoreOffer>? cachedOffers(
+    String query, {
+    required String zipCode,
+    String? chainId,
+    int limit = 30,
+  }) {
+    final cached = _searchCache['${query.trim().toLowerCase()}|$zipCode|$limit'];
+    if (cached == null ||
+        _now().difference(cached.fetchedAt) >= _searchCacheTtl) {
+      return null;
+    }
+    if (chainId == null) return cached.offers;
+    return [
+      for (final offer in cached.offers)
+        if (offer.isFromChain(chainId)) offer,
+    ];
+  }
+
   Future<List<StoreOffer>?> _cachedSearch(
     String normalized,
     String zipCode,

@@ -83,9 +83,9 @@ void rememberOffer(BuildContext context, StoreOffer offer) =>
     ).read(offerCacheProvider).remember(offer);
 
 /// Writes [fields] onto [item] and shows [message] with undo. On failure
-/// the item rolls back (the notifier does that) and the toast says
-/// "Preis nicht gespeichert" with a retry.
-Future<void> _writePrice(
+/// the item rolls back (the notifier does that), the toast says "Preis
+/// nicht gespeichert" with a retry and the result is false.
+Future<bool> _writePrice(
   BuildContext context, {
   required String listId,
   required ShoppingItemModel item,
@@ -104,10 +104,11 @@ Future<void> _writePrice(
   );
   try {
     await notifier.updateItem(item.id, fields);
+    return true;
   } catch (e) {
     debugPrint('❌ [OFFERS] Price of an item not saved: $e');
     unawaited(AvoHaptics.error());
-    if (!toastContext.mounted) return;
+    if (!toastContext.mounted) return false;
     AvoToast.show(
       toastContext,
       message: toastContext.tr('offer_toast_price_failed'),
@@ -125,6 +126,7 @@ Future<void> _writePrice(
         );
       },
     );
+    return false;
   }
 }
 
@@ -149,7 +151,7 @@ Future<void> takeOfferPrice(
   item: item,
   fields: offerPriceFields(offer),
   message: context.tr('offer_toast_price_taken', params: {'item': item.name}),
-);
+).then((_) {});
 
 /// "Übernommenen Preis entfernen"; toast "Preis für Milch entfernt".
 Future<void> removeOfferPrice(
@@ -162,7 +164,7 @@ Future<void> removeOfferPrice(
   item: item,
   fields: _noPrice,
   message: context.tr('offer_toast_price_removed', params: {'item': item.name}),
-);
+).then((_) {});
 
 /// "Nicht dieses Angebot": [offer] is hidden for [item] until it ends;
 /// toast "Angebot für Milch ausgeblendet · Widerrufen".
@@ -196,9 +198,11 @@ Future<void> declineOffer(
 /// new item with [quantity] and [unit] and the offer's price is added.
 ///
 /// [listName] set: toast "Milch auf Wocheneinkauf · Widerrufen" for a new
-/// item; an attached offer always says "Angebot an Milch angehängt".
-/// VoiceOver hears "Milch hinzugefügt, im Angebot". Returns false when the
-/// write failed (the toast then says "Nicht hinzugefügt").
+/// item; an attached offer always says "Angebot an Milch angehängt". Once
+/// saved, VoiceOver hears "Milch hinzugefügt, im Angebot" or "Angebot an
+/// Milch angehängt". Returns false when the write failed (the toast then
+/// says "Nicht hinzugefügt" or "Preis nicht gespeichert"), so the caller
+/// keeps what was typed.
 Future<bool> addOfferToList(
   BuildContext context, {
   required String listId,
@@ -221,18 +225,22 @@ Future<bool> addOfferToList(
       .firstOrNull;
 
   if (open != null) {
-    _announce(toastContext, trimmed, direction);
-    await _writePrice(
+    final attached = toastContext.tr(
+      'offer_toast_attached',
+      params: {'item': open.name},
+    );
+    final saved = await _writePrice(
       toastContext,
       listId: listId,
       item: open,
       fields: offerPriceFields(offer),
-      message: toastContext.tr(
-        'offer_toast_attached',
-        params: {'item': open.name},
-      ),
+      message: attached,
     );
-    return true;
+    // Said once it is saved: "Angebot an Milch angehängt".
+    if (saved && toastContext.mounted) {
+      _announce(toastContext, attached, direction);
+    }
+    return saved;
   }
 
   final started = DateTime.now();
@@ -276,7 +284,11 @@ Future<bool> addOfferToList(
     return false;
   }
   if (!toastContext.mounted) return true;
-  _announce(toastContext, trimmed, direction);
+  _announce(
+    toastContext,
+    toastContext.tr('offer_suggest_added_a11y', params: {'item': trimmed}),
+    direction,
+  );
   if (listName != null) {
     final added =
         (container.read(itemsNotifierProvider(listId)).valueOrNull ??
@@ -303,14 +315,8 @@ Future<bool> addOfferToList(
   return true;
 }
 
-void _announce(BuildContext context, String item, TextDirection direction) {
+void _announce(BuildContext context, String message, TextDirection direction) {
   final view = View.maybeOf(context);
   if (view == null) return;
-  unawaited(
-    SemanticsService.sendAnnouncement(
-      view,
-      context.tr('offer_suggest_added_a11y', params: {'item': item}),
-      direction,
-    ),
-  );
+  unawaited(SemanticsService.sendAnnouncement(view, message, direction));
 }

@@ -30,7 +30,8 @@ const double _kHintIcon = 18; // D2 like the savings card's tag
 /// - In the list the card offers "Diese Woche ausblenden" (close button,
 ///   swipe left, long press, VoiceOver) and "Nicht mehr zeigen"; a list
 ///   without a market shows "Für welchen Markt ist …? · Markt wählen"
-///   instead, until it is closed (then a week of quiet).
+///   instead, at most in one opening a week and not for 7 days after it
+///   was closed; never while the market is still being worked out.
 /// - In shopping mode (inside [ShoppingModeHeader]) the card is still: no
 ///   close button, no gestures, no hint.
 ///
@@ -63,6 +64,10 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
   /// opening when it drops below 0,50 € while reading.
   int? _shownSavings;
 
+  /// Decided once per opening: the "Markt wählen" hint shows in this
+  /// opening (at most once a week per list).
+  bool? _hintShows;
+
   @override
   void didUpdateWidget(covariant ListOfferSummary oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -71,6 +76,7 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
       _shows = null;
       _decidedFor = null;
       _shownSavings = null;
+      _hintShows = null;
     }
   }
 
@@ -92,9 +98,16 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
       return const SizedBox.shrink();
     }
 
+    final guess = ref.watch(storeGuessForListProvider(listId));
+    // Still finding out which market the list has: nothing yet, so the hint
+    // never flashes up for a list that has one.
+    if (!guess.hasValue) return const SizedBox.shrink();
     final store = ref.watch(storeForListProvider(listId));
     if (store == null) {
-      if (shopping) return const SizedBox.shrink();
+      // A suggested market is asked about in the chip, not here.
+      if (shopping || guess.valueOrNull != null) {
+        return const SizedBox.shrink();
+      }
       return _noStoreHint(context, prefs, now);
     }
 
@@ -156,12 +169,25 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
     OfferDisplayPrefs? prefs,
     DateTime now,
   ) {
-    final until = prefs?.noStoreHintUntil[widget.listId];
-    if (prefs == null || (until != null && now.isBefore(until))) {
+    final listId = widget.listId;
+    final name = ref.watch(offerListNameProvider(listId));
+    if (prefs == null || name == null || name.isEmpty) {
       return const SizedBox.shrink();
     }
-    final name = ref.watch(offerListNameProvider(widget.listId));
-    if (name == null || name.isEmpty) return const SizedBox.shrink();
+    if (_hintShows == null) {
+      final until = prefs.noStoreHintUntil[listId];
+      final closed = until != null && now.isBefore(until);
+      final shownThisWeek = prefs.noStoreHintWeek[listId] == weekKey(now);
+      _hintShows = !closed && !shownThisWeek;
+      if (_hintShows!) {
+        // Counts as this week's showing; it stays for this opening.
+        final notifier = ref.read(offerDisplayPrefsProvider.notifier);
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => unawaited(notifier.markNoStoreHintShown(listId)),
+        );
+      }
+    }
+    if (_hintShows != true) return const SizedBox.shrink();
     final colors = context.colors;
     return Builder(
       builder: (context) => HintRow(
@@ -173,11 +199,14 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
         text: context.tr('offer_hint_no_store', params: {'list': name}),
         actionLabel: context.tr('offer_hint_no_store_action'),
         onTap: () => unawaited(showStoreMenu(context, ref, widget.listId)),
-        onDismiss: () => unawaited(
-          ref
-              .read(offerDisplayPrefsProvider.notifier)
-              .snoozeNoStoreHint(widget.listId),
-        ),
+        onDismiss: () {
+          setState(() => _hintShows = false);
+          unawaited(
+            ref
+                .read(offerDisplayPrefsProvider.notifier)
+                .snoozeNoStoreHint(widget.listId),
+          );
+        },
       ),
     );
   }

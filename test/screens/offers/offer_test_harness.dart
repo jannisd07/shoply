@@ -23,6 +23,9 @@ import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/routes/areas/offers_routes.dart';
 
 const String testListId = 'list-1';
+
+/// The signed-in account in the offer tests.
+const String testAccount = 'user-a';
 const Region testRegion = Region(
   zip: '79098',
   city: 'Freiburg',
@@ -169,6 +172,7 @@ List<Override> offersOn({
 }) => [
   offersRemoteEnabledProvider.overrideWithValue(true),
   offersAvailableProvider.overrideWithValue(true),
+  offerAccountIdProvider.overrideWithValue(testAccount),
   offersVisibleForListProvider.overrideWith((ref, id) => true),
   regionProvider.overrideWithValue(region),
   regionLoadedProvider.overrideWithValue(true),

@@ -3,9 +3,10 @@
 /// ausblenden" per list, "Nicht dieses Angebot" per item, the snoozed
 /// "Markt wählen" hint and "Nicht fragen" for a suggested market.
 ///
-/// Kept on this device only until the account table `user_offer_prefs`
-/// exists (Lücke L4/L6, owner question 14); one JSON value in
-/// SharedPreferences.
+/// Kept on this device per account until the account table
+/// `user_offer_prefs` exists (Lücke L4/L6, owner question 14): one JSON
+/// value in SharedPreferences under [offerDisplayPrefsKeyFor]; signed out
+/// nothing is stored. Another account on the device starts with none of it.
 library;
 
 import 'dart:convert';
@@ -18,8 +19,14 @@ import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
 
-/// SharedPreferences key of [OfferDisplayPrefs].
+/// Prefix of the SharedPreferences key of [OfferDisplayPrefs]. A value
+/// stored under the bare prefix (device-wide, only on development builds of
+/// this branch) is dropped, not moved to an account.
 const String offerDisplayPrefsKey = 'offers_display_prefs_v1';
+
+/// SharedPreferences key of the choices of [userId].
+String offerDisplayPrefsKeyFor(String userId) =>
+    '$offerDisplayPrefsKey:$userId';
 
 /// How long a dismissed "Für welchen Markt ist …?" hint stays away.
 const Duration noStoreHintPause = Duration(days: 7);
@@ -52,6 +59,7 @@ class OfferDisplayPrefs {
     this.summaryHiddenWeek = const {},
     this.declined = const {},
     this.noStoreHintUntil = const {},
+    this.noStoreHintWeek = const {},
     this.dontAskStore = const {},
   });
 
@@ -64,8 +72,12 @@ class OfferDisplayPrefs {
   /// Item id -> the offer hidden for it.
   final Map<String, DeclinedOffer> declined;
 
-  /// List id -> until when the "Markt wählen" hint stays away.
+  /// List id -> until when the "Markt wählen" hint stays away (closed).
   final Map<String, DateTime> noStoreHintUntil;
+
+  /// List id -> week key ([weekKey]) in which the "Markt wählen" hint was
+  /// shown: at most once a week per list (`angebote.md` 3.4).
+  final Map<String, String> noStoreHintWeek;
 
   /// List id -> chain the person does not want suggested again.
   final Map<String, String> dontAskStore;
@@ -83,12 +95,14 @@ class OfferDisplayPrefs {
     Map<String, String>? summaryHiddenWeek,
     Map<String, DeclinedOffer>? declined,
     Map<String, DateTime>? noStoreHintUntil,
+    Map<String, String>? noStoreHintWeek,
     Map<String, String>? dontAskStore,
   }) => OfferDisplayPrefs(
     off: off ?? this.off,
     summaryHiddenWeek: summaryHiddenWeek ?? this.summaryHiddenWeek,
     declined: declined ?? this.declined,
     noStoreHintUntil: noStoreHintUntil ?? this.noStoreHintUntil,
+    noStoreHintWeek: noStoreHintWeek ?? this.noStoreHintWeek,
     dontAskStore: dontAskStore ?? this.dontAskStore,
   );
 
@@ -106,6 +120,7 @@ class OfferDisplayPrefs {
       for (final e in noStoreHintUntil.entries)
         e.key: e.value.toIso8601String(),
     },
+    'noStoreHintWeek': noStoreHintWeek,
     'dontAskStore': dontAskStore,
   };
 
@@ -132,6 +147,10 @@ class OfferDisplayPrefs {
           if (DateTime.tryParse('${e.value}') case final until?
               when now.isBefore(until))
             '${e.key}': until,
+      },
+      noStoreHintWeek: {
+        for (final e in (json['noStoreHintWeek'] as Map? ?? const {}).entries)
+          if (e.value == week) '${e.key}': week,
       },
       dontAskStore: {
         for (final e in (json['dontAskStore'] as Map? ?? const {}).entries)
@@ -162,10 +181,15 @@ String weekKey(DateTime date) {
 /// The clock of the offer prefs; override in tests.
 final offerClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
-/// The prefs, null until loaded from the device.
+/// The prefs of the signed-in account, null until loaded from the device.
+/// Starts again (and loads the other account's choices) when the account
+/// changes; signed out it holds an empty, unsaved set.
 final offerDisplayPrefsProvider =
     StateNotifierProvider<OfferDisplayPrefsNotifier, OfferDisplayPrefs?>(
-      (ref) => OfferDisplayPrefsNotifier(ref.watch(offerClockProvider)),
+      (ref) => OfferDisplayPrefsNotifier(
+        ref.watch(offerClockProvider),
+        userId: ref.watch(offerAccountIdProvider),
+      ),
     );
 
 /// Whether an offer surface may show on [listId] (`angebote.md` 3.1):
@@ -185,17 +209,28 @@ final offerSurfaceVisibleProvider =
     });
 
 class OfferDisplayPrefsNotifier extends StateNotifier<OfferDisplayPrefs?> {
-  OfferDisplayPrefsNotifier(this._now) : super(null) {
+  OfferDisplayPrefsNotifier(this._now, {this.userId}) : super(null) {
     _loaded = _load();
   }
 
   final DateTime Function() _now;
+
+  /// Whose choices these are; null signed out (nothing is stored).
+  final String? userId;
   late final Future<void> _loaded;
 
   Future<void> _load() async {
+    final id = userId;
+    if (id == null) {
+      if (mounted) state = const OfferDisplayPrefs();
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(offerDisplayPrefsKey);
+      if (prefs.containsKey(offerDisplayPrefsKey)) {
+        await prefs.remove(offerDisplayPrefsKey);
+      }
+      final raw = prefs.getString(offerDisplayPrefsKeyFor(id));
       final json = raw == null ? null : jsonDecode(raw);
       if (mounted) {
         state = json is Map<String, dynamic>
@@ -215,9 +250,14 @@ class OfferDisplayPrefsNotifier extends StateNotifier<OfferDisplayPrefs?> {
     if (!mounted) return;
     final next = change(state ?? const OfferDisplayPrefs());
     state = next;
+    final id = userId;
+    if (id == null) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(offerDisplayPrefsKey, jsonEncode(next.toJson()));
+      await prefs.setString(
+        offerDisplayPrefsKeyFor(id),
+        jsonEncode(next.toJson()),
+      );
     } catch (e) {
       debugPrint('⚠️ [OFFERS] Offer display choices not saved: $e');
     }
@@ -261,6 +301,14 @@ class OfferDisplayPrefsNotifier extends StateNotifier<OfferDisplayPrefs?> {
         ...p.noStoreHintUntil,
         listId: _now().add(noStoreHintPause),
       },
+    ),
+  );
+
+  /// Notes that the "Markt wählen" hint of [listId] was shown this week, so
+  /// a later opening in the same week does not show it again.
+  Future<void> markNoStoreHintShown(String listId) => _update(
+    (p) => p.copyWith(
+      noStoreHintWeek: {...p.noStoreHintWeek, listId: weekKey(_now())},
     ),
   );
 

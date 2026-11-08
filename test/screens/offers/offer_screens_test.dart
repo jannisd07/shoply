@@ -1,17 +1,21 @@
 // "Markt wählen" (S2, /stores/pick) and "Angebot" (S5, /offers/offer/:id):
 // full screens above the tab bar, never sheets; what they show, what they
 // save, and how they close.
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/list_store_repository.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
 import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
+import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/store_choice_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/offers/offer_detail_screen.dart';
@@ -177,8 +181,12 @@ void main() {
         snapshot: testSnapshot({'Milch': offer}),
         items: [milk],
         notifier: notifier,
-        suggestions: more,
       ),
+      // "Weitere Angebote" come from the device only.
+      cachedMoreOffersProvider.overrideWith((ref, key) => more),
+      offerSuggestionsProvider.overrideWith((ref, request) async {
+        fail('the offer detail never searches');
+      }),
       offerByIdProvider.overrideWith(
         (ref, key) => key.offerId == offer.id ? offer : null,
       ),
@@ -367,6 +375,155 @@ void main() {
       await tester.pumpAndSettle();
       expect(notifier.added.single.name, 'Milch');
       expect(find.text('Milch auf Wocheneinkauf'), findsOneWidget);
+    });
+  });
+
+  group('S5 when offers switch off while it is open', () {
+    final module = StateProvider<bool>((ref) => true);
+    final kill = StateProvider<bool>((ref) => true);
+
+    Future<ProviderContainer> openLive(WidgetTester tester) async {
+      final offer = testOffer();
+      await _open(
+        tester,
+        offerDetailLocation(
+          offer.id,
+          listId: testListId,
+          itemId: 'a',
+          mode: OfferDetailMode.take,
+        ),
+        overrides: [
+          ...offersOn(
+            snapshot: testSnapshot({'Milch': offer}),
+            items: [testItem('a', 'Milch')],
+          ),
+          offerByIdProvider.overrideWith((ref, key) => offer),
+          moduleEnabledProvider.overrideWith((ref, m) => ref.watch(module)),
+          offersRemoteEnabledProvider.overrideWith((ref) => ref.watch(kill)),
+          offersAvailableProvider.overrideWith(
+            (ref) => ref.watch(module) && ref.watch(kill),
+          ),
+        ],
+      );
+      expect(find.byType(OfferDetailScreen), findsOneWidget);
+      return ProviderScope.containerOf(
+        tester.element(find.byType(OfferDetailScreen)),
+      );
+    }
+
+    void expectQuiet() {
+      expect(find.byType(CupertinoAlertDialog), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(RouteErrorScreen), findsNothing);
+      expect(find.textContaining('ausgeschaltet'), findsNothing);
+    }
+
+    testWidgets('module off elsewhere: closes silently, no dialog', (
+      tester,
+    ) async {
+      final container = await openLive(tester);
+      container.read(module.notifier).state = false;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expectQuiet();
+      await tester.pumpAndSettle();
+      expectQuiet();
+      expect(find.byType(OfferDetailScreen), findsNothing);
+      expect(find.text('open').hitTestable(), findsOneWidget);
+    });
+
+    testWidgets('kill switch: closes silently, no error page', (tester) async {
+      final container = await openLive(tester);
+      container.read(kill.notifier).state = false;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expectQuiet();
+      await tester.pumpAndSettle();
+      expectQuiet();
+      expect(find.byType(OfferDetailScreen), findsNothing);
+      expect(find.text('open').hitTestable(), findsOneWidget);
+    });
+
+    testWidgets('opened while the module is off: A asks first', (tester) async {
+      final offer = testOffer();
+      await _open(
+        tester,
+        offerDetailLocation(offer.id, listId: testListId),
+        overrides: [
+          ...offersOn(),
+          offerByIdProvider.overrideWith((ref, key) => offer),
+          moduleEnabledProvider.overrideWith((ref, m) => false),
+        ],
+      );
+      expect(find.byType(OfferDetailScreen), findsNothing);
+      expect(find.textContaining('ausgeschaltet'), findsWidgets);
+    });
+  });
+
+  group('S5 finds an offer only where offers may show', () {
+    testWidgets('without a real region: "nicht mehr gespeichert"', (
+      tester,
+    ) async {
+      final offer = testOffer();
+      await _open(
+        tester,
+        offerDetailLocation(offer.id, listId: testListId),
+        overrides: [
+          ...offersOn(region: null),
+          offerCacheProvider.overrideWith(
+            (ref) => OfferCache()..remember(offer),
+          ),
+        ],
+      );
+      expect(
+        find.text('Dieses Angebot ist nicht mehr gespeichert.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('on a list with hidden offers: "nicht mehr gespeichert"', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        hiddenOfferListsKeyFor(testAccount): [testListId],
+      });
+      final offer = testOffer();
+      await _open(
+        tester,
+        offerDetailLocation(offer.id, listId: testListId),
+        overrides: [
+          ...offersOn(),
+          offersVisibleForListProvider.overrideWith(
+            (ref, id) =>
+                !(ref.watch(hiddenOfferListsProvider)?.contains(id) ?? true),
+          ),
+          offerCacheProvider.overrideWith(
+            (ref) => OfferCache()..remember(offer),
+          ),
+        ],
+      );
+      expect(
+        find.text('Dieses Angebot ist nicht mehr gespeichert.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('with region and a visible list the cached offer opens', (
+      tester,
+    ) async {
+      final offer = testOffer();
+      await _open(
+        tester,
+        offerDetailLocation(offer.id, listId: testListId),
+        overrides: [
+          ...offersOn(),
+          offerCacheProvider.overrideWith(
+            (ref) => OfferCache()..remember(offer),
+          ),
+        ],
+      );
+      expect(find.text('Milbona Frische Vollmilch 3,5 %'), findsOneWidget);
+      expect(find.text('Auf die Liste'), findsOneWidget);
     });
   });
 

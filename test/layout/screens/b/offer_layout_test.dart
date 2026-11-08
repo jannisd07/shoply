@@ -345,10 +345,9 @@ void main() {
             mode: OfferDetailMode.take,
           ),
           overrides: [
-            ...offersOn(
-              snapshot: snapshot,
-              items: items,
-              suggestions: [long, testOffer(id: 9, broad: true)],
+            ...offersOn(snapshot: snapshot, items: items),
+            cachedMoreOffersProvider.overrideWith(
+              (ref, key) => [long, testOffer(id: 9, broad: true)],
             ),
             offerByIdProvider.overrideWith((ref, key) => long),
           ],

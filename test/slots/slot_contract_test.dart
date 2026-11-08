@@ -10,8 +10,10 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_info.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
+import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
+import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/recipe_offers_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
@@ -217,9 +219,29 @@ void main() {
     });
   });
 
-  group('without offers of the list the item slots render nothing', () {
-    List<Override> offersOn() => [
+  group('offers on, but the source has nothing: the item slots render '
+      'nothing', () {
+    late _EmptySource source;
+
+    setUp(() => source = _EmptySource());
+
+    /// Kill switch known on, module on, list not hidden, a real region and
+    /// Lidl as the confirmed market: only the empty source keeps them empty.
+    List<Override> offersOnNoData() => [
+      offersRemoteEnabledProvider.overrideWithValue(true),
       offersAvailableProvider.overrideWithValue(true),
+      offerAccountIdProvider.overrideWithValue('me'),
+      regionLoadedProvider.overrideWithValue(true),
+      regionProvider.overrideWithValue(
+        const Region(zip: '80331', source: RegionSource.manual),
+      ),
+      storeForListProvider.overrideWith(
+        (ref, listId) =>
+            const StoreInfo(id: 'lidl', name: 'Lidl', shortLabel: 'L'),
+      ),
+      cachedStoreOfListProvider.overrideWith((ref, id) => 'lidl'),
+      offerListItemsProvider.overrideWith((ref, id) => [item]),
+      offerPriceServiceProvider.overrideWithValue(source),
     ];
 
     testWidgets('ItemOfferBadge, also compact', (tester) async {
@@ -231,29 +253,34 @@ void main() {
             ItemOfferBadge(listId: listId, item: item, compact: true),
           ],
         ),
-        overrides: offersOn(),
+        overrides: offersOnNoData(),
       );
       for (final badge in tester.widgetList(find.byType(ItemOfferBadge))) {
         _expectEmpty(tester, find.byWidget(badge));
       }
+      expect(source.calls, greaterThan(0), reason: 'the gate was open');
     });
 
     testWidgets('ItemOfferCard', (tester) async {
       await _pumpSlot(
         tester,
         ItemOfferCard(listId: listId, item: item),
-        overrides: offersOn(),
+        overrides: offersOnNoData(),
       );
       _expectEmpty(tester, find.byType(ItemOfferCard));
+      expect(source.calls, greaterThan(0), reason: 'the gate was open');
     });
 
-    testWidgets('ListOfferCountBadge', (tester) async {
+    testWidgets('ListOfferCountBadge (nothing cached, nothing asked)', (
+      tester,
+    ) async {
       await _pumpSlot(
         tester,
         const ListOfferCountBadge(listId: listId),
-        overrides: offersOn(),
+        overrides: offersOnNoData(),
       );
       _expectEmpty(tester, find.byType(ListOfferCountBadge));
+      expect(source.calls, 0, reason: 'a list card reads the cache only');
     });
   });
 
@@ -309,7 +336,7 @@ void main() {
     });
 
     testWidgets(
-      'setOffersHiddenForList hides and shows again, saved on the device',
+      'setOffersHiddenForList hides and shows again, saved for the account',
       (tester) async {
         final (container, ref) = await _widgetRef(tester);
 
@@ -317,15 +344,17 @@ void main() {
         expect(container.read(offersHiddenForListProvider(listId)), isTrue);
         expect(container.read(offersHiddenForListProvider('other')), isFalse);
         final prefs = await SharedPreferences.getInstance();
-        expect(prefs.getStringList(hiddenOfferListsPrefsKey), [listId]);
+        expect(prefs.getStringList(hiddenOfferListsKeyFor('me')), [listId]);
 
         await tester.runAsync(() => setOffersHiddenForList(ref, listId, false));
         expect(container.read(offersHiddenForListProvider(listId)), isFalse);
-        expect(prefs.getStringList(hiddenOfferListsPrefsKey), isEmpty);
+        expect(prefs.getStringList(hiddenOfferListsKeyFor('me')), isEmpty);
       },
     );
 
-    testWidgets('keeps the lists hidden in an earlier session', (tester) async {
+    testWidgets('moves the device-wide choice to the account once', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         hiddenOfferListsPrefsKey: ['old-list'],
       });
@@ -337,9 +366,10 @@ void main() {
       expect(container.read(offersHiddenForListProvider(listId)), isTrue);
       final prefs = await SharedPreferences.getInstance();
       expect(
-        prefs.getStringList(hiddenOfferListsPrefsKey),
+        prefs.getStringList(hiddenOfferListsKeyFor('me')),
         unorderedEquals(['old-list', listId]),
       );
+      expect(prefs.getStringList(hiddenOfferListsPrefsKey), isNull);
     });
   });
 
@@ -457,7 +487,9 @@ void main() {
 /// A [WidgetRef] from a mounted [Consumer], as Teil A's list menu has one.
 Future<(ProviderContainer, WidgetRef)> _widgetRef(WidgetTester tester) async {
   late WidgetRef captured;
-  final container = ProviderContainer();
+  final container = ProviderContainer(
+    overrides: [offerAccountIdProvider.overrideWithValue('me')],
+  );
   addTearDown(container.dispose);
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -563,6 +595,7 @@ class _OfferSourceSpy {
   /// (module) decides.
   List<Override> get overrides => [
     offersRemoteEnabledProvider.overrideWithValue(true),
+    offerAccountIdProvider.overrideWithValue('me'),
     regionLoadedProvider.overrideWithValue(true),
     regionProvider.overrideWithValue(
       const Region(zip: '80331', source: RegionSource.manual),
@@ -622,5 +655,32 @@ class _RecordingItemsNotifier extends ItemsNotifier {
       retailer: priceRetailer,
       autoParse: autoParse,
     ));
+  }
+}
+
+/// An offers source that knows nothing; counts every search.
+class _EmptySource extends Fake implements OfferPriceService {
+  int calls = 0;
+
+  @override
+  Future<List<StoreOffer>?> trySearchOffers(
+    String query, {
+    required String zipCode,
+    String? chainId,
+    int limit = 30,
+  }) async {
+    calls++;
+    return const [];
+  }
+
+  @override
+  Future<List<StoreOffer>> searchOffers(
+    String query, {
+    required String zipCode,
+    String? chainId,
+    int limit = 30,
+  }) async {
+    calls++;
+    return const [];
   }
 }

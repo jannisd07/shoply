@@ -13,7 +13,7 @@ import 'package:shoply/presentation/screens/offers/offer_text.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_price_tag.dart';
 
 /// Room around the pill inside its 44-pt target (`angebote.md` 3.9).
-const double _kTargetInset = AvoSpacing.xs;
+const double _kTargetInset = AvoSpacing.xs; // D2 target = pill + 8 (3.9)
 
 /// The offer pill at one item of a list (S3, contract `b_slots.dart`): the
 /// price of the item's current offer at the list's market, "0,99 €", with a

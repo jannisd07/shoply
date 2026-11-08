@@ -18,7 +18,7 @@ import 'package:shoply/presentation/screens/offers/offer_text.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_row.dart';
 
 /// At most this many offers above the add field (S6).
-const int _kMaxRows = 3;
+const int _kMaxRows = 3; // D2 at most three rows (angebote.md S6)
 
 // The panel: a white card on the floating layer (D2 hint card).
 const double _kShadowAlpha = 0.08; // D2 `.card` on the floating layer

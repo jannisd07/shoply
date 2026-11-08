@@ -12,6 +12,7 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
@@ -39,7 +40,11 @@ class OfferCache {
   StoreOffer? byId(int id) => _byId[id];
 }
 
-final offerCacheProvider = Provider<OfferCache>((ref) => OfferCache());
+/// The session's offers; a new, empty cache for another account.
+final offerCacheProvider = Provider<OfferCache>((ref) {
+  ref.watch(offerAccountIdProvider);
+  return OfferCache();
+});
 
 /// What [offerByIdProvider] looks up: the offer and the list whose cached
 /// offers may hold it.
@@ -55,9 +60,21 @@ final offerByIdProvider = FutureProvider.autoDispose
           !ref.watch(offersAvailableProvider)) {
         return null;
       }
+      // Without a real region there are no offers (`angebote.md` 1.3) and a
+      // hidden list shows none; both wait while they are still being read.
+      if (!ref.watch(regionLoadedProvider)) {
+        return Completer<StoreOffer?>().future;
+      }
+      if (ref.watch(regionProvider) == null) return null;
+      final listId = key.listId;
+      if (listId != null) {
+        if (ref.watch(hiddenOfferListsProvider) == null) {
+          return Completer<StoreOffer?>().future;
+        }
+        if (!ref.watch(offersVisibleForListProvider(listId))) return null;
+      }
       final known = ref.watch(offerCacheProvider).byId(key.offerId);
       if (known != null) return known;
-      final listId = key.listId;
       if (listId == null) return null;
       return ref
           .watch(listOfferSyncProvider)
@@ -166,3 +183,25 @@ final offerListNameProvider = Provider.autoDispose.family<String?, String>(
     ),
   ),
 );
+
+/// What [cachedMoreOffersProvider] is asked for: the list and the item name.
+typedef MoreOffersKey = ({String listId, String query});
+
+/// "Weitere Angebote bei Lidl" in the offer detail (S5): offers of the
+/// list's market for the item that an earlier search left on the device,
+/// read once when the detail opens and never a request, so the section never
+/// appears late. Empty without them or while offers may not show.
+final cachedMoreOffersProvider = Provider.autoDispose
+    .family<List<StoreOffer>, MoreOffersKey>((ref, key) {
+      if (!ref.watch(offersRemoteEnabledProvider) ||
+          !ref.watch(offersVisibleForListProvider(key.listId))) {
+        return const [];
+      }
+      final region = ref.watch(regionProvider);
+      final chainId = ref.watch(storeForListProvider(key.listId))?.id;
+      if (region == null || chainId == null) return const [];
+      return ref
+              .read(offerPriceServiceProvider)
+              .cachedOffers(key.query, zipCode: region.zip, chainId: chainId) ??
+          const [];
+    });

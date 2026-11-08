@@ -20,10 +20,10 @@ const EdgeInsets _kLargePadding = EdgeInsets.symmetric(
 const double _kLargeRadius = 22; // D2
 
 /// The small pill grows with Dynamic Type up to AX2 (Konzept 00 §6.4).
-const double _kSmallMaxScale = 33 / 17;
+const double _kSmallMaxScale = 33 / 17; // D2 AX2 cap (Konzept 00 §6.4)
 
 /// The large price stops at AX3, where `title1` is 48 pt (at most 51 pt).
-const double _kLargeMaxScale = 40 / 17;
+const double _kLargeMaxScale = 40 / 17; // D2 AX3 cap (angebote.md 2.3)
 
 /// Size of an [OfferPriceTag].
 enum OfferPriceTagSize {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,8 +25,8 @@ const double _kMark = 28; // D2 StoreMark in S2 rows
 const double _kCheck = 17; // D2 check mark at the row start
 const double _kRowMin = 52; // D2 one line
 const double _kRowMinTwoLines = 60; // D2 with a second line
-const double _kRowVertical = 8;
-const double _kGap = AvoSpacing.m;
+const double _kRowVertical = AvoSpacing.s; // D2 row padding 8
+const double _kGap = AvoSpacing.m; // D2 gap 12
 
 /// "Markt wählen" (S2, `/stores/pick`, full screen, core): which market is
 /// it when it is not in the menu? A search over every market (aliases and
@@ -64,7 +66,7 @@ class _StorePickerScreenState extends ConsumerState<StorePickerScreen> {
 
   void _pick(StoreChoice choice) {
     final listId = widget.listId;
-    if (listId != null) applyStoreChoice(context, listId, choice);
+    if (listId != null) unawaited(applyStoreChoice(context, listId, choice));
     context.pop(choice);
   }
 

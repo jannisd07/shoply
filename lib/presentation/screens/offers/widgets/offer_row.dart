@@ -11,7 +11,7 @@ const double _kMinHeightFull = 60; // D2 with a second line
 const double _kVertical = 8; // D2
 const double _kTile = 28; // D2 category symbol in rows
 const double _kTileRadius = 8; // D2
-const double _kTileGlyph = 16;
+const double _kTileGlyph = 16; // D2 symbol inside the 28-pt tile
 const double _kGap = AvoSpacing.m; // D2 gap 12
 
 /// Where a row's text starts with the category symbol (for the group's

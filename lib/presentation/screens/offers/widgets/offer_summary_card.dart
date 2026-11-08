@@ -18,12 +18,12 @@ const EdgeInsetsDirectional _kPadding = EdgeInsetsDirectional.fromSTEB(
 ); // D2
 const double _kIcon = 18; // D2 tag
 const double _kGap = 10; // D2
-const double _kChevron = 14;
+const double _kChevron = 14; // D2 chevron.right
 const double _kClose = 12; // D2 close glyph in a 44-pt target
 const double _kShadowAlpha = 0.04; // D2 `.card`
 const double _kShadowBlur = 2; // D2
 const Offset _kShadowOffset = Offset(0, 1); // D2
-const double _kSwipeThreshold = 0.35;
+const double _kSwipeThreshold = 0.35; // D2 swipe to hide, shorter than delete
 
 /// The two-line savings card (S7, `OfferSummaryText`): "4 von 11 Artikeln
 /// diese Woche bei Lidl im Angebot" in 15/20 semibold, below it "ca. 3,20 €

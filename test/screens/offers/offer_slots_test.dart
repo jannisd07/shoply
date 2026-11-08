@@ -1,17 +1,21 @@
 // The offer slots with content (angebote.md S1, S3, S4, S6, S7, S8): what
 // they show, what a tap does, what VoiceOver hears, and that they stay
 // empty without a region or with their switch off.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shoply/data/services/offer_price_service.dart';
+import 'package:shoply/data/services/store_detection_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
 import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/item_offer_badge.dart';
 import 'package:shoply/presentation/screens/lists/widgets/item_offer_card.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_offer_count_badge.dart';
@@ -21,6 +25,7 @@ import 'package:shoply/presentation/screens/lists/widgets/store_chip.dart';
 import 'package:shoply/presentation/screens/offers/offer_detail_screen.dart';
 import 'package:shoply/presentation/screens/offers/store_picker_screen.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/hint_row.dart';
 
 import 'offer_test_harness.dart';
 
@@ -72,16 +77,12 @@ void main() {
               asked++;
               return [offer];
             }),
-            listOfferBadgeCountProvider.overrideWith((ref, id) async {
-              final visible = ref.watch(
-                offerSurfaceVisibleProvider((
-                  surface: OfferSurface.itemOffers,
-                  listId: id,
-                )),
-              );
-              if (visible) asked++;
-              return visible ? 2 : 0;
-            }),
+            // The real counter; only its cache read is watched.
+            cachedStoreOfListProvider.overrideWith((ref, id) => 'lidl'),
+            listOfferSyncProvider.overrideWith(
+              (ref) =>
+                  _CachedSync({testListId: snapshot}, onRead: () => asked++),
+            ),
           ],
         );
         for (final type in [
@@ -194,7 +195,7 @@ void main() {
       expect(tester.getSize(find.byType(ItemOfferBadge)), Size.zero);
 
       SharedPreferences.setMockInitialValues({
-        offerDisplayPrefsKey: '{"off":["itemOffers"]}',
+        offerDisplayPrefsKeyFor(testAccount): '{"off":["itemOffers"]}',
       });
       await pumpOffers(
         tester,
@@ -208,7 +209,7 @@ void main() {
       tester,
     ) async {
       SharedPreferences.setMockInitialValues({
-        offerDisplayPrefsKey:
+        offerDisplayPrefsKeyFor(testAccount):
             '{"declined":{"a":{"offer":7,"until":"2099-12-31T00:00:00.000"}}}',
       });
       await pumpOffers(
@@ -413,27 +414,97 @@ void main() {
       expect(find.textContaining('im Angebot'), findsNothing);
     });
 
-    testWidgets('a list without a market asks which one, once a week', (
+    const hint =
+        'Für welchen Markt ist Wocheneinkauf? Dann siehst du dessen Angebote.';
+
+    testWidgets('a list without a market asks which one, at most once a week', (
+      tester,
+    ) async {
+      var now = DateTime(2026, 11, 10, 9);
+      List<Override> overrides() => [
+        ...offersOn(snapshot: snapshot, items: items, chainId: null),
+        offerClockProvider.overrideWithValue(() => now),
+      ];
+      await pumpOffers(
+        tester,
+        const ListOfferSummary(listId: testListId),
+        overrides: overrides(),
+      );
+      expect(find.text(hint), findsOneWidget);
+      expect(find.text('Markt wählen'), findsOneWidget);
+
+      // Opened again the same week: not again.
+      now = DateTime(2026, 11, 13, 18);
+      await pumpOffers(
+        tester,
+        const ListOfferSummary(listId: testListId),
+        overrides: overrides(),
+      );
+      expect(find.text(hint), findsNothing);
+
+      // Next week it may ask once more.
+      now = DateTime(2026, 11, 17, 9);
+      await pumpOffers(
+        tester,
+        const ListOfferSummary(listId: testListId),
+        overrides: overrides(),
+      );
+      expect(find.text(hint), findsOneWidget);
+    });
+
+    testWidgets('closing the hint keeps it away for 7 days', (tester) async {
+      var now = DateTime(2026, 11, 10, 9);
+      List<Override> overrides() => [
+        ...offersOn(snapshot: snapshot, items: items, chainId: null),
+        offerClockProvider.overrideWithValue(() => now),
+      ];
+      await pumpOffers(
+        tester,
+        const ListOfferSummary(listId: testListId),
+        overrides: overrides(),
+      );
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(HintRow),
+              matching: find.byWidgetPredicate(
+                (w) => w is GestureDetector && w.onTap != null,
+              ),
+            )
+            .last,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(hint), findsNothing);
+
+      now = DateTime(2026, 11, 16, 9); // next week, but within 7 days
+      await pumpOffers(
+        tester,
+        const ListOfferSummary(listId: testListId),
+        overrides: overrides(),
+      );
+      expect(find.text(hint), findsNothing);
+    });
+
+    testWidgets('no hint while the market of the list is still loading', (
       tester,
     ) async {
       await pumpOffers(
         tester,
         const ListOfferSummary(listId: testListId),
-        overrides: offersOn(snapshot: snapshot, items: items, chainId: null),
+        overrides: [
+          ...offersOn(snapshot: snapshot, items: items),
+          storeGuessForListProvider.overrideWith(
+            (ref, id) => Completer<StoreGuess?>().future,
+          ),
+        ],
       );
-      expect(
-        find.text(
-          'Für welchen Markt ist Wocheneinkauf? Dann siehst du dessen '
-          'Angebote.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('Markt wählen'), findsOneWidget);
+      expect(find.text(hint), findsNothing);
+      expect(tester.getSize(find.byType(ListOfferSummary)), Size.zero);
     });
 
     testWidgets('nothing with "Ersparnis in der Liste" off', (tester) async {
       SharedPreferences.setMockInitialValues({
-        offerDisplayPrefsKey: '{"off":["listSavings"]}',
+        offerDisplayPrefsKeyFor(testAccount): '{"off":["listSavings"]}',
       });
       await pumpOffers(
         tester,
@@ -530,6 +601,29 @@ void main() {
       expect(cleared, 0);
     });
 
+    testWidgets('a failed attach keeps the typed text', (tester) async {
+      final notifier = RecordingItemsNotifier([milk], fail: true);
+      var cleared = 0;
+      await pumpOffers(
+        tester,
+        OfferSuggestionsBar(
+          listId: testListId,
+          query: 'milch',
+          onAdded: () => cleared++,
+        ),
+        overrides: offersOn(
+          items: [milk],
+          notifier: notifier,
+          suggestions: [offer],
+        ),
+      );
+      await tester.tap(find.text('Milbona Frische Vollmilch 3,5 %'));
+      await tester.pumpAndSettle();
+      expect(notifier.updates, hasLength(1));
+      expect(find.text('Preis nicht gespeichert'), findsOneWidget);
+      expect(cleared, 0);
+    });
+
     testWidgets('nothing with "Vorschläge beim Tippen" off or one letter', (
       tester,
     ) async {
@@ -540,7 +634,7 @@ void main() {
       );
       expect(tester.getSize(find.byType(OfferSuggestionsBar)), Size.zero);
       SharedPreferences.setMockInitialValues({
-        offerDisplayPrefsKey: '{"off":["typingSuggestions"]}',
+        offerDisplayPrefsKeyFor(testAccount): '{"off":["typingSuggestions"]}',
       });
       await pumpOffers(
         tester,
@@ -613,12 +707,29 @@ void main() {
 
 /// A sync that only has what is cached; it never fetches.
 class _CachedSync extends ListOfferSync {
-  _CachedSync(this.snapshots) : super(_NoService());
+  _CachedSync(this.snapshots, {this.onRead}) : super(_NoService());
 
   final Map<String, ListOfferSnapshot> snapshots;
 
+  /// Called on every read of the cache or the source.
+  final VoidCallback? onRead;
+
   @override
-  Future<ListOfferSnapshot?> cached(String listId) async => snapshots[listId];
+  Future<ListOfferSnapshot?> cached(String listId) async {
+    onRead?.call();
+    return snapshots[listId];
+  }
+
+  @override
+  Future<ListOfferSnapshot> sync({
+    required String listId,
+    required String chainId,
+    required String zip,
+    required List<String> itemNames,
+  }) async {
+    onRead?.call();
+    return snapshots[listId]!;
+  }
 }
 
 class _NoService extends Fake implements OfferPriceService {}

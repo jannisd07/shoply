@@ -18,7 +18,7 @@ const Color _kInkOnDark = Color(0xFFFFFFFF); // D2
 const Map<String, Color> _kBrandInk = {'lidl': Color(0xFFFFE500)}; // D2
 
 /// Above this relative luminance a brand colour takes the dark letter.
-const double _kLightBrand = 0.4;
+const double _kLightBrand = 0.4; // D2 letter rule (angebote.md 3.8)
 
 /// D2 tile: radius and letter size relative to the side (18 → 5 and 10).
 const double _kRadiusRatio = 5 / 18; // D2
@@ -27,13 +27,13 @@ const double _kOutline = 1; // D2 inner outline of light tiles
 
 /// Fallback for a brand colour without a directory entry: outline above
 /// this luminance (as `StoreChain.needsOutlineOn`).
-const double _kOutlineLuminance = 0.6;
+const double _kOutlineLuminance = 0.6; // D2 outline rule (2.3)
 
 /// Side padding of the letters inside the tile, relative to its side.
 const double _kLetterInset = 0.08; // D2 "AS" fits an 18-pt tile
 
 /// The tile grows with Dynamic Type up to AX2 (33 / 17), then stays.
-const double _kMaxScale = 33 / 17;
+const double _kMaxScale = 33 / 17; // D2 AX2 cap (angebote.md 2.3)
 
 /// The D2 letter tile of a market (`angebote.md` 2.3): the brand colour with
 /// one or two letters ("L", "AS"), heavy. Light brand colours get a 1-pt

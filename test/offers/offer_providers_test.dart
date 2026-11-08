@@ -13,6 +13,8 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_info.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
+import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
@@ -39,17 +41,16 @@ Map<String, Object?> _result(
   double price,
   String chain, {
   double? oldPrice,
-}) =>
-    {
-      'id': id,
-      'price': price,
-      'oldPrice': oldPrice,
-      'description': '',
-      'product': {'name': name},
-      'advertisers': [
-        {'name': chain == 'lidl' ? 'Lidl' : 'REWE', 'uniqueName': chain},
-      ],
-    };
+}) => {
+  'id': id,
+  'price': price,
+  'oldPrice': oldPrice,
+  'description': '',
+  'product': {'name': name},
+  'advertisers': [
+    {'name': chain == 'lidl' ? 'Lidl' : 'REWE', 'uniqueName': chain},
+  ],
+};
 
 /// Counts every HTTP request to the offers source (keys page and search).
 class _Source {
@@ -108,8 +109,8 @@ ProviderContainer _container({
   List<ShoppingItemModel>? items,
   _Clock? clock,
 }) {
-  final open = items ??
-      [_item('a', 'Milch'), _item('b', 'Butter'), _item('c', 'Brot')];
+  final open =
+      items ?? [_item('a', 'Milch'), _item('b', 'Butter'), _item('c', 'Brot')];
   final container = ProviderContainer(
     overrides: [
       offerPriceServiceProvider.overrideWithValue(source.service),
@@ -157,8 +158,10 @@ void main() {
       final container = _container(source: source, region: null);
       await _hiddenListsLoaded();
 
-      expect(await container.read(offerSearchAllProvider('milch').future),
-          isEmpty);
+      expect(
+        await container.read(offerSearchAllProvider('milch').future),
+        isEmpty,
+      );
       expect(
         await container.read(
           offerSuggestionsProvider((listId: _listId, query: 'milch')).future,
@@ -183,8 +186,10 @@ void main() {
       final container = _container(source: source, offersOn: false);
       await _hiddenListsLoaded();
 
-      expect(await container.read(offerSearchAllProvider('milch').future),
-          isEmpty);
+      expect(
+        await container.read(offerSearchAllProvider('milch').future),
+        isEmpty,
+      );
       expect(
         await container.read(
           offerSuggestionsProvider((listId: _listId, query: 'milch')).future,
@@ -310,38 +315,37 @@ void main() {
       expect(firstRound, greaterThan(0));
     });
 
-    test('a typed search waits 300 ms and asks nothing when overtaken',
-        () async {
-      final source = _Source(_answers);
-      final container = _container(source: source);
-      await _hiddenListsLoaded();
+    test(
+      'a typed search waits 300 ms and asks nothing when overtaken',
+      () async {
+        final source = _Source(_answers);
+        final container = _container(source: source);
+        await _hiddenListsLoaded();
 
-      final sub = container.listen(
-        offerSearchAllProvider('mil'),
-        (_, __) {},
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      sub.close();
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+        final sub = container.listen(offerSearchAllProvider('mil'), (_, __) {});
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        sub.close();
+        await Future<void>.delayed(const Duration(milliseconds: 400));
 
-      expect(source.requests, 0);
-    });
+        expect(source.requests, 0);
+      },
+    );
 
     test('the all-markets search keeps the order of the source', () async {
       final source = _Source(_answers);
       final container = _container(source: source);
       await _hiddenListsLoaded();
 
-      final offers =
-          await container.read(offerSearchAllProvider('milch').future);
+      final offers = await container.read(
+        offerSearchAllProvider('milch').future,
+      );
 
       expect(offers.map((o) => o.id), [1, 2]);
     });
   });
 
   group('deals of the lists (Home, weekly offers)', () {
-    test('without a real region there are none and nothing is asked',
-        () async {
+    test('without a real region there are none and nothing is asked', () async {
       final source = _Source(_answers);
       final container = _container(source: source, region: null);
       await _hiddenListsLoaded();
@@ -368,8 +372,7 @@ void main() {
       expect(source.requests, 0);
     });
 
-    test('only offers of the list market, in the order of the list',
-        () async {
+    test('only offers of the list market, in the order of the list', () async {
       final source = _Source(_answers);
       final container = _container(source: source);
       await _hiddenListsLoaded();
@@ -394,22 +397,58 @@ void main() {
   });
 
   group('transition for older callers', () {
-    test('the old per-row lookup gives the offer of the list market only',
-        () async {
-      final source = _Source(_answers);
-      final container = _container(source: source);
-      await _hiddenListsLoaded();
-      await _syncList(container);
+    test(
+      'the old per-row lookup gives the offer of the list market only',
+      () async {
+        final source = _Source(_answers);
+        final container = _container(source: source);
+        await _hiddenListsLoaded();
+        await _syncList(container);
 
-      // ignore: deprecated_member_use_from_same_package
-      final offers = await container.read(
         // ignore: deprecated_member_use_from_same_package
-        basketComparisonProvider(_listId).future,
+        final offers = await container.read(
+          // ignore: deprecated_member_use_from_same_package
+          basketComparisonProvider(_listId).future,
+        );
+        // ignore: deprecated_member_use_from_same_package
+        expect(offers.cheapestOfferFor('Milch')?.id, 2);
+        // ignore: deprecated_member_use_from_same_package
+        expect(offers.cheapestOfferFor('Brot'), isNull);
+      },
+    );
+  });
+
+  group('"Weitere Angebote" read from the device only', () {
+    test('nothing before a search, the market\'s offers after one, '
+        'no request', () async {
+      final source = _Source(_answers);
+      final container = ProviderContainer(
+        overrides: [
+          offerPriceServiceProvider.overrideWithValue(source.service),
+          offersRemoteEnabledProvider.overrideWithValue(true),
+          offersAvailableProvider.overrideWithValue(true),
+          offerAccountIdProvider.overrideWithValue('me'),
+          regionProvider.overrideWithValue(_ulm),
+          storeForListProvider.overrideWith((ref, id) => _lidl),
+        ],
       );
-      // ignore: deprecated_member_use_from_same_package
-      expect(offers.cheapestOfferFor('Milch')?.id, 2);
-      // ignore: deprecated_member_use_from_same_package
-      expect(offers.cheapestOfferFor('Brot'), isNull);
+      addTearDown(container.dispose);
+      container.listen(hiddenOfferListsProvider, (_, __) {});
+      await _hiddenListsLoaded();
+      const key = (listId: _listId, query: 'Milch');
+      container.listen(cachedMoreOffersProvider(key), (_, __) {});
+      expect(container.read(cachedMoreOffersProvider(key)), isEmpty);
+      expect(source.requests, 0);
+
+      await source.service.searchOffers('milch', zipCode: _ulm.zip);
+      final requests = source.requests;
+      container.invalidate(cachedMoreOffersProvider(key));
+      final more = container.read(cachedMoreOffersProvider(key));
+      expect(more.map((o) => o.productName), [
+        'Frische Milch',
+      ], reason: 'only the list market Lidl');
+      expect(source.requests, requests, reason: 'read from the cache');
+      expect(source.service.cachedOffers('brot', zipCode: _ulm.zip), isNull);
     });
   });
 }

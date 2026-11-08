@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/screens/home/weekly_deals_screen.dart';
@@ -73,19 +74,55 @@ final List<RouteBase> offersRootRoutes = [
 /// They open in the Profil tab.
 final List<RouteBase> offersSettingsRoutes = [];
 
-/// The guard of an offers route (`angebote.md` 1.3): the kill switch shows
-/// A's error page without the word "Angebot", a switched-off module asks
-/// first (A's [ModuleGate]).
-class _OffersGate extends ConsumerWidget {
+/// The guard of an offers route (`angebote.md` 1.3).
+///
+/// Opened while offers are off: the kill switch shows A's error page without
+/// the word "Angebot", a switched-off module asks first (A's [ModuleGate]).
+/// Once the screen was shown, a later flip (kill switch, or the module
+/// turned off on another device) closes it silently: a plain background,
+/// then back to where the person came from, no dialog, no error page.
+class _OffersGate extends ConsumerStatefulWidget {
   const _OffersGate({required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (!ref.watch(offersRemoteEnabledProvider)) {
-      return const RouteErrorScreen();
+  ConsumerState<_OffersGate> createState() => _OffersGateState();
+}
+
+class _OffersGateState extends ConsumerState<_OffersGate> {
+  bool _shown = false;
+  bool _closing = false;
+
+  void _closeSilently() {
+    if (_closing) return;
+    _closing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      final navigator = Navigator.of(context);
+      // A menu above the screen goes first, then the screen itself.
+      if (route != null && !route.isCurrent && route.isActive) {
+        navigator.popUntil((r) => r == route);
+      }
+      if (context.canPop()) context.pop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remote = ref.watch(offersRemoteEnabledProvider);
+    final module = ref.watch(moduleEnabledProvider(AppModule.offers));
+    if (_shown) {
+      if (!_closing && remote && module) return widget.child;
+      _closeSilently();
+      return ColoredBox(color: context.colors.background);
     }
-    return ModuleGate(module: AppModule.offers, child: child);
+    if (!remote) return const RouteErrorScreen();
+    if (!module) {
+      return ModuleGate(module: AppModule.offers, child: widget.child);
+    }
+    _shown = true;
+    return widget.child;
   }
 }
