@@ -9,13 +9,13 @@ eigener Worktree wegen Speicher). Regeln für beide: kein `git stash`/`checkout`
 Pfade committen (`git commit -m … -- <pfade>`); abgleichen mit `git fetch && git merge --ff-only origin/main`;
 analyze/Tests nur auf eigene Pfade.
 
-**S2b fast fertig** (nutzbar, alle in `lib/presentation/widgets/design/`): `AvoCard`/`AvoTile`/`AvoTileGrid`/
+**S2b-Komponenten komplett** (nutzbar, alle in `lib/presentation/widgets/design/`): `AvoCard`/`AvoTile`/`AvoTileGrid`/
 `AvoSectionHeader` (`home_card.dart`), `ItemRow`/`ItemThumb`, `ListCard`/`ListRow`, `Avatar`/`AvatarStack`/
 `PresenceDot`, `QuickAddTile`, `AddItemAccessory`/`AvoComposerField`/`AccessoryDock`, `AvoMenuItem`/`AvoMenuDivider`/
 `showAvoMenu`/`AvoMenuButton`, `FullScreenEditor`/`pushFullScreenEditor`, `ProGate.run`/`ProFeatures`
 (`pro_gate.dart`); dazu `AppBrand` (`lib/core/constants/app_brand.dart`) und `openAppDestination`/`AppDestinations`
-(`lib/routes/app_destinations.dart`). Noch offen in S2b: `RecipeCard`/`RecipeHeroCard`/`GlassInfoPanel`,
-`AvoBarChart`, Komponenten-Galerie.
+(`lib/routes/app_destinations.dart`), `RecipeCard`/`RecipeHeroCard`/`GlassInfoPanel`, `AvoBarChart`/
+`AvoHorizontalBar`. Noch offen für S2: die Komponenten-Galerie (`/debug/components`, nur Debug).
 
 **A4 Home ist gebaut** (D2 „Für dich“, Reihenfolge `lib/presentation/screens/home/home_layout.dart`): B's Abschnitte
 erscheinen, wenn Modul an und `…HasContentProvider` true. Die alten Home-Karten, der Angebote-Streifen und die
@@ -34,7 +34,7 @@ Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`. Vorrang-Aufgaben für B: `d
 | S1 Struktur | **erledigt** | 07.11.2026 | siehe `git log --grep "(a1)"` |
 | A3 Eingabeleiste (Bug der Mutter des Owners) | **erledigt**: Text wird bei keiner Breite (320–440 pt) und keiner Textgröße (bis 3,1×) mehr abgeschnitten, Nachweis `test/screens/lists/add_item_composer_test.dart` (40 Fälle) | 07.11.2026 | siehe `git log --grep "(a3)"` |
 | S2a Fundament Teil 1 | **erledigt**: D2-Tab-Bar (Home, Listen, Avo, Rezepte, Profil; Avo-Tab auf `/avo`), Kalorien als Push im Home-Tab, Fehlerseite, Modul-Wächter, Deep-Link-Übersetzung, Komponenten Teil 1 (Liste in `prompt-b-vorrang.md`) | 07.11.2026 | `ce66d9f`, `f16e071` |
-| S2 Fundament (S2b: Editor, Eingabefeld, Menüs, Zeilen/Karten, Charts, `ProGate.run`, `AppBrand`) | in Arbeit: alles außer Rezeptkarten, Charts und Galerie auf `main` | 08.11.2026 | `ad2a9c4` … `5ccea14` |
+| S2 Fundament (S2b: Editor, Eingabefeld, Menüs, Zeilen/Karten, Charts, `ProGate.run`, `AppBrand`) | in Arbeit: alle Komponenten auf `main`, Galerie fehlt | 08.11.2026 | `ad2a9c4` … `016b75e` |
 | A4 Home (D2 „Für dich“) | **gebaut**, ohne „Tipp von Avo“ (kommt mit A5) | 08.11.2026 | `4618daf`, `22a7153`, `41a974d` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
@@ -176,6 +176,7 @@ Provider in `lib/presentation/widgets/slots/b_slots.dart`; Stufe 2: Home-Abschni
 | 1 | Paywall verspricht keine Angebote mehr, `premium_feat_deals` entfernt | siehe `git log --grep "B request 1"` |
 | 2 | `showAppBottomSheet` bleibt, bis B meldet, dass keine B-Datei es braucht | – (vorgemerkt) |
 | 3 | `owner.sh`: `lib/presentation/screens/system/*` und `evals/*` gehören B | siehe `git log --grep "B request 3"` |
+| 4 | `ItemRepository` kategorisiert lokal sofort (`categorizeLocal`), verfeinert im Hintergrund (`refineCategory`, `categorizeBatch`); kein A-Code nutzt mehr `GeminiCategorizationService`. Profil ohne `userZipCodeProvider` | `356168d`, `0c034cd` |
 | 5 (Teil) | Remount-Schlüssel `ValueKey(themeMode-language)` in `app.dart` entfernt; synchroner Redirect folgt mit B3 | siehe `git log --grep "no app remount"` |
 
 ## Fragen an den Owner
