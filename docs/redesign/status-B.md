@@ -53,6 +53,10 @@ nutzen beide direkt.
 
 ## Erledigte Anfragen von Teil A
 
+- **A6 (1) Allergene** (Commit mit dieser Zeile): `allergen_matcher.dart` kennt Feta, Halloumi, Gouda, Emmentaler,
+  Cheddar, Camembert, Brie, Pecorino, Gorgonzola, Burrata, Ghee, Skyr, Paneer, Frischkäse, Buttermilch, Crème fraîche
+  und Crème double unter Milch **und** Laktose („Brief“ ist ausgenommen). Die lokale Ergänzung im Rezeptdetail kann
+  raus. **A6 (2)** `RecipeOfferSummary`, `IngredientOfferBadge` kommen mit Angebote S15, `addRecipeToPlan` mit B7.
 - **Simulator-Funde A** (Commit mit dieser Zeile): (1) Fälschlich „Offline“: `connectivity_plus` 5 meldet auf iOS
   `none`, wenn der Netzpfad eine unbekannte Schnittstelle nutzt. `ConnectivityService` prüft ein „none“ jetzt mit
   einer echten Anfrage an Supabase und wiederholt sie offline alle 20 s. (2) Mitteilungsabfrage ohne Erklärung beim
@@ -103,6 +107,14 @@ Entschieden am 07.11.2026:
 - Apple Health, Barcode-Kamera, Sprachmodus: eigene Swift-Kanäle, kein Fremdpaket.
 - Arbeitsweise: mehr Agenten und Prüfungen, gründliche Design-Reviews mit den Design-Skills, alter Code sofort raus;
   am Ende Simulator-Durchgang mit Screenshots aller Screens und Überarbeitung von allem, was nicht perfekt aussieht.
+
+Entschieden am 08.11.2026:
+- **Name „Shoply“ verschwindet überall** (nach Teil B, als letzter Schritt, wenn A und B ruhen): alles Sichtbare
+  (Texte, Links, Domains) und der ganze Code (Dart-Paket `shoply` → `avo` samt Imports, Klassen, Kanäle,
+  Widget-Kinds), Docs, Ordner und Repo-Name. **Bleiben:** Bundle-ID `com.dominik.shoply`, App-Group
+  `group.com.shoply.app`, Abo-Produkt-IDs `shoply_premium_*`, Firebase-/Supabase-Projekt (sonst neue App im App
+  Store). Neues URL-Schema `avo://`, alte `shoply://`-Links funktionieren weiter. Gespeicherte Schlüssel mit
+  „shoply“ werden migriert, nicht einfach umbenannt.
 
 Offen:
 - **Abo-RPCs** (Advisor, alt): Sofortmaßnahme angewendet (`20261108003000`), kein `anon` mehr, nur das eigene Konto.

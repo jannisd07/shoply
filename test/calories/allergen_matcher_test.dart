@@ -44,6 +44,29 @@ void main() {
       expect(m.contains('whole milk'), isTrue);
     });
 
+    const cheeses = [
+      'Feta', 'Halloumi', 'Gouda', 'Emmentaler', 'Cheddar', 'Camembert', 'Brie', 'Pecorino',
+      'Gorgonzola', 'Burrata', 'Ghee', 'Skyr', 'Paneer', 'Frischkäse', 'Buttermilch',
+      'Crème fraîche', '200 g Feta, zerbröselt', '1 Becher Crème fraîche',
+    ];
+
+    test('Milch and Laktose find cheeses and dairy by their own names', () {
+      const milk = AllergenMatcher(['milk']);
+      const lactose = AllergenMatcher(['Laktose']);
+      for (final food in cheeses) {
+        expect(milk.contains(food), isTrue, reason: '$food under milk');
+        expect(lactose.contains(food), isTrue, reason: '$food under lactose');
+      }
+    });
+
+    test('cheese names do not match unrelated words', () {
+      const milk = AllergenMatcher(['milk']);
+      expect(milk.contains('Konfetti'), isFalse);
+      expect(milk.contains('Briefumschlag'), isFalse);
+      expect(milk.contains('Fettuccine'), isFalse);
+      expect(milk.contains('Gemüsebrühe'), isFalse);
+    });
+
     test('Gluten finds Weizenmehl, Dinkel and pasta but not Buchweizen', () {
       const m = AllergenMatcher(['Gluten']);
       expect(m.contains('Weizenmehl Type 405'), isTrue);

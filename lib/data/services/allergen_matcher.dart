@@ -180,6 +180,7 @@ const Map<AllergyType, List<String>> _extraKeywords = {
   AllergyType.milk: [
     'milch', 'kase', 'butter', 'sahne', 'joghurt', 'quark', 'molke', 'mozzarella', 'parmesan',
     'ricotta', 'mascarpone', 'schmand', 'kefir', 'milk', 'cheese', 'cream', 'yogurt', 'yoghurt', 'whey',
+    ..._dairyByName,
   ],
   AllergyType.nuts: [
     'nuss', 'nusse', 'mandel', 'marzipan', 'nougat', 'cashew', 'pistazie', 'pekannuss',
@@ -191,16 +192,25 @@ const Map<AllergyType, List<String>> _extraKeywords = {
   AllergyType.sulfites: ['sulfit', 'schwefel'],
   AllergyType.lupin: ['lupin'],
   AllergyType.molluscs: ['muschel', 'calamari', 'oktopus', 'auster', 'mussel', 'oyster', 'squid', 'clam'],
-  AllergyType.lactose: ['milch', 'butter', 'kase', 'lactose', 'laktose', 'milk', 'cream', 'yogurt'],
+  AllergyType.lactose: [
+    'milch', 'butter', 'kase', 'lactose', 'laktose', 'milk', 'cream', 'yogurt', ..._dairyByName,
+  ],
   AllergyType.corn: ['corn'],
   AllergyType.yeast: ['yeast'],
 };
 
+/// Cheeses and dairy named without "Käse"/"Milch" in the word. Listed under
+/// lactose too: a warning too many is safer than a missed one.
+const _dairyByName = [
+  'feta', 'halloumi', 'gouda', 'emmentaler', 'cheddar', 'camembert', 'brie', 'pecorino',
+  'gorgonzola', 'burrata', 'ghee', 'skyr', 'paneer', 'creme fraiche', 'creme double',
+];
+
 /// Words that contain a keyword but are something else (token is skipped).
 const Map<AllergyType, List<String>> _lookAlikes = {
   AllergyType.nuts: ['muskatnuss', 'kokos', 'butternut', 'nutmeg', 'coconut', 'donut', 'doughnut'],
-  AllergyType.milk: ['butternut', 'kokos'],
-  AllergyType.lactose: ['butternut', 'kokos'],
+  AllergyType.milk: ['butternut', 'kokos', 'brief'],
+  AllergyType.lactose: ['butternut', 'kokos', 'brief'],
   AllergyType.gluten: ['buchweizen', 'buckwheat', 'glasnudel', 'glutenfrei'],
   AllergyType.eggs: ['eggplant'],
 };
