@@ -63,8 +63,9 @@ final offerSearchAllProvider = FutureProvider.autoDispose
       final service = ref.watch(offerPriceServiceProvider);
       final region = ref.watch(regionProvider);
       final left = _watchLeft(ref);
-      if (!ref.watch(offersAvailableProvider) || region == null)
+      if (!ref.watch(offersAvailableProvider) || region == null) {
         return const [];
+      }
       if (!await _debounce(query, left)) return const [];
       return service.searchOffers(query, zipCode: region.zip);
     });
@@ -503,8 +504,9 @@ final personalizedDealsProvider =
     FutureProvider.autoDispose<List<RecipeIngredientOffer>>((ref) async {
       final sync = ref.watch(listOfferSyncProvider);
       final region = ref.watch(regionProvider);
-      if (!ref.watch(offersAvailableProvider) || region == null)
+      if (!ref.watch(offersAvailableProvider) || region == null) {
         return const [];
+      }
       final markets = <String, String>{
         for (final listId in ref.watch(offerDealListIdsProvider))
           if (ref.watch(storeForListProvider(listId))?.id case final chainId?)

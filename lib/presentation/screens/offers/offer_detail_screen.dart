@@ -26,7 +26,6 @@ import 'package:shoply/presentation/screens/offers/widgets/offer_row.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offers_source_footnote.dart';
 import 'package:shoply/presentation/screens/offers/widgets/store_mark.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
-import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/empty_state.dart';
@@ -557,12 +556,7 @@ class _Body extends ConsumerWidget {
     // "Auf die Liste" without a list needs the menu "Auf welche Liste?"
     // (S10, a later slice): no action until then.
     if (list == null) return null;
-    final listName = ref
-        .read(listsNotifierProvider)
-        .valueOrNull
-        ?.where((l) => l.id == list)
-        .firstOrNull
-        ?.name;
+    final listName = ref.watch(offerListNameProvider(list));
     return AppButton.primary(
       label: context.tr('offer_detail_add_to_list'),
       size: AppButtonSize.large,

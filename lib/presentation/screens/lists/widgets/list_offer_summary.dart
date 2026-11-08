@@ -7,6 +7,7 @@ import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/offer_savings.dart';
 import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
+import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_header.dart'
@@ -15,7 +16,6 @@ import 'package:shoply/presentation/screens/offers/offer_text.dart';
 import 'package:shoply/presentation/screens/offers/store_menu.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_icons.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_summary_card.dart';
-import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/hint_row.dart';
@@ -160,12 +160,7 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
     if (prefs == null || (until != null && now.isBefore(until))) {
       return const SizedBox.shrink();
     }
-    final lists = ref.watch(listsNotifierProvider).valueOrNull;
-    final name = lists
-        ?.where((l) => l.id == widget.listId)
-        .firstOrNull
-        ?.name
-        .trim();
+    final name = ref.watch(offerListNameProvider(widget.listId));
     if (name == null || name.isEmpty) return const SizedBox.shrink();
     final colors = context.colors;
     return Builder(

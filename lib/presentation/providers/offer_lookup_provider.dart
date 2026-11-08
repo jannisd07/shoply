@@ -17,6 +17,7 @@ import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
 
 /// Offers the person saw in this session, by id, so the offer detail opens
 /// from the surface that showed it without a request (at most 200, least
@@ -151,3 +152,17 @@ final listOfferBadgeCountProvider = FutureProvider.autoDispose
             !(prefs?.isDeclined(item.id, offer.id, now) ?? false);
       }).length;
     });
+
+/// The name of [listId] from the loaded lists ("Wocheneinkauf"); null while
+/// unknown. Override in tests.
+final offerListNameProvider = Provider.autoDispose.family<String?, String>(
+  (ref, listId) => ref.watch(
+    listsNotifierProvider.select(
+      (lists) => lists.valueOrNull
+          ?.where((l) => l.id == listId)
+          .firstOrNull
+          ?.name
+          .trim(),
+    ),
+  ),
+);
