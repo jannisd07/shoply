@@ -4,11 +4,11 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 
 ## Stand
 
-2026-11-08: **Vorrang-Aufgaben aus `prompt-b-vorrang.md`:** Stufe 1 (Slot-Hüllen) und Stufe 2 (Home-Abschnitte) sind
-gepusht, Stufe 3 (Avo im Tab) ebenfalls. **A importiert nur `lib/presentation/widgets/slots/b_slots.dart`.**
-Danach geht es mit P0/P1 weiter (Edge Function `ai`, Claude-Client, Kategorisierung, Angebots-Logik, App-Start), parallel
-nativer Unterbau, Kalorien- und Wochenplan-Logik, Evals und Screen-Specs. Plan:
-[`docs/superpowers/plans/2026-11-07-teil-b.md`](../superpowers/plans/2026-11-07-teil-b.md).
+2026-11-08 abends: P1 ist bis auf die App-Seite von Avo und Fotos auf `main` (`0721f38` … `0e5026a`): Edge Function
+`ai` mit Quote, Claude-Client, Kategorisierung lokal zuerst, Angebote nur vom Markt der Liste (ohne Ersatz-PLZ und
+Korbvergleich), App-Start, Artikelbilder, Wochenplan-Daten. Noch lokal und nicht committet: Foto-Client, Kalorien-Logik,
+Swift-Kanäle (Health, Scanner, Stimme), Evals, Screen-Specs. Die Swift-Teile folgen erst nach einem iOS-Build.
+**Für S3 fehlen nur Owner-Schritte:** Secret setzen, `ai` deployen, Migrationen anwenden (siehe Fragen an den Owner).
 
 ## Meilensteine
 
@@ -17,8 +17,8 @@ nativer Unterbau, Kalorien- und Wochenplan-Logik, Evals und Screen-Specs. Plan:
 | S0 Aufräumen gemergt (A) | erledigt (laut status-A) | 07.11.2026 | `950921d` |
 | S1 Struktur (A) | erledigt (laut status-A) | 07.11.2026 | `ab83f21`…`6112576` |
 | S2 Fundament (A) | S2a erreicht (laut status-A) | 08.11.2026 | `f16e071` |
-| S3 Claude live (B) | in Arbeit | | |
-| S4 Angebote abgesichert (B) | in Arbeit: Ersatz-Keys raus und Hänger in der Angebotssuche behoben | 07.11.2026 | `8de8a40` |
+| S3 Claude live (B) | Code auf main, wartet auf Secret + Deploy + Migration | 08.11.2026 | `0721f38` |
+| S4 Angebote abgesichert (B) | Logik fertig (`26677f3`): keine Ersatz-Keys, Kill-Switch, Wortlaut, nur Listen-Markt; Slots noch Hüllen bis zum Zeichnen mit S2b | 08.11.2026 | `26677f3` |
 | S5 Bereiche fertig (B) | offen | | |
 | S6 Gegenprüfung (B prüft A) | offen | | |
 
@@ -96,6 +96,9 @@ Entschieden am 07.11.2026:
   am Ende Simulator-Durchgang mit Screenshots aller Screens und Überarbeitung von allem, was nicht perfekt aussieht.
 
 Offen:
+- **S3:** Supabase-Secret `ANTHROPIC_API_KEY` setzen (Owner selbst), Deploy der Edge Function `ai` (und
+  `extract-shopping-list` als Hülle) und die Migrationen `20261108000000_b_app_flags`, `…000100_b_ai_usage`,
+  `…000200_b_meal_photos_private`, `…000300_b_list_store`, `…002000_b_meal_plan` – Teil B fragt jeden Schritt einzeln.
 - Kontakt-E-Mail für den Open-Food-Facts-User-Agent (`Avo/<version> (<E-Mail>)`).
 - Berechtigungstexte (Mikrofon, Spracherkennung, Kamera, Health) und HealthKit-Capability im Developer-Portal.
 - Welche B-Funktionen Pro werden (Angebote nie). Kommt mit der A9-Analyse.
