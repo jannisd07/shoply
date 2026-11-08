@@ -1,0 +1,75 @@
+{
+  "description": "Shopping categories of the app (lib/core/constants/categories.dart, same ids, order and names; checked by test/ai_categories_json_test.dart). The categorize task builds its category_id enum and its system prompt from this file.",
+  "categories": [
+    {
+      "id": "fruits_vegetables",
+      "de": "Obst & Gemüse",
+      "en": "Fruits & Vegetables",
+      "examples_de": ["Äpfel", "Bananen", "Tomaten", "Gurke", "Kartoffeln", "Zwiebeln", "Knoblauch", "Salat", "Zitronen", "frische Kräuter"],
+      "examples_en": ["apples", "bananas", "tomatoes", "cucumber", "potatoes", "onions", "garlic", "lettuce", "lemons", "fresh herbs"]
+    },
+    {
+      "id": "bakery",
+      "de": "Bäckerei & Frischetheke",
+      "en": "Bakery & Deli",
+      "examples_de": ["Brot", "Brötchen", "Toastbrot", "Croissant", "Brezel", "Kuchen", "Mehl", "Zucker", "Hefe", "Backpulver", "Honig"],
+      "examples_en": ["bread", "rolls", "toast", "croissant", "pretzel", "cake", "flour", "sugar", "yeast", "baking powder", "honey"]
+    },
+    {
+      "id": "meat_fish",
+      "de": "Fleisch & Wurst",
+      "en": "Meat & Deli Counter",
+      "examples_de": ["Hähnchenbrust", "Hackfleisch", "Rindersteak", "Schinken", "Salami", "Bratwurst", "Speck", "Lachs", "Thunfisch", "Garnelen"],
+      "examples_en": ["chicken breast", "ground beef", "steak", "ham", "salami", "sausages", "bacon", "salmon", "tuna", "shrimp"]
+    },
+    {
+      "id": "staples",
+      "de": "Trockenwaren",
+      "en": "Dry Goods",
+      "examples_de": ["Nudeln", "Reis", "Haferflocken", "Müsli", "Linsen", "Dosentomaten", "Olivenöl", "Essig", "Ketchup", "Pesto", "Marmelade", "Gewürze"],
+      "examples_en": ["pasta", "rice", "oats", "cereal", "lentils", "canned tomatoes", "olive oil", "vinegar", "ketchup", "pesto", "jam", "spices"]
+    },
+    {
+      "id": "snacks",
+      "de": "Snacks & Süßigkeiten",
+      "en": "Snacks & Sweets",
+      "examples_de": ["Chips", "Schokolade", "Gummibärchen", "Kekse", "Salzstangen", "Popcorn", "Müsliriegel"],
+      "examples_en": ["chips", "chocolate", "gummy bears", "cookies", "pretzel sticks", "popcorn", "granola bars"]
+    },
+    {
+      "id": "beverages",
+      "de": "Getränke",
+      "en": "Beverages",
+      "examples_de": ["Mineralwasser", "Apfelsaft", "Cola", "Bier", "Wein", "Kaffee", "Tee", "Eistee", "Limonade"],
+      "examples_en": ["sparkling water", "apple juice", "cola", "beer", "wine", "coffee", "tea", "iced tea", "lemonade"]
+    },
+    {
+      "id": "household",
+      "de": "Haushalt & Hygiene",
+      "en": "Household & Hygiene",
+      "examples_de": ["Toilettenpapier", "Küchenrolle", "Spülmittel", "Waschmittel", "Müllbeutel", "Zahnpasta", "Shampoo", "Duschgel", "Windeln", "Katzenfutter", "Batterien"],
+      "examples_en": ["toilet paper", "paper towels", "dish soap", "laundry detergent", "trash bags", "toothpaste", "shampoo", "body wash", "diapers", "cat food", "batteries"]
+    },
+    {
+      "id": "dairy",
+      "de": "Milchprodukte",
+      "en": "Dairy Products",
+      "examples_de": ["Milch", "Hafermilch", "Joghurt", "Quark", "Butter", "Sahne", "Käse", "Mozzarella", "Frischkäse", "Eier"],
+      "examples_en": ["milk", "oat milk", "yogurt", "quark", "butter", "cream", "cheese", "mozzarella", "cream cheese", "eggs"]
+    },
+    {
+      "id": "frozen",
+      "de": "Tiefkühlprodukte",
+      "en": "Frozen Foods",
+      "examples_de": ["Tiefkühlpizza", "Eiscreme", "TK-Erbsen", "Pommes", "Fischstäbchen", "gefrorene Beeren", "Tiefkühlgemüse"],
+      "examples_en": ["frozen pizza", "ice cream", "frozen peas", "fries", "fish sticks", "frozen berries", "frozen vegetables"]
+    },
+    {
+      "id": "other",
+      "de": "Sonstiges",
+      "en": "Other",
+      "examples_de": ["Geschenkpapier", "Blumen", "Zeitschrift", "Grillkohle"],
+      "examples_en": ["gift wrap", "flowers", "magazine", "charcoal"]
+    }
+  ]
+}

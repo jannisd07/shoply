@@ -1,34 +1,73 @@
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
+
 import 'package:shoply/data/models/item_purchase_stats.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/recommendation_item.dart';
 import 'package:shoply/data/services/purchase_tracking_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
-import 'package:shoply/data/services/gemini_categorization_service.dart';
+import 'package:shoply/data/services/ai_categorization_service.dart';
+
+/// Why an item is recommended, in the app language.
+enum _Reason {
+  listContext('Oft auf dieser Liste', 'Often on this list'),
+  history('Oft gekauft', 'Bought often'),
+  association('Passt gut dazu', 'Goes well with your list'),
+  complementary('Ergänzt deine Liste', 'Rounds out your list'),
+  replenishment('Wieder Zeit zu kaufen', 'Time to buy again'),
+  recommended('Empfohlen', 'Recommended'),
+  popular('Beliebtes Produkt', 'Popular item');
+
+  const _Reason(this.de, this.en);
+
+  final String de;
+  final String en;
+}
+
+/// Claude's last complementary suggestions for one list.
+class _Complementary {
+  const _Complementary(this.signature, this.suggestions, this.askedAt);
+
+  /// Sorted item names they were asked for.
+  final String signature;
+  final List<String> suggestions;
+  final DateTime askedAt;
+}
 
 /// Multi-factor recommendation engine: list context, purchase frequency,
-/// recency and replenishment rhythm, recent trips, co-occurrence, Gemini
-/// complementary items, day-of-week patterns and category affinity. The
-/// weights live next to each factor in [getRecommendations].
+/// recency and replenishment rhythm, recent trips, co-occurrence, Claude's
+/// complementary items (task `recommend`, in the app language), day-of-week
+/// patterns and category affinity. The weights live next to each factor in
+/// [getRecommendations]. Reasons and starter items follow the app language.
 class MLRecommendationService {
-  /// Gemini complementary suggestions per sorted item-name signature. The
-  /// provider recomputes on every list change (check toggles included), so
-  /// the LLM is only asked again when the set of item names changes.
-  static final Map<String, List<String>> _complementaryCache = {};
-
-  final PurchaseTrackingService _trackingService;
-  final ShoppingHistoryService _historyService;
-  final GeminiCategorizationService _geminiService;
-
+  /// [geminiService] keeps its old name so the constructor stays as it was
+  /// (plan B1.8); it is the Claude-based [AiCategorizationService].
   MLRecommendationService({
     PurchaseTrackingService? trackingService,
     ShoppingHistoryService? historyService,
-    GeminiCategorizationService? geminiService,
+    AiCategorizationService? geminiService,
   })  : _trackingService = trackingService ?? PurchaseTrackingService(),
         _historyService = historyService ?? ShoppingHistoryService(),
-        _geminiService = geminiService ?? GeminiCategorizationService();
+        _aiService = geminiService ?? AiCategorizationService.instance {
+    // List names and suggestions belong to the account that signed out.
+    _aiService.accountReset.listen((_) => _complementary.clear());
+  }
+
+  /// Claude is asked again for a list only after this long, however often
+  /// its items change in between: every added item would otherwise spend
+  /// one of the 5 (free) or 30 (Pro) daily `recommend` calls.
+  static const Duration complementaryRefresh = Duration(minutes: 10);
+
+  final PurchaseTrackingService _trackingService;
+  final ShoppingHistoryService _historyService;
+  final AiCategorizationService _aiService;
+
+  /// Per app language and list (or item set, without a list).
+  final Map<String, _Complementary> _complementary = {};
+
+  String _say(_Reason reason) => _aiService.locale == 'de' ? reason.de : reason.en;
 
   /// Generate up to 5 recommendations, filtered by confidence
   /// (see [_filterByConfidence]).
@@ -75,7 +114,7 @@ class MLRecommendationService {
           candidateScores[entry.key] = (candidateScores[entry.key] ?? 0) + entry.value * 0.15;
           candidateFactors.putIfAbsent(entry.key, () => {})['listContext'] = entry.value * 0.15;
           if (entry.value > 0.5) {
-            candidateReasons.putIfAbsent(entry.key, () => []).add('Oft auf dieser Liste');
+            candidateReasons.putIfAbsent(entry.key, () => []).add(_say(_Reason.listContext));
           }
         }
       }
@@ -87,7 +126,7 @@ class MLRecommendationService {
         candidateScores[entry.key] = (candidateScores[entry.key] ?? 0) + entry.value * historyWeight;
         candidateFactors.putIfAbsent(entry.key, () => {})['history'] = entry.value * historyWeight;
         if (entry.value > 0.6) {
-          candidateReasons.putIfAbsent(entry.key, () => []).add('Oft gekauft');
+          candidateReasons.putIfAbsent(entry.key, () => []).add(_say(_Reason.history));
         }
       }
 
@@ -98,18 +137,19 @@ class MLRecommendationService {
         candidateScores[entry.key] = (candidateScores[entry.key] ?? 0) + entry.value * associationWeight;
         candidateFactors.putIfAbsent(entry.key, () => {})['association'] = entry.value * associationWeight;
         if (entry.value > 0.5) {
-          candidateReasons.putIfAbsent(entry.key, () => []).add('Passt gut dazu');
+          candidateReasons.putIfAbsent(entry.key, () => []).add(_say(_Reason.association));
         }
       }
 
-      // 🆕 2.5️⃣ Gemini Complementary Items Score (6% weight)
+      // 2.5️⃣ Claude complementary items score (6% weight)
       if (currentListItems.isNotEmpty) {
-        final complementaryScores = await _calculateComplementaryScore(currentListItems, currentItemNames);
+        final complementaryScores =
+            await _calculateComplementaryScore(currentListItems, currentItemNames, listId);
         for (final entry in complementaryScores.entries) {
           candidateScores[entry.key] = (candidateScores[entry.key] ?? 0) + entry.value * 0.06;
           candidateFactors.putIfAbsent(entry.key, () => {})['complementary'] = entry.value * 0.06;
           if (entry.value > 0.5) {
-            candidateReasons.putIfAbsent(entry.key, () => []).add('Ergänzt deine Liste');
+            candidateReasons.putIfAbsent(entry.key, () => []).add(_say(_Reason.complementary));
           }
         }
       }
@@ -152,7 +192,7 @@ class MLRecommendationService {
 
         // Add reason if item is due for replenishment
         if (replenishmentScore > 0.7) {
-          candidateReasons.putIfAbsent(itemName, () => []).add('Wieder Zeit zu kaufen');
+          candidateReasons.putIfAbsent(itemName, () => []).add(_say(_Reason.replenishment));
         }
       }
 
@@ -162,7 +202,7 @@ class MLRecommendationService {
       for (final entry in candidateScores.entries) {
         final itemName = _capitalizeItemName(entry.key);
         final score = entry.value * 100; // Scale to 0-100
-        final reasons = candidateReasons[entry.key] ?? ['Empfohlen'];
+        final reasons = candidateReasons[entry.key] ?? [_say(_Reason.recommended)];
         final stats = candidateStats[entry.key];
 
         allRecommendations.add(RecommendationItem(
@@ -544,11 +584,14 @@ class MLRecommendationService {
     return scores;
   }
 
-  /// 🆕 Complementary Items Score via Gemini AI
-  /// Asks Gemini to suggest items that go well with current list items
+  /// Complementary items score: Claude suggests items that go well with the
+  /// current list. A list asks at most once per [complementaryRefresh] (in
+  /// between, its last suggestions are reused); a real empty answer is
+  /// remembered, a failure is not.
   Future<Map<String, double>> _calculateComplementaryScore(
     List<ShoppingItemModel> currentItems,
     Set<String> excludeItems,
+    String? listId,
   ) async {
     final scores = <String, double>{};
 
@@ -557,10 +600,22 @@ class MLRecommendationService {
       final signature =
           (itemNames.map((n) => n.trim().toLowerCase()).toSet().toList()..sort())
               .join('|');
-      final suggestions = _complementaryCache[signature] ??=
-          await _geminiService.getSmartRecommendations(itemNames);
+      final key = '${_aiService.locale}|${listId ?? signature}';
+      final known = _complementary[key];
+      final now = DateTime.now();
 
-      if (suggestions.isEmpty) return scores;
+      final List<String> suggestions;
+      if (known != null &&
+          (known.signature == signature ||
+              now.difference(known.askedAt) < complementaryRefresh)) {
+        suggestions = known.suggestions;
+      } else {
+        final answer = await _aiService.recommendItems(itemNames);
+        if (answer != null) {
+          _complementary[key] = _Complementary(signature, answer, now);
+        }
+        suggestions = answer ?? known?.suggestions ?? const [];
+      }
 
       // Score decreases for later suggestions (first suggestion = most relevant)
       for (var i = 0; i < suggestions.length; i++) {
@@ -578,30 +633,35 @@ class MLRecommendationService {
     return scores;
   }
 
-  /// Starter recommendations for new users. Categories are the
+  /// Starter items for new users, in German and English. Categories are the
   /// language-agnostic ids from `core/constants/categories.dart`.
-  List<RecommendationItem> _getStarterRecommendations(Set<String> excludeNames) {
-    final commonItems = [
-      {'name': 'Milch', 'category': 'dairy', 'quantity': 1.0, 'score': 85.0},
-      {'name': 'Brot', 'category': 'bakery', 'quantity': 1.0, 'score': 80.0},
-      {'name': 'Eier', 'category': 'dairy', 'quantity': 6.0, 'score': 75.0},
-      {'name': 'Butter', 'category': 'dairy', 'quantity': 1.0, 'score': 70.0},
-      {'name': 'Käse', 'category': 'dairy', 'quantity': 1.0, 'score': 65.0},
-      {'name': 'Äpfel', 'category': 'fruits_vegetables', 'quantity': 1.0, 'score': 60.0},
-      {'name': 'Bananen', 'category': 'fruits_vegetables', 'quantity': 1.0, 'score': 55.0},
-      {'name': 'Tomaten', 'category': 'fruits_vegetables', 'quantity': 1.0, 'score': 50.0},
-    ];
+  static const List<({String de, String en, String category, double quantity, double score})>
+      _starterItems = [
+    (de: 'Milch', en: 'Milk', category: 'dairy', quantity: 1.0, score: 85.0),
+    (de: 'Brot', en: 'Bread', category: 'bakery', quantity: 1.0, score: 80.0),
+    (de: 'Eier', en: 'Eggs', category: 'dairy', quantity: 6.0, score: 75.0),
+    (de: 'Butter', en: 'Butter', category: 'dairy', quantity: 1.0, score: 70.0),
+    (de: 'Käse', en: 'Cheese', category: 'dairy', quantity: 1.0, score: 65.0),
+    (de: 'Äpfel', en: 'Apples', category: 'fruits_vegetables', quantity: 1.0, score: 60.0),
+    (de: 'Bananen', en: 'Bananas', category: 'fruits_vegetables', quantity: 1.0, score: 55.0),
+    (de: 'Tomaten', en: 'Tomatoes', category: 'fruits_vegetables', quantity: 1.0, score: 50.0),
+  ];
 
-    return commonItems
-        .where((item) => !excludeNames.contains((item['name'] as String).toLowerCase()))
-        .map((item) => RecommendationItem(
-              itemName: item['name'] as String,
-              score: item['score'] as double,
-              reason: 'Beliebtes Produkt',
-              category: item['category'] as String?,
-              quantity: item['quantity'] as double?,
-            ))
-        .toList();
+  /// Starter recommendations for new users, in the app language, without
+  /// what is already on the list.
+  List<RecommendationItem> _getStarterRecommendations(Set<String> excludeNames) {
+    final german = _aiService.locale == 'de';
+    return [
+      for (final item in _starterItems)
+        if (!excludeNames.contains((german ? item.de : item.en).toLowerCase()))
+          RecommendationItem(
+            itemName: german ? item.de : item.en,
+            score: item.score,
+            reason: _say(_Reason.popular),
+            category: item.category,
+            quantity: item.quantity,
+          ),
+    ];
   }
 
   String _capitalizeItemName(String name) {
