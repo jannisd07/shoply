@@ -10,6 +10,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/data/services/tip_service.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_actions.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_avo.dart';
@@ -22,6 +23,7 @@ import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
+import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 import 'package:shoply/routes/areas/plan_routes.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -334,7 +336,17 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
       );
     }
 
-    final content = RecipesBrowseContent(
+    // The one-time tip of the tab (Konzept 17 §6.1): T7 for now in the diet
+    // hint below the chips; T6 needs a tip slot under the large title in
+    // RecipesBrowseContent first. Without the tip service (before start,
+    // other areas' tests) the hint keeps its own rule.
+    final tipsOn = ref.watch(tipServiceProvider).isAttached;
+    final dietHint =
+        signedIn &&
+        profileKnown &&
+        !profile.hasProfile &&
+        !prefs.dietHintDismissed;
+    Widget content(TipId? tip, VoidCallback hideTip) => RecipesBrowseContent(
       loading: !catalogue.known,
       catalogueEmpty: catalogue.known && recipes.isEmpty,
       searchController: _search,
@@ -355,19 +367,20 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
       filters: filters,
       filter: filter,
       onFilter: (f) => setState(() => _filter = f),
-      showDietHint:
-          signedIn &&
-          profileKnown &&
-          !profile.hasProfile &&
-          !prefs.dietHintDismissed,
+      showDietHint: dietHint && (!tipsOn || tip == TipId.diet),
       onDietHint: () => context.push(RoutePaths.dietPreferences),
-      onDismissDietHint: () =>
-          ref.read(recipesBrowsePrefsProvider.notifier).dismissDietHint(),
+      onDismissDietHint: () {
+        hideTip();
+        ref.read(recipesBrowsePrefsProvider.notifier).dismissDietHint();
+      },
       home: home,
       fits: fits,
       showCalories: calories,
       onOpen: _open,
-      onToList: (r) => openRecipeToList(context, r),
+      onToList: (r) {
+        ref.read(tipServiceProvider).markDone(TipId.recipeToList);
+        openRecipeToList(context, r);
+      },
       onMenu: (anchor, r) => showRecipeCardMenu(anchor, ref, r),
       onLink: (link) => _link(link, filter, profile.hasProfile),
       onCategory: (id) => openRecipeCategory(context, id),
@@ -396,7 +409,17 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
                       kRecipesTitleGap,
                   bottom: ShellInsets.bottom(context),
                 ),
-                sliver: content,
+                sliver: TipSlot.builder(
+                  place: TipPlace.recipes,
+                  only: const {TipId.diet},
+                  facts: TipFacts(
+                    ready: !signedIn || profileKnown,
+                    dietSet: signedIn && profileKnown
+                        ? profile.hasProfile
+                        : null,
+                  ),
+                  builder: (context, tip, hide) => content(tip, hide),
+                ),
               ),
             ],
           ),

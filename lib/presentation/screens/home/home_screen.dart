@@ -5,12 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:shoply/core/design/design.dart';
-import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
-import 'package:shoply/data/services/dynamic_tutorial_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
+import 'package:shoply/data/services/tip_service.dart';
 import 'package:shoply/data/services/widget_service.dart';
 import 'package:shoply/presentation/screens/home/home_layout.dart';
 import 'package:shoply/presentation/screens/home/widgets/home_avo_card.dart';
@@ -23,6 +22,8 @@ import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
 import 'package:shoply/presentation/widgets/design/home_card.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
+import 'package:shoply/presentation/widgets/tips/home_tips.dart';
+import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 
 /// Content starts 52 pt below the safe area (D2: 106 on a 54 pt status bar).
 const double _kTopInset = 52; // D2
@@ -51,7 +52,9 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  bool _isCreatingTutorialList = false;
+  /// The one-time tip of this visit (Konzept 17 §6.1), fixed at its first
+  /// frame.
+  final _tip = TipVisit(TipPlace.home);
   String? _lastUserId;
   StreamSubscription<AuthState>? _authSubscription;
 
@@ -63,17 +66,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // The lists notifier loads itself on creation.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncWidgetCredentials();
-      unawaited(_ensureTutorialListExists());
     });
-
-    DynamicTutorialService.instance.addListener(_handleTutorialChange);
-
-    // Keep the tutorial pointed at the most recently updated list.
-    ref.listenManual<AsyncValue<List<ShoppingListModel>>>(
-      listsNotifierProvider,
-      (_, next) => _updateTutorialListsData(next.valueOrNull),
-      fireImmediately: true,
-    );
 
     // Reload account-scoped data when the signed-in user changes.
     _authSubscription = SupabaseService.instance.client.auth.onAuthStateChange
@@ -88,74 +81,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         });
   }
 
-  void _updateTutorialListsData(List<ShoppingListModel>? lists) {
-    if (lists == null) return;
-    final tutorial = DynamicTutorialService.instance;
-    if (lists.isEmpty) {
-      tutorial.updateListsData(hasLists: false, firstListId: null);
-      if (tutorial.isActive &&
-          tutorial.currentStepId == TutorialStepId.openShoppingList) {
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => unawaited(_ensureTutorialListExists()),
-        );
-      }
-      return;
-    }
-    final newest = lists.reduce(
-      (a, b) => b.updatedAt.isAfter(a.updatedAt) ? b : a,
-    );
-    tutorial.updateListsData(hasLists: true, firstListId: newest.id);
-  }
-
   @override
   void dispose() {
-    DynamicTutorialService.instance.removeListener(_handleTutorialChange);
     _authSubscription?.cancel();
     super.dispose();
-  }
-
-  void _handleTutorialChange() {
-    unawaited(_ensureTutorialListExists());
-  }
-
-  Future<void> _ensureTutorialListExists() async {
-    if (_isCreatingTutorialList || !mounted) return;
-
-    final tutorial = DynamicTutorialService.instance;
-    if (!tutorial.isActive ||
-        tutorial.currentStepId != TutorialStepId.openShoppingList) {
-      return;
-    }
-
-    var lists = ref.read(listsNotifierProvider).value;
-    if (lists == null) {
-      await ref.read(listsNotifierProvider.notifier).loadLists();
-      if (!mounted) return;
-      lists = ref.read(listsNotifierProvider).value;
-    }
-    if (lists == null) return;
-
-    if (lists.isNotEmpty) {
-      final sortedLists = [...lists]
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      tutorial.updateListsData(
-        hasLists: true,
-        firstListId: sortedLists.first.id,
-      );
-      return;
-    }
-
-    _isCreatingTutorialList = true;
-    try {
-      final list = await ref
-          .read(listsNotifierProvider.notifier)
-          .createList(context.tr('my_first_list'));
-      tutorial.updateListsData(hasLists: true, firstListId: list.id);
-    } catch (e) {
-      debugPrint('[HOME] Error creating tutorial list: $e');
-    } finally {
-      _isCreatingTutorialList = false;
-    }
   }
 
   void _syncWidgetCredentials() {
@@ -183,6 +112,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final offersOn = ref.watch(offersAvailableProvider);
     final continueList = continueShoppingList(lists);
+    final tipFacts = homeTipFacts(ref.watch(listsNotifierProvider).valueOrNull);
+    final tip = _tip.resolve(
+      context,
+      ref.watch(tipServiceProvider),
+      tipFacts,
+      allowed: homeTipAllowed(
+        savingsHint: offersOn && ref.watch(homeSavingsHintHasContentProvider),
+        cookToday:
+            ref.watch(moduleEnabledProvider(AppModule.mealPlan)) &&
+            ref.watch(homeCookTodayHasContentProvider),
+      ),
+    );
     final input = HomeLayoutInput(
       avo: ref.watch(moduleEnabledProvider(AppModule.avo)),
       offers: offersOn,
@@ -200,6 +141,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       lists: lists.isNotEmpty,
       recentTrips: ref.watch(homeRecentTripsHasContentProvider),
       cookToday: ref.watch(homeCookTodayHasContentProvider),
+      tip: tip != null,
     );
 
     final sections = homeSections(input);
@@ -215,6 +157,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             firstName: firstName,
             lists: lists,
             continueList: continueList,
+            tipFacts: tipFacts,
           ),
         );
       previous = section;
@@ -256,6 +199,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required String? firstName,
     required List<ShoppingListModel> lists,
     required ShoppingListModel? continueList,
+    required TipFacts tipFacts,
   }) {
     Widget inset(Widget child) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
@@ -290,8 +234,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case HomeSection.cookToday:
         return inset(const HomeCookToday());
       case HomeSection.tip:
-        // One-time tips arrive with A5 (Konzept 10.3.3, rank 9).
-        return const SizedBox.shrink();
+        return HomeTipSection(visit: _tip, facts: tipFacts);
     }
   }
 }
