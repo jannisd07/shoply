@@ -28,7 +28,9 @@ const double _tintDropBlur = 18; // D2
 const double _tintDropAlpha = 0.30; // D2
 
 // ContentGlass: cheap pseudo glass on photos inside content (A2 spec).
-const double _contentLightAlpha = 0.78; // D2 (white .78)
+// At least .92 so text pills stay at 4.5:1 over any photo (D2 has .78,
+// which gives 3.18:1 over black).
+const double _contentLightAlpha = 0.92;
 const double _contentDarkAlpha = 0.85; // D2 (glassFallback .85)
 
 /// The floating glass layer: toolbar buttons, the tab bar, the add-item
@@ -126,7 +128,7 @@ class GlassSurface extends StatelessWidget {
 /// scrolling content (list card cover, recipe hero): no blur, no platform
 /// view, so it costs no more than a coloured box.
 ///
-/// Light: white at 78 %; dark: [AvoColors.glassFallback] at 85 %; a hairline
+/// Light: white at 92 %; dark: [AvoColors.glassFallback] at 85 %; a hairline
 /// and the soft D2 glass shadow. With Reduce Transparency or Increase
 /// Contrast it turns opaque with a clear outline.
 class ContentGlass extends StatelessWidget {

@@ -238,13 +238,13 @@ void main() {
   });
 
   group('ContentGlass', () {
-    testWidgets('light: white at 78 % with a hairline and soft shadow', (
+    testWidgets('light: white at 92 % with a hairline and soft shadow', (
       tester,
     ) async {
       await tester.pumpWidget(_harness(const ContentGlass(child: _chip)));
 
       final decoration = _decorationIn(tester, ContentGlass);
-      expect(decoration.color, AvoColors.light.surface.withValues(alpha: .78));
+      expect(decoration.color, AvoColors.light.surface.withValues(alpha: .92));
       final shape = decoration.shape as RoundedRectangleBorder;
       expect(shape.borderRadius, BorderRadius.circular(AvoRadii.card));
       expect(shape.side.width, AvoSizes.hairline);
