@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/repositories/item_batch.dart';
-import 'package:shoply/data/services/gemini_categorization_service.dart';
+import 'package:shoply/data/services/ai_categorization_service.dart';
 import 'package:shoply/data/services/language_detection_service.dart';
 import 'package:shoply/data/services/push_notification_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
@@ -15,8 +15,7 @@ export 'package:shoply/data/repositories/item_batch.dart';
 class ItemRepository {
   static final ItemRepository instance = ItemRepository();
   final SupabaseService _supabase;
-  final GeminiCategorizationService _geminiService =
-      GeminiCategorizationService();
+  final AiCategorizationService _categories = AiCategorizationService.instance;
   final Map<String, RealtimeChannel> _channels = {};
 
   ItemRepository({SupabaseService? supabase})
@@ -75,7 +74,8 @@ class ItemRepository {
   /// Add a new item to a list.
   ///
   /// Merges into an existing unchecked item with the same name and unit,
-  /// auto-categorizes with Gemini when [category] is null, and parses amount
+  /// categorizes locally at once when [category] is null (Claude refines it
+  /// in the background), and parses amount
   /// and unit out of the text (e.g. "2 cups flour") when none were given.
   Future<ShoppingItemModel> addItem({
     required String listId,
@@ -112,7 +112,7 @@ class ItemRepository {
         unit == null &&
         _containsDigit.hasMatch(name)) {
       try {
-        final parsed = await _geminiService.parseIngredient(name);
+        final parsed = await _categories.parseIngredient(name);
         parsedName = parsed['name'] as String? ?? name;
         parsedQuantity = (parsed['amount'] as num?)?.toDouble() ?? 1.0;
         parsedUnit = parsed['unit'] as String?;
@@ -179,22 +179,11 @@ class ItemRepository {
       );
     }
 
-    // Auto-categorize with Gemini if category is null (returns a
-    // language-agnostic category ID).
-    String? finalCategory = category;
-    if (finalCategory == null) {
-      try {
-        finalCategory = await _geminiService.categorizeItem(parsedName);
-        debugPrint(
-          '✅ [ITEM_REPO] Auto-categorized "$parsedName" → $finalCategory',
-        );
-      } catch (e) {
-        debugPrint(
-          '⚠️ [ITEM_REPO] Auto-categorization failed for "$parsedName": $e',
-        );
-        finalCategory = 'other';
-      }
-    }
+    // Without a category the item gets the local answer at once (never
+    // waits for the network); Claude refines it in the background.
+    final String finalCategory =
+        category ?? _categories.categorizeLocal(parsedName);
+    final refine = category == null;
 
     try {
       final response = await _supabase
@@ -225,11 +214,15 @@ class ItemRepository {
           .single();
 
       await _touchList(listId);
+      final model = ShoppingItemModel.fromJson(response);
+      if (refine) {
+        unawaited(_refineInBackground(model.id, parsedName, finalCategory));
+      }
 
       // 🔔 The "item added" notification is sent by the caller
       // (ItemsNotifier.addItem → sendItemAddedNotification), not from here,
       // to avoid duplicates when other addItem() callers exist.
-      return ShoppingItemModel.fromJson(response);
+      return model;
     } catch (e) {
       debugPrint('❌ [ITEM_REPO] Database insert failed for "$parsedName": $e');
       rethrow;
@@ -283,8 +276,9 @@ class ItemRepository {
             'name': item.name,
             'quantity': item.quantity,
             'unit': item.unit,
-            'category': item.category ?? 'other',
-            'category_id': item.category ?? 'other',
+            'category': item.category ?? _categories.categorizeLocal(item.name),
+            'category_id':
+                item.category ?? _categories.categorizeLocal(item.name),
             'language': LanguageDetectionService.detectLanguage(item.name),
             'notes': item.notes,
             'added_by': userId,
@@ -344,18 +338,40 @@ class ItemRepository {
   static final Map<String, _AddBatch> _batches = {};
 
   Future<void> _categorizeInBackground(List<ShoppingItemModel> items) async {
+    final categories = await _categories.categorizeBatch([
+      for (final item in items) item.name,
+    ]);
     for (final item in items) {
-      try {
-        final category = await _geminiService.categorizeItem(item.name);
-        await _supabase
-            .from('shopping_items')
-            .update({'category': category, 'category_id': category})
-            .eq('id', item.id);
-      } catch (e) {
-        debugPrint(
-          '⚠️ [ITEM_REPO] Background category failed for "${item.name}": $e',
-        );
-      }
+      final category = categories[item.name];
+      if (category == null || category == item.category) continue;
+      await _saveCategory(item.id, item.name, category);
+    }
+  }
+
+  /// Stores Claude's better answer for one item when it differs from the
+  /// local one the item was saved with.
+  Future<void> _refineInBackground(
+    String itemId,
+    String name,
+    String localCategory,
+  ) async {
+    final refined = await _categories.refineCategory(name);
+    if (refined == null || refined == localCategory) return;
+    await _saveCategory(itemId, name, refined);
+  }
+
+  Future<void> _saveCategory(
+    String itemId,
+    String name,
+    String category,
+  ) async {
+    try {
+      await _supabase
+          .from('shopping_items')
+          .update({'category': category, 'category_id': category})
+          .eq('id', itemId);
+    } catch (e) {
+      debugPrint('⚠️ [ITEM_REPO] Background category failed for "$name": $e');
     }
   }
 
@@ -434,8 +450,8 @@ class ItemRepository {
         .eq('id', itemId)
         .select('list_id, name')
         .maybeSingle();
-    if (deleted == null)
-      return; // Already gone (e.g. removed by another member).
+    // Already gone (e.g. removed by another member).
+    if (deleted == null) return;
 
     final listId = deleted['list_id'] as String;
     final itemName = deleted['name'] as String;
