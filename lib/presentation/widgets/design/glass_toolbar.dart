@@ -12,6 +12,9 @@ const double _itemGap = 8; // D2: gap between toolbar items
 const double _minTitleWidth = 80;
 const double _fadeSolidStop = 0.3; // D2: linear-gradient(bg 30 %, transparent)
 
+/// How far below the toolbar the default fade runs out.
+const double _fadeBelowToolbar = 24;
+
 /// The top row of the floating layer (D2 toolbar): [leading] at the start,
 /// [trailing] at the end, an optional [title] centred on the screen.
 ///
@@ -97,14 +100,13 @@ class GlassToolbar extends StatelessWidget {
 /// VoiceOver.
 class ScrollEdgeFade extends StatelessWidget {
   /// Creates the top scroll edge fade.
-  const ScrollEdgeFade({
-    super.key,
-    this.height = AvoSizes.scrollEdge,
-    this.color,
-  });
+  const ScrollEdgeFade({super.key, this.height, this.color});
 
-  /// Height of the fade; [AvoSizes.scrollEdge] (110 pt, D2) by default.
-  final double height;
+  /// Fixed height of the fade (solid for its first 30 %, D2). By default it
+  /// follows the device instead: solid down to the middle of the toolbar,
+  /// so an inline title stays readable over scrolled content on every
+  /// status bar height, then fading out over [_fadeBelowToolbar].
+  final double? height;
 
   /// The screen background it fades from. Defaults to
   /// [AvoColors.background]; pass [AvoColors.backgroundPlain] on plain
@@ -114,18 +116,29 @@ class ScrollEdgeFade extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = color ?? context.colors.background;
+    final fixed = height;
+    final double fadeHeight;
+    final double solidStop;
+    if (fixed != null) {
+      fadeHeight = fixed;
+      solidStop = _fadeSolidStop;
+    } else {
+      final top = GlassToolbar.topOffset(context);
+      fadeHeight = top + AvoSizes.toolbarButton + _fadeBelowToolbar;
+      solidStop = (top + AvoSizes.toolbarButton / 2) / fadeHeight;
+    }
     return IgnorePointer(
       child: ExcludeSemantics(
         child: SizedBox(
           width: double.infinity,
-          height: height,
+          height: fadeHeight,
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [base, base.withValues(alpha: 0)],
-                stops: const [_fadeSolidStop, 1],
+                stops: [solidStop, 1],
               ),
             ),
           ),

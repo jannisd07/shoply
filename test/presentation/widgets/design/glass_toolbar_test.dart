@@ -306,11 +306,46 @@ void main() {
   });
 
   group('ScrollEdgeFade', () {
-    testWidgets('110 pt fade from the background (solid to 30 %)', (
+    testWidgets('by default solid to the toolbar middle on every status bar', (
       tester,
     ) async {
       _phone(tester);
-      await tester.pumpWidget(_harness(const ScrollEdgeFade()));
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: Size(390, 844),
+            padding: EdgeInsets.only(top: 62),
+          ),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: AvoDesignScope(
+              reduceTransparencyOverride: false,
+              child: const Align(
+                alignment: Alignment.topCenter,
+                child: ScrollEdgeFade(),
+              ),
+            ),
+          ),
+        ),
+      );
+      // Toolbar top 62 + 7, 44 tall, fade runs out 24 pt below it.
+      expect(tester.getSize(find.byType(ScrollEdgeFade)).height, 137);
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byType(ScrollEdgeFade),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
+      final gradient =
+          (box.decoration as BoxDecoration).gradient! as LinearGradient;
+      expect(gradient.stops!.first, closeTo((69 + 22) / 137, 0.0001));
+    });
+
+    testWidgets('fixed 110 pt fade from the background (solid to 30 %)', (
+      tester,
+    ) async {
+      _phone(tester);
+      await tester.pumpWidget(_harness(const ScrollEdgeFade(height: 110)));
 
       expect(tester.getSize(find.byType(ScrollEdgeFade)), const Size(390, 110));
       final box = tester.widget<DecoratedBox>(
