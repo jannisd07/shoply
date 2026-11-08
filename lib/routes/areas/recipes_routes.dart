@@ -8,6 +8,7 @@ import 'package:shoply/presentation/screens/recipes/my_recipes_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_author_page.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_detail_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_drafts_screen.dart';
+import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_screen.dart';
 import 'package:shoply/presentation/screens/recipes/saved_recipes_screen.dart';
 import 'package:shoply/routes/areas/plan_routes.dart';
@@ -20,7 +21,12 @@ final List<RouteBase> recipesBranchRoutes = [
     name: 'recipes',
     pageBuilder: (context, state) => NoTransitionPage(
       key: state.pageKey,
-      child: RecipesScreen(initialQuery: state.uri.queryParameters['q']),
+      child: RecipesScreen(
+        initialQuery: state.uri.queryParameters['q'],
+        initialSegment: state.uri.queryParameters['segment'] == 'plan'
+            ? RecipesSegment.plan
+            : null,
+      ),
     ),
     routes: [
       GoRoute(
@@ -61,14 +67,25 @@ final List<RouteBase> recipesBranchRoutes = [
       GoRoute(
         path: 'all',
         name: 'all-recipes',
-        builder: (context, state) => const AllRecipesScreen(),
+        builder: (context, state) => AllRecipesScreen(
+          initialFilter: RecipeListFilter.byId(
+            state.uri.queryParameters['filter'],
+          ),
+          initialSort: RecipeSort.byId(state.uri.queryParameters['sort']),
+        ),
       ),
       GoRoute(
         path: 'category/:categoryId',
         name: 'category-recipes',
         builder: (context, state) {
           final categoryId = state.pathParameters['categoryId']!;
-          return CategoryRecipesScreen(categoryId: categoryId);
+          return CategoryRecipesScreen(
+            categoryId: categoryId,
+            initialFilter: RecipeListFilter.byId(
+              state.uri.queryParameters['filter'],
+            ),
+            initialSort: RecipeSort.byId(state.uri.queryParameters['sort']),
+          );
         },
       ),
       GoRoute(
@@ -92,8 +109,10 @@ final List<RouteBase> recipesBranchRoutes = [
   GoRoute(
     path: RoutePaths.plan,
     name: 'plan',
-    pageBuilder: (context, state) =>
-        NoTransitionPage(key: state.pageKey, child: const RecipesScreen()),
+    pageBuilder: (context, state) => NoTransitionPage(
+      key: state.pageKey,
+      child: const RecipesScreen(initialSegment: RecipesSegment.plan),
+    ),
     routes: planChildRoutes,
   ),
 ];

@@ -1,555 +1,442 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/paper_colors.dart';
-import 'package:shoply/core/constants/recipe_categories.dart';
+
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/services/contextual_prompt_service.dart';
-import 'package:shoply/data/services/dynamic_tutorial_service.dart';
-import 'package:shoply/data/services/offline_cache_service.dart';
-import 'package:shoply/data/services/recipe_features_service.dart';
-import 'package:shoply/data/services/recipe_service.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/recipes_home_widgets.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/recipes_search_results.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_actions.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_avo.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_home.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_page.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_search.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_state.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
-import 'package:shoply/presentation/state/recipes_provider.dart';
-import 'package:shoply/presentation/state/saved_recipes_provider.dart';
-import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
+import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
+import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
+import 'package:shoply/routes/areas/plan_routes.dart';
+import 'package:shoply/routes/route_paths.dart';
 
+export 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_home.dart'
+    show RecipesSegment;
+
+/// D2-Rezepte toolbar: the bookmark glyph is 20 pt and filled.
+const double _kBookmarkSize = 20; // D2
+
+/// Root of the "Rezepte" tab (D2-Rezepte, Konzept 13 §3–4): large title,
+/// the search (recipes, ingredients, creators) as a state of the tab, the
+/// chips "Für dich / Schnell / Vegetarisch …", the hero "Passt zu deiner
+/// Liste" with "Zutaten auf die Liste", "Beliebt diese Woche", "Neu" and
+/// "Kategorien". The toolbar holds "Gespeichert" and "Mehr" (Meine Rezepte,
+/// Entwürfe, Ersteller, Neues Rezept). With the meal plan module on, the
+/// segment "Entdecken | Wochenplan" shows Teil B's plan.
+///
+/// Everything comes from the local state at once; the server's answer
+/// replaces it underneath, and what the sections show is fixed per visit so
+/// nothing jumps. Sets Avo's screen context to `recipes` while visible.
 class RecipesScreen extends ConsumerStatefulWidget {
-  const RecipesScreen({super.key, this.initialQuery});
+  const RecipesScreen({super.key, this.initialQuery, this.initialSegment});
 
-  /// Pre-fills and triggers the search, e.g. from a Siri "search recipes"
-  /// deep link (`shoply://recipes/search?q=...`).
+  /// Pre-fills the search, e.g. from Siri (`shoply://recipes/search?q=`).
   final String? initialQuery;
+
+  /// Opens the Wochenplan segment (`/recipes?segment=plan`, `/plan`).
+  final RecipesSegment? initialSegment;
 
   @override
   ConsumerState<RecipesScreen> createState() => _RecipesScreenState();
 }
 
-class _RecipesScreenState extends ConsumerState<RecipesScreen> {
-  static const _searchDebounce = Duration(milliseconds: 250);
+class _RecipesScreenState extends ConsumerState<RecipesScreen>
+    with RecipesAvoContext {
+  final _search = TextEditingController();
+  final _focus = FocusNode();
+  final _moreKey = GlobalKey();
 
-  final _searchController = TextEditingController();
-  final _searchFocusNode = FocusNode();
-  Timer? _searchTimer;
+  String _query = '';
+  bool _focused = false;
+  RecipeQuickFilter _filter = RecipeQuickFilter.forYou;
+  late RecipesSegment _segment;
 
-  List<Recipe> _allRecipes = [];
-  List<Recipe> _popularRecipes = [];
-  List<Recipe> _recentRecipes = [];
-  Recipe? _recipeOfTheWeek;
-  List<Recipe> _forYouRecipes = [];
-  List<RecipeAuthorSummary> _allAuthors = [];
-  Map<String, int> _categoryCounts = {};
-  bool _isLoading = true;
-  bool _isSearching = false;
-  String _searchQuery = '';
-  List<Recipe> _searchResults = [];
+  /// What each chip shows, fixed for this visit of the tab.
+  final Map<RecipeQuickFilter, RecipesHomeIds> _frozen = {};
 
-  List<RecipeAuthorSummary> get _topAuthors => _allAuthors.take(8).toList();
+  /// Server highlights for this visit; newer ones are saved for the next.
+  RecipeHighlights? _highlights;
+  bool _hadStoredHighlights = false;
+  bool? _tickerOn;
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_onSearchTextChanged);
-    _seedFromCache();
-    _loadAllData();
-    _maybeShowDietPrompt();
+    _segment = widget.initialSegment ?? RecipesSegment.discover;
+    _focus.addListener(_onFocus);
+    _highlights = ref.read(recipesBrowsePrefsProvider).highlights;
+    _hadStoredHighlights = _highlights != null;
+    final q = widget.initialQuery;
+    if (q != null && q.isNotEmpty) {
+      _search.text = q;
+      _query = q;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_loadHighlights());
+    });
+  }
 
-    final initialQuery = widget.initialQuery;
-    if (initialQuery != null && initialQuery.isNotEmpty) {
-      // Deferred: setting .text fires _onSearchTextChanged synchronously,
-      // which calls setState — not allowed during initState itself.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Coming back to the tab is a new visit: sections may change now.
+    final on = TickerMode.valuesOf(context).enabled;
+    if (_tickerOn == false && on) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _searchController.text = initialQuery;
+        if (mounted) setState(_frozen.clear);
       });
+    }
+    _tickerOn = on;
+  }
+
+  @override
+  void didUpdateWidget(RecipesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Siri on a live tab: every new `?q=` sets the search again.
+    final q = widget.initialQuery;
+    if (q != null && q != oldWidget.initialQuery && q != _search.text) {
+      _search.text = q;
+      _query = q;
+    }
+    final segment = widget.initialSegment;
+    if (segment != oldWidget.initialSegment) {
+      _segment = segment ?? RecipesSegment.discover;
     }
   }
 
   @override
   void dispose() {
-    _searchTimer?.cancel();
-    _searchController.removeListener(_onSearchTextChanged);
-    _searchController.dispose();
-    _searchFocusNode.dispose();
+    _focus
+      ..removeListener(_onFocus)
+      ..dispose();
+    _search.dispose();
     super.dispose();
   }
 
-  /// Show diet preferences prompt once on first visit
-  Future<void> _maybeShowDietPrompt() async {
-    // Delay to let the screen render first
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-    final shouldShow = await ContextualPromptService.instance.shouldShowDietPrompt();
-    if (shouldShow && mounted) {
-      ContextualPromptService.instance.showDietPrompt(context);
-    }
+  void _onFocus() {
+    if (_focus.hasFocus != _focused) setState(() => _focused = _focus.hasFocus);
   }
 
-  /// Paint the tab from the warmed offline cache before any network call, so
-  /// the first frame already shows recipes; the network result replaces them.
-  /// Runs synchronously in initState — no await, no empty frame.
-  void _seedFromCache() {
-    final cached = OfflineCacheService.instance.getCachedRecipesSync();
-    if (cached == null || cached.isEmpty) return;
-    _allRecipes = cached;
-    _popularRecipes = ([...cached]
-          ..sort((a, b) => b.averageRating.compareTo(a.averageRating)))
-        .take(8)
-        .toList();
-    _recentRecipes = recentRecipesFrom(cached);
-    _allAuthors = topAuthorsFrom(cached);
-    _categoryCounts = categoryCountsFrom(cached);
-    _isLoading = false;
-  }
-
-  /// Loads the recipe list once (through [recipesProvider], which also
-  /// caches it offline) and derives every section from it in memory.
-  /// Only "popular this week" and "recipe of the week" need their own query.
-  Future<void> _loadAllData({bool forceRefresh = false}) async {
-    // Only block the UI when there is nothing cached to show yet; otherwise
-    // refresh silently underneath the already-rendered content.
-    if (_allRecipes.isEmpty) setState(() => _isLoading = true);
+  Future<void> _loadHighlights({bool apply = false}) async {
     try {
-      final allRecipesFuture = forceRefresh
-          ? ref.refresh(recipesProvider.future)
-          : ref.read(recipesProvider.future);
-      final results = await Future.wait([
-        allRecipesFuture,
-        // Request 9 so we still have 8 after excluding recipe of the week
-        RecipeService.instance.getPopularRecipes(limit: 9, thisWeekOnly: true),
-        RecipeFeaturesService.instance.getRecipeOfTheWeek(),
-      ]);
-      if (!mounted) return;
-
-      final allRecipes = results[0] as List<Recipe>;
-      final weekRecipe = results[2] as Recipe?;
-      final weekId = weekRecipe?.id;
-
-      // Exclude recipe of the week from "Popular This Week"
-      final popular = (results[1] as List<Recipe>)
-          .where((r) => r.id != weekId)
-          .take(8)
-          .toList();
-
-      // Personalized "For You" (diet, allergies, priorities); excludes
-      // anything already shown in recipe of the week or popular.
-      final forYou = forYouRecipesFrom(
-        allRecipes,
-        user: ref.read(currentUserProvider).value,
-        excludeIds: {if (weekId != null) weekId, ...popular.map((r) => r.id)},
-      );
-
-      setState(() {
-        _allRecipes = allRecipes;
-        _popularRecipes = popular;
-        _recentRecipes = recentRecipesFrom(allRecipes);
-        _allAuthors = topAuthorsFrom(allRecipes);
-        _recipeOfTheWeek = weekRecipe;
-        _forYouRecipes = forYou;
-        _categoryCounts = categoryCountsFrom(allRecipes);
-        _isLoading = false;
-        if (_isSearching) {
-          _searchResults = searchRecipesLocally(allRecipes, _searchQuery);
-        }
-      });
-      DynamicTutorialService.instance.updateRecipesData(
-        hasRecipes: popular.isNotEmpty || _recentRecipes.isNotEmpty,
-      );
-    } catch (e) {
-      debugPrint('❌ [RECIPES] Failed to load recipes tab: $e');
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('error_loading_recipes'))),
-      );
-    }
-  }
-
-  void _onSearchTextChanged() {
-    final value = _searchController.text;
-    if (value == _searchQuery) return;
-    _searchQuery = value;
-    _searchTimer?.cancel();
-
-    if (value.trim().isEmpty) {
-      if (_isSearching) {
+      final loaded = await ref.read(recipeHighlightsLoaderProvider)();
+      if (loaded == null || !mounted) return;
+      ref.read(recipesBrowsePrefsProvider.notifier).saveHighlights(loaded);
+      if (apply || !_hadStoredHighlights) {
         setState(() {
-          _isSearching = false;
-          _searchResults = [];
+          _highlights = loaded;
+          _hadStoredHighlights = true;
+          _frozen.clear();
         });
       }
-      return;
+    } catch (e) {
+      debugPrint('⚠️ [RECIPES] Highlights failed: $e');
     }
-
-    if (!_isSearching) setState(() => _isSearching = true);
-    // Search is a local filter over the already-loaded recipes; the debounce
-    // only avoids re-filtering on every keystroke while typing fast.
-    _searchTimer = Timer(_searchDebounce, () {
-      if (!mounted) return;
-      setState(() => _searchResults = searchRecipesLocally(_allRecipes, _searchQuery));
-    });
   }
 
-  void _clearSearch() {
-    _searchTimer?.cancel();
-    _searchController.clear();
-    _searchFocusNode.unfocus();
-    setState(() {
-      _isSearching = false;
-      _searchQuery = '';
-      _searchResults = [];
-    });
+  Future<void> _refresh() async {
+    await Future.wait([
+      refreshRecipeCatalogue(ref),
+      _loadHighlights(apply: true),
+    ]);
+    if (mounted) setState(_frozen.clear);
   }
 
-  void _openRecipe(Recipe recipe) => context.push('/recipes/${recipe.id}', extra: recipe);
+  // ------------------------------------------------------------- actions
 
-  @override
-  Widget build(BuildContext context) {
-    // Only the count is shown here; watching the whole saved-recipes state
-    // rebuilt the tab three times per bookmark toggle anywhere in the app.
-    final savedCount = ref.watch(savedRecipesProvider.select((s) => s.savedIds.length));
-
-    // Reload when ratings change. Deferred a microtask so the invalidation
-    // that follows the trigger bump in refreshRecipeData has happened.
-    ref.listen(recipeRefreshTriggerProvider, (previous, next) {
-      if (previous != next) Future.microtask(() => mounted ? _loadAllData() : null);
-    });
-
-    return Scaffold(
-      backgroundColor: AppColors.background(context),
-      body: _isLoading
-          ? _buildLoadingState(context)
-          : Column(
-              children: [
-                _buildSearchHeader(context),
-                Expanded(
-                  child: _isSearching
-                      ? RecipesSearchResults(
-                          query: _searchQuery,
-                          results: _searchResults,
-                          authors: _allAuthors,
-                          onRecipeTap: _openRecipe,
-                        )
-                      : _buildMainContent(context, savedCount),
-                ),
-              ],
-            ),
-    );
+  void _open(Recipe recipe) {
+    if (_query.trim().isNotEmpty) _remember(_query);
+    openBrowseRecipe(context, recipe);
   }
 
-  Widget _buildSearchHeader(BuildContext context) {
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  context.tr('recipes'),
-                  style: PaperTextStyles.serif(27, color: textPrimary),
-                ),
-                const Spacer(),
-                // Glass circle, matching the composer's "+" — 34pt visual
-                // inside a 44pt touch target.
-                GestureDetector(
-                  key: DynamicTutorialService.instance.addRecipeButtonKey,
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    context.push('/recipes/add');
-                  },
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Center(
-                      child: SizedBox(
-                        width: 34,
-                        height: 34,
-                        child: AdaptiveGlass(
-                          isCircle: true,
-                          child: Center(
-                            child: Icon(Icons.add_rounded, color: textPrimary, size: 20),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // The same TextField in both modes, so focus survives the switch.
-            SizedBox(
-              height: 42,
-              child: AdaptiveGlass(
-                isCircle: true,
-                opaqueColor: AppColors.surface(context),
-                child: TextField(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  decoration: InputDecoration(
-                    hintText: context.tr('search_recipes_users'),
-                    hintStyle: TextStyle(color: textSecondary, fontSize: 14),
-                    prefixIcon: Icon(Icons.search_rounded, color: textSecondary, size: 20),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(Icons.close_rounded, color: textSecondary, size: 18),
-                            onPressed: _clearSearch,
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                  style: TextStyle(color: textPrimary, fontSize: 14),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _remember(String query) =>
+      ref.read(recipesBrowsePrefsProvider.notifier).addRecentSearch(query);
+
+  void _setQuery(String q) {
+    _search.text = q;
+    _search.selection = TextSelection.collapsed(offset: q.length);
+    setState(() => _query = q);
   }
 
-  Widget _buildMainContent(BuildContext context, int savedCount) {
-    return CustomScrollView(
-      key: DynamicTutorialService.instance.recipesAreaKey,
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-      slivers: [
-        CupertinoSliverRefreshControl(
-          onRefresh: () => _loadAllData(forceRefresh: true),
+  void _link(RecipesHomeLink link, RecipeQuickFilter filter, bool hasProfile) {
+    final sort = switch (link) {
+      RecipesHomeLink.newest => RecipeSort.newest,
+      _ => RecipeSort.popular,
+    };
+    switch (filter) {
+      case RecipeQuickFilter.forYou:
+        switch (link) {
+          case RecipesHomeLink.popular:
+            context.push('${RoutePaths.recipes}/popular');
+          case RecipesHomeLink.newest:
+            openAllRecipes(context, sort: RecipeSort.newest);
+          case RecipesHomeLink.pool:
+            openAllRecipes(
+              context,
+              filter: hasProfile ? RecipeListFilter.fitsMe : null,
+            );
+        }
+      case RecipeQuickFilter.quick:
+        openAllRecipes(context, filter: RecipeListFilter.under20, sort: sort);
+      case RecipeQuickFilter.vegetarian:
+        openRecipeCategory(context, 'vegetarian', sort: sort);
+      case RecipeQuickFilter.vegan:
+        openRecipeCategory(context, 'vegan', sort: sort);
+      case RecipeQuickFilter.glutenFree:
+        openRecipeCategory(context, 'gluten-free', sort: sort);
+      case RecipeQuickFilter.healthy:
+        openRecipeCategory(context, 'healthy', sort: sort);
+    }
+  }
+
+  void _more() {
+    showAvoMenu(
+      context,
+      anchorKey: _moreKey,
+      items: [
+        AvoMenuItem(
+          label: context.tr('recipe_browse_my_recipes'),
+          onSelected: () => context.push('${RoutePaths.recipes}/my'),
         ),
-
-        // Community stats banner
-        if (_allRecipes.isNotEmpty)
-          SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surface(context),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.border(context)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  RecipeStatItem(
-                    value: '${_allRecipes.length}',
-                    label: context.tr('recipes'),
-                  ),
-                  RecipeStatItem(
-                    value: '${_allAuthors.length}',
-                    label: context.tr('creators'),
-                  ),
-                  RecipeStatItem(
-                    value: '$savedCount',
-                    label: context.tr('saved_recipes'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        if (_recipeOfTheWeek != null) ...[
-          SliverToBoxAdapter(
-            child: RecipeSectionHeader(title: context.tr('recipe_of_the_week')),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: FeaturedRecipeCard(
-                recipe: _recipeOfTheWeek!,
-                onTap: () => _openRecipe(_recipeOfTheWeek!),
-              ),
-            ),
-          ),
-        ],
-
-        // Shortcuts: My Recipes, Saved, Drafts, Creators
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: RecipeActionCard(
-                        icon: Icons.restaurant_rounded,
-                        label: context.tr('my_recipes'),
-                        onTap: () => context.push('/recipes/my'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: RecipeActionCard(
-                        icon: Icons.bookmark_rounded,
-                        label: context.tr('saved_recipes'),
-                        badge: savedCount > 0 ? '$savedCount' : null,
-                        onTap: () => context.push('/recipes/saved'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: RecipeActionCard(
-                        icon: Icons.edit_note_rounded,
-                        label: context.tr('my_drafts'),
-                        onTap: () => context.push('/recipes/drafts'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: RecipeActionCard(
-                        icon: Icons.people_rounded,
-                        label: context.tr('creators'),
-                        onTap: () => context.push('/recipes/creators'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        AvoMenuItem(
+          label: context.tr('recipe_browse_drafts'),
+          onSelected: () => context.push('${RoutePaths.recipes}/drafts'),
         ),
-
-        if (_forYouRecipes.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: RecipeSectionHeader(title: context.tr('recommended_for_you')),
-          ),
-          SliverToBoxAdapter(
-            child: RecipeCarousel(recipes: _forYouRecipes, onTap: _openRecipe),
-          ),
-        ],
-
-        if (_popularRecipes.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: RecipeSectionHeader(
-              title: context.tr('popular_this_week'),
-              onSeeAll: () => context.push('/recipes/popular'),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: RecipeCarousel(recipes: _popularRecipes, onTap: _openRecipe),
-          ),
-        ],
-
-        SliverToBoxAdapter(
-          child: RecipeSectionHeader(title: context.tr('browse_by_category')),
+        AvoMenuItem(
+          label: context.tr('recipe_browse_creators'),
+          icon: AvoIcons.people,
+          onSelected: () => context.push('${RoutePaths.recipes}/creators'),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              childAspectRatio: 0.75,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final category = recipeCategories[index];
-                return RecipeCategoryCard(
-                  category: category,
-                  count: _categoryCounts[category.id] ?? 0,
-                  onTap: () => context.push('/recipes/category/${category.id}'),
-                );
-              },
-              childCount: recipeCategories.length,
-            ),
-          ),
-        ),
-
-        if (_allAuthors.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: RecipeSectionHeader(
-              title: context.tr('top_creators'),
-              onSeeAll: () => context.push('/recipes/creators'),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 110,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  for (final author in _topAuthors)
-                    CreatorAvatarCard(
-                      name: author.name,
-                      avatarUrl: author.avatarUrl,
-                      recipeCount: author.recipeCount,
-                      onTap: () => context.push(
-                        '/author/${author.id}',
-                        extra: {'authorName': author.name},
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-
-        if (_recentRecipes.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: RecipeSectionHeader(
-              title: context.tr('recently_added'),
-              onSeeAll: () => context.push('/recipes/all'),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            // Two-column photo tiles, matching the reference design.
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.82,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => DietAwareRecipeCard(
-                  recipe: _recentRecipes[index],
-                  onTap: () => _openRecipe(_recentRecipes[index]),
-                ),
-                childCount: _recentRecipes.length > 6 ? 6 : _recentRecipes.length,
-              ),
-            ),
-          ),
-        ],
-
-        SliverPadding(
-          padding: EdgeInsets.only(bottom: 120 + MediaQuery.paddingOf(context).bottom),
+        const AvoMenuDivider(),
+        AvoMenuItem(
+          label: context.tr('recipe_browse_new_recipe'),
+          icon: AvoIcons.plus,
+          onSelected: () => openRecipeEditor(context),
         ),
       ],
     );
   }
 
-  Widget _buildLoadingState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  // --------------------------------------------------------------- build
+
+  @override
+  Widget build(BuildContext context) {
+    final catalogue = ref.watch(recipeCatalogueProvider);
+    final fits = ref.watch(recipeFitsProvider);
+    final profile = ref.watch(recipeDietProfileProvider);
+    final profileKnown = ref.watch(recipeDietProfileKnownProvider);
+    final offline = ref.watch(isOfflineProvider);
+    final calories = ref.watch(moduleEnabledProvider(AppModule.calories));
+    final planOn = ref.watch(moduleEnabledProvider(AppModule.mealPlan));
+    final prefs = ref.watch(recipesBrowsePrefsProvider);
+    final signedIn = ref.watch(authUserIdProvider) != null;
+    final language = Localizations.maybeLocaleOf(context)?.languageCode;
+
+    // A new diet profile changes what fits: pick the sections again.
+    ref.listen(recipeDietProfileProvider, (previous, next) {
+      if (previous != next) setState(_frozen.clear);
+    });
+
+    final recipes = catalogue.recipes;
+    final filters = availableQuickFilters(recipes);
+    final filter = filters.contains(_filter)
+        ? _filter
+        : RecipeQuickFilter.forYou;
+    RecipesHomeIds compute() => buildRecipesHome(
+      catalogue: recipes,
+      filter: filter,
+      fits: fits,
+      listItemStems: ref.read(recipeListItemStemsProvider),
+      popularIds: _highlights?.popularIds ?? const [],
+      weekId: _highlights?.weekId,
+      language: language,
+    );
+    // Fixed once the recipes and the allergies are known.
+    final ids = catalogue.known && profileKnown
+        ? (_frozen[filter] ??= compute())
+        : compute();
+    final heroId = ids.heroId;
+    final home = RecipesHomeView(
+      hero: heroId == null
+          ? null
+          : resolveRecipes(recipes, [heroId]).firstOrNull,
+      heroKind: ids.heroKind,
+      popular: resolveRecipes(recipes, ids.popularIds),
+      newest: resolveRecipes(recipes, ids.newestIds),
+      poolCount: ids.poolCount,
+      categories: filter == RecipeQuickFilter.forYou
+          ? categoriesWithRecipes(recipes)
+          : const [],
+    );
+
+    final searching = _focused || _query.trim().isNotEmpty;
+    final segment = planOn ? _segment : RecipesSegment.discover;
+
+    Widget? searchSliver;
+    if (searching) {
+      searchSliver = RecipesBrowseSearch(
+        query: _query,
+        results: searchRecipes(
+          recipes,
+          _query,
+          categoryName: (c) => context.tr(c.nameKey),
+          dietName: (d) => recipeDietLabelName(context, d),
+        ),
+        recent: prefs.recentSearches,
+        hasProfile: profile.hasProfile,
+        fits: fits,
+        showCalories: calories,
+        onOpen: _open,
+        onMenu: (anchor, r) => showRecipeCardMenu(anchor, ref, r),
+        onRecent: _setQuery,
+        onRemoveRecent: (q) =>
+            ref.read(recipesBrowsePrefsProvider.notifier).removeRecentSearch(q),
+        onClearRecent: () =>
+            ref.read(recipesBrowsePrefsProvider.notifier).clearRecentSearches(),
+        onDiet: (label) {
+          if (_query.trim().isNotEmpty) _remember(_query);
+          openRecipeCategory(context, label);
+        },
+        onFitsMe: () =>
+            openAllRecipes(context, filter: RecipeListFilter.fitsMe),
+        onCategory: (id) {
+          if (_query.trim().isNotEmpty) _remember(_query);
+          openRecipeCategory(context, id);
+        },
+        onIngredient: (name) {
+          _remember(_query);
+          openRecipeCategory(
+            context,
+            '$kIngredientCategoryPrefix${name.toLowerCase()}',
+          );
+        },
+        onAuthor: (a) {
+          _remember(_query);
+          context.push('/author/${a.id}', extra: {'authorName': a.name});
+        },
+        onAllCreators: () => context.push('${RoutePaths.recipes}/creators'),
+        onCreate: (_) => openRecipeEditor(context),
+      );
+    }
+
+    final content = RecipesBrowseContent(
+      loading: !catalogue.known,
+      catalogueEmpty: catalogue.known && recipes.isEmpty,
+      searchController: _search,
+      searchFocus: _focus,
+      onQueryChanged: (q) => setState(() => _query = q),
+      onQuerySubmitted: _remember,
+      searching: searching,
+      searchSliver: searchSliver,
+      offline: offline,
+      refreshFailed: catalogue.refreshFailed,
+      onRetry: _refresh,
+      showPlanSegment: planOn,
+      segment: segment,
+      onSegment: (s) => setState(() => _segment = s),
+      planContent: segment == RecipesSegment.plan
+          ? buildPlanSegment(context)
+          : null,
+      filters: filters,
+      filter: filter,
+      onFilter: (f) => setState(() => _filter = f),
+      showDietHint:
+          signedIn &&
+          profileKnown &&
+          !profile.hasProfile &&
+          !prefs.dietHintDismissed,
+      onDietHint: () => context.push(RoutePaths.dietPreferences),
+      onDismissDietHint: () =>
+          ref.read(recipesBrowsePrefsProvider.notifier).dismissDietHint(),
+      home: home,
+      fits: fits,
+      showCalories: calories,
+      onOpen: _open,
+      onToList: (r) => openRecipeToList(context, r),
+      onMenu: (anchor, r) => showRecipeCardMenu(anchor, ref, r),
+      onLink: (link) => _link(link, filter, profile.hasProfile),
+      onCategory: (id) => openRecipeCategory(context, id),
+      onCreate: () => openRecipeEditor(context),
+      onShowAll: () => openAllRecipes(context),
+    );
+
+    final background = context.colors.backgroundPlain;
+    return ColoredBox(
+      color: background,
+      child: Stack(
         children: [
-          const CupertinoActivityIndicator(),
-          const SizedBox(height: 16),
-          Text(context.tr('loading_recipes')),
+          CustomScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: [
+              if (!searching)
+                CupertinoSliverRefreshControl(onRefresh: _refresh),
+              SliverPadding(
+                padding: EdgeInsets.only(
+                  top:
+                      GlassToolbar.topOffset(context) +
+                      AvoSizes.toolbarButton +
+                      kRecipesTitleGap,
+                  bottom: ShellInsets.bottom(context),
+                ),
+                sliver: content,
+              ),
+            ],
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ScrollEdgeFade(color: background),
+          ),
+          Positioned(
+            top: GlassToolbar.topOffset(context),
+            left: 0,
+            right: 0,
+            child: GlassToolbar(
+              trailing: [
+                GlassButtonGroup(
+                  items: [
+                    GlassGroupItem(
+                      icon: const AvoIcon(
+                        AvoIcons.bookmark,
+                        filled: true,
+                        size: _kBookmarkSize,
+                      ),
+                      semanticLabel: context.tr('recipe_browse_saved'),
+                      onPressed: () =>
+                          context.push('${RoutePaths.recipes}/saved'),
+                    ),
+                    GlassGroupItem(
+                      icon: KeyedSubtree(
+                        key: _moreKey,
+                        child: const AvoIcon(AvoIcons.more),
+                      ),
+                      semanticLabel: context.tr('common_more'),
+                      onPressed: _more,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
