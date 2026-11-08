@@ -124,6 +124,7 @@ class AvoErrorSection extends StatelessWidget {
     required this.onSignIn,
     this.retryAt,
     this.partlyDone = false,
+    this.partlyDoneHidden = false,
   });
 
   final String code;
@@ -133,6 +134,10 @@ class AvoErrorSection extends StatelessWidget {
 
   /// Changes of this answer are done and keep their cards: says so.
   final bool partlyDone;
+
+  /// Something without a card of its own is done (recipe to list, a log):
+  /// says that part is done, without pointing at cards.
+  final bool partlyDoneHidden;
   final VoidCallback onSignIn;
   final DateTime? retryAt;
 
@@ -185,7 +190,9 @@ class AvoErrorSection extends StatelessWidget {
           context,
           error,
           context.tr('avo_err_title'),
-          subtitle: partlyDone ? null : context.tr('avo_err_unreachable'),
+          subtitle: partlyDone || partlyDoneHidden
+              ? null
+              : context.tr('avo_err_unreachable'),
         );
     }
   }
@@ -196,7 +203,11 @@ class AvoErrorSection extends StatelessWidget {
     String title, {
     String? subtitle,
   }) {
-    final sub = partlyDone ? context.tr('avo_err_partly_done') : subtitle;
+    final sub = partlyDone
+        ? context.tr('avo_err_partly_done')
+        : partlyDoneHidden
+        ? context.tr('avo_err_partly_done_hidden')
+        : subtitle;
     final retry = onRetry;
     return _RetryLater(
       retryAt: retryAt,

@@ -29,6 +29,11 @@ const Set<String> avoWritingTools = {
 
 /// The marker for a writing [tool] that succeeded without leaving a done
 /// card ([hadDoneCard]); null for reads, failures and switched-off modules.
+///
+/// A tool that reports nothing written (`success: false`, `added: 0`, as
+/// `add_recipe_to_list`, `add_history_items_to_list` and `plan_to_list` do
+/// when every item failed) gets none: the retry must do it. A partial result
+/// (`added > 0` with failures) keeps it, or a retry would double quantities.
 AvoWidgetPayload? avoWriteMarker(
   String tool,
   Map<String, Object?> result, {
@@ -38,11 +43,38 @@ AvoWidgetPayload? avoWriteMarker(
   if (!avoWritingTools.contains(tool) || hadDoneCard) return null;
   if (result['error'] != null ||
       result['not_available'] == true ||
-      result['tracking_enabled'] == false) {
+      result['tracking_enabled'] == false ||
+      result['success'] == false) {
     return null;
   }
+  final added = result['added'];
+  if (added is num && added <= 0) return null;
   return AvoWidgetPayload.wrote(
     tool,
     listName: listName == null || listName.isEmpty ? null : listName,
   );
+}
+
+/// After a tool ran: adds the [avoWriteMarker] for it to [payloads] when it
+/// wrote without a done card of its own. [before] is the payload count before
+/// the tool ran; [listName] resolves the `list_id`/`to_list_id` of [input].
+Future<void> avoNoteWrite(
+  List<AvoWidgetPayload> payloads, {
+  required int before,
+  required String tool,
+  required Map<String, Object?> input,
+  required Map<String, Object?> result,
+  required Future<String> Function(String listId) listName,
+}) async {
+  if (!avoWritingTools.contains(tool)) return;
+  final hadDoneCard = payloads.skip(before).any((p) => p.isDoneChange);
+  if (hadDoneCard) return;
+  final listId = input['list_id'] ?? input['to_list_id'];
+  final marker = avoWriteMarker(
+    tool,
+    result,
+    hadDoneCard: false,
+    listName: listId is String ? await listName(listId) : null,
+  );
+  if (marker != null) payloads.add(marker);
 }

@@ -33,14 +33,16 @@ String avoDoneNote(
     if (setting != null && setting.success) {
       final value = avoSafeName(setting.newValue);
       parts.add(
-        value == null ? setting.displayName : '${setting.displayName}: $value',
+        value == null
+            ? setting.displayName
+            : '${setting.displayName}: ${_quoted(value)}',
       );
       continue;
     }
     final tool = p.wroteTool;
     if (tool != null) {
       final list = avoSafeName(p.wroteListName);
-      parts.add(list == null ? tool : '$tool ($list)');
+      parts.add(list == null ? tool : '$tool (${_quoted(list)})');
     }
   }
   if (parts.isEmpty) return '';
@@ -50,8 +52,14 @@ String avoDoneNote(
   );
 }
 
+/// Names stay visibly data, never part of the sentence around them.
+String _quoted(String name) => '"$name"';
+
 String _listChange(BuildContext context, AvoListChange c) {
-  final list = avoSafeName(c.listName) ?? context.tr('avo_note_a_list');
+  final safeList = avoSafeName(c.listName);
+  final list = safeList == null
+      ? context.tr('avo_note_a_list')
+      : _quoted(safeList);
   final n = {'n': '${c.count}'};
   final lang = Localizations.maybeLocaleOf(context)?.languageCode ?? 'de';
   String qty(double v) => NumberFormat('0.##', lang).format(v);
@@ -67,7 +75,11 @@ String _listChange(BuildContext context, AvoListChange c) {
           ? context.tr('avo_note_updated')
           : context.tr(
               'avo_card_quantity',
-              params: {'item': item, 'new': qty(after), 'old': qty(before)},
+              params: {
+                'item': _quoted(item),
+                'new': qty(after),
+                'old': qty(before),
+              },
             );
     case AvoListChangeKind.added:
       what = context.tr('avo_card_added', params: n);
@@ -86,7 +98,7 @@ String _listChange(BuildContext context, AvoListChange c) {
   }
   final names = [
     for (final i in c.items.take(_maxNames))
-      if (avoSafeName(i.name) case final safe?) safe,
+      if (avoSafeName(i.name) case final safe?) _quoted(safe),
   ];
   final listed =
       c.kind == AvoListChangeKind.updated ||

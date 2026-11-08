@@ -100,12 +100,16 @@ const _modules = AvoSuggestion('avo_sugg_modules', AvoSuggestionSymbol.toggles);
 /// only when short and on one line (W1 review).
 const int _maxNameLength = 40;
 
-/// [name] trimmed, or null when it is empty, longer than 40 characters or
-/// spans lines.
+/// Line breaks, line and paragraph separators and other control characters
+/// (incl. U+0085, VT, FF, U+2028, U+2029).
+final RegExp _unsafeChars = RegExp(r'[\u0000-\u001F\u007F-\u009F\u2028\u2029]');
+
+/// [name] trimmed, or null when it is empty, longer than 40 characters,
+/// spans lines or holds control characters.
 String? avoSafeName(String? name) {
   if (name == null) return null;
   final n = name.trim();
-  if (n.isEmpty || n.length > _maxNameLength || n.contains(RegExp(r'[\r\n]'))) {
+  if (n.isEmpty || n.length > _maxNameLength || _unsafeChars.hasMatch(n)) {
     return null;
   }
   return n;

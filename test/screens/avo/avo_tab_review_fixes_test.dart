@@ -116,7 +116,7 @@ void main() {
     expect(backend.asked, hasLength(2));
     expect(backend.asked[1], startsWith('Milch und Eier auf die Liste'));
     expect(backend.asked[1], contains("Already done, don't do it again"));
-    expect(backend.asked[1], contains('Wocheneinkauf: 1 added'));
+    expect(backend.asked[1], contains('"Wocheneinkauf": 1 added'));
     // The first card and its undo are still there; it is not retried twice.
     expect(find.text('1 added'), findsOneWidget);
     expect(find.text('Undo'), findsOneWidget);
@@ -332,7 +332,7 @@ void main() {
     await tester.tap(find.text('Try again'));
     await settle(tester);
     final note = backend.asked[1];
-    expect(note, contains('a list: 2 added (Brot)'));
+    expect(note, contains('a list: 2 added ("Brot")'));
     expect(note, isNot(contains('Allergien')));
     expect(note, isNot(contains(long)));
   });
@@ -353,13 +353,14 @@ void main() {
     ]);
     await _pump(tester, backend);
     await _ask(tester, 'Zutaten für Lasagne auf die Liste');
-    expect(find.text('The changes above are saved.'), findsOneWidget);
+    // No card above: the error row says a part is done, not "above".
+    expect(find.text('Part of it is already done.'), findsOneWidget);
     await tester.tap(find.text('Try again'));
     await settle(tester);
     expect(backend.asked, hasLength(2));
     expect(
       backend.asked[1],
-      contains('add_recipe_to_list (Wocheneinkauf)'),
+      contains('add_recipe_to_list ("Wocheneinkauf")'),
       reason: 'a new round that tells Avo the ingredients are on the list',
     );
     expect(find.text('Erledigt.'), findsOneWidget);

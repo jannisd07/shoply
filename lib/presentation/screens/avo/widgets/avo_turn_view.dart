@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shoply/core/constants/app_brand.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/avo_done_note.dart';
@@ -114,7 +115,12 @@ class AvoTurnView extends ConsumerWidget {
         AvoErrorSection(
           code: turn.errorCode!,
           retryAt: turn.retryAt,
-          partlyDone: turn.payloads.any((p) => p.isDoneChange),
+          partlyDone: turn.payloads.any(
+            (p) => p.isDoneChange && p.kind != AvoPayloadKind.wrote,
+          ),
+          partlyDoneHidden: turn.payloads.any(
+            (p) => p.kind == AvoPayloadKind.wrote,
+          ),
           // Asked again as a new round: the retry is that round now.
           onRetry: turn.retried
               ? null

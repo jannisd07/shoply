@@ -349,16 +349,14 @@ class AvoAssistantService {
     final before = payloads.length;
     final result = await _runTool(call.name, call.input, ref, context, payloads);
     // A write without a card of its own still counts as done for a retry.
-    final listId = call.input['list_id'] ?? call.input['to_list_id'];
-    final marker = avoWriteMarker(
-      call.name,
-      result,
-      hadDoneCard: payloads.skip(before).any((p) => p.isDoneChange),
-      listName: listId is String && avoWritingTools.contains(call.name)
-          ? await _changes(ref).listName(listId)
-          : null,
+    await avoNoteWrite(
+      payloads,
+      before: before,
+      tool: call.name,
+      input: call.input,
+      result: result,
+      listName: (id) => _changes(ref).listName(id),
     );
-    if (marker != null) payloads.add(marker);
     // A calories tool with the module off: the card offers "Einschalten"
     // (once per answer). Never for the meal plan while it is unreleased.
     if (result['tracking_enabled'] == false &&
@@ -941,17 +939,27 @@ class AvoAssistantService {
         : entry.items.where((i) => filter.contains(i.name.toLowerCase())).toList();
 
     final notifier = ref.read(itemsNotifierProvider(listId).notifier);
+    // One by one, so a failure after some items still reports those as
+    // added and a retry does not add them again.
+    var added = 0;
+    final failed = <String>[];
     for (final item in itemsToAdd) {
-      await notifier.addItem(
-        name: item.name,
-        quantity: item.quantity,
-        unit: item.unit,
-        category: item.category,
-      );
+      try {
+        await notifier.addItem(
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          category: item.category,
+        );
+        added++;
+      } catch (e) {
+        debugPrint('⚠️ [AVO] History item not added: $e');
+        failed.add(item.name);
+      }
     }
     // Refresh lists so the UI shows the new counts.
     ref.invalidate(listsNotifierProvider);
-    return {'added': itemsToAdd.length};
+    return {'added': added, if (failed.isNotEmpty) 'failed_items': failed};
   }
 
   Future<Map<String, Object?>> _toolUpdateSetting(

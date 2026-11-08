@@ -178,7 +178,9 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
       );
       return;
     }
-    turn.restart();
+    turn
+      ..restart()
+      ..proHintAllowed = proHintAllowed;
     _start(turn, offline: offline);
   }
 
@@ -245,10 +247,12 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     if (_disposed) return;
     // "Verbindung schlecht" only for transport trouble (no event in time, a
     // broken stream), never for a slow but working answer.
+    // An answer from the server (also busy, limit, provider error) proves
+    // the connection carries; only a client-side failure says nothing.
     final code = response?.errorCode;
     if (code == 'timeout' || code == 'network_error') {
       _slow = true;
-    } else if (response != null && code == null) {
+    } else if (response != null && code != 'generic') {
       _slow = false;
     }
     await _finish(turn, response, proHintAllowed: turn.proHintAllowed);

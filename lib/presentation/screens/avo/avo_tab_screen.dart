@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/physics.dart';
@@ -14,6 +15,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/data/services/tip_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
@@ -37,6 +39,7 @@ import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 
 // D2 X-Avo layout (Kap. 3.1).
 const double _titleGap = 11; // D2: toolbar ends at 98, the title at 109
@@ -79,8 +82,11 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
   AvoChat? _chat;
   int _turnCount = -1;
 
-  /// Height of the pinned status row (offline, AI off, weak connection).
-  double _statusHeight = 0;
+  /// The one status row (offline, AI off, weak connection): it moves between
+  /// the conversation (below the large title) and the pinned band under the
+  /// head without losing its state, so it is announced once.
+  final _statusKey = GlobalKey(debugLabel: 'avo-status');
+  String? _announcedStatus;
   bool _visible = false;
   late final AppLifecycleListener _lifecycle = AppLifecycleListener(
     onResume: () => _chat?.expireIfStale(),
@@ -172,14 +178,18 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       !ref.read(isSubscribedProvider) &&
       ref.read(avoProQuestionLimitProvider) != null;
 
-  void _send(String text, {bool clearField = true}) {
+  /// [typed]: the person wrote it in the composer (counts for Teil A's tip
+  /// T8); suggestions, chips and in-app hand-overs do not.
+  void _send(String text, {bool clearField = true, bool typed = false}) {
     final chat = ref.read(avoChatProvider)..attach(ref);
     final turn = chat.send(
       text,
       offline: ref.read(isOfflineProvider),
       proHintAllowed: _proHintAllowed,
     );
-    if (turn != null && clearField) _controller.clear();
+    if (turn == null) return;
+    if (clearField) _controller.clear();
+    if (typed) ref.read(tipServiceProvider).note(TipEvent.avoTextMessage);
   }
 
   /// Kap. 3.2: a change made while the tab is not visible also shows as a
@@ -233,12 +243,33 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
     ref.read(avoScreenContextProvider.notifier).state = null;
   }
 
+  // ---------------------------------------------------------------- status
+
+  /// The status row is in the conversation but scrolled out of sight (and
+  /// maybe never built): say its new text once, politely (Kap. 2.12).
+  void _announceIfHidden(String? text, {required bool visible}) {
+    if (text == _announcedStatus) return;
+    _announcedStatus = text;
+    if (text == null || visible) return;
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final view = View.maybeOf(context);
+      if (view == null) return;
+      SemanticsService.sendAnnouncement(view, text, Directionality.of(context));
+    });
+  }
+
   // ------------------------------------------------------------- scrolling
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
     final threshold = context.typography.lineHeightOf(AvoTextStyle.largeTitle);
-    _collapsed.value = _scroll.offset > threshold;
+    final collapsed = _scroll.offset > threshold;
+    if (collapsed == _collapsed.value) return;
+    _collapsed.value = collapsed;
+    // The status row may move between the conversation and the band.
+    setState(() {});
   }
 
   void _onSpring() {
@@ -373,17 +404,33 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
             text: context.tr('avo_slow_connection'),
           )
         : null;
-    // The status row stays pinned under the head, so it is seen in a long
-    // conversation too; the conversation starts below it.
-    final statusSpace = status == null
-        ? 0.0
-        : _statusHeight + 2 * AvoSpacing.xs;
-
     final media = MediaQuery.of(context);
+    // The status row sits in the conversation below the large title (as
+    // StatusRow wants it). Once the title has collapsed into the head it
+    // pins under the head, so it stays in sight, but only while it is small:
+    // never at accessibility sizes or above a quarter of the screen, where
+    // it would hide the conversation. Its height is measured up front, so
+    // nothing jumps and nothing is covered for a frame.
+    final statusText = status?.text;
+    final statusSpace = statusText == null
+        ? 0.0
+        : _statusRowHeight(context, statusText, media.size.width) +
+              2 * AvoSpacing.xs;
+    final mayPin =
+        statusText != null &&
+        !context.isAccessibilityText &&
+        statusSpace <= media.size.height / 4;
+    final pinned = mayPin && _collapsed.value;
+    _announceIfHidden(statusText, visible: pinned || !_collapsed.value);
+
     final toolbarTop = GlassToolbar.topOffset(context);
-    final top = toolbarTop + AvoSizes.toolbarButton + _titleGap + statusSpace;
+    final top = toolbarTop + AvoSizes.toolbarButton + _titleGap;
+    // The newest round glides below the band, not under it.
     final turnTop =
-        toolbarTop + AvoSizes.toolbarButton + AvoSpacing.s + statusSpace;
+        toolbarTop +
+        AvoSizes.toolbarButton +
+        AvoSpacing.s +
+        (mayPin ? statusSpace : 0);
     final dockBottom = AccessoryDock.bottomOffset(context);
     final chipSpace = showChip ? AvoSizes.hitTarget + _contextChipGap : 0.0;
     final bottom =
@@ -400,6 +447,17 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       // VoiceOver reads the title from the head ([_TitleForVoiceOver]), so it
       // comes before "Neues Gespräch" (Kap. 3.6).
       ExcludeSemantics(child: AvoLargeTitle(pose: pose)),
+      if (status != null)
+        pinned
+            // Holds its place while it is pinned, so nothing moves.
+            ? SizedBox(height: statusSpace)
+            : ConstrainedBox(
+                constraints: BoxConstraints(minHeight: statusSpace),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AvoSpacing.xs),
+                  child: KeyedSubtree(key: _statusKey, child: status),
+                ),
+              ),
       const SizedBox(height: _historyStart),
       if (turns.isEmpty)
         AvoEmptyChat(
@@ -472,7 +530,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (status != null)
+                if (status != null && pinned)
                   Semantics(
                     container: true,
                     sortKey: const OrdinalSortKey(1.5),
@@ -486,18 +544,11 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
                               AvoSpacing.xs,
                           bottom: AvoSpacing.xs,
                         ),
-                        child: _SizeReporter(
-                          onSize: (size) {
-                            if (mounted && size.height != _statusHeight) {
-                              setState(() => _statusHeight = size.height);
-                            }
-                          },
-                          child: status,
-                        ),
+                        child: KeyedSubtree(key: _statusKey, child: status),
                       ),
                     ),
                   ),
-                ScrollEdgeFade(height: status == null ? _topFade : _bottomFade),
+                ScrollEdgeFade(height: pinned ? _bottomFade : _topFade),
               ],
             ),
           ),
@@ -539,7 +590,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
                 controller: _controller,
                 focusNode: _focus,
                 enabled: aiOn,
-                onSend: _send,
+                onSend: (text) => _send(text, typed: true),
                 above: showChip
                     ? AvoContextChip(
                         name: contextName,
@@ -584,35 +635,41 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
   }
 }
 
-/// Reports its child's size after layout (the pinned status row's height).
-class _SizeReporter extends SingleChildRenderObjectWidget {
-  const _SizeReporter({required this.onSize, super.child});
+// Mirrors StatusRow (Teil A): 16 pt symbol at subhead 15, 8 pt gap, 12 pt
+// above and below the text, at least 44 pt, 16 pt side margins.
+const double _statusSymbol = 16;
+const double _statusSubheadAtLarge = 15;
+const double _statusGap = AvoSpacing.s;
+const double _statusVertical = AvoSpacing.m;
 
-  final ValueChanged<Size> onSize;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderSizeReporter(onSize);
-
-  @override
-  void updateRenderObject(BuildContext context, _RenderSizeReporter render) =>
-      render.onSize = onSize;
-}
-
-class _RenderSizeReporter extends RenderProxyBox {
-  _RenderSizeReporter(this.onSize);
-
-  ValueChanged<Size> onSize;
-  Size? _last;
-
-  @override
-  void performLayout() {
-    super.performLayout();
-    final now = size;
-    if (now == _last) return;
-    _last = now;
-    WidgetsBinding.instance.addPostFrameCallback((_) => onSize(now));
-  }
+/// The height a [StatusRow] with [text] takes at [screenWidth], measured
+/// with the same text resolution as `Text` (Dynamic Type, Bold Text).
+double _statusRowHeight(BuildContext context, String text, double screenWidth) {
+  final typography = context.typography;
+  final symbol =
+      _statusSymbol *
+      typography.sizeOf(AvoTextStyle.subhead) /
+      _statusSubheadAtLarge;
+  final style = context.text(AvoTextStyle.subhead);
+  final painter =
+      TextPainter(
+        text: TextSpan(
+          text: text,
+          style: MediaQuery.boldTextOf(context)
+              ? style.merge(const TextStyle(fontWeight: FontWeight.bold))
+              : style,
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout(
+        maxWidth: math.max(
+          0,
+          screenWidth - 2 * AvoSpacing.screen - symbol - _statusGap,
+        ),
+      );
+  final height = painter.height + 2 * _statusVertical;
+  painter.dispose();
+  return math.max(AvoSizes.hitTarget, height);
 }
 
 /// The large title "Avo" for VoiceOver, placed over the scrolling title so

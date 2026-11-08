@@ -20,7 +20,11 @@ import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_status_sections.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/screens/avo/avo_tab_screen.dart';
+import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+
+import '../../layout/layout_matrix.dart';
 
 final DateTime kNow = DateTime(2026, 11, 8, 10, 30);
 
@@ -272,3 +276,61 @@ Future<void> settle(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 100));
   }
 }
+
+/// The tab at a given phone size and text scale (layout checks).
+Future<void> pumpAvoAt(
+  WidgetTester tester, {
+  required double width,
+  required double height,
+  required double scale,
+  bool offline = false,
+  bool aiOn = true,
+  FakeAvoBackend? backend,
+  List<Override> extra = const [],
+  Widget? screen,
+}) async {
+  await loadLayoutFonts();
+  tester.view.physicalSize = Size(width * 3, height * 3);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    MediaQuery(
+      data: MediaQueryData(
+        size: Size(width, height),
+        devicePixelRatio: 3,
+        textScaler: TextScaler.linear(scale),
+        padding: const EdgeInsets.only(top: 20),
+        viewPadding: const EdgeInsets.only(top: 20),
+      ),
+      child: ProviderScope(
+        overrides: [
+          ...avoOverrides(
+            backend: backend ?? FakeAvoBackend(),
+            offline: offline,
+            aiOn: aiOn,
+          ),
+          ...extra,
+        ],
+        child: MaterialApp(
+          theme: ThemeData(
+            platform: TargetPlatform.iOS,
+            fontFamily: 'CupertinoSystemText',
+          ),
+          home: AvoDesignScope(
+            child: AvoToastHost(child: screen ?? const AvoTabScreen()),
+          ),
+        ),
+      ),
+    ),
+  );
+  await settle(tester);
+}
+
+/// The status row sits in the conversation (not pinned under the head).
+bool avoStatusInConversation(WidgetTester tester) => find
+    .descendant(
+      of: find.byType(CustomScrollView),
+      matching: find.byType(StatusRow),
+    )
+    .evaluate()
+    .isNotEmpty;

@@ -174,6 +174,7 @@ const Map<String, String> avoEn = {
   'avo_note_a_list': 'a list',
   'avo_note_updated': '1 item changed',
   'avo_note_moved': '{n} moved',
+  'avo_err_partly_done_hidden': 'Part of it is already done.',
 };
 
 const Map<String, String> avoDe = {
@@ -348,4 +349,5 @@ const Map<String, String> avoDe = {
   'avo_note_a_list': 'eine Liste',
   'avo_note_updated': '1 Artikel geändert',
   'avo_note_moved': '{n} verschoben',
+  'avo_err_partly_done_hidden': 'Ein Teil davon ist schon erledigt.',
 };

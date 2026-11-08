@@ -126,8 +126,8 @@ class AvoTurn {
   /// a second retry still tells Avo about all of them.
   final List<AvoWidgetPayload> carried;
 
-  /// Free with a known Pro limit when it was asked.
-  final bool proHintAllowed;
+  /// Free with a known Pro limit when it was asked (or last retried).
+  bool proHintAllowed;
 
   /// Asked again as a new round after it failed with done changes: the
   /// changes keep their cards, the retry button goes.
@@ -166,7 +166,10 @@ class AvoTurn {
 
   /// Whether the status line still holds the place of the answer.
   bool get showsStatus =>
-      phase == AvoTurnPhase.working && payloads.isEmpty && text.value.isEmpty;
+      phase == AvoTurnPhase.working &&
+      text.value.isEmpty &&
+      // The invisible "done" marker of a card-less write is no content.
+      payloads.every((p) => p.kind == AvoPayloadKind.wrote);
 
   /// Back to a fresh answer (a retry without done changes).
   void restart() {
