@@ -63,6 +63,8 @@ Stand: 2026-11-08.
 | Rechtliche Links | Datenschutz/Impressum auf joinavo.app, AGB/Support noch shoplyai.app (`core/constants/legal_links.dart`). Hat joinavo.app AGB? |
 | Versionsanzeige | Profil/Hilfe zeigen fest "1.0.0". `package_info_plus` direkt einbinden (ist schon transitiv da)? |
 | `macos/`, `web/` | Behalten? `web/` enthält die Deep-Link-Seite und die AASA-Datei. |
+| Eigener Markt pro Liste | „Markt wählen“ bietet „„Bio Kaiser“ als eigenen Markt verwenden“ nur ohne Liste an: `list_store_assignments_b.chain_id` nimmt nur Ketten-IDs. Für eigene Märkte eine Spalte (z. B. `custom_name`) per Migration ergänzen? |
+| Angebots-Einstellungen pro Konto | Schalter „Angebote an Artikeln / Vorschläge beim Tippen / Ersparnis in der Liste“, „Diese Woche ausblenden“, „Nicht dieses Angebot“ und ausgeblendete Listen liegen nur auf dem Gerät. Migration `user_offer_prefs` (angebote.md Owner-Frage 14) freigeben? |
 
 ## 5. Bekannte Restarbeiten im Code (kann Claude machen)
 

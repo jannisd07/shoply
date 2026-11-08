@@ -102,6 +102,12 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 - `OfflineCacheService`: Schlüssel mit Präfix `offline_cache_v2_`, wird bei Account-Wechsel und Logout geleert.
 - `UserCategoryPreferences`: pro Nutzer unter `user_category_prefs_v1_<uid>`.
 - Externe Preis-/Angebotsdienste teilen sich `core/utils/request_throttle.dart` und cachen keine Fehler.
+- Angebote einer Liste: 6-h-Schnappschuss pro Liste und Markt (`ListOfferSync`, SharedPreferences
+  `offers_list_snapshot_v1:<listId>`). Listenkarten und das Angebots-Vollbild lesen nur diesen Cache, nie die Quelle.
+  Was die Person an Angebotsflächen ein- und ausschaltet, liegt unter `offers_display_prefs_v1` (nur Gerät).
+- Markt pro Liste: Tabelle `list_store_assignments_b` plus Gerätecache `list_store_guess_v1` (`ListStoreRepository`).
+  Angebots- und Markt-Screens von Teil B liegen als Vollbild über der Tab-Leiste (`offersRootRoutes`:
+  `/offers/offer/:offerId`, `/stores/pick`), geöffnet mit den Helfern in `screens/offers/offer_paths.dart`.
 
 ## Backend (Supabase)
 

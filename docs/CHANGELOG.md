@@ -2,6 +2,15 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-08: Angebote an Artikeln und Markt pro Liste (Teil B, W2)
+
+Die Angebots-Slots, die Teil A in Liste, Artikel, Einkaufsmodus und Listen-Übersicht setzt, zeigen jetzt echte
+Inhalte im D2-Stil (`docs/redesign/b-screens/angebote.md` S1–S8): Markt-Chip mit Menü, Vollbild „Markt wählen“
+(`/stores/pick`), grüne Angebots-Pille, Angebotskarte im Artikel, Vollbild „Angebot“ (`/offers/offer/:offerId`)
+statt Bottom-Sheet, Angebote beim Tippen, Ersparnis-Zeile im Pflicht-Wortlaut und „2 Angebote“ auf der Listenkarte.
+Ohne echte Region, bei Modul aus, Kill-Switch oder ausgeblendeter Liste erscheint nichts und es geht keine Anfrage
+raus. Die Einzel-Schalter und „Diese Woche ausblenden“ liegen vorerst nur auf dem Gerät.
+
 ## 2026-11-07: Großes Aufräumen
 
 Ausgangslage: 292 Dart-Dateien, ~86.000 Zeilen, 59 Analyzer-Warnungen, App langsam und fehleranfällig.
