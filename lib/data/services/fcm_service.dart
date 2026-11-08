@@ -20,6 +20,101 @@ Future<void> _handleBackgroundMessage(RemoteMessage message) async {
   }
 }
 
+/// The own row's `users.fcm_token`.
+abstract interface class FcmTokenStore {
+  /// The stored token, or null when none is stored or the row is missing.
+  Future<String?> read(String userId);
+
+  /// Writes [token]; whether a row was updated. An update that RLS or a
+  /// missing row lets match nothing returns no error, so this is the only
+  /// sign that the write landed.
+  Future<bool> write(String userId, String token);
+
+  /// Clears the column only while it still holds [token]; a newer token
+  /// from another device stays.
+  Future<void> clear(String userId, String token);
+}
+
+class SupabaseFcmTokenStore implements FcmTokenStore {
+  const SupabaseFcmTokenStore();
+
+  @override
+  Future<String?> read(String userId) async {
+    final row = await SupabaseService.instance.client
+        .from('users')
+        .select('fcm_token')
+        .eq('id', userId)
+        .maybeSingle();
+    return row?['fcm_token'] as String?;
+  }
+
+  @override
+  Future<bool> write(String userId, String token) async {
+    final rows = await SupabaseService.instance.client
+        .from('users')
+        .update({
+          'fcm_token': token,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', userId)
+        .select('id');
+    return rows.isNotEmpty;
+  }
+
+  @override
+  Future<void> clear(String userId, String token) async {
+    await SupabaseService.instance.client
+        .from('users')
+        .update({
+          'fcm_token': null,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', userId)
+        .eq('fcm_token', token);
+  }
+}
+
+/// Keeps `users.fcm_token` on this device's token with as few writes as
+/// possible. The column holds one token per account, and other devices
+/// overwrite it (or clear it through the master switch), so every save
+/// compares with the server value instead of a local memory: one read, and
+/// a write only when the value differs. Saves of the same token at the same
+/// time (token refresh and the first fetch) share one round trip.
+class FcmTokenSync {
+  FcmTokenSync([this._store = const SupabaseFcmTokenStore()]);
+
+  final FcmTokenStore _store;
+  final Map<String, Future<bool>> _inFlight = {};
+
+  /// Whether the server holds [token] for [userId] afterwards.
+  Future<bool> save(String userId, String token) {
+    final key = '$userId|$token';
+    // A block body: `=> _inFlight.remove(key)` would return this very
+    // future to whenComplete, which then waits on itself.
+    return _inFlight[key] ??= _save(userId, token).whenComplete(() {
+      _inFlight.remove(key);
+    });
+  }
+
+  Future<bool> _save(String userId, String token) async {
+    if (await _store.read(userId) == token) {
+      debugPrint('🔵 [FCM] Token unchanged, no write');
+      return true;
+    }
+    final written = await _store.write(userId, token);
+    debugPrint(
+      written
+          ? '✅ [FCM] Token saved'
+          : '⚠️ [FCM] Token write matched no row, retried on the next save',
+    );
+    return written;
+  }
+
+  /// Takes [token] off [userId]'s row unless another device replaced it.
+  Future<void> release(String userId, String token) =>
+      _store.clear(userId, token);
+}
+
 class FCMService {
   static FCMService? _instance;
   static FCMService get instance {
@@ -29,60 +124,61 @@ class FCMService {
 
   FCMService._();
 
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  /// Only touched after Firebase is configured ([initialize] runs then).
+  FirebaseMessaging get _fcm => FirebaseMessaging.instance;
+  final FcmTokenSync _tokens = FcmTokenSync();
   String? _fcmToken;
+  bool _started = false;
 
-  /// Initialize Firebase Cloud Messaging
+  /// Push listeners and the notification the app was opened with. Never
+  /// asks for permission: the token is fetched only when notifications are
+  /// already allowed, otherwise after [onPermissionGranted]. Call once
+  /// Firebase is configured; later calls do nothing.
   Future<void> initialize() async {
+    if (_started) return;
     try {
       debugPrint('🔵 [FCM] Initializing...');
 
-      // Request permission
-      final settings = await _fcm.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false,
-      );
-
-      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        debugPrint('✅ [FCM] User granted permission');
-      } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
-        debugPrint('⚠️ [FCM] User granted provisional permission');
-      } else {
-        debugPrint('❌ [FCM] User declined permission');
-        return;
-      }
-
-      // Fetch the token in the background: on iOS it can take several
-      // seconds until the APNs token exists, and app start must not wait.
-      unawaited(_getTokenWithRetry());
-
-      // Listen for token refresh
       _fcm.onTokenRefresh.listen((token) {
         _fcmToken = token;
         _saveTokenToDatabase(token);
       });
-
-      // Handle foreground messages
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-
-      // Handle background messages
       FirebaseMessaging.onBackgroundMessage(_handleBackgroundMessage);
-
-      // Handle notification taps
       FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
+      _started = true;
 
-      // Check if app was opened from a terminated state via notification
+      // Opened from a terminated state via a push.
       final initialMessage = await _fcm.getInitialMessage();
       if (initialMessage != null) {
         _handleMessageOpenedApp(initialMessage);
       }
 
-      debugPrint('✅ [FCM] Initialized successfully');
+      if (await _isAllowed()) {
+        // On iOS the APNs token can take seconds; start must not wait.
+        unawaited(_getTokenWithRetry());
+      } else {
+        debugPrint('🔵 [FCM] Notifications not allowed yet, no token');
+      }
+      debugPrint('✅ [FCM] Initialized');
     } catch (e) {
       debugPrint('❌ [FCM] Initialization failed: $e');
     }
+  }
+
+  /// Called by `NotificationPermissionService` right after the user allowed
+  /// notifications: fetches and saves the token without waiting for the
+  /// next start.
+  Future<void> onPermissionGranted() async {
+    if (!_started) return;
+    unawaited(_getTokenWithRetry());
+  }
+
+  /// Reads the current permission state; never shows the prompt.
+  Future<bool> _isAllowed() async {
+    final settings = await _fcm.getNotificationSettings();
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
   }
 
   /// Get the FCM token and save it. On iOS the APNs token must exist first,
@@ -117,8 +213,10 @@ class FCMService {
     debugPrint('❌ [FCM] Failed to get token after $maxRetries attempts');
   }
 
-  /// Save FCM token to Supabase. Stored in the single `users.fcm_token`
-  /// column, so only the most recently used device receives pushes.
+  /// Save FCM token to Supabase. `users.fcm_token` holds one token per
+  /// account, so pushes go to the device that saved last; every save
+  /// re-checks the server value, so this device takes the column back on
+  /// its next start or sign-in. Writes only when the stored value differs.
   Future<void> _saveTokenToDatabase(String token) async {
     try {
       final userId = SupabaseService.instance.currentUser?.id;
@@ -134,15 +232,7 @@ class FCMService {
         return;
       }
 
-      await SupabaseService.instance.client
-          .from('users')
-          .update({
-            'fcm_token': token,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', userId);
-
-      debugPrint('✅ [FCM] Token saved');
+      await _tokens.save(userId, token);
     } catch (e) {
       debugPrint('❌ [FCM] Failed to save token: $e');
     }
@@ -203,29 +293,43 @@ class FCMService {
   /// Check if FCM is available
   bool get isAvailable => Platform.isIOS || Platform.isAndroid;
 
-  /// Save FCM token to database for current user
-  /// Call this after user logs in to ensure token is saved
+  /// Save FCM token to database for current user (after sign-in, when the
+  /// master switch goes on). Does nothing before [initialize] or while
+  /// notifications are not allowed.
   Future<void> saveTokenForCurrentUser() async {
-    if (_fcmToken == null) {
-      // Try to get token if we don't have one
-      try {
-        if (Platform.isIOS) {
-          final apnsToken = await _fcm.getAPNSToken();
-          if (apnsToken != null) {
-            _fcmToken = await _fcm.getToken();
-          }
-        } else {
-          _fcmToken = await _fcm.getToken();
-        }
-      } catch (e) {
-        debugPrint('❌ [FCM] Failed to get token: $e');
+    if (!_started) return;
+    try {
+      if (!await _isAllowed()) return;
+      if (_fcmToken == null &&
+          (!Platform.isIOS || await _fcm.getAPNSToken() != null)) {
+        _fcmToken = await _fcm.getToken();
       }
+    } catch (e) {
+      debugPrint('❌ [FCM] Failed to get token: $e');
     }
 
     if (_fcmToken != null) {
       await _saveTokenToDatabase(_fcmToken!);
     } else {
       debugPrint('⚠️ [FCM] Still no FCM token available');
+    }
+  }
+
+  /// Takes this device's token off the signed-in account, so its pushes
+  /// (list activity with names and items) stop reaching this device. Call
+  /// while the session is still valid, right before signing out; after
+  /// sign-out RLS no longer lets the app touch the row. A newer token from
+  /// another device stays.
+  Future<void> releaseDeviceToken() async {
+    try {
+      final userId = SupabaseService.instance.currentUser?.id;
+      if (userId == null || !_started) return;
+      final token = _fcmToken ?? await _fcm.getToken();
+      if (token == null) return;
+      await _tokens.release(userId, token);
+      debugPrint('🔕 [FCM] Device token released');
+    } catch (e) {
+      debugPrint('⚠️ [FCM] Failed to release device token: $e');
     }
   }
 

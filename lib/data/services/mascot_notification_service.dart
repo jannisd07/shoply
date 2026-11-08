@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,6 +24,11 @@ import 'package:shoply/data/services/supabase_service.dart';
 /// notification keeps being pushed a day ahead — so it only ever fires when
 /// the user has NOT opened the app since yesterday AND something is actually
 /// due. Useful re-engagement, not spam.
+///
+/// At start the scheduler in main.dart re-arms once, 3 s after the first
+/// frame ([rearmAfterLaunch]); earlier calls are skipped, and nothing is
+/// computed while notifications are not allowed. Reminders never mention
+/// offers (Kap. 19 §1, S-14), so a re-arm needs no offer data at all.
 class MascotNotificationService {
   static MascotNotificationService? _instance;
   static MascotNotificationService get instance {
@@ -33,6 +37,10 @@ class MascotNotificationService {
   }
 
   MascotNotificationService._();
+
+  /// A fresh instance with its own launch gate and throttles.
+  @visibleForTesting
+  MascotNotificationService.forTesting();
 
   /// Same key `LanguageNotifier` persists the app language under
   /// ('en', 'de' or 'system').
@@ -53,6 +61,48 @@ class MascotNotificationService {
 
   DateTime? _lastRearm;
   DateTime? _lastDinnerRearm;
+  bool _launchSettled = false;
+
+  /// Whether the system allows notifications (never prompts). Without it a
+  /// re-arm only cancels: no account or network work for a reminder that
+  /// cannot show.
+  Future<bool> Function() notificationsAllowed =
+      NotificationService.instance.hasPermission;
+
+  /// The start-up re-arm, 3 s after the first frame. Until it ran, every
+  /// re-arm call (first frame, auth events at start) is skipped, so a cold
+  /// start costs no reminder work before the app is usable.
+  Future<void> rearmAfterLaunch() async {
+    _launchSettled = true;
+    await rearmRestockReminder(force: true);
+    await rearmDinnerIdeasReminder(force: true);
+  }
+
+  /// The restock reminder's text for [suggestions] (most due first): the
+  /// first item and its buying rhythm, or the first item and how many more
+  /// are due. Never an offer or a price.
+  @visibleForTesting
+  static String restockReminderBody(
+    List<RestockSuggestion> suggestions,
+    String lang,
+  ) {
+    final first = suggestions.first;
+    if (suggestions.length == 1) {
+      return AppTranslations.get(
+        'restock_notification_body_one',
+        lang,
+        params: {'item': first.displayName, 'days': '${first.averageDays}'},
+      );
+    }
+    return AppTranslations.get(
+      'restock_notification_body_many',
+      lang,
+      params: {
+        'item': first.displayName,
+        'count': '${suggestions.length - 1}',
+      },
+    );
+  }
 
   /// The app language as resolved by `LanguageNotifier`: the saved choice,
   /// or the device locale for 'system' / unset (falling back to 'en').
@@ -69,11 +119,13 @@ class MascotNotificationService {
 
   /// (Re-)schedule the one-shot restock reminder for tomorrow morning, or
   /// cancel it when it no longer applies (signed out, nudges disabled, or
-  /// nothing due). Call on app start, resume, and auth changes.
+  /// nothing due). Call on resume and auth changes; the start is covered by
+  /// [rearmAfterLaunch].
   ///
   /// Throttled to once per 15 minutes unless [force] is set, since resume
   /// events can fire often.
   Future<void> rearmRestockReminder({bool force = false}) async {
+    if (!_launchSettled) return;
     try {
       final now = DateTime.now();
       if (!force &&
@@ -82,6 +134,12 @@ class MascotNotificationService {
         return;
       }
       _lastRearm = now;
+
+      if (!await notificationsAllowed()) {
+        await NotificationService.instance.cancel(restockReminderId);
+        debugPrint('🥑 [AVO] Notifications not allowed, no restock reminder');
+        return;
+      }
 
       if (SupabaseService.instance.currentUser == null) {
         await NotificationService.instance.cancel(restockReminderId);
@@ -108,54 +166,13 @@ class MascotNotificationService {
       }
 
       final lang = await _getLanguage();
-      final first = suggestions.first;
       final tomorrowMorning = DateTime(
           now.year, now.month, now.day + 1, _reminderHour);
-
-      // When the top item also has a live discounted offer nearby, lead with
-      // that — "running low AND cheaper right now" is the strongest honest
-      // reason to open the app. The offer must still run when the reminder
-      // actually fires tomorrow morning. Cached in AvoNudgeService, so this
-      // does not hit the offers API on every re-arm.
-      OfferNudge? offerForFirst;
-      try {
-        final offers = await AvoNudgeService.instance.getOfferNudges();
-        for (final offer in offers) {
-          if (offer.itemName == first.itemName &&
-              (offer.validTo == null ||
-                  offer.validTo!.isAfter(tomorrowMorning))) {
-            offerForFirst = offer;
-            break;
-          }
-        }
-      } catch (_) {}
-
-      final String body;
-      if (offerForFirst != null) {
-        body = AppTranslations.get('restock_notification_body_offer', lang,
-            params: {
-              'item': first.displayName,
-              'store': offerForFirst.retailerName,
-              'price': offerForFirst.price.toStringAsFixed(2),
-            });
-      } else if (suggestions.length == 1) {
-        body = AppTranslations.get('restock_notification_body_one', lang,
-            params: {
-              'item': first.displayName,
-              'days': '${first.averageDays}',
-            });
-      } else {
-        body = AppTranslations.get('restock_notification_body_many', lang,
-            params: {
-              'item': first.displayName,
-              'count': '${suggestions.length - 1}',
-            });
-      }
 
       await NotificationService.instance.scheduleNotification(
         id: restockReminderId,
         title: AppTranslations.get('restock_notification_title', lang),
-        body: body,
+        body: restockReminderBody(suggestions, lang),
         scheduledFor: tomorrowMorning,
         payload: jsonEncode({'type': 'avo_restock'}),
         category: NotificationCategory.avoNudges,
@@ -178,6 +195,7 @@ class MascotNotificationService {
   ///
   /// Throttled to once per 15 minutes unless [force] is set.
   Future<void> rearmDinnerIdeasReminder({bool force = false}) async {
+    if (!_launchSettled) return;
     try {
       final now = DateTime.now();
       if (!force &&
@@ -190,6 +208,13 @@ class MascotNotificationService {
       // Always replace the previously scheduled reminder — its content and
       // due-state are stale the moment the app is opened again.
       await NotificationService.instance.cancel(dinnerIdeasReminderId);
+
+      if (!await notificationsAllowed()) {
+        debugPrint(
+          '🥑 [AVO] Notifications not allowed, no dinner-ideas reminder',
+        );
+        return;
+      }
 
       if (SupabaseService.instance.currentUser == null) return;
 

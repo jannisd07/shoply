@@ -2,12 +2,17 @@
 ///
 /// **AI: Critical Constraints**:
 /// - ⚠️ Platform: iOS/Android only (check Platform.isIOS before using)
-/// - ⚠️ Permissions: Must call requestPermissions() before showing notifications
-/// - ⚠️ Initialization: Must call initialize() in main.dart before use
+/// - ⚠️ Permissions: [initialize] never asks. The prompt comes only from
+///   `NotificationPermissionService.requestIfUseful`, at a moment where a
+///   notification helps (first shared list, a reminder switched on).
+/// - ⚠️ Initialization: the start-up scheduler in main.dart calls
+///   [initialize] right after the first frame; show/schedule calls before
+///   that are dropped.
 /// - ⚠️ Preferences: every show/schedule call is gated by
 ///   [NotificationPreferencesService] (master switch + optional category).
 ///   Pass the most specific [NotificationCategory] you can so user toggles
 ///   are honored.
+library;
 
 import 'dart:convert';
 import 'dart:io';
@@ -33,42 +38,41 @@ class NotificationService {
 
   bool _initialized = false;
   bool get isInitialized => _initialized;
+  Future<void>? _initializing;
+  bool _timeZonesLoaded = false;
 
-  /// Initialize the notification service
-  /// Call this in main.dart before runApp()
-  Future<void> initialize() async {
-    debugPrint('🔵 [NOTIFICATIONS] initialize() called');
+  /// iOS init settings. They request nothing: an Avo start never shows the
+  /// notification prompt (Kap. 20 §2.2 "nie beim Start").
+  static const darwinSettings = DarwinInitializationSettings(
+    requestAlertPermission: false,
+    requestBadgePermission: false,
+    requestSoundPermission: false,
+  );
 
-    if (_initialized) {
-      debugPrint('⚠️ [NOTIFICATIONS] Already initialized');
-      return;
-    }
+  /// Sets up the plugin without a permission prompt and routes the
+  /// notification the app was opened with. Safe to call more than once.
+  Future<void> initialize() {
+    if (_initialized) return Future.value();
+    return _initializing ??= _initialize().whenComplete(
+      () => _initializing = null,
+    );
+  }
 
+  Future<void> _initialize() async {
     try {
-      // Timezone db for zonedSchedule (scheduled reminders).
-      tzdata.initializeTimeZones();
-
-      const initializationSettingsIOS = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
-      );
-
-      const initializationSettingsAndroid =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
-
-      const initializationSettings = InitializationSettings(
-        iOS: initializationSettingsIOS,
-        android: initializationSettingsAndroid,
+      const settings = InitializationSettings(
+        iOS: darwinSettings,
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       );
 
       final bool? initialized = await _notifications.initialize(
-        initializationSettings,
+        settings,
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
       _initialized = initialized ?? false;
-      debugPrint('✅ [NOTIFICATIONS] Initialized successfully: $_initialized');
+      debugPrint('✅ [NOTIFICATIONS] Initialized: $_initialized');
+      if (_initialized) await _routeLaunchNotification();
     } catch (e, stackTrace) {
       debugPrint('❌ [NOTIFICATIONS] Initialization failed: $e');
       debugPrint('❌ [NOTIFICATIONS] Stack trace: $stackTrace');
@@ -76,21 +80,71 @@ class NotificationService {
     }
   }
 
-  /// Handle notification tap
-  /// Parse payload and navigate to relevant screen
-  void _onNotificationTapped(NotificationResponse response) {
-    debugPrint('🔔 [NOTIFICATIONS] Tapped: ${response.payload}');
-
-    if (response.payload == null) return;
-
+  /// A tap that arrives before [initialize] (cold start from a reminder)
+  /// is kept by the plugin as launch details instead of a callback.
+  Future<void> _routeLaunchNotification() async {
     try {
-      final data = jsonDecode(response.payload!);
-      if (data is Map<String, dynamic>) {
-        NavigationService.instance.handleNotificationData(data);
-      }
+      final details = await _notifications.getNotificationAppLaunchDetails();
+      if (details == null || !details.didNotificationLaunchApp) return;
+      _route(details.notificationResponse?.payload);
+    } catch (e) {
+      debugPrint('⚠️ [NOTIFICATIONS] Launch notification check failed: $e');
+    }
+  }
+
+  /// The timezone database (326 KB) is parsed on the first scheduled
+  /// reminder, not at start.
+  void _ensureTimeZones() {
+    if (_timeZonesLoaded) return;
+    tzdata.initializeTimeZones();
+    _timeZonesLoaded = true;
+  }
+
+  void _onNotificationTapped(NotificationResponse response) =>
+      _route(response.payload);
+
+  void _route(String? payload) {
+    final data = payloadData(payload);
+    if (data == null) return;
+    debugPrint('🔔 [NOTIFICATIONS] Opened from notification (${data['type']})');
+    NavigationService.instance.handleNotificationData(data);
+  }
+
+  /// The JSON object a notification carries, or null for an empty,
+  /// broken or non-object payload.
+  @visibleForTesting
+  static Map<String, dynamic>? payloadData(String? payload) {
+    if (payload == null || payload.isEmpty) return null;
+    try {
+      final data = jsonDecode(payload);
+      return data is Map<String, dynamic> ? data : null;
     } catch (e) {
       debugPrint('❌ [NOTIFICATIONS] Failed to parse payload: $e');
+      return null;
     }
+  }
+
+  /// Whether notifications are currently allowed. Never prompts.
+  Future<bool> hasPermission() async {
+    try {
+      if (Platform.isIOS) {
+        final options = await _notifications
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
+            ?.checkPermissions();
+        return options?.isEnabled ?? false;
+      }
+      if (Platform.isAndroid) {
+        return await _notifications
+                .resolvePlatformSpecificImplementation<
+                    AndroidFlutterLocalNotificationsPlugin>()
+                ?.areNotificationsEnabled() ??
+            false;
+      }
+    } catch (e) {
+      debugPrint('⚠️ [NOTIFICATIONS] Permission check failed: $e');
+    }
+    return false;
   }
 
   /// Request notification permissions (iOS and Android 13+)
@@ -213,6 +267,7 @@ class NotificationService {
     }
 
     try {
+      _ensureTimeZones();
       // tz.local defaults to UTC when no explicit location is set, but
       // TZDateTime.from converts the absolute instant — the notification
       // still fires at the intended local wall-clock moment.
