@@ -350,6 +350,12 @@ const Map<String, String> commonEn = {
   'common_module_calories': 'Calories & health',
   'common_module_avo': 'Avo, your assistant',
   'common_module_cost_split': 'Split costs',
+  'common_send': 'Send',
+  'common_voice_mode': 'Start voice mode',
+  'common_take_photo': 'Take photo',
+  'common_edit_item': 'Edit',
+  'common_shared_with': 'Shared with {names}',
+  'common_with_name': 'with {name}',
 };
 
 const Map<String, String> commonDe = {
@@ -704,4 +710,10 @@ const Map<String, String> commonDe = {
   'common_module_calories': 'Kalorien & Gesundheit',
   'common_module_avo': 'Avo, dein Assistent',
   'common_module_cost_split': 'Kosten teilen',
+  'common_send': 'Senden',
+  'common_voice_mode': 'Sprachmodus starten',
+  'common_take_photo': 'Foto aufnehmen',
+  'common_edit_item': 'Bearbeiten',
+  'common_shared_with': 'Geteilt mit {names}',
+  'common_with_name': 'mit {name}',
 };
