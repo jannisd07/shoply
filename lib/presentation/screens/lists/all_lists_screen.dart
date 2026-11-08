@@ -6,6 +6,8 @@ import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/routes/route_paths.dart';
 
 /// Root of the "Listen" tab (D2-Home): every list of the user.
@@ -45,6 +47,16 @@ class AllListsScreen extends ConsumerWidget {
                         style: context.text(AvoTextStyle.largeTitle),
                       ),
                     ),
+                  ),
+                  AvoMenuButton(
+                    floating: false,
+                    items: [
+                      AvoMenuItem(
+                        label: context.tr('join_list'),
+                        icon: AvoIcons.people,
+                        onSelected: () => _joinList(context, ref),
+                      ),
+                    ],
                   ),
                   _NewListButton(onTap: () => _createList(context, ref)),
                 ],
@@ -120,6 +132,62 @@ class AllListsScreen extends ConsumerWidget {
       context.push(RoutePaths.list(list.id, name: list.name));
     }
   }
+}
+
+/// "Liste beitreten" with a share code (moved here from the old Home).
+Future<void> _joinList(BuildContext context, WidgetRef ref) async {
+  final code = await AdaptiveAlertDialog.inputShow(
+    context: context,
+    title: context.tr('join_list'),
+    message: context.tr('enter_share_code'),
+    icon: PlatformInfo.isIOS26OrHigher() ? 'person.2.fill' : null,
+    input: AdaptiveAlertDialogInput(
+      placeholder: context.tr('share_code'),
+      initialValue: '',
+      keyboardType: TextInputType.text,
+    ),
+    actions: [
+      AlertAction(
+        title: context.tr('cancel'),
+        style: AlertActionStyle.cancel,
+        onPressed: () {},
+      ),
+      AlertAction(
+        title: context.tr('join'),
+        style: AlertActionStyle.primary,
+        onPressed: () {},
+      ),
+    ],
+  );
+  if (code == null || code.trim().isEmpty || !context.mounted) return;
+
+  String? message;
+  try {
+    final list = await ref
+        .read(listsNotifierProvider.notifier)
+        .joinListWithCode(code.trim().toUpperCase());
+    if (!context.mounted) return;
+    if (list != null) {
+      context.push(RoutePaths.list(list.id, name: list.name));
+      return;
+    }
+    message = context.tr('invalid_share_code');
+  } catch (_) {
+    if (!context.mounted) return;
+    message = context.tr('join_error');
+  }
+  await AdaptiveAlertDialog.show(
+    context: context,
+    title: context.tr('join_list'),
+    message: message,
+    actions: [
+      AlertAction(
+        title: context.tr('ok'),
+        style: AlertActionStyle.primary,
+        onPressed: () {},
+      ),
+    ],
+  );
 }
 
 class _NewListButton extends StatelessWidget {
