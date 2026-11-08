@@ -17,6 +17,19 @@ Home, Routen, Übersetzungen), `dart analyze` ohne Errors/Warnings. Auf dem Ger�
 - **Offline:** `ItemsNotifier` hat keine Warteschlange; Abhaken offline wird zurückgerollt.
 - **Rückgängig beim Artikel-Löschen** legt den Artikel neu an (neue ID); kein Restore im Repository.
 
+## Simulator-Durchgang 08.11.2026 (iPhone 17, iOS 27.2, angemeldet)
+
+Behoben: Abblendung unter der Toolbar zu niedrig auf großen Statusleisten (`202e207`), Avo-Chips in einer Zeile
+(`d0d1552`, `d2bfcd9`), Top-Listen mit den Farben des Listen-Tabs (`4e41f2e`). Offen:
+- **Kaltstart:** ca. 4 s bis Name und Listen auf Home erscheinen; „lokaler Stand zuerst“ in `lists_provider`/
+  `items_provider`/`currentUserProvider` fehlt noch (A5 Tempo).
+- **Mengen uneinheitlich:** Liste zeigt „1 btl.“/„1 pcs“, Einkaufsmodus „1 bottle“ und bei 1 Stück nichts; ein
+  gemeinsamer Formatierer (`formatItemQuantity`) für beide.
+- **Eingabefeld:** Return der Hardware-Tastatur im Simulator hat nicht abgeschickt (Plus-Knopf schon); auf dem Gerät
+  mit Software-Tastatur prüfen.
+- **B:** „Offline“-Hinweis trotz Netz (`connectivity_service.dart`); iOS-Mitteilungsdialog ohne Vorab-Erklärung direkt
+  nach dem Login (Quelle offen). An B gemeldet.
+
 ## Router und Repository (A)
 
 - Routen fehlen: `/join/:code` (geteilter Link `https://shoplyai.app/join/<CODE>` führt ins Leere), `/lists/join`
