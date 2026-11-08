@@ -70,4 +70,28 @@ vorgemerkt.
 
 ## overview (Listen-Übersicht, Teilen, Listen-Info)
 
-offen (Bericht ausstehend)
+| Datei | Stand |
+|---|---|
+| `translations/lists_overview.dart` | fertig (Präfix `list_ov_`) |
+| `widgets/list_info_colors.dart`, `share_members.dart`, `all_lists_data.dart`, `all_lists_quick_add.dart`, `list_info_actions.dart`, `all_lists_body.dart`, `list_info_header.dart`, `all_lists_new_list.dart`, `share_join_screen.dart` (alle neu) | fertig geschrieben, nie analysiert/getestet |
+| `all_lists_screen.dart` | fertig, kompiliert erst, wenn `ListSettingsScreen` den Parameter `focusName` hat (`:129`) |
+| `widgets/share_list_dialog.dart` | nicht begonnen (alter Dialog, importiert noch `item_form_dialog.dart`) |
+| `widgets/share_list_screen.dart` (neu) | nicht begonnen |
+| `list_settings_screen.dart`, `category_order_screen.dart`, `list_activities_screen.dart` | nicht begonnen |
+| Tests `all_lists_*`, `share_*`, `list_settings_*` | nicht begonnen |
+
+Vermutete Analyse-Fehler: `share_members.dart:193` (`import 'package:flutter/semantics.dart';` für
+`CustomSemanticsAction`), `debugPrint` ohne `foundation`-Import in `all_lists_new_list.dart:66`/`share_join_screen.dart`,
+`IntrinsicHeight` in `all_lists_quick_add.dart` mit `LayoutBuilder` (sonst `crossAxisAlignment.start`).
+
+Nächste Schritte: (1) `list_settings_screen.dart` als Listen-Info (Vollbild, `focusName`, Name, Farbe/Foto, Markt,
+Mitglieder, Anheften, Zuletzt geändert, Löschen/Verlassen mit `showAvoConfirm`), dann Kategorie-Reihenfolge und
+Aktivitäten. (2) `share_list_screen.dart`, `showShareListDialog` (gleiche Signatur) darauf umleiten, ohne
+`item_form_dialog`. (3) analyze 0/0/0, Tests, `translations_test`.
+
+Fakten für den Owner bzw. B: „Schnell wieder hinzufügen“ nutzt direkt B's `restockSuggestionsProvider`
+(`state/avo_nudge_provider.dart`; Anfrage an B: über `b_slots.dart` exportieren). Teilen-Codes sind heute 6 Zeichen
+`A-Z0-9`, nicht 6 Ziffern (nicht geändert). Router kennt `https://shoplyai.app/join/<CODE>` nicht (`/join/:code` fehlt,
+`/lists/join` kollidiert mit `/lists/:listId`); `ListRepository` kann kein Mitglied entfernen (direkt in
+`list_members`); `createList` nicht atomar; keine Spalte für Listen-Symbole. „Schnell wieder hinzufügen“ steht wie in
+D2-Home über der großen Karte.
