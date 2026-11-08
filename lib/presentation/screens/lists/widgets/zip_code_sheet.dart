@@ -5,7 +5,6 @@ import 'package:shoply/core/constants/app_colors.dart';
 import 'package:shoply/core/constants/paper_colors.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/user_location_service.dart';
-import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 
 /// Bottom sheet to set (or clear) a manual zip code for local offer lookups.
 /// Used when GPS is unavailable/denied — without this, pricing has no way
@@ -51,7 +50,6 @@ class _ZipCodeSheetState extends ConsumerState<_ZipCodeSheet> {
     setState(() => _saving = true);
     HapticFeedback.mediumImpact();
     await UserLocationService.instance.setManualZipCode(zip);
-    ref.invalidate(userZipCodeProvider);
     if (mounted) Navigator.of(context).pop(true);
   }
 

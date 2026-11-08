@@ -543,30 +543,6 @@ List<ShoppingListModel> _recentListsWithOpenItems(
 // Transition for callers outside this package (delete once they switched)
 // ---------------------------------------------------------------------------
 
-/// The zip code of [regionProvider], or null. Never a stand-in. Kept only
-/// for `personal_info_screen.dart` (Teil A), `avo_settings_bridge.dart` and
-/// `weekly_deals_screen.dart`, which invalidate or read it; a saved zip code
-/// reaches [regionProvider] on its own.
-@Deprecated('Use regionProvider; null means no offer request')
-final userZipCodeProvider = FutureProvider<String?>((ref) {
-  final zip = ref.watch(regionProvider)?.zip;
-  if (!ref.watch(regionLoadedProvider)) return Completer<String?>().future;
-  return zip;
-});
-
-/// The region as `recipe_offers_provider.dart` still reads it: `isReal` is
-/// false without a region, and then no request may be made. Never a
-/// stand-in zip code.
-@Deprecated('Use regionProvider; null means no offer request')
-final effectiveZipProvider =
-    FutureProvider<({String zipCode, bool isReal})>((ref) {
-  final zip = ref.watch(regionProvider)?.zip;
-  if (!ref.watch(regionLoadedProvider)) {
-    return Completer<({String zipCode, bool isReal})>().future;
-  }
-  return (zipCode: zip ?? '', isReal: zip != null);
-});
-
 /// The offer of the list's market per item name, for the item rows of
 /// `list_category_section.dart` (Teil A) until they use `ItemOfferBadge`.
 /// There is no basket comparison any more.

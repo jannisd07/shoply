@@ -6,10 +6,10 @@
 // on to drive price lookups and purchase statistics, so the damage outlives
 // the one row.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shoply/data/services/gemini_categorization_service.dart';
+import 'package:shoply/data/services/ai_categorization_service.dart';
 
 String clean(String input, String? parsed) =>
-    GeminiCategorizationService.sanitizeParsedName(input, parsed);
+    AiCategorizationService.sanitizeParsedName(input, parsed);
 
 void main() {
   group('rejects invented words', () {

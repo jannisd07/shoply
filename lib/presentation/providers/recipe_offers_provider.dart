@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/services/recipe_offer_service.dart';
-import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/providers/region_provider.dart';
 
 /// Family key for [recipeOffersProvider]: a recipe plus the exact ingredient
 /// names to check. Value equality (not identity) so rebuilding the detail
@@ -33,13 +33,14 @@ class RecipeOffersRequest {
 /// are filtered out at read time.
 final recipeOffersProvider = FutureProvider.autoDispose
     .family<RecipeOffersResult?, RecipeOffersRequest>((ref, request) async {
-  final zipInfo = await ref.watch(effectiveZipProvider.future);
-  if (!zipInfo.isReal) return null;
+  if (!ref.watch(regionLoadedProvider)) return null;
+  final region = ref.watch(regionProvider);
+  if (region == null) return null;
 
   final result = await RecipeOfferService.instance.getOffers(
     recipeId: request.recipeId,
     ingredientNames: request.ingredientNames,
-    zipCode: zipInfo.zipCode,
+    zipCode: region.zip,
   );
 
   final valid = result.matches.where((m) => m.isStillValid).toList();

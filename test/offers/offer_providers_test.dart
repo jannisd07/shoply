@@ -394,26 +394,6 @@ void main() {
   });
 
   group('transition for older callers', () {
-    test('the zip code is the real region or none, never a stand-in',
-        () async {
-      final none = _container(source: _Source(), region: null);
-      // ignore: deprecated_member_use_from_same_package
-      expect(await none.read(userZipCodeProvider.future), isNull);
-
-      final ulm = _container(source: _Source());
-      // ignore: deprecated_member_use_from_same_package
-      expect(await ulm.read(userZipCodeProvider.future), '89077');
-    });
-
-    test('the zip info of recipe offers is not real without a region',
-        () async {
-      final none = _container(source: _Source(), region: null);
-      // ignore: deprecated_member_use_from_same_package
-      final info = await none.read(effectiveZipProvider.future);
-      expect(info.isReal, isFalse);
-      expect(info.zipCode, isNot('10115'));
-    });
-
     test('the old per-row lookup gives the offer of the list market only',
         () async {
       final source = _Source(_answers);

@@ -8,7 +8,6 @@ import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
-import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
 
@@ -350,9 +349,8 @@ class AvoSettingsBridge {
       );
     }
     final current = await UserLocationService.instance.getManualZipCode();
+    // regionProvider follows UserLocationService.changes on its own.
     await UserLocationService.instance.setManualZipCode(zip);
-    // Same refresh the zip-code sheet does, so live offer UIs pick it up.
-    ref.invalidate(userZipCodeProvider);
     return SettingChangeResult(
       success: true,
       key: 'zip_code',

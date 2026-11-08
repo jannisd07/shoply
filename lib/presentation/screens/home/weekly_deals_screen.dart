@@ -8,6 +8,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/providers/region_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/zip_code_sheet.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
@@ -89,8 +90,8 @@ class _WeeklyDealsScreenState extends ConsumerState<WeeklyDealsScreen> {
   Widget build(BuildContext context) {
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final zipAsync = ref.watch(userZipCodeProvider);
-    final needsZip = zipAsync.hasValue && zipAsync.value == null;
+    final needsZip =
+        ref.watch(regionLoadedProvider) && ref.watch(regionProvider) == null;
     final searching = _query.trim().length >= 2;
 
     return Scaffold(
