@@ -225,10 +225,13 @@ class _Actions extends ListDetailActions {
     required GlobalKey anchorKey,
   }) async => calls.add('import:$listId');
 
+  /// What Teil B's checkout returns (`true`: trip saved).
+  bool checkoutResult = false;
+
   @override
   Future<bool> checkout(BuildContext context, String listId) async {
     calls.add('checkout');
-    return false;
+    return checkoutResult;
   }
 
   @override
@@ -735,6 +738,22 @@ void main() {
       await tester.tap(find.text(_en('list_detail_menu_checkout')));
       await tester.pump();
       expect(setup.actions.calls, ['checkout']);
+    });
+
+    testWidgets('a saved trip ends with the success moment', (tester) async {
+      final setup = _Setup(
+        items: AsyncData([
+          _item('e', 'Eier', checked: true, checkedAt: DateTime(2026, 1, 2)),
+          _item('n', 'Nudeln', checked: true),
+        ]),
+      );
+      setup.actions.checkoutResult = true;
+      await _pump(tester, setup);
+      await tester.tap(find.text(_en('list_detail_menu_checkout')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text(_en('list_shop_saved_title')), findsOneWidget);
+      await tester.pumpAndSettle(const Duration(seconds: 5));
     });
 
     testWidgets('first load without local data: calm placeholders', (

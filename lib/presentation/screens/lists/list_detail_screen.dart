@@ -39,6 +39,7 @@ import 'package:shoply/presentation/widgets/design/skeleton.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
+import 'package:shoply/presentation/widgets/design/success_moment.dart';
 
 /// A row just checked off stays in its aisle this long before it moves to
 /// "Erledigt"; tapping it again in that time takes it back (Konzept 11
@@ -629,7 +630,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
       case ListDetailMenuAction.shop:
         await _actions.openShopping(context, _listId);
       case ListDetailMenuAction.checkout:
-        await _actions.checkout(context, _listId);
+        await _checkout();
       case ListDetailMenuAction.share:
         await _share();
       case ListDetailMenuAction.info:
@@ -664,6 +665,26 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
 
   String get _currentName =>
       ref.read(listDetailListProvider(_listId))?.name ?? _listName;
+
+  /// "Einkauf abschließen": Teil B saves the trip and returns `true`; the
+  /// confirmation is ours, the same success moment as in shopping mode.
+  Future<void> _checkout() async {
+    final items =
+        ref.read(itemsNotifierProvider(_listId)).valueOrNull ??
+        const <ShoppingItemModel>[];
+    final count = items.where((i) => i.isChecked).length;
+    final saved = await _actions.checkout(context, _listId);
+    if (!saved || !mounted) return;
+    unawaited(
+      showSuccessMoment(
+        context,
+        title: context.tr('list_shop_saved_title'),
+        subtitle: count == 1
+            ? context.tr('list_shop_saved_one')
+            : context.tr('list_shop_saved_many', params: {'count': '$count'}),
+      ),
+    );
+  }
 
   Future<void> _share() async {
     _dismissKeyboard();
@@ -954,7 +975,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
                       params: {'count': '$count'},
                     ),
               actionLabel: context.tr('list_detail_menu_checkout'),
-              onAction: () => _actions.checkout(context, _listId),
+              onAction: _checkout,
             ),
             doneSection,
           ],
