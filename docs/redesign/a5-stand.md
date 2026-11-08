@@ -49,6 +49,6 @@ Home, Routen, Übersetzungen), `dart analyze` ohne Errors/Warnings. Auf dem Ger�
 
 ## Für Teil B
 
-- `restockSuggestionsProvider` über `b_slots.dart` exportieren (Übersicht importiert ihn direkt).
-- `OfferSuggestionsBar`: `onSelect` und nullbare `listId` können weg; `ListPriceSummaryBar` nutzt A nicht mehr.
-- Abschluss: Bis B8 erscheint nach `openCheckoutFlow` zweimal „gespeichert“ (B's Zwischen-Screen und A's Erfolgsmoment).
+Erledigt am 08.11.2026 (`b3a2ce0`, A-Seite `6d07741`, `5999b7f`): `OfferSuggestionsBar` mit Pflicht-`listId`,
+`ListPriceSummaryBar` gelöscht, `restockSuggestionsProvider` über `b_slots.dart`, `openCheckoutFlow` ohne eigene
+Bestätigung (den Erfolgsmoment zeigen Liste und Einkaufsmodus).
