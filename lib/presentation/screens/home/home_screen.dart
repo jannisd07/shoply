@@ -173,8 +173,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final user = ref.watch(currentUserProvider).valueOrNull;
     // Until the server answers, the name saved on this device.
     final rawName =
-        user?.displayName ??
-        ref.watch(cachedUserProfileProvider).valueOrNull?.displayName;
+        user?.displayName ?? ref.watch(cachedUserProfileProvider)?.displayName;
     final firstName = rawName == null || rawName.trim().isEmpty
         ? null
         : DisplayNameHelper.getDisplayName(

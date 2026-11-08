@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
@@ -68,7 +69,18 @@ class ListsNotifier extends StateNotifier<AsyncValue<List<ShoppingListModel>>> {
   static AsyncValue<List<ShoppingListModel>> _seed(String? userId) {
     if (userId == null) return const AsyncValue.data([]);
     final known = _lastKnownUserId == userId ? _lastKnown : null;
-    return known == null ? const AsyncValue.loading() : AsyncValue.data(known);
+    if (known != null) return AsyncValue.data(known);
+    // Cold start: this account's lists from the device, in the first frame.
+    final cached = OfflineCacheService.instance.getCachedListsSync(
+      userId: userId,
+    );
+    if (cached == null || cached.isEmpty) return const AsyncValue.loading();
+    unawaited(
+      OfflineCacheService.instance.warmListItems([
+        for (final l in cached) l.id,
+      ]),
+    );
+    return AsyncValue.data(cached);
   }
 
   void _onRemoteChange() {
@@ -247,6 +259,10 @@ final listsNotifierProvider =
     StateNotifierProvider<ListsNotifier, AsyncValue<List<ShoppingListModel>>>((
       ref,
     ) {
+      // The preferences main() loaded before runApp: lets the notifier
+      // paint the cached lists in the first frame.
+      final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+      if (prefs != null) OfflineCacheService.instance.attachPreferences(prefs);
       return ListsNotifier(
         ref.watch(listRepositoryProvider),
         ref.watch(authUserIdProvider),

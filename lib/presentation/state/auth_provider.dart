@@ -7,6 +7,7 @@ import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/data/services/onboarding_answers_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shoply/core/services/shared_preferences_provider.dart';
 
 /// Provider for current auth user. Emits on every auth event, including the
 /// hourly token refresh — providers that only care about *who* is signed in
@@ -44,11 +45,13 @@ String? _lastSeenUserId;
 
 /// The profile saved on this device for the signed-in account (name,
 /// onboarding flag), available before [currentUserProvider] has asked the
-/// server, so Home can greet by name on a cold start.
-final cachedUserProfileProvider = FutureProvider<CachedUserProfile?>((ref) {
+/// server, so Home can greet by name in the first frame.
+final cachedUserProfileProvider = Provider<CachedUserProfile?>((ref) {
   final userId = ref.watch(authUserIdProvider);
   if (userId == null) return null;
-  return OfflineCacheService.instance.getCachedUserProfile(userId);
+  final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+  if (prefs != null) OfflineCacheService.instance.attachPreferences(prefs);
+  return OfflineCacheService.instance.getCachedUserProfileSync(userId);
 });
 
 /// Provider for current user model. Caches the display_name/onboarding flag

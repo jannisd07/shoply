@@ -34,6 +34,10 @@ class OfflineCacheService {
     return _prefs!;
   }
 
+  /// Hands over the instance `main()` loaded before `runApp`, so the sync
+  /// reads below can answer in the first frame.
+  void attachPreferences(SharedPreferences prefs) => _prefs ??= prefs;
+
   // =============================================
   // RECIPE CACHING
   // =============================================
@@ -142,6 +146,43 @@ class OfflineCacheService {
       return lists;
     } catch (e) {
       debugPrint('❌ [OFFLINE] Error loading cached shopping lists: $e');
+      return null;
+    }
+  }
+
+  /// [getCachedLists] without waiting, for the first frame: null until
+  /// [attachPreferences] ran, when nothing is cached or it belongs to another
+  /// account.
+  List<ShoppingListModel>? getCachedListsSync({required String userId}) {
+    final prefs = _prefs;
+    if (prefs == null || prefs.getString(_cachedListsUserKey) != userId) {
+      return null;
+    }
+    final listsJson = prefs.getStringList(_cachedListsKey);
+    if (listsJson == null || listsJson.isEmpty) return null;
+    try {
+      return [
+        for (final json in listsJson)
+          ShoppingListModel.fromJson(jsonDecode(json) as Map<String, dynamic>),
+      ];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// [getCachedUserProfile] without waiting (see [getCachedListsSync]).
+  CachedUserProfile? getCachedUserProfileSync(String userId) {
+    final raw = _prefs?.getString(_cachedProfileKey);
+    if (raw == null) return null;
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      if (map['user_id'] != userId) return null;
+      return CachedUserProfile(
+        userId: userId,
+        displayName: map['display_name'] as String?,
+        onboardingCompleted: map['onboarding_completed'] as bool?,
+      );
+    } catch (_) {
       return null;
     }
   }

@@ -32,4 +32,16 @@ void main() {
     await cache.cacheLists([list]);
     expect(await cache.getCachedLists(userId: 'u1'), isNull);
   });
+
+  test('sync read for the first frame, only for the own account', () async {
+    final cache = OfflineCacheService.instance;
+    cache.attachPreferences(await SharedPreferences.getInstance());
+    await cache.cacheLists([list], userId: 'u1');
+    expect(cache.getCachedListsSync(userId: 'u1')?.single.id, 'l1');
+    expect(cache.getCachedListsSync(userId: 'u2'), isNull);
+
+    await cache.cacheUserProfile(userId: 'u1', displayName: 'Jannis');
+    expect(cache.getCachedUserProfileSync('u1')?.displayName, 'Jannis');
+    expect(cache.getCachedUserProfileSync('u2'), isNull);
+  });
 }
