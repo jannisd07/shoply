@@ -6,7 +6,6 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/number_parsing.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
-import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/widgets/common/paper_settings.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 
@@ -85,9 +84,9 @@ class _PersonalInfoScreenState extends ConsumerState<PersonalInfoScreen> {
 
       final zip = _zipController.text.trim();
       if (zip != _initialZip) {
+        // The region (regionProvider) follows the saved zip code by itself.
         await UserLocationService.instance.setManualZipCode(zip);
         _initialZip = zip;
-        ref.invalidate(userZipCodeProvider);
       }
 
       if (mounted) {
