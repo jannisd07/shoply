@@ -53,6 +53,11 @@ nutzen beide direkt.
 
 ## Erledigte Anfragen von Teil A
 
+- **Simulator-Funde A** (Commit mit dieser Zeile): (1) Fälschlich „Offline“: `connectivity_plus` 5 meldet auf iOS
+  `none`, wenn der Netzpfad eine unbekannte Schnittstelle nutzt. `ConnectivityService` prüft ein „none“ jetzt mit
+  einer echten Anfrage an Supabase und wiederholt sie offline alle 20 s. (2) Mitteilungsabfrage ohne Erklärung beim
+  Öffnen einer Liste: `flutter_app_badger` fragte bei jedem Aufruf nach Erlaubnis. Ersetzt durch den Kanal
+  `shoply/app` (`AppBadge.clear()`, fragt nie), Paket entfernt.
 - **Nach A5** (Commit mit dieser Zeile): `OfferSuggestionsBar` braucht jetzt `listId`, `onSelect` und
   `ListPriceSummaryBar` sind gelöscht. `b_slots.dart` exportiert `restockSuggestionsProvider` und `RestockSuggestion`.
   `openCheckoutFlow` zeigt keine eigene Bestätigung mehr (kein Fertig-Screen, keine grüne Snackbar, keine

@@ -11,7 +11,7 @@ import Foundation
 ///
 /// Channels: `shoply/health`, `shoply/scanner`, `shoply/voice` with
 /// `shoply/voice/events` and `shoply/voice/levels`, `shoply/accessibility`
-/// with `shoply/accessibility/events`.
+/// with `shoply/accessibility/events`, `shoply/app`.
 enum ShoplyNativeChannels {
   /// Channels, handlers and stream bridges live as long as the app.
   private static var retained: [AnyObject] = []
@@ -28,7 +28,8 @@ enum ShoplyNativeChannels {
     let scanner = BarcodeScannerChannel()
     let voice = VoiceChannel()
     let accessibility = AccessibilityChannel()
-    retained = [health, scanner, voice, accessibility]
+    let app = AppBadgeChannel()
+    retained = [health, scanner, voice, accessibility, app]
 
     bind("shoply/health", health, messenger)
     bind("shoply/scanner", scanner, messenger)
@@ -37,7 +38,8 @@ enum ShoplyNativeChannels {
     stream("shoply/voice/levels", voice.levels, messenger)
     bind("shoply/accessibility", accessibility, messenger)
     stream("shoply/accessibility/events", accessibility.events, messenger)
-    nativeLog("✅ [NativeChannels] health, scanner, voice and accessibility registered")
+    bind("shoply/app", app, messenger)
+    nativeLog("✅ [NativeChannels] health, scanner, voice, accessibility and app registered")
   }
 
   @MainActor

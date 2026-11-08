@@ -17,6 +17,7 @@
 		15C7AC2785E58907A1231A07 /* HealthKitChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CE5A76802AAEF5E894120D /* HealthKitChannel.swift */; };
 		7AFA6A6B05568AC19F678906 /* BarcodeScannerChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D140210CFCD18C110AD34B /* BarcodeScannerChannel.swift */; };
 		39D75ABD4173C29F1D981481 /* VoiceChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176A0AF2B7610513D4D3EAD8 /* VoiceChannel.swift */; };
+		E1A7C0B2D4F6081A2B3C4D5E /* AppBadgeChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B8D1C3E5071928A3B4C5D6 /* AppBadgeChannel.swift */; };
 		9C04BDD01861B33B90682CCF /* ShoplyNativeChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128CD41185BF6EC9B3B968B8 /* ShoplyNativeChannels.swift */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
@@ -101,6 +102,7 @@
 		46CE5A76802AAEF5E894120D /* HealthKitChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthKitChannel.swift; sourceTree = "<group>"; };
 		B6D140210CFCD18C110AD34B /* BarcodeScannerChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BarcodeScannerChannel.swift; sourceTree = "<group>"; };
 		176A0AF2B7610513D4D3EAD8 /* VoiceChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceChannel.swift; sourceTree = "<group>"; };
+		F2B8D1C3E5071928A3B4C5D6 /* AppBadgeChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppBadgeChannel.swift; sourceTree = "<group>"; };
 		128CD41185BF6EC9B3B968B8 /* ShoplyNativeChannels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShoplyNativeChannels.swift; sourceTree = "<group>"; };
 		9E98BBB9D49B7C6253A05DDE /* LiquidGlassViewFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiquidGlassViewFactory.swift; sourceTree = "<group>"; };
 		AC93E8255E00C9F17CF032E5 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
@@ -238,6 +240,7 @@
 				B6D140210CFCD18C110AD34B /* BarcodeScannerChannel.swift */,
 				176A0AF2B7610513D4D3EAD8 /* VoiceChannel.swift */,
 				128CD41185BF6EC9B3B968B8 /* ShoplyNativeChannels.swift */,
+				F2B8D1C3E5071928A3B4C5D6 /* AppBadgeChannel.swift */,
 			);
 			path = NativeChannels;
 			sourceTree = "<group>";
@@ -629,6 +632,7 @@
 				7AFA6A6B05568AC19F678906 /* BarcodeScannerChannel.swift in Sources */,
 				39D75ABD4173C29F1D981481 /* VoiceChannel.swift in Sources */,
 				9C04BDD01861B33B90682CCF /* ShoplyNativeChannels.swift in Sources */,
+				E1A7C0B2D4F6081A2B3C4D5E /* AppBadgeChannel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_app_badger/flutter_app_badger.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +17,7 @@ import 'package:shoply/data/repositories/item_batch.dart';
 import 'package:shoply/data/services/category_order_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/dynamic_tutorial_service.dart';
+import 'package:shoply/data/services/native/app_badge_channel.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/unread_service.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_category_section.dart';
@@ -236,13 +236,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     } catch (e) {
       debugPrint('⚠️ [LIST_DETAIL] Mark as read failed: $e');
     }
-    try {
-      if (await FlutterAppBadger.isAppBadgeSupported()) {
-        FlutterAppBadger.removeBadge();
-      }
-    } catch (e) {
-      debugPrint('⚠️ [LIST_DETAIL] Failed to remove badge: $e');
-    }
+    await AppBadge.clear();
     await _clearThisListsNotifications();
   }
 
