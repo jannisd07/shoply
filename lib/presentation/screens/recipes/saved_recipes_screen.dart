@@ -1,15 +1,57 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shoply/core/constants/app_colors.dart';
+
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/author_avatar.dart';
-import 'package:shoply/presentation/state/saved_recipes_provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_data.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_saved.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_scaffold.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/route_paths.dart';
 
-/// Screen displaying user's saved/bookmarked recipes
+/// The saved recipes to show: the loaded ones still saved, recipes brought
+/// back by "Widerrufen" before the reload has them (at their old place), and
+/// on the very first open the saved ids found in the catalogue.
+List<Recipe> visibleSavedRecipes(
+  LibrarySaved saved, {
+  List<Recipe>? catalog,
+  Map<String, (int, Recipe)> restoring = const {},
+}) {
+  final list = [
+    for (final r in saved.recipes)
+      if (saved.ids.contains(r.id)) r,
+  ];
+  final present = {for (final r in list) r.id};
+  final back =
+      restoring.entries
+          .where((e) => saved.ids.contains(e.key) && !present.contains(e.key))
+          .toList()
+        ..sort((a, b) => a.value.$1.compareTo(b.value.$1));
+  for (final e in back) {
+    final at = e.value.$1.clamp(0, list.length);
+    list.insert(at, e.value.$2);
+    present.add(e.key);
+  }
+  if (list.isEmpty && saved.recipes.isEmpty && catalog != null) {
+    return [
+      for (final r in catalog)
+        if (saved.ids.contains(r.id)) r,
+    ];
+  }
+  return list;
+}
+
+/// R-07 "Gespeichert" (Konzept 13 §9): what did I want to cook?
+///
+/// Shows the saved recipes at once (provider state, else the catalogue),
+/// reloads behind them, never empties the list because of a network error
+/// it can see (no reload while offline). Removing is a swipe or a menu
+/// entry and can be undone.
 class SavedRecipesScreen extends ConsumerStatefulWidget {
   const SavedRecipesScreen({super.key});
 
@@ -17,361 +59,108 @@ class SavedRecipesScreen extends ConsumerStatefulWidget {
   ConsumerState<SavedRecipesScreen> createState() => _SavedRecipesScreenState();
 }
 
-class _SavedRecipesScreenState extends ConsumerState<SavedRecipesScreen> {
-  bool _hasLoaded = false;
+class _SavedRecipesScreenState extends ConsumerState<SavedRecipesScreen>
+    with LibraryAvoContext {
+  final _search = TextEditingController();
+  String _query = '';
+
+  /// Removed rows by id with their place, so "Widerrufen" puts them back
+  /// before the reload knows them again.
+  final Map<String, (int, Recipe)> _restoring = {};
 
   @override
   void initState() {
     super.initState();
-    // Force reload saved recipes when screen opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
+      if (mounted && !ref.read(isOfflineProvider)) {
+        unawaited(ref.read(recipeLibraryActionsProvider).reloadSaved());
+      }
     });
   }
 
-  Future<void> _loadData() async {
-    if (!_hasLoaded) {
-      _hasLoaded = true;
-      await ref.read(savedRecipesProvider.notifier).loadSavedRecipes();
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    if (ref.read(isOfflineProvider)) return;
+    await ref.read(recipeLibraryActionsProvider).reloadSaved();
+  }
+
+  Future<void> _remove(Recipe recipe, int index) async {
+    final actions = ref.read(recipeLibraryActionsProvider);
+    setState(() => _restoring[recipe.id] = (index, recipe));
+    final toastContext = context;
+    final message = context.tr('recipe_lib_removed');
+    final undo = context.tr('common_undo');
+    final failedText = context.tr('action_failed');
+    final ok = await actions.toggleSaved(recipe.id);
+    if (!ok) {
+      unawaited(AvoHaptics.error());
+      if (toastContext.mounted) {
+        AvoToast.show(toastContext, message: failedText);
+      }
+      return;
     }
+    if (!toastContext.mounted) return;
+    AvoToast.show(
+      toastContext,
+      message: message,
+      actionLabel: undo,
+      onAction: () async {
+        final saved = await actions.toggleSaved(recipe.id);
+        if (!saved && toastContext.mounted) {
+          unawaited(AvoHaptics.error());
+          AvoToast.show(toastContext, message: failedText);
+        }
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final savedState = ref.watch(savedRecipesProvider);
-    // toggleSave removes the id from savedIds immediately (optimistic) but
-    // only reloads savedRecipes after the network round trip. Filtering by
-    // savedIds drops an unsaved/dismissed card in the same frame, so a
-    // dismissed Dismissible is never rebuilt.
-    final recipes = savedState.savedRecipes
-        .where((r) => savedState.savedIds.contains(r.id))
-        .toList();
-    final backgroundColor = AppColors.recipeBg(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          // App Bar
-          SliverAppBar(
-            backgroundColor: backgroundColor,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            floating: true,
-            pinned: true,
-            expandedHeight: 100,
-            collapsedHeight: 60,
-            leading: IconButton(
-              icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary),
-              onPressed: () => context.pop(),
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: EdgeInsets.zero,
-              expandedTitleScale: 1,
-              title: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 56),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.tr('saved_recipes'),
-                        style: TextStyle(
-                          color: textPrimary,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      if (recipes.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            '${recipes.length} ${context.tr('recipes')}',
-                            style: TextStyle(
-                              color: textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          
-          // Content — the spinner only replaces an empty list; reloads
-          // with data on screen happen underneath it.
-          if (savedState.isLoading && recipes.isEmpty)
-            const SliverFillRemaining(
-              child: Center(child: CupertinoActivityIndicator()),
-            )
-          else if (recipes.isEmpty)
-            SliverFillRemaining(
-              child: _buildEmptyState(context),
-            )
-          else
-            SliverPadding(
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 8,
-                bottom: 100 + MediaQuery.paddingOf(context).bottom,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final recipe = recipes[index];
-                    return _SavedRecipeCard(
-                      recipe: recipe,
-                      onTap: () => context.push('/recipes/${recipe.id}', extra: recipe),
-                      onRemove: () {
-                        ref.read(savedRecipesProvider.notifier).toggleSave(recipe.id);
-                      },
-                    );
-                  },
-                  childCount: recipes.length,
-                ),
-              ),
-            ),
-        ],
-      ),
+    syncAvoContext(context);
+    final saved = ref.watch(librarySavedProvider);
+    final catalog = ref.watch(libraryCatalogProvider);
+    final offline = ref.watch(isOfflineProvider);
+    final allergies = ref.watch(libraryAllergiesProvider);
+    final recipes = visibleSavedRecipes(
+      saved,
+      catalog: catalog,
+      restoring: _restoring,
     );
-  }
+    final phase = recipes.isEmpty && saved.loading && saved.recipes.isEmpty
+        ? LibraryPhase.loading
+        : LibraryPhase.ready;
 
-  Widget _buildEmptyState(BuildContext context) {
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.bookmark_border_rounded,
-              size: 64,
-              color: textSecondary.withOpacity(0.5),
+    return RecipesLibraryPage(
+      title: context.tr('recipe_lib_saved_title'),
+      subtitle: recipes.isEmpty
+          ? null
+          : formatRecipeCount(context, recipes.length),
+      onRefresh: _refresh,
+      slivers: [
+        SliverToBoxAdapter(
+          child: SavedRecipesContent(
+            phase: phase,
+            recipes: recipes,
+            query: _query,
+            searchController: _search,
+            onQueryChanged: (q) => setState(() => _query = q),
+            offline: offline,
+            allergensOf: (r) => libraryAllergenNames(context, r, allergies),
+            onOpen: (r) => context.push(RoutePaths.recipe(r.id), extra: r),
+            onOpenAuthor: (r) => context.push(
+              creatorPath(r.authorId),
+              extra: {'authorName': r.authorName},
             ),
-            const SizedBox(height: 24),
-            Text(
-              context.tr('no_saved_recipes'),
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.tr('save_recipes_hint'),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: textSecondary,
-              ),
-            ),
-            const SizedBox(height: 32),
-            OutlinedButton.icon(
-              onPressed: () => context.pop(),
-              icon: Icon(Icons.search_rounded, color: textPrimary, size: 20),
-              label: Text(
-                context.tr('browse_recipes'),
-                style: TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: textSecondary.withOpacity(0.2)),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SavedRecipeCard extends ConsumerWidget {
-  final Recipe recipe;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
-
-  const _SavedRecipeCard({
-    required this.recipe,
-    required this.onTap,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cardColor = AppColors.recipeSurface(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final inputFill = AppColors.recipeInput(context);
-
-    return Dismissible(
-      key: ValueKey(recipe.id),
-      direction: DismissDirection.endToStart,
-      onDismissed: (_) => onRemove(),
-      background: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_rounded, color: Colors.white),
-      ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Image with bookmark button
-              Stack(
-                children: [
-                  if (recipe.imageUrl.isNotEmpty)
-                    CachedNetworkImage(
-                      imageUrl: recipe.imageUrl,
-                      height: 160,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      memCacheWidth: (MediaQuery.sizeOf(context).width *
-                              MediaQuery.devicePixelRatioOf(context))
-                          .round(),
-                      placeholder: (_, __) => Container(
-                        height: 160,
-                        color: inputFill,
-                        child: Center(
-                          child: Icon(Icons.restaurant_rounded, size: 40, color: textSecondary),
-                        ),
-                      ),
-                      errorWidget: (_, __, ___) => Container(
-                        height: 160,
-                        color: inputFill,
-                        child: Icon(Icons.restaurant_rounded, size: 40, color: textSecondary),
-                      ),
-                    ),
-                  // Remove/Bookmark button
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: GestureDetector(
-                      onTap: onRemove,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.bookmark_rounded,
-                          size: 20,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              // Content
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      recipe.name,
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      recipe.description,
-                      style: TextStyle(color: textSecondary, fontSize: 14),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 10),
-                    // Author & Stats Row
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => context.push(
-                            '/author/${recipe.authorId}',
-                            extra: {'authorName': recipe.authorName},
-                          ),
-                          child: Row(
-                            children: [
-                              AuthorAvatar(
-                                name: recipe.authorName,
-                                avatarUrl: recipe.authorAvatarUrl,
-                                size: 24,
-                                backgroundColor: inputFill,
-                                initialStyle: TextStyle(fontSize: 10, color: textSecondary),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                recipe.authorName,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: textSecondary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Spacer(),
-                        Icon(Icons.schedule_rounded, size: 14, color: textSecondary),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${recipe.totalTimeMinutes} min',
-                          style: TextStyle(color: textSecondary, fontSize: 13),
-                        ),
-                        if (recipe.averageRating > 0) ...[
-                          const SizedBox(width: 10),
-                          Icon(Icons.star_rounded, size: 14, color: AppColors.recipeStarColor(context)),
-                          const SizedBox(width: 3),
-                          Text(
-                            recipe.averageRating.toStringAsFixed(1),
-                            style: TextStyle(
-                              color: textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            onRemove: (r) => _remove(r, recipes.indexOf(r)),
+            onDiscover: () => context.go(RoutePaths.recipes),
           ),
         ),
-      ),
+      ],
     );
   }
 }

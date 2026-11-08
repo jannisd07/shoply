@@ -1,414 +1,198 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shoply/core/constants/app_colors.dart';
+import 'package:go_router/go_router.dart';
+
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/services/recipe_service.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/author_avatar.dart';
-import 'package:shoply/presentation/widgets/recipes/star_rating_widget.dart';
-import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_author.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_data.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_follow.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_scaffold.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/widgets/design/empty_state.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/app_destinations.dart';
+import 'package:shoply/routes/route_paths.dart';
 
-/// Recipe Author Profile Page
-/// Shows author info and all their recipes
+/// R-06 creator page (Konzept 13 §8, §19.6): who is this, and do I want
+/// more from them?
+///
+/// The head shows at once from what is known (the name passed in, the
+/// catalogue, the follow list), the recipes from the catalogue; the
+/// creator's full list loads behind it. "Folgen" switches at once and is
+/// synced later; "Folge ich" stops following with "Widerrufen". On the
+/// person's own page the button is "Profil bearbeiten".
 class RecipeAuthorPage extends ConsumerStatefulWidget {
   final String authorId;
   final String? authorName;
 
-  const RecipeAuthorPage({
-    super.key,
-    required this.authorId,
-    this.authorName,
-  });
+  const RecipeAuthorPage({super.key, required this.authorId, this.authorName});
 
   @override
   ConsumerState<RecipeAuthorPage> createState() => _RecipeAuthorPageState();
 }
 
-class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage> {
-  List<Recipe> _recipes = [];
-  bool _isLoading = true;
-  String? _authorName;
-  String? _authorAvatarUrl;
-  double _authorAverageRating = 0.0;
+class _RecipeAuthorPageState extends ConsumerState<RecipeAuthorPage>
+    with LibraryAvoContext {
+  /// The creator's recipes from the server; null until the first answer.
+  List<Recipe>? _loaded;
+  bool _failed = false;
+  CreatorSort _sort = CreatorSort.newest;
 
   @override
   void initState() {
     super.initState();
-    _loadAuthorData();
+    unawaited(_load());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _markSeen());
   }
 
-  /// Loads only this author's recipes (one query; the service also resolves
-  /// the author's display name and avatar from `users`).
-  Future<void> _loadAuthorData() async {
-    setState(() => _isLoading = true);
+  Future<void> _load() async {
+    final actions = ref.read(recipeLibraryActionsProvider);
     try {
-      final authorRecipes =
-          await RecipeService.instance.getRecipesByAuthor(widget.authorId);
+      final recipes = await actions.recipesBy(widget.authorId);
       if (!mounted) return;
-
-      final rated = authorRecipes.where((r) => r.ratingCount > 0).toList();
-      final avgRating = rated.isEmpty
-          ? 0.0
-          : rated.map((r) => r.averageRating).reduce((a, b) => a + b) / rated.length;
-
+      // The service answers an empty list when it fails; offline that
+      // must not replace what the catalogue already showed.
+      if (recipes.isEmpty && ref.read(isOfflineProvider)) return;
       setState(() {
-        _recipes = authorRecipes;
-        if (authorRecipes.isNotEmpty) {
-          _authorName = authorRecipes.first.authorName;
-          _authorAvatarUrl = authorRecipes.first.authorAvatarUrl;
-        }
-        _authorAverageRating = avgRating;
-        _isLoading = false;
+        _loaded = recipes;
+        _failed = false;
       });
     } catch (e) {
-      debugPrint('❌ [AUTHOR_PAGE] Failed to load author ${widget.authorId}: $e');
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('author_load_failed'))),
-      );
+      debugPrint('❌ [AUTHOR_PAGE] Failed to load ${widget.authorId}: $e');
+      if (mounted) setState(() => _failed = true);
     }
   }
 
+  void _markSeen() {
+    if (!mounted) return;
+    final recipes = _recipes(ref.read(libraryCatalogProvider));
+    unawaited(
+      ref
+          .read(creatorFollowsProvider.notifier)
+          .markSeen(
+            widget.authorId,
+            name: recipes.isEmpty
+                ? widget.authorName
+                : recipes.first.authorName,
+            avatarUrl: recipes.isEmpty ? null : recipes.first.authorAvatarUrl,
+          ),
+    );
+  }
+
+  List<Recipe> _recipes(List<Recipe>? catalog) {
+    final loaded = _loaded;
+    if (loaded != null) return loaded;
+    if (catalog == null) return const [];
+    return [
+      for (final r in catalog)
+        if (r.authorId == widget.authorId) r,
+    ];
+  }
+
+  void _follow(String name, String? avatarUrl) {
+    unawaited(
+      ref
+          .read(creatorFollowsProvider.notifier)
+          .follow(widget.authorId, name: name, avatarUrl: avatarUrl),
+    );
+  }
+
+  void _unfollow(String name) {
+    final notifier = ref.read(creatorFollowsProvider.notifier);
+    final previous = ref.read(creatorFollowsProvider).followed[widget.authorId];
+    if (previous == null) return;
+    unawaited(notifier.unfollow(widget.authorId));
+    AvoToast.show(
+      context,
+      message: context.tr('recipe_lib_unfollowed', params: {'name': name}),
+      actionLabel: context.tr('common_undo'),
+      onAction: () => notifier.restore(previous),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = AppColors.recipeBg(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final cardColor = AppColors.recipeSurface(context);
-    final borderColor = AppColors.recipeBorderColor(context);
-    final displayName = (_authorName?.isNotEmpty ?? false)
-        ? _authorName!
-        : (widget.authorName?.isNotEmpty ?? false)
-            ? widget.authorName!
-            : null;
+    syncAvoContext(context);
+    final catalog = ref.watch(libraryCatalogProvider);
+    final follows = ref.watch(creatorFollowsProvider);
+    final offline = ref.watch(isOfflineProvider);
+    final userId = ref.watch(authUserIdProvider);
+    final allergies = ref.watch(libraryAllergiesProvider);
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary),
-          onPressed: () => context.pop(),
-        ),
-        title: Text(
-          displayName ?? context.tr('author_label'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CupertinoActivityIndicator())
-          : _recipes.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.restaurant_menu,
-                        size: 64,
-                        color: textSecondary.withOpacity(0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        context.tr('no_recipes_found'),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
+    final recipes = sortCreatorRecipes(_recipes(catalog), _sort);
+    final followed = follows.followed[widget.authorId];
+    final fromRecipes = recipes.isEmpty ? null : recipes.first;
+    final knownName = [
+      fromRecipes?.authorName,
+      widget.authorName,
+      followed?.name,
+    ].whereType<String>().map((n) => n.trim()).where((n) => n.isNotEmpty);
+    final name = knownName.isEmpty
+        ? context.tr('recipe_lib_creator_fallback')
+        : knownName.first;
+    final avatarUrl = fromRecipes?.authorAvatarUrl ?? followed?.avatarUrl;
+    final isSelf = userId != null && userId == widget.authorId;
+
+    final LibraryPhase phase;
+    if (recipes.isNotEmpty || _loaded != null) {
+      phase = LibraryPhase.ready;
+    } else if (_failed) {
+      phase = LibraryPhase.error;
+    } else {
+      phase = LibraryPhase.loading;
+    }
+    final gone =
+        phase == LibraryPhase.ready &&
+        recipes.isEmpty &&
+        knownName.isEmpty &&
+        !offline;
+
+    final header = CreatorHeader(
+      name: name,
+      avatarUrl: avatarUrl,
+      meta: creatorMeta(context, recipes),
+      isSelf: isSelf,
+      following: followed != null,
+      onFollow: () => _follow(name, avatarUrl),
+      onUnfollow: () => _unfollow(name),
+      onEditProfile: () => openAppDestination(context, AppDestinations.profile),
+    );
+
+    return RecipesLibraryPage(
+      title: name,
+      plain: true,
+      header: gone ? const SizedBox.shrink() : header,
+      collapseAfter: CreatorHeader.collapseAfter(context),
+      onRefresh: _load,
+      slivers: [
+        SliverToBoxAdapter(
+          child: gone
+              ? EmptyState(
+                  title: context.tr('recipe_lib_creator_gone'),
+                  actionLabel: context.tr('recipe_lib_to_recipes'),
+                  onAction: () => context.go(RoutePaths.recipes),
                 )
-              : CustomScrollView(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  slivers: [
-                    CupertinoSliverRefreshControl(
-                      onRefresh: _loadAuthorData,
-                    ),
-                    // Author Header
-                    SliverToBoxAdapter(
-                      child: Container(
-                          padding: const EdgeInsets.all(24),
-                          margin: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: cardColor,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Column(
-                            children: [
-                              // Profile Picture
-                              AuthorAvatar(
-                                name: displayName ?? '',
-                                avatarUrl: _authorAvatarUrl,
-                                size: 100,
-                                backgroundColor: AppColors.recipeInput(context),
-                                border: Border.all(color: borderColor, width: 2),
-                                initialStyle: TextStyle(
-                                  fontSize: 40,
-                                  fontWeight: FontWeight.bold,
-                                  color: textSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              
-                              // Author Name
-                              Text(
-                                displayName ?? context.tr('unknown_author'),
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: textPrimary,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 16),
-                              
-                              // Stats Row
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // Recipe count
-                                  _StatChip(
-                                    icon: Icons.restaurant_rounded,
-                                    label: _recipes.length == 1 
-                                      ? '1 ${context.tr('recipe_singular')}'
-                                      : '${_recipes.length} ${context.tr('recipes_plural')}',
-                                  ),
-                                  const SizedBox(width: 12),
-                                  
-                                  // Average rating
-                                  if (_recipes.any((r) => r.ratingCount > 0))
-                                    _StatChip(
-                                      icon: Icons.star_rounded,
-                                      label: context.tr('author_avg_rating', params: {
-                                        'rating': _authorAverageRating.toStringAsFixed(1),
-                                      }),
-                                      isRating: true,
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      
-                      // Section Title
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                          child: Text(
-                            '${context.tr('recipes_by')} ${displayName ?? context.tr('this_author')}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: textPrimary,
-                            ),
-                          ),
-                        ),
-                      ),
-                      
-                      // Recipe Grid
-                      SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        sliver: SliverGrid(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.75,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final recipe = _recipes[index];
-                              return _RecipeCard(recipe: recipe);
-                            },
-                            childCount: _recipes.length,
-                          ),
-                        ),
-                      ),
-                      
-                      // Bottom padding
-                      SliverPadding(
-                        padding: EdgeInsets.only(
-                          bottom: 100 + MediaQuery.paddingOf(context).bottom,
-                        ),
-                      ),
-                    ],
-                  ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isRating;
-
-  const _StatChip({
-    required this.icon,
-    required this.label,
-    this.isRating = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textPrimary = AppColors.textPrimary(context);
-    final borderColor = AppColors.recipeBorderColor(context);
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: borderColor),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon, 
-            size: 18, 
-            color: isRating ? AppColors.recipeStarColor(context) : textPrimary.withOpacity(0.7),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RecipeCard extends StatelessWidget {
-  final Recipe recipe;
-
-  const _RecipeCard({required this.recipe});
-
-  @override
-  Widget build(BuildContext context) {
-    final cardColor = AppColors.recipeSurface(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-
-    return GestureDetector(
-      onTap: () {
-        // Use /recipe/ route (outside ShellRoute) to avoid navigation conflicts
-        context.push('/recipe/${recipe.id}', extra: recipe);
-      },
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(12),
+              : CreatorRecipesSection(
+                  phase: phase,
+                  recipes: recipes,
+                  creatorName: name,
+                  sort: _sort,
+                  onSort: (s) => setState(() => _sort = s),
+                  offline: offline,
+                  failed: _failed && recipes.isEmpty,
+                  onRetry: _load,
+                  allergensOf: (r) =>
+                      libraryAllergenNames(context, r, allergies),
+                  // Top-level recipe route: this page sits outside the tab
+                  // shell today.
+                  onOpen: (r) => context.push('/recipe/${r.id}', extra: r),
+                ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Recipe Image
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: recipe.imageUrl,
-                    fit: BoxFit.cover,
-                    memCacheWidth: (MediaQuery.sizeOf(context).width /
-                            2 *
-                            MediaQuery.devicePixelRatioOf(context))
-                        .round(),
-                    placeholder: (context, url) => Container(
-                      color: AppColors.recipeInput(context),
-                      child: Center(
-                        child: CupertinoActivityIndicator(color: textSecondary, radius: 10),
-                      ),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: AppColors.recipeInput(context),
-                      child: Icon(Icons.restaurant, size: 48, color: textSecondary),
-                    ),
-                  ),
-                  // Time badge
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.schedule_rounded,
-                            size: 14,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${recipe.totalTimeMinutes} min',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Recipe Info
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    recipe.name,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: textPrimary,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  CompactStarRating(
-                    averageRating: recipe.averageRating,
-                    ratingCount: recipe.ratingCount,
-                    starSize: 12,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 }

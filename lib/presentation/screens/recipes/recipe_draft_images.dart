@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+// path_provider comes in through other plugins; pubspec.yaml (shared file)
+// should list it directly.
+// ignore: depend_on_referenced_packages
 import 'package:path_provider/path_provider.dart';
 
 /// Keeps recipe-draft photos in the app's documents folder.
@@ -20,7 +23,8 @@ class RecipeDraftImages {
     return dir;
   }
 
-  static String _fileName(String path) => path.split(Platform.pathSeparator).last;
+  static String _fileName(String path) =>
+      path.split(Platform.pathSeparator).last;
 
   /// Copies [source] into the drafts folder for [draftId] and returns the
   /// stored path. A file already stored there is returned unchanged.

@@ -1,263 +1,206 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shoply/core/constants/app_colors.dart';
+
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/services/recipe_service.dart';
-import 'package:shoply/presentation/screens/recipes/widgets/recipe_state_views.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_data.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_mine.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_scaffold.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/recipes_provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
+import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/route_paths.dart';
 
-/// Provider for user's own recipes - auto-dispose to ensure fresh data.
-/// Also reloads on refreshRecipeData (e.g. after editing a recipe).
-final myRecipesProvider = FutureProvider.autoDispose<List<Recipe>>((ref) async {
-  ref.watch(recipeRefreshTriggerProvider);
-  return RecipeService.instance.getMyRecipes();
-});
-
-/// Screen displaying recipes created by the current user
-class MyRecipesScreen extends ConsumerWidget {
+/// R-08 "Meine Rezepte" (Konzept 13 §10): what did I write, and how is it
+/// received?
+///
+/// Own recipes show at once from the catalogue and load in full behind it.
+/// "Bearbeiten" opens the editor with the recipe, "Löschen" asks first and
+/// removes the row at once (it comes back if the server says no). The plus
+/// in the toolbar writes a new recipe.
+class MyRecipesScreen extends ConsumerStatefulWidget {
   const MyRecipesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final recipesAsync = ref.watch(myRecipesProvider);
-    final textPrimary = AppColors.textPrimary(context);
-
-    return Scaffold(
-      backgroundColor: AppColors.recipeBg(context),
-      appBar: recipeListAppBar(
-        context,
-        title: Text(context.tr('my_recipes')),
-        onBack: () => context.pop(),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.add_rounded, color: textPrimary),
-            onPressed: () => context.push('/recipes/add'),
-          ),
-        ],
-      ),
-      body: recipesAsync.when(
-        loading: () => const Center(child: CupertinoActivityIndicator()),
-        error: (_, __) => RecipeErrorView(
-          onRetry: () => ref.invalidate(myRecipesProvider),
-        ),
-        data: (recipes) => recipes.isEmpty
-            ? _buildEmptyState(context)
-            : CustomScrollView(
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
-                ),
-                slivers: [
-                  CupertinoSliverRefreshControl(
-                    onRefresh: () async {
-                      ref.invalidate(myRecipesProvider);
-                    },
-                  ),
-                  SliverPadding(
-                    padding: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      top: 16,
-                      bottom: 100 + MediaQuery.paddingOf(context).bottom,
-                    ),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final recipe = recipes[index];
-                          return _MyRecipeCard(
-                            recipe: recipe,
-                            onTap: () => context.push('/recipes/${recipe.id}', extra: recipe),
-                            onEdit: () => context.push('/recipes/add', extra: {'recipeId': recipe.id}),
-                          );
-                        },
-                        childCount: recipes.length,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    final textSecondary = AppColors.textSecondary(context);
-    return RecipeEmptyView(
-      icon: Icons.restaurant_menu_rounded,
-      title: context.tr('no_my_recipes'),
-      subtitle: context.tr('create_recipe_hint'),
-      action: OutlinedButton.icon(
-        onPressed: () => context.push('/recipes/add'),
-        icon: Icon(Icons.add_rounded, color: AppColors.textPrimary(context), size: 20),
-        label: Text(
-          context.tr('create_recipe'),
-          style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w500),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: textSecondary.withValues(alpha: 0.2)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-    );
-  }
+  ConsumerState<MyRecipesScreen> createState() => _MyRecipesScreenState();
 }
 
-class _MyRecipeCard extends StatelessWidget {
-  final Recipe recipe;
-  final VoidCallback onTap;
-  final VoidCallback onEdit;
+class _MyRecipesScreenState extends ConsumerState<MyRecipesScreen>
+    with LibraryAvoContext {
+  List<Recipe>? _recipes;
+  bool _failed = false;
+  int _draftCount = 0;
 
-  const _MyRecipeCard({
-    required this.recipe,
-    required this.onTap,
-    required this.onEdit,
-  });
+  /// Deleted here and not confirmed by the server yet.
+  final Set<String> _deleting = {};
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final actions = ref.read(recipeLibraryActionsProvider);
+    try {
+      final (recipes, drafts) = await (
+        actions.myRecipes(),
+        actions.drafts(),
+      ).wait;
+      if (!mounted) return;
+      setState(() {
+        _draftCount = drafts.length;
+        // The service answers an empty list when it fails; offline that
+        // must not replace what is on screen.
+        if (recipes.isNotEmpty || !ref.read(isOfflineProvider)) {
+          _recipes = recipes;
+        }
+        _failed = false;
+      });
+    } catch (e) {
+      debugPrint('❌ [MY_RECIPES] Load failed: $e');
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  /// The loaded recipes, or until they arrive the own ones in the
+  /// catalogue.
+  List<Recipe> _source(List<Recipe>? catalog, String? userId) =>
+      _recipes ??
+      [
+        if (catalog != null && userId != null)
+          for (final r in catalog)
+            if (r.authorId == userId) r,
+      ];
+
+  List<Recipe> _visible(List<Recipe>? catalog, String? userId) => [
+    for (final r in _source(catalog, userId))
+      if (!_deleting.contains(r.id)) r,
+  ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  Future<void> _write() async {
+    await context.push('/recipes/add');
+    if (mounted) unawaited(_load());
+  }
+
+  Future<void> _edit(Recipe r) async {
+    await context.push(editRecipePath(r.id), extra: {'recipeId': r.id});
+    if (mounted) unawaited(_load());
+  }
+
+  Future<void> _openDrafts() async {
+    await context.push('/recipes/drafts');
+    if (mounted) unawaited(_load());
+  }
+
+  void _share(Recipe r, BuildContext anchor) {
+    final box = anchor.findRenderObject() as RenderBox?;
+    final origin = box == null || !box.hasSize
+        ? null
+        : box.localToGlobal(Offset.zero) & box.size;
+    unawaited(
+      ref.read(recipeLibraryActionsProvider).shareRecipe(r, origin: origin),
+    );
+  }
+
+  Future<bool> _confirmDelete(Recipe r) => showAvoConfirm(
+    context,
+    title: context.tr('recipe_lib_delete_title', params: {'name': r.name}),
+    message: context.tr('recipe_lib_delete_message'),
+    confirmLabel: context.tr('recipe_lib_delete'),
+  );
+
+  Future<void> _delete(Recipe r) async {
+    setState(() => _deleting.add(r.id));
+    // Let the row leave the tree first: a swiped row that came back in the
+    // same frame would still be dismissed.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final toastContext = context;
+    final done = context.tr('recipe_lib_deleted');
+    final failed = context.tr('recipe_lib_delete_failed');
+    try {
+      await ref.read(recipeLibraryActionsProvider).deleteRecipe(r.id);
+      if (!mounted) return;
+      final source = _source(
+        ref.read(libraryCatalogProvider),
+        ref.read(authUserIdProvider),
+      );
+      setState(() {
+        _recipes = [
+          for (final x in source)
+            if (x.id != r.id) x,
+        ];
+        _deleting.remove(r.id);
+      });
+      if (toastContext.mounted) AvoToast.show(toastContext, message: done);
+    } catch (e) {
+      debugPrint('❌ [MY_RECIPES] Delete failed: $e');
+      unawaited(AvoHaptics.error());
+      if (!mounted) return;
+      setState(() => _deleting.remove(r.id));
+      if (toastContext.mounted) AvoToast.show(toastContext, message: failed);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cardColor = AppColors.recipeSurface(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final borderColor = AppColors.recipeBorderColor(context);
+    syncAvoContext(context);
+    // The editor and the detail announce changes through this trigger.
+    ref.listen<int>(recipeRefreshTriggerProvider, (_, _) => _load());
+    final catalog = ref.watch(libraryCatalogProvider);
+    final userId = ref.watch(authUserIdProvider);
+    final offline = ref.watch(isOfflineProvider);
+    final recipes = _visible(catalog, userId);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor),
+    final LibraryPhase phase;
+    if (recipes.isNotEmpty || _recipes != null) {
+      phase = LibraryPhase.ready;
+    } else if (_failed) {
+      phase = LibraryPhase.error;
+    } else {
+      phase = LibraryPhase.loading;
+    }
+
+    return RecipesLibraryPage(
+      title: context.tr('recipe_lib_my_title'),
+      onRefresh: _load,
+      trailing: [
+        GlassIconButton(
+          icon: const AvoIcon(AvoIcons.plus),
+          semanticLabel: context.tr('recipe_lib_new_recipe_button'),
+          tinted: true,
+          onPressed: _write,
         ),
-        child: Row(
-          children: [
-            // Recipe Image
-            ClipRRect(
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
-              child: CachedNetworkImage(
-                imageUrl: recipe.imageUrl,
-                width: 100,
-                height: 100,
-                fit: BoxFit.cover,
-                memCacheWidth: (100 * MediaQuery.devicePixelRatioOf(context)).round(),
-                placeholder: (_, __) => Container(
-                  width: 100,
-                  height: 100,
-                  color: AppColors.recipeInput(context),
-                  child: const Icon(Icons.restaurant_rounded),
-                ),
-                errorWidget: (_, __, ___) => Container(
-                  width: 100,
-                  height: 100,
-                  color: AppColors.recipeInput(context),
-                  child: const Icon(Icons.restaurant_rounded),
-                ),
-              ),
-            ),
-            // Content
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      recipe.name,
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatDate(context, recipe.createdAt),
-                      style: TextStyle(
-                        color: textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(Icons.schedule_rounded, size: 14, color: textSecondary),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${recipe.totalTimeMinutes} min',
-                          style: TextStyle(color: textSecondary, fontSize: 12),
-                        ),
-                        if (recipe.averageRating > 0) ...[
-                          const SizedBox(width: 12),
-                          Icon(Icons.star_rounded, size: 14, color: AppColors.recipeStarColor(context)),
-                          const SizedBox(width: 3),
-                          Text(
-                            recipe.averageRating.toStringAsFixed(1),
-                            style: TextStyle(
-                              color: textPrimary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            ' (${recipe.ratingCount})',
-                            style: TextStyle(color: textSecondary, fontSize: 11),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Edit button
-            GestureDetector(
-              onTap: onEdit,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.recipeAccentColor(context).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.edit_rounded,
-                  color: AppColors.recipeAccentColor(context),
-                  size: 20,
-                ),
-              ),
-            ),
-            // Arrow
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Icon(
-                Icons.chevron_right_rounded,
-                color: textSecondary,
-              ),
-            ),
-          ],
+      ],
+      slivers: [
+        SliverToBoxAdapter(
+          child: MyRecipesContent(
+            phase: phase,
+            recipes: recipes,
+            now: DateTime.now(),
+            draftCount: _draftCount,
+            offline: offline,
+            failed: _failed && recipes.isEmpty,
+            onRetry: _load,
+            onOpen: (r) => context.push(RoutePaths.recipe(r.id), extra: r),
+            onEdit: _edit,
+            onShare: _share,
+            confirmDelete: _confirmDelete,
+            onDelete: _delete,
+            onOpenDrafts: _openDrafts,
+            onWrite: _write,
+          ),
         ),
-      ),
+      ],
     );
-  }
-
-  String _formatDate(BuildContext context, DateTime date) {
-    final days = DateTime.now().difference(date).inDays;
-    String ago(String key, int count) =>
-        context.tr(key, params: {'count': '$count'});
-
-    if (days == 0) return context.tr('today');
-    if (days == 1) return context.tr('yesterday');
-    if (days < 7) return ago('time_days_ago', days);
-    if (days < 30) return ago('time_weeks_ago', days ~/ 7);
-    if (days < 365) return ago('time_months_ago', days ~/ 30);
-    return ago('time_years_ago', days ~/ 365);
   }
 }

@@ -1,339 +1,126 @@
-import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:go_router/go_router.dart';
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_dimensions.dart';
-import 'package:shoply/data/models/recipe_draft.dart';
-import 'package:shoply/data/services/recipe_draft_service.dart';
-import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/presentation/screens/recipes/recipe_draft_images.dart';
+import 'dart:async';
 
-class RecipeDraftsScreen extends StatefulWidget {
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:shoply/core/design/design.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/data/models/recipe_draft.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_data.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_mine.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_scaffold.dart';
+import 'package:shoply/presentation/state/recipes_provider.dart';
+import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+
+/// R-09 "Entwürfe" (Konzept 13 §11, §19.5): where did I stop writing?
+///
+/// Drafts come from this device (they are not synced yet). Tapping a row
+/// is "Weiterschreiben"; discarding asks first, because it deletes the
+/// draft and its photo for good.
+class RecipeDraftsScreen extends ConsumerStatefulWidget {
   const RecipeDraftsScreen({super.key});
 
   @override
-  State<RecipeDraftsScreen> createState() => _RecipeDraftsScreenState();
+  ConsumerState<RecipeDraftsScreen> createState() => _RecipeDraftsScreenState();
 }
 
-class _RecipeDraftsScreenState extends State<RecipeDraftsScreen> {
-  final _draftService = RecipeDraftService();
-  List<RecipeDraft> _drafts = [];
-  bool _isLoading = true;
+class _RecipeDraftsScreenState extends ConsumerState<RecipeDraftsScreen>
+    with LibraryAvoContext {
+  List<RecipeDraft>? _drafts;
 
   @override
   void initState() {
     super.initState();
-    _loadDrafts();
+    unawaited(_load());
   }
 
-  Future<void> _loadDrafts() async {
-    setState(() => _isLoading = true);
-    final stored = await _draftService.getDrafts();
-    // Point each draft at where its photo lives now (the app container
-    // path changes across updates).
-    final drafts = await Future.wait(stored.map((draft) async {
-      final image = await RecipeDraftImages.resolve(draft.localImagePath);
-      return image?.path == draft.localImagePath
-          ? draft
-          : draft.copyWith(localImagePath: image?.path);
-    }));
-    if (mounted) {
+  Future<void> _load() async {
+    try {
+      final drafts = await ref.read(recipeLibraryActionsProvider).drafts();
+      if (mounted) setState(() => _drafts = drafts);
+    } catch (e) {
+      debugPrint('❌ [RECIPE_DRAFTS] Load failed: $e');
+      if (mounted) setState(() => _drafts ??= const []);
+    }
+  }
+
+  Future<void> _continue(RecipeDraft d) async {
+    await context.push(continueDraftPath(d.id), extra: {'draftId': d.id});
+    if (mounted) unawaited(_load());
+  }
+
+  Future<void> _write() async {
+    await context.push('/recipes/add');
+    if (mounted) unawaited(_load());
+  }
+
+  Future<bool> _confirmDiscard(RecipeDraft d) => showAvoConfirm(
+    context,
+    title: context.tr('recipe_lib_discard_title'),
+    message: context.tr(
+      'recipe_lib_discard_message',
+      params: {'name': draftTitle(context, d)},
+    ),
+    confirmLabel: context.tr('common_discard'),
+  );
+
+  Future<void> _discard(RecipeDraft d) async {
+    final before = _drafts ?? const <RecipeDraft>[];
+    final index = before.indexWhere((x) => x.id == d.id);
+    setState(
+      () => _drafts = [
+        for (final x in before)
+          if (x.id != d.id) x,
+      ],
+    );
+    // Let the row leave the tree first: a swiped row that came back in the
+    // same frame would still be dismissed.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final toastContext = context;
+    final done = context.tr('recipe_lib_discarded');
+    final failed = context.tr('action_failed');
+    try {
+      await ref.read(recipeLibraryActionsProvider).deleteDraft(d);
+      if (toastContext.mounted) AvoToast.show(toastContext, message: done);
+    } catch (e) {
+      debugPrint('❌ [RECIPE_DRAFTS] Discard failed: $e');
+      unawaited(AvoHaptics.error());
+      if (!mounted) return;
       setState(() {
-        _drafts = drafts;
-        _isLoading = false;
+        final list = [...?_drafts];
+        list.insert(index.clamp(0, list.length), d);
+        _drafts = list;
       });
-    }
-  }
-
-  Future<void> _deleteDraft(RecipeDraft draft) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.tr('delete_draft')),
-        content: Text(context.tr('delete_draft_confirm')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(context.tr('cancel')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(context.tr('delete')),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await _draftService.deleteDraft(draft.id);
-      await RecipeDraftImages.delete(draft.localImagePath);
-      _loadDrafts();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tr('draft_deleted'))),
-        );
-      }
+      if (toastContext.mounted) AvoToast.show(toastContext, message: failed);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = AppColors.recipeBg(context);
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final cardColor = AppColors.recipeSurface(context);
-    final borderColor = AppColors.recipeBorderColor(context);
+    syncAvoContext(context);
+    // A draft saved or published in the editor changes this list.
+    ref.listen<int>(recipeRefreshTriggerProvider, (_, _) => _load());
+    final drafts = _drafts;
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          context.tr('my_drafts'),
-          style: TextStyle(
-            color: textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+    return RecipesLibraryPage(
+      title: context.tr('recipe_lib_drafts_title'),
+      onRefresh: _load,
+      slivers: [
+        SliverToBoxAdapter(
+          child: RecipeDraftsContent(
+            phase: drafts == null ? LibraryPhase.loading : LibraryPhase.ready,
+            drafts: drafts ?? const [],
+            now: DateTime.now(),
+            onContinue: _continue,
+            confirmDiscard: _confirmDiscard,
+            onDiscard: _discard,
+            onWrite: _write,
           ),
         ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_rounded, color: textPrimary),
-          onPressed: () => context.pop(),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CupertinoActivityIndicator())
-          : _drafts.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.edit_note_rounded,
-                        size: 64,
-                        color: textSecondary.withOpacity(0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        context.tr('no_drafts'),
-                        style: TextStyle(
-                          color: textSecondary,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        context.tr('no_drafts_hint'),
-                        style: TextStyle(
-                          color: textSecondary.withOpacity(0.7),
-                          fontSize: 14,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(AppDimensions.paddingLarge),
-                  itemCount: _drafts.length,
-                  itemBuilder: (context, index) {
-                    final draft = _drafts[index];
-                    return _DraftCard(
-                      draft: draft,
-                      cardColor: cardColor,
-                      borderColor: borderColor,
-                      textPrimary: textPrimary,
-                      textSecondary: textSecondary,
-                      onTap: () async {
-                        // Navigate to edit draft
-                        await context.push('/recipes/add', extra: {'draftId': draft.id});
-                        // Reload drafts when returning
-                        _loadDrafts();
-                      },
-                      onDelete: () => _deleteDraft(draft),
-                    );
-                  },
-                ),
-    );
-  }
-}
-
-class _DraftCard extends StatelessWidget {
-  final RecipeDraft draft;
-  final Color cardColor;
-  final Color borderColor;
-  final Color textPrimary;
-  final Color textSecondary;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
-
-  const _DraftCard({
-    required this.draft,
-    required this.cardColor,
-    required this.borderColor,
-    required this.textPrimary,
-    required this.textSecondary,
-    required this.onTap,
-    required this.onDelete,
-  });
-
-  String _formatDate(DateTime date, BuildContext context) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    
-    if (diff.inMinutes < 60) {
-      return context.tr('minutes_ago').replaceAll('{count}', '${diff.inMinutes}');
-    } else if (diff.inHours < 24) {
-      return context.tr('hours_ago').replaceAll('{count}', '${diff.inHours}');
-    } else if (diff.inDays < 7) {
-      return context.tr('days_ago').replaceAll('{count}', '${diff.inDays}');
-    } else {
-      return '${date.day}.${date.month}.${date.year}';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage = draft.localImagePath != null && 
-                     File(draft.localImagePath!).existsSync();
-    
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: borderColor),
-          ),
-          child: Row(
-            children: [
-              // Image or placeholder
-              ClipRRect(
-                borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
-                child: SizedBox(
-                  width: 100,
-                  height: 100,
-                  child: hasImage
-                      ? Image.file(
-                          File(draft.localImagePath!),
-                          fit: BoxFit.cover,
-                        )
-                      : Container(
-                          color: borderColor,
-                          child: Icon(
-                            Icons.image_outlined,
-                            size: 32,
-                            color: textSecondary.withOpacity(0.5),
-                          ),
-                        ),
-                ),
-              ),
-              // Content
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        draft.name.isEmpty 
-                            ? context.tr('untitled_draft')
-                            : draft.name,
-                        style: TextStyle(
-                          color: draft.name.isEmpty 
-                              ? textSecondary 
-                              : textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          fontStyle: draft.name.isEmpty 
-                              ? FontStyle.italic 
-                              : FontStyle.normal,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        draft.description.isEmpty
-                            ? context.tr('no_description')
-                            : draft.description,
-                        style: TextStyle(
-                          color: textSecondary,
-                          fontSize: 13,
-                          fontStyle: draft.description.isEmpty 
-                              ? FontStyle.italic 
-                              : FontStyle.normal,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.access_time_rounded,
-                            size: 14,
-                            color: textSecondary.withOpacity(0.7),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatDate(draft.updatedAt, context),
-                            style: TextStyle(
-                              color: textSecondary.withOpacity(0.7),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const Spacer(),
-                          // Completion indicator
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: draft.isComplete
-                                  ? AppColors.recipeGreenColor(context).withOpacity(0.15)
-                                  : AppColors.recipeAccentColor(context).withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              draft.isComplete
-                                  ? context.tr('ready_to_publish')
-                                  : context.tr('incomplete'),
-                              style: TextStyle(
-                                color: draft.isComplete
-                                    ? AppColors.recipeGreenColor(context)
-                                    : AppColors.recipeAccentColor(context),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // Delete button
-              IconButton(
-                icon: Icon(
-                  Icons.delete_outline_rounded,
-                  color: textSecondary,
-                ),
-                onPressed: onDelete,
-              ),
-            ],
-          ),
-        ),
-      ),
+      ],
     );
   }
 }
