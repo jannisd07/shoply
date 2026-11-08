@@ -1,337 +1,533 @@
+/// The offer providers behind the list slots, the add field, Home and the
+/// weekly offers (Kap. 12). Every one of them is empty, and asks the offers
+/// source nothing, without a real region ([regionProvider]), while offers
+/// are unavailable ([offersAvailableProvider]: module or kill switch) or
+/// hidden on the list. Offers only ever come from one market, the list's
+/// confirmed one ([storeForListProvider]): no market comparison, no basket
+/// total, no ranking of stores (rule 2).
+library;
+
+import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shoply/data/models/home_price_highlight.dart';
-import 'package:shoply/data/models/nearby_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
-import 'package:shoply/data/services/home_price_comparison_cache_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
-import 'package:shoply/data/services/personalized_deals_service.dart';
-import 'package:shoply/data/services/store_locator_service.dart';
-import 'package:shoply/data/services/user_location_service.dart';
+import 'package:shoply/data/services/offer_savings.dart';
+import 'package:shoply/data/services/recipe_offer_service.dart';
+import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
+import 'package:shoply/presentation/providers/region_provider.dart';
+import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 
-/// The user's real zip code (GPS or manual override), or null if unknown.
-final userZipCodeProvider = FutureProvider<String?>((ref) async {
-  return UserLocationService.instance.getZipCode();
-});
+/// A typed search asks the source only after this pause (Kap. 12, rule 10).
+const Duration offerSearchDebounce = Duration(milliseconds: 300);
 
-/// Always-usable zip: real location when known, else a nationwide fallback
-/// so search suggestions still work on the simulator / without permission.
-final effectiveZipProvider = FutureProvider<ZipInfo>((ref) async {
-  return UserLocationService.instance.getZipInfo();
-});
+/// The offers source; override in tests.
+final offerPriceServiceProvider =
+    Provider<OfferPriceService>((ref) => OfferPriceService.instance);
 
-/// Raw GPS coordinates, or null when unavailable (permission denied, GPS
-/// off, or a manual-zip-only user). Unlike the zip there's no fallback —
-/// distance info is simply omitted when this is null.
-final userCoordinatesProvider = FutureProvider<UserCoordinates?>((ref) async {
-  return UserLocationService.instance.getCoordinates();
-});
+/// The 6-h offer snapshots of the lists; override in tests (clock).
+final listOfferSyncProvider = Provider<ListOfferSync>(
+  (ref) => ListOfferSync(ref.watch(offerPriceServiceProvider)),
+);
 
-/// Real nearby supermarket branches (OpenStreetMap), for showing an actual
-/// distance next to each store in the comparison sheet. Empty when location
-/// is unavailable or the lookup fails — never blocks the price comparison,
-/// which works from the zip code alone.
-final nearbyStoresProvider = FutureProvider.autoDispose<List<NearbyStore>>((ref) async {
-  final coords = await ref.watch(userCoordinatesProvider.future);
-  if (coords == null) return const [];
-  return StoreLocatorService.instance.findNearbyStores(
-    latitude: coords.latitude,
-    longitude: coords.longitude,
+/// The items of a list as the offer providers see them; override in tests.
+final offerListItemsProvider =
+    Provider.autoDispose.family<List<ShoppingItemModel>, String>(
+  (ref, listId) =>
+      ref.watch(itemsNotifierProvider(listId)).valueOrNull ?? const [],
+);
+
+// ---------------------------------------------------------------------------
+// Typed search
+// ---------------------------------------------------------------------------
+
+/// Offers of every market for a typed search, in the order of the source
+/// (relevance), for the weekly offers search, which groups them by market
+/// and never sorts by price. From 2 characters, after [offerSearchDebounce];
+/// nothing is asked when the search was left (typed on) meanwhile.
+final offerSearchAllProvider =
+    FutureProvider.autoDispose.family<List<StoreOffer>, String>(
+  (ref, query) async {
+    final service = ref.watch(offerPriceServiceProvider);
+    final region = ref.watch(regionProvider);
+    final left = _watchLeft(ref);
+    if (!ref.watch(offersAvailableProvider) || region == null) return const [];
+    if (!await _debounce(query, left)) return const [];
+    return service.searchOffers(query, zipCode: region.zip);
+  },
+);
+
+/// What [offerSuggestionsProvider] is asked for. [listId] is null only
+/// while Teil A still calls `OfferSuggestionsBar(query:, onSelect:)`.
+typedef OfferSuggestionsRequest = ({String? listId, String query});
+
+/// Offers for the text typed in a list's add field: only the list's market,
+/// in the order of the source; similar products of that market only when
+/// it has no exact hit. Empty without a list, without a confirmed market,
+/// without a region, or while offers are off or hidden on the list.
+final offerSuggestionsProvider = FutureProvider.autoDispose
+    .family<List<StoreOffer>, OfferSuggestionsRequest>((ref, request) async {
+  final listId = request.listId;
+  if (listId == null) return const [];
+  final service = ref.watch(offerPriceServiceProvider);
+  final region = ref.watch(regionProvider);
+  final chainId = ref.watch(storeForListProvider(listId))?.id;
+  final left = _watchLeft(ref);
+  final visible = _watchVisibleOn(ref, listId);
+  if (region == null || chainId == null) return const [];
+  if (!await visible) return const [];
+  if (!await _debounce(request.query, left)) return const [];
+  return service.searchOffers(
+    request.query,
+    zipCode: region.zip,
+    chainId: chainId,
   );
 });
 
-/// All current offers for a live search query, unfiltered by retailer
-/// (used both for the top-3 suggestions and for savings stats).
-final offerSearchAllProvider = FutureProvider.autoDispose
-    .family<List<StoreOffer>, String>((ref, query) async {
-  if (query.trim().length < 2) return const [];
-  final zipInfo = await ref.watch(effectiveZipProvider.future);
-  final zip = zipInfo.zipCode;
+/// True once every listener left the provider (the person typed on).
+ValueGetter<bool> _watchLeft(Ref ref) {
+  var left = false;
+  ref.onCancel(() => left = true);
+  ref.onResume(() => left = false);
+  return () => left;
+}
 
-  return OfferPriceService.instance.searchOffers(query, zipCode: zip);
-});
+/// Waits [offerSearchDebounce]; false when [query] is too short or the
+/// search was [left] meanwhile.
+Future<bool> _debounce(String query, ValueGetter<bool> left) async {
+  if (query.trim().length < 2) return false;
+  await Future<void>.delayed(offerSearchDebounce);
+  return !left();
+}
 
-/// Top offers for a live search query (used by the add-bar suggestions).
-final offerSuggestionsProvider = FutureProvider.autoDispose
-    .family<List<StoreOffer>, String>((ref, query) async {
-  final offers = await ref.watch(offerSearchAllProvider(query).future);
+/// Whether offers may show on [listId]: available (module and kill switch)
+/// and not hidden there. Waits for the saved "hide" choices, so a hidden
+/// list never asks the source.
+Future<bool> _watchVisibleOn(Ref ref, String listId) async {
+  if (!ref.watch(offersAvailableProvider)) return false;
+  final hidden = await _followHiddenLists(ref);
+  return !hidden.contains(listId);
+}
 
-  // Relevance: offers whose product name actually contains the query rank
-  // above loose matches (so "Milch" doesn't surface "Sahne Joghurt" first),
-  // then cheapest first.
-  final q = query.trim().toLowerCase();
-  final sorted = List<StoreOffer>.from(offers)
-    ..sort((a, b) {
-      final aMatch = a.productName.toLowerCase().contains(q) ? 0 : 1;
-      final bMatch = b.productName.toLowerCase().contains(q) ? 0 : 1;
-      if (aMatch != bMatch) return aMatch - bMatch;
-      return a.price.compareTo(b.price);
+/// The ids of the lists with hidden offers, once the saved choices are
+/// loaded. A later change rebuilds the provider; the first load does not,
+/// so a pending answer is never thrown away mid-request.
+Future<Set<String>> _followHiddenLists(Ref ref) {
+  ref.listen<Set<String>?>(hiddenOfferListsProvider, (previous, next) {
+    if (previous != null) ref.invalidateSelf();
+  });
+  final ids = ref.read(hiddenOfferListsProvider);
+  if (ids != null) return Future.value(ids);
+  return ref
+      .read(hiddenOfferListsProvider.notifier)
+      .stream
+      .firstWhere((ids) => ids != null)
+      .then((ids) => ids!);
+}
+
+// ---------------------------------------------------------------------------
+// Offers of a list (6-h snapshot of the list's market)
+// ---------------------------------------------------------------------------
+
+/// The offers found for a list's items at its market around one zip code.
+@immutable
+class ListOfferSnapshot {
+  const ListOfferSnapshot({
+    required this.chainId,
+    required this.zip,
+    required this.fetchedAt,
+    required this.offersByName,
+    this.complete = true,
+  });
+
+  final String chainId;
+  final String zip;
+  final DateTime fetchedAt;
+
+  /// Offer per item name (trimmed, lower case); names without one are
+  /// missing.
+  final Map<String, StoreOffer> offersByName;
+
+  /// False when a search failed; such a snapshot is tried again sooner and
+  /// never stored.
+  final bool complete;
+
+  /// The offer for an item called [name], if it was on offer.
+  StoreOffer? offerFor(String name) => offersByName[offerNameKey(name)];
+
+  Map<String, Object?> toJson() => {
+        'chainId': chainId,
+        'zip': zip,
+        'fetchedAt': fetchedAt.toIso8601String(),
+        'offers': {
+          for (final entry in offersByName.entries)
+            entry.key: {
+              'offer': entry.value.toJson(),
+              'broad': entry.value.isBroadMatch,
+            },
+        },
+      };
+
+  static ListOfferSnapshot? fromJson(Map<String, dynamic> json) {
+    final chainId = json['chainId'] as String?;
+    final zip = json['zip'] as String?;
+    final fetchedAt = DateTime.tryParse(json['fetchedAt'] as String? ?? '');
+    final offers = json['offers'] as Map<String, dynamic>?;
+    if (chainId == null || zip == null || fetchedAt == null || offers == null) {
+      return null;
+    }
+    final byName = <String, StoreOffer>{};
+    for (final entry in offers.entries) {
+      final value = entry.value as Map<String, dynamic>;
+      final offer =
+          StoreOffer.fromJson(value['offer'] as Map<String, dynamic>);
+      if (offer == null) continue;
+      byName[entry.key] = value['broad'] == true ? offer.asBroadMatch() : offer;
+    }
+    return ListOfferSnapshot(
+      chainId: chainId,
+      zip: zip,
+      fetchedAt: fetchedAt,
+      offersByName: byName,
+    );
+  }
+}
+
+/// The key of an item name in a [ListOfferSnapshot].
+String offerNameKey(String name) => name.trim().toLowerCase();
+
+/// Fetches the offers of a list's items at the list's market at most every
+/// [maxAge] (Kap. 12, rule 10), keeps the result on the device across app
+/// starts and shares one fetch between concurrent callers. Checking off and
+/// adding items count locally from the snapshot, without a request.
+class ListOfferSync {
+  ListOfferSync(this._service, {DateTime Function() now = DateTime.now})
+      : _now = now;
+
+  final OfferPriceService _service;
+  final DateTime Function() _now;
+
+  /// How long a complete snapshot of a list stays current.
+  static const maxAge = Duration(hours: 6);
+
+  /// How long a snapshot with a failed search stays before the next try.
+  static const retryAfter = Duration(minutes: 30);
+
+  /// At most this many item names per list are looked up.
+  static const maxItems = 25;
+
+  /// The names of [itemNames] that are looked up: trimmed, at least two
+  /// characters ("Ei" counts), each once (first spelling wins), pantry
+  /// staples included, at most [maxItems], in list order.
+  static List<String> namesToCheck(Iterable<String> itemNames) {
+    final seen = <String>{};
+    final names = <String>[];
+    for (final name in itemNames) {
+      final trimmed = name.trim();
+      if (trimmed.length < 2 || !seen.add(offerNameKey(trimmed))) continue;
+      names.add(trimmed);
+      if (names.length == maxItems) break;
+    }
+    return names;
+  }
+
+  /// Snapshots kept in memory, least recently used out.
+  static const _memorySize = 200;
+  static const _prefsPrefix = 'offers_list_snapshot_v1:';
+
+  final LinkedHashMap<String, ListOfferSnapshot> _memory = LinkedHashMap();
+  final Map<String, Future<ListOfferSnapshot>> _inFlight = {};
+
+  /// The snapshot of [listId] at [chainId] around [zip] for [itemNames];
+  /// fetched only when there is none for that market and region or it is
+  /// older than [maxAge].
+  Future<ListOfferSnapshot> sync({
+    required String listId,
+    required String chainId,
+    required String zip,
+    required List<String> itemNames,
+  }) async {
+    final cached = _memory.remove(listId) ?? await _load(listId);
+    if (cached != null) {
+      _remember(listId, cached);
+      if (_isCurrent(cached, chainId, zip)) return cached;
+    }
+    final key = '$listId|$chainId|$zip';
+    // Block body: an arrow would return the removed future, i.e. this very
+    // future, and whenComplete would wait on itself forever.
+    return _inFlight[key] ??=
+        _fetch(listId, chainId, zip, itemNames).whenComplete(() {
+      _inFlight.remove(key);
     });
-
-  // Return *all* matches, but lead with one offer per retailer so the rows
-  // the user sees without scrolling are real alternatives rather than three
-  // variants from the same store. Everything else — further sorts from the
-  // same market, other pack sizes — follows underneath, reachable by
-  // scrolling inside the suggestion card.
-  final result = <StoreOffer>[];
-  final seenRetailers = <String>{};
-  for (final offer in sorted) {
-    if (seenRetailers.add(offer.retailerUniqueName)) result.add(offer);
-  }
-  final leadIds = result.map((o) => o.id).toSet();
-  for (final offer in sorted) {
-    if (!leadIds.contains(offer.id)) result.add(offer);
-  }
-  return result;
-});
-
-/// Compares the open items of a list across all nearby stores.
-final basketComparisonProvider = FutureProvider.autoDispose
-    .family<BasketComparison?, String>((ref, listId) async {
-  final zipInfo = await ref.watch(effectiveZipProvider.future);
-  final zip = zipInfo.zipCode;
-
-  // Watch only the open names, so edits that do not change them (prices,
-  // notes, reorders) do not re-run the comparison.
-  final namesKey = ref.watch(itemsNotifierProvider(listId).select((s) => [
-        for (final i in s.valueOrNull ?? const <ShoppingItemModel>[])
-          if (!i.isChecked && i.name.trim().length >= 2) i.name.trim(),
-      ].take(25).join('\n'))); // keep request volume sane for very long lists
-  final names = namesKey.isEmpty ? const <String>[] : namesKey.split('\n');
-
-  if (names.isEmpty) {
-    return BasketComparison(
-        zipCode: zip, comparableItemCount: 0, stores: const []);
   }
 
-  // item name → cheapest offer per retailer. Fetched concurrently (the
-  // service's internal throttle still spaces out actual request starts) —
-  // sequential awaits here would mean ~1s per item, i.e. 20+ seconds for a
-  // full basket before showing any comparison at all.
-  final fetched = await Future.wait(names.map((name) async {
-    final result =
-        await OfferPriceService.instance.cheapestPerRetailer(name, zipCode: zip);
-    return MapEntry(name, result);
-  }));
-  final perItem = <String, Map<String, StoreOffer>>{
-    for (final entry in fetched) entry.key: entry.value,
-  };
-
-  // Items that at least one store offers form the comparable basket; for each
-  // such item remember the cheapest price anywhere (the "fill" price used when
-  // a store doesn't carry it, so every store's total covers the same basket).
-  final comparableItems = names.where((n) {
-    final m = perItem[n];
-    return m != null && m.isNotEmpty;
-  }).toList();
-
-  final fillPrice = <String, double>{};
-  for (final name in comparableItems) {
-    fillPrice[name] = perItem[name]!
-        .values
-        .map((o) => o.price)
-        .reduce((a, b) => a < b ? a : b);
+  bool _isCurrent(ListOfferSnapshot snapshot, String chainId, String zip) {
+    if (snapshot.chainId != chainId || snapshot.zip != zip) return false;
+    final age = _now().difference(snapshot.fetchedAt);
+    return age < (snapshot.complete ? maxAge : retryAfter);
   }
 
-  final retailerNames = <String, String>{};
-  for (final matches in perItem.values) {
-    for (final offer in matches.values) {
-      retailerNames[offer.retailerUniqueName] = offer.retailerName;
+  Future<ListOfferSnapshot> _fetch(
+    String listId,
+    String chainId,
+    String zip,
+    List<String> itemNames,
+  ) async {
+    final names = namesToCheck(itemNames);
+    var complete = true;
+    final found = await Future.wait(names.map((name) async {
+      final offers =
+          await _service.trySearchOffers(name, zipCode: zip, chainId: chainId);
+      if (offers == null) complete = false;
+      final offer = RecipeOfferService.pickRelevantOffer(
+        name,
+        offers ?? const [],
+        chainId: chainId,
+      );
+      return MapEntry(offerNameKey(name), offer);
+    }));
+    final snapshot = ListOfferSnapshot(
+      chainId: chainId,
+      zip: zip,
+      fetchedAt: _now(),
+      offersByName: {
+        for (final entry in found)
+          if (entry.value != null) entry.key: entry.value!,
+      },
+      complete: complete,
+    );
+    debugPrint('✅ [OFFERS] List offers: ${snapshot.offersByName.length}/'
+        '${names.length} items on offer at $chainId');
+    _remember(listId, snapshot);
+    if (complete) await _save(listId, snapshot);
+    return snapshot;
+  }
+
+  void _remember(String listId, ListOfferSnapshot snapshot) {
+    _memory.remove(listId);
+    _memory[listId] = snapshot;
+    while (_memory.length > _memorySize) {
+      _memory.remove(_memory.keys.first);
     }
   }
 
-  final stores = retailerNames.entries.map((retailer) {
-    final matches = comparableItems
-        .map((name) => BasketItemMatch(
-              itemName: name,
-              offer: perItem[name]?[retailer.key],
-            ))
-        .toList();
-    // Comparable total: own offer where available, else cheapest-anywhere fill.
-    final comparableTotal = comparableItems.fold<double>(0, (sum, name) {
-      final own = perItem[name]?[retailer.key];
-      return sum + (own?.price ?? fillPrice[name] ?? 0);
-    });
-    return StoreBasketResult(
-      retailerName: retailer.value,
-      retailerUniqueName: retailer.key,
-      matches: matches,
-      comparableTotal: comparableTotal,
-    );
-  }).toList();
-
-  return BasketComparison(
-    zipCode: zip,
-    comparableItemCount: comparableItems.length,
-    stores: stores,
-  );
-});
-
-/// Minimum open items a list needs before a home-screen comparison is worth
-/// computing at all — avoids a weak claim based on 1-2 items.
-const _homeHighlightMinItems = 3;
-
-/// Minimum comparable (matched) items and savings before the highlight is
-/// worth surfacing on the home screen — a stricter bar than the in-list
-/// comparison sheet, since this is a proactive claim, not something the
-/// user asked to see.
-const _homeHighlightMinMatched = 3;
-const _homeHighlightMinSavings = 1.5;
-
-/// "This list is €X cheaper at [store] than [store]" — Feature 8's home
-/// screen surface for Feature 1's price-comparison infra. Checks up to 5
-/// recently-updated lists cheaply (open-item counts, then one query for
-/// their open items), but only ever runs the expensive live
-/// [basketComparisonProvider] computation for the first one that both
-/// qualifies and has no fresh cache entry — so a home-screen visit costs at
-/// most one basket comparison, not one per list. Cached per exact
-/// (list, items, zip) signature for [HomePriceComparisonCacheService.cacheTtl]
-/// so repeat visits with an unchanged list don't re-trigger it at all.
-/// Renders nothing (null) when there's no candidate list, no real zip, or no
-/// comparison worth showing.
-final homePriceHighlightProvider =
-    FutureProvider.autoDispose<HomePriceHighlight?>((ref) async {
-  final zipInfo = await ref.watch(effectiveZipProvider.future);
-  if (!zipInfo.isReal) return null;
-
-  final candidates = _recentListsWithOpenItems(ref,
-          scanFirst: 5, minOpenItems: _homeHighlightMinItems)
-      .toList();
-  final itemsByList = await _openItemsByList(ref, candidates);
-
-  for (final list in candidates) {
-    final openNames = <String>{
-      for (final i in itemsByList[list.id] ?? const <ShoppingItemModel>[])
-        if (i.name.trim().length >= 2) i.name.trim(),
-    }.toList()
-      ..sort();
-    if (openNames.length < _homeHighlightMinItems) continue;
-
-    final signature = '${list.id}|${zipInfo.zipCode}|${openNames.join(',')}';
-    final cached = await HomePriceComparisonCacheService.instance.load(signature);
-    final highlight = cached.isHit
-        ? cached.highlight
-        : await _computeAndCacheHighlight(
-            ref,
-            listId: list.id,
-            listName: list.name,
-            signature: signature,
-            totalItemCount: openNames.length,
-          );
-
-    if (highlight == null) return null;
-    final dismissed =
-        await HomePriceComparisonCacheService.instance.isDismissed(signature);
-    return dismissed ? null : highlight;
+  Future<ListOfferSnapshot?> _load(String listId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_prefsPrefix$listId');
+      if (raw == null) return null;
+      return ListOfferSnapshot.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('⚠️ [OFFERS] List offers not read: $e');
+      return null;
+    }
   }
-  return null;
+
+  Future<void> _save(String listId, ListOfferSnapshot snapshot) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '$_prefsPrefix$listId',
+        jsonEncode(snapshot.toJson()),
+      );
+    } catch (e) {
+      debugPrint('⚠️ [OFFERS] List offers not saved: $e');
+    }
+  }
+}
+
+/// The 6-h offer snapshot of [listId] at its confirmed market; null without
+/// a market, a region, open items, or while offers are off or hidden on the
+/// list. Follows item changes without a request while the snapshot is
+/// current: new offers come with the next sync, when the list is opened
+/// again (K12-02).
+final listOfferSnapshotProvider =
+    FutureProvider.autoDispose.family<ListOfferSnapshot?, String>(
+  (ref, listId) async {
+    final sync = ref.watch(listOfferSyncProvider);
+    final region = ref.watch(regionProvider);
+    final chainId = ref.watch(storeForListProvider(listId))?.id;
+    final namesKey = ref.watch(
+      offerListItemsProvider(listId).select(_openNamesKey),
+    );
+    final visible = _watchVisibleOn(ref, listId);
+    if (region == null || chainId == null || namesKey.isEmpty) return null;
+    if (!await visible) return null;
+    return sync.sync(
+      listId: listId,
+      chainId: chainId,
+      zip: region.zip,
+      itemNames: namesKey.split('\n'),
+    );
+  },
+);
+
+String _openNamesKey(List<ShoppingItemModel> items) => [
+      for (final item in items)
+        if (!item.isChecked && item.name.trim().length >= 2) item.name.trim(),
+    ].join('\n');
+
+/// The current offer of the list's market per open item id of [listId];
+/// empty while offers may not show there.
+final listItemOffersProvider =
+    Provider.autoDispose.family<Map<String, StoreOffer>, String>((ref, listId) {
+  final snapshot = ref.watch(listOfferSnapshotProvider(listId)).valueOrNull;
+  final chainId = ref.watch(storeForListProvider(listId))?.id;
+  if (!ref.watch(offersVisibleForListProvider(listId)) ||
+      ref.watch(regionProvider) == null ||
+      snapshot == null ||
+      snapshot.chainId != chainId) {
+    return const {};
+  }
+  final items = ref.watch(offerListItemsProvider(listId));
+  return {
+    for (final item in items)
+      if (!item.isChecked)
+        if (snapshot.offerFor(item.name) case final offer?)
+          if (offer.isValidNow) item.id: offer,
+  };
 });
 
-Future<HomePriceHighlight?> _computeAndCacheHighlight(
-  Ref ref, {
-  required String listId,
-  required String listName,
-  required String signature,
-  required int totalItemCount,
-}) async {
-  final comparison = await ref.watch(basketComparisonProvider(listId).future);
-  final highlight = _deriveHomeHighlight(
-    comparison,
-    listId: listId,
-    listName: listName,
-    signature: signature,
-    totalItemCount: totalItemCount,
+/// The key of [itemOfferProvider].
+typedef ItemOfferKey = ({String listId, String itemId});
+
+/// The current offer of the list's market for one item (`ItemOfferBadge`,
+/// `ItemOfferCard`); null for a checked item or without one.
+final itemOfferProvider =
+    Provider.autoDispose.family<StoreOffer?, ItemOfferKey>(
+  (ref, key) => ref.watch(
+    listItemOffersProvider(key.listId).select((offers) => offers[key.itemId]),
+  ),
+);
+
+/// "4 von 11 Artikeln diese Woche bei Lidl im Angebot, ca. 3,20 € gespart,
+/// in deiner Region" for [listId] (`ListOfferSummary`); null when nothing
+/// is on offer or offers may not show.
+final listOfferSummaryProvider =
+    Provider.autoDispose.family<OfferSummary?, String>((ref, listId) {
+  final offers = ref.watch(listItemOffersProvider(listId));
+  final store = ref.watch(storeForListProvider(listId));
+  if (offers.isEmpty || store == null) return null;
+  return summarizeListOffers(
+    chainId: store.id,
+    openItems: ref.watch(offerListItemsProvider(listId)),
+    offersByItemId: offers,
+    realRegion: ref.watch(regionProvider) != null,
   );
-  await HomePriceComparisonCacheService.instance.save(signature, highlight);
-  return highlight;
-}
+});
 
-HomePriceHighlight? _deriveHomeHighlight(
-  BasketComparison? comparison, {
-  required String listId,
-  required String listName,
-  required String signature,
-  required int totalItemCount,
-}) {
-  if (comparison == null) return null;
-  if (comparison.comparableItemCount < _homeHighlightMinMatched) return null;
+/// "2 Angebote" on the cover of a list card (`ListOfferCountBadge`).
+final listOfferCountProvider = Provider.autoDispose.family<int, String>(
+  (ref, listId) => ref.watch(listOfferSummaryProvider(listId))?.matched ?? 0,
+);
 
-  final ranked = comparison.ranked.where((s) => s.matchedCount > 0).toList();
-  if (ranked.length < 2) return null;
+// ---------------------------------------------------------------------------
+// Deals of the lists (Home, weekly offers "Deine Listen")
+// ---------------------------------------------------------------------------
 
-  final cheapest = ranked.first;
-  // Compare against the next-best real alternative, not the priciest
-  // outlier — a fair "X cheaper here than there" claim, not a cherry-picked
-  // worst case.
-  final pricier = ranked[1];
-  final savings = pricier.comparableTotal - cheapest.comparableTotal;
-  if (savings < _homeHighlightMinSavings) return null;
+/// How many of the most recently changed lists with open items the deals
+/// look at, so a Home visit never fans out to every list.
+const _dealsMaxLists = 2;
 
-  return HomePriceHighlight(
-    listId: listId,
-    listName: listName,
-    cheaperRetailerName: cheapest.retailerName,
-    pricierRetailerName: pricier.retailerName,
-    cheaperTotal: cheapest.comparableTotal,
-    savings: savings,
-    matchedItemCount: comparison.comparableItemCount,
-    totalItemCount: totalItemCount,
-    signature: signature,
-  );
-}
+/// The ids of the [_dealsMaxLists] most recently changed lists with open
+/// items; override in tests.
+final offerDealListIdsProvider = Provider.autoDispose<List<String>>(
+  (ref) => [
+    for (final list in _recentListsWithOpenItems(ref, minOpenItems: 1)
+        .take(_dealsMaxLists))
+      list.id,
+  ],
+);
 
-/// How many of the user's most-recently-updated lists to pool open items
-/// from for the personalized deals screen — bounded so a home-screen visit
-/// never fans out to every list the user has.
-const _dealsMaxListsScanned = 2;
+/// The open items of the lists in [listIds] ('|'-joined), in one query;
+/// override in tests. Plain repository reads, not `itemsNotifierProvider`,
+/// which would keep a realtime subscription alive per list scanned.
+final offerDealItemsProvider =
+    FutureProvider.autoDispose.family<List<ShoppingItemModel>, String>(
+  (ref, listIds) async {
+    final items = await ref
+        .read(itemRepositoryProvider)
+        .getItemsForLists(listIds.split('|'));
+    return [
+      for (final item in items)
+        if (!item.isChecked) item,
+    ];
+  },
+);
 
-/// Real current offers matching items already on the user's shopping lists —
-/// the data behind the home screen's "Angebote" entry point and the deals
-/// screen's default (no-search) view. Empty (never null) when there are no
-/// lists, no open items, or nothing currently on offer. Uses plain repository
-/// reads to scan candidate lists (not `itemsNotifierProvider`, which would
-/// leak a live realtime subscription per list scanned past — same reasoning
-/// as [homePriceHighlightProvider]).
+/// Offers on items of the user's lists, each from its list's market, in the
+/// order of the lists and their items (never by discount or price). Shares
+/// the 6-h snapshots with the list screen. Empty without a region, while
+/// offers are off, and for lists without a confirmed market or with hidden
+/// offers.
 final personalizedDealsProvider =
     FutureProvider.autoDispose<List<RecipeIngredientOffer>>((ref) async {
-  final zipInfo = await ref.watch(effectiveZipProvider.future);
-  final candidates = _recentListsWithOpenItems(ref, minOpenItems: 1)
-      .take(_dealsMaxListsScanned)
-      .toList();
-  final itemsByList = await _openItemsByList(ref, candidates);
-  final pooled = [
-    for (final list in candidates) ...?itemsByList[list.id],
-  ];
+  final sync = ref.watch(listOfferSyncProvider);
+  final region = ref.watch(regionProvider);
+  if (!ref.watch(offersAvailableProvider) || region == null) return const [];
+  final markets = <String, String>{
+    for (final listId in ref.watch(offerDealListIdsProvider))
+      if (ref.watch(storeForListProvider(listId))?.id case final chainId?)
+        listId: chainId,
+  };
+  if (markets.isEmpty) return const [];
+  final hiddenLists = _followHiddenLists(ref);
+  final itemsOfLists =
+      ref.watch(offerDealItemsProvider(markets.keys.join('|')).future);
+  final hidden = await hiddenLists;
+  final items = await itemsOfLists;
 
-  final names = PersonalizedDealsService.selectCandidateNames(pooled);
-  if (names.isEmpty) return const [];
-
-  return PersonalizedDealsService.instance
-      .getMatches(names: names, zipCode: zipInfo.zipCode);
+  final deals = <RecipeIngredientOffer>[];
+  final seen = <String>{};
+  for (final MapEntry(key: listId, value: chainId) in markets.entries) {
+    if (hidden.contains(listId)) continue;
+    final openItems = [
+      for (final item in items)
+        if (item.listId == listId) item,
+    ];
+    if (openItems.isEmpty) continue;
+    final snapshot = await sync.sync(
+      listId: listId,
+      chainId: chainId,
+      zip: region.zip,
+      itemNames: [for (final item in openItems) item.name],
+    );
+    for (final item in openItems) {
+      final offer = snapshot.offerFor(item.name);
+      if (offer == null || !offer.isValidNow) continue;
+      if (!seen.add(offerNameKey(item.name))) continue;
+      deals.add(RecipeIngredientOffer.fromStoreOffer(item.name.trim(), offer));
+    }
+  }
+  return deals;
 });
 
-
-/// The user's lists, most recently updated first, cut to the first
-/// [scanFirst] (when given) and then to those with at least [minOpenItems]
-/// unchecked items.
+/// The user's lists, most recently updated first, with at least
+/// [minOpenItems] unchecked items.
 ///
 /// Watches only that selection (ids and open counts), not the whole lists
 /// value, so a realtime reload that changes nothing relevant does not re-run
-/// the network-heavy home price surfaces.
+/// the deals.
 List<ShoppingListModel> _recentListsWithOpenItems(
   Ref ref, {
-  int? scanFirst,
   required int minOpenItems,
 }) {
   List<ShoppingListModel> pick(List<ShoppingListModel>? lists) {
     final sorted = [...?lists]
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return [
-      for (final list in scanFirst == null ? sorted : sorted.take(scanFirst))
+      for (final list in sorted)
         if ((list.uncheckedCount ?? 0) >= minOpenItems) list,
     ];
   }
@@ -343,20 +539,56 @@ List<ShoppingListModel> _recentListsWithOpenItems(
   return pick(ref.read(listsNotifierProvider).valueOrNull);
 }
 
-/// Unchecked items of [lists], grouped by list id, in one query. Plain
-/// repository reads, not `itemsNotifierProvider`, which would keep a
-/// notifier alive for every list scanned past.
-Future<Map<String, List<ShoppingItemModel>>> _openItemsByList(
-  Ref ref,
-  List<ShoppingListModel> lists,
-) async {
-  if (lists.isEmpty) return const {};
-  final items = await ref
-      .read(itemRepositoryProvider)
-      .getItemsForLists([for (final l in lists) l.id]);
-  final byList = <String, List<ShoppingItemModel>>{};
-  for (final item in items) {
-    if (!item.isChecked) byList.putIfAbsent(item.listId, () => []).add(item);
+// ---------------------------------------------------------------------------
+// Transition for callers outside this package (delete once they switched)
+// ---------------------------------------------------------------------------
+
+/// The zip code of [regionProvider], or null. Never a stand-in. Kept only
+/// for `personal_info_screen.dart` (Teil A), `avo_settings_bridge.dart` and
+/// `weekly_deals_screen.dart`, which invalidate or read it; a saved zip code
+/// reaches [regionProvider] on its own.
+@Deprecated('Use regionProvider; null means no offer request')
+final userZipCodeProvider = FutureProvider<String?>((ref) {
+  final zip = ref.watch(regionProvider)?.zip;
+  if (!ref.watch(regionLoadedProvider)) return Completer<String?>().future;
+  return zip;
+});
+
+/// The region as `recipe_offers_provider.dart` still reads it: `isReal` is
+/// false without a region, and then no request may be made. Never a
+/// stand-in zip code.
+@Deprecated('Use regionProvider; null means no offer request')
+final effectiveZipProvider =
+    FutureProvider<({String zipCode, bool isReal})>((ref) {
+  final zip = ref.watch(regionProvider)?.zip;
+  if (!ref.watch(regionLoadedProvider)) {
+    return Completer<({String zipCode, bool isReal})>().future;
   }
-  return byList;
+  return (zipCode: zip ?? '', isReal: zip != null);
+});
+
+/// The offer of the list's market per item name, for the item rows of
+/// `list_category_section.dart` (Teil A) until they use `ItemOfferBadge`.
+/// There is no basket comparison any more.
+@Deprecated('Use ItemOfferBadge or itemOfferProvider')
+final basketComparisonProvider =
+    FutureProvider.autoDispose.family<ListMarketOffers, String>((ref, listId) {
+  final offers = ref.watch(listItemOffersProvider(listId));
+  final items = ref.watch(offerListItemsProvider(listId));
+  return ListMarketOffers._({
+    for (final item in items)
+      if (offers[item.id] case final offer?) item.name.trim(): offer,
+  });
+});
+
+/// See [basketComparisonProvider].
+@Deprecated('Use ItemOfferBadge or itemOfferProvider')
+class ListMarketOffers {
+  const ListMarketOffers._(this._byName);
+
+  final Map<String, StoreOffer> _byName;
+
+  /// The offer of the list's market for the open item called [name]. The
+  /// name is the old call of Teil A; nothing is compared.
+  StoreOffer? cheapestOfferFor(String name) => _byName[name];
 }

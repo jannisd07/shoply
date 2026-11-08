@@ -22,7 +22,6 @@ class _DealDisplay {
   final double? regularPrice;
   final String? unitSizeLabel;
   final String? unitPriceLabel;
-  final int? discountPercent;
   final bool isBroadMatch;
   final String imageUrl;
   final DateTime? validTo;
@@ -34,24 +33,22 @@ class _DealDisplay {
     required this.regularPrice,
     required this.unitSizeLabel,
     required this.unitPriceLabel,
-    required this.discountPercent,
     required this.isBroadMatch,
     required this.imageUrl,
     required this.validTo,
   });
 
   factory _DealDisplay.fromStoreOffer(StoreOffer o) => _DealDisplay(
-        productName: o.productName,
-        retailerName: o.retailerName,
-        price: o.price,
-        regularPrice: o.regularPrice,
-        unitSizeLabel: o.unitSizeLabel,
-        unitPriceLabel: o.unitPriceLabel,
-        discountPercent: o.discountPercent,
-        isBroadMatch: o.isBroadMatch,
-        imageUrl: o.imageUrl,
-        validTo: o.validTo,
-      );
+    productName: o.productName,
+    retailerName: o.retailerName,
+    price: o.price,
+    regularPrice: o.regularPrice,
+    unitSizeLabel: o.unitSizeLabel,
+    unitPriceLabel: o.unitPriceLabel,
+    isBroadMatch: o.isBroadMatch,
+    imageUrl: o.imageUrl,
+    validTo: o.validTo,
+  );
 
   factory _DealDisplay.fromIngredientOffer(RecipeIngredientOffer o) =>
       _DealDisplay(
@@ -61,7 +58,6 @@ class _DealDisplay {
         regularPrice: o.regularPrice,
         unitSizeLabel: o.unitSizeLabel,
         unitPriceLabel: o.unitPriceLabel,
-        discountPercent: o.discountPercent,
         isBroadMatch: o.isBroadMatch,
         imageUrl: o.imageUrl,
         validTo: o.validTo,
@@ -134,18 +130,26 @@ class _WeeklyDealsScreenState extends ConsumerState<WeeklyDealsScreen> {
                       behavior: HitTestBehavior.opaque,
                       child: Row(
                         children: [
-                          Icon(Icons.location_on_outlined,
-                              size: 13, color: textSecondary),
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 13,
+                            color: textSecondary,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               context.tr('offers_nationwide_set_zip'),
-                              style:
-                                  TextStyle(fontSize: 12, color: textSecondary),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: textSecondary,
+                              ),
                             ),
                           ),
-                          Icon(Icons.chevron_right_rounded,
-                              size: 16, color: textSecondary),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: textSecondary,
+                          ),
                         ],
                       ),
                     ),
@@ -187,14 +191,22 @@ class _SearchField extends StatelessWidget {
         decoration: InputDecoration(
           hintText: context.tr('search_deals_hint'),
           hintStyle: TextStyle(
-              fontSize: 14, color: AppColors.textTertiary(context)),
-          prefixIcon: Icon(Icons.search,
-              size: 19, color: AppColors.textSecondary(context)),
+            fontSize: 14,
+            color: AppColors.textTertiary(context),
+          ),
+          prefixIcon: Icon(
+            Icons.search,
+            size: 19,
+            color: AppColors.textSecondary(context),
+          ),
           suffixIcon: controller.text.isEmpty
               ? null
               : IconButton(
-                  icon: Icon(Icons.close, size: 17,
-                      color: AppColors.textSecondary(context)),
+                  icon: Icon(
+                    Icons.close,
+                    size: 17,
+                    color: AppColors.textSecondary(context),
+                  ),
                   onPressed: () {
                     controller.clear();
                     onChanged('');
@@ -232,9 +244,8 @@ class _SearchResults extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
           itemCount: offers.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, i) => _DealCard(
-            display: _DealDisplay.fromStoreOffer(offers[i]),
-          ),
+          itemBuilder: (context, i) =>
+              _DealCard(display: _DealDisplay.fromStoreOffer(offers[i])),
         );
       },
     );
@@ -311,8 +322,10 @@ class _EmptyState extends StatelessWidget {
             Text(
               text,
               textAlign: TextAlign.center,
-              style:
-                  TextStyle(fontSize: 13.5, color: AppColors.textSecondary(context)),
+              style: TextStyle(
+                fontSize: 13.5,
+                color: AppColors.textSecondary(context),
+              ),
             ),
           ],
         ),
@@ -323,6 +336,7 @@ class _EmptyState extends StatelessWidget {
 
 class _DealCard extends StatelessWidget {
   final _DealDisplay display;
+
   /// For personalized matches: which of the user's list items this offer
   /// was matched against (shown when it differs from the product name).
   final String? subtitleOverride;
@@ -336,7 +350,10 @@ class _DealCard extends StatelessWidget {
         validTo.toUtc().difference(DateTime.now().toUtc()).inHours / 24;
     if (daysLeft < 0 || daysLeft > 3) return null;
     if (daysLeft < 1) return context.tr('offer_ends_today');
-    return context.tr('offer_ends_in_days', params: {'days': '${daysLeft.ceil()}'});
+    return context.tr(
+      'offer_ends_in_days',
+      params: {'days': '${daysLeft.ceil()}'},
+    );
   }
 
   @override
@@ -344,7 +361,6 @@ class _DealCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textPrimary = AppColors.textPrimary(context);
     final textSecondary = AppColors.textSecondary(context);
-    final accent = AppColors.accentColor(context);
     final expiry = _expiryLabel(context);
 
     return GestureDetector(
@@ -377,11 +393,13 @@ class _DealCard extends StatelessWidget {
                   width: 46,
                   height: 46,
                   color: isDark ? const Color(0xFF2C2C2E) : PaperColors.cream,
-                  child: Icon(Icons.shopping_basket_outlined,
-                      size: 19,
-                      color: isDark
-                          ? AppColors.textSecondary(context)
-                          : PaperColors.creamInk),
+                  child: Icon(
+                    Icons.shopping_basket_outlined,
+                    size: 19,
+                    color: isDark
+                        ? AppColors.textSecondary(context)
+                        : PaperColors.creamInk,
+                  ),
                 ),
               ),
             ),
@@ -395,7 +413,10 @@ class _DealCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w500, color: textPrimary),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: textPrimary,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -411,8 +432,10 @@ class _DealCard extends StatelessWidget {
                           display.productName.toLowerCase()) ...[
                     const SizedBox(height: 2),
                     Text(
-                      context.tr('matched_for_item',
-                          params: {'item': subtitleOverride!}),
+                      context.tr(
+                        'matched_for_item',
+                        params: {'item': subtitleOverride!},
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 10.5, color: textSecondary),
@@ -422,14 +445,22 @@ class _DealCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       context.tr('similar_product_match'),
-                      style: TextStyle(fontSize: 10, color: AppColors.textTertiary(context)),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textTertiary(context),
+                      ),
                     ),
                   ],
                   if (expiry != null) ...[
                     const SizedBox(height: 2),
-                    Text(expiry,
-                        style: const TextStyle(
-                            fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.warning)),
+                    Text(
+                      expiry,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.warning,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -441,28 +472,24 @@ class _DealCard extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (display.discountPercent != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text('-${display.discountPercent}%',
-                            style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.w600, color: accent)),
-                      ),
-                      const SizedBox(width: 5),
-                    ],
-                    Text('${display.price.toStringAsFixed(2)} €',
-                        style: PaperTextStyles.serif(14, color: textPrimary)),
+                    Text(
+                      '${display.price.toStringAsFixed(2)} €',
+                      style: PaperTextStyles.serif(14, color: textPrimary),
+                    ),
                   ],
                 ),
                 if (display.regularPrice != null)
                   Text(
-                    context.tr('instead_of_price',
-                        params: {'price': display.regularPrice!.toStringAsFixed(2)}),
-                    style: TextStyle(fontSize: 9.5, color: AppColors.textTertiary(context)),
+                    context.tr(
+                      'instead_of_price',
+                      params: {
+                        'price': display.regularPrice!.toStringAsFixed(2),
+                      },
+                    ),
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      color: AppColors.textTertiary(context),
+                    ),
                   ),
               ],
             ),
@@ -492,22 +519,26 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
     setState(() => _adding = true);
     HapticFeedback.mediumImpact();
     try {
-      await ref.read(itemsNotifierProvider(listId).notifier).addItem(
-        name: widget.display.productName,
-        price: widget.display.price,
-        priceCurrency: 'EUR',
-        priceRetailer: widget.display.retailerName,
-        priceUnit: widget.display.unitSizeLabel,
-        priceOldValue: widget.display.regularPrice,
-        autoParse: false,
-      );
+      await ref
+          .read(itemsNotifierProvider(listId).notifier)
+          .addItem(
+            name: widget.display.productName,
+            price: widget.display.price,
+            priceCurrency: 'EUR',
+            priceRetailer: widget.display.retailerName,
+            priceUnit: widget.display.unitSizeLabel,
+            priceOldValue: widget.display.regularPrice,
+            autoParse: false,
+          );
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         setState(() => _adding = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.tr('error_adding', params: {'error': e.toString()})),
+            content: Text(
+              context.tr('error_adding', params: {'error': e.toString()}),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -520,15 +551,21 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
     final listsAsync = ref.watch(userListsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF2C2C2E) : PaperColors.surface;
-    final separatorColor =
-        isDark ? Colors.white.withValues(alpha: 0.08) : PaperColors.hairline;
+    final separatorColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : PaperColors.hairline;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.background(context),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 20 + MediaQuery.of(context).padding.bottom),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        20 + MediaQuery.of(context).padding.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -536,14 +573,20 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
           Text(
             context.tr('add_to_shopping_list'),
             style: TextStyle(
-                fontSize: 17, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context)),
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary(context),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             widget.display.productName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary(context),
+            ),
           ),
           const SizedBox(height: 14),
           if (_adding)
@@ -568,7 +611,9 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
                     child: Center(
                       child: Text(
                         context.tr('no_lists_yet'),
-                        style: TextStyle(color: AppColors.textSecondary(context)),
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                        ),
                       ),
                     ),
                   );
@@ -587,11 +632,17 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
                           padding: EdgeInsets.zero,
                           onPressed: () => _addTo(lists[i].id),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
                             child: Row(
                               children: [
-                                Icon(CupertinoIcons.cart_fill,
-                                    size: 16, color: CupertinoColors.systemBlue),
+                                Icon(
+                                  CupertinoIcons.cart_fill,
+                                  size: 16,
+                                  color: CupertinoColors.systemBlue,
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
@@ -599,7 +650,9 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w500,
                                       fontSize: 15,
-                                      color: isDark ? Colors.white : Colors.black,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black,
                                     ),
                                   ),
                                 ),
@@ -610,7 +663,10 @@ class _AddDealSheetState extends ConsumerState<_AddDealSheet> {
                         if (i < lists.length - 1)
                           Padding(
                             padding: const EdgeInsets.only(left: 42),
-                            child: Container(height: 0.5, color: separatorColor),
+                            child: Container(
+                              height: 0.5,
+                              color: separatorColor,
+                            ),
                           ),
                       ],
                     ],

@@ -311,23 +311,6 @@ class _ItemOfferSheetState extends State<_ItemOfferSheet> {
                   ),
                 ),
               const Spacer(),
-              if (offer.discountPercent != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '-${offer.discountPercent}%',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: accent,
-                    ),
-                  ),
-                ),
             ],
           ),
           if (offer.unitPriceLabel != null) ...[

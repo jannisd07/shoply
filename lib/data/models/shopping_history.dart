@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:shoply/data/services/offer_savings.dart';
+
 class ShoppingHistory extends Equatable {
   final String id;
   final String userId;
@@ -133,6 +135,11 @@ class ShoppingHistoryItem extends Equatable {
     return diff > 0 ? diff : null;
   }
 
+  /// How many packs [price] and [priceOldValue] were paid for: pieces
+  /// multiply, a measured quantity ("500 g") is one pack (the history keeps
+  /// no pack size to count in base units).
+  double get pricingQuantity => packCount(quantity, unit);
+
   factory ShoppingHistoryItem.fromJson(Map<String, dynamic> json) {
     return ShoppingHistoryItem(
       id: json['id'] as String,
@@ -175,15 +182,16 @@ class ShoppingHistoryItem extends Equatable {
       ];
 }
 
-/// Sums [ShoppingHistoryItem.savingsPerUnit] × quantity across every item in
-/// every trip in [trips] — the "you've saved €X thanks to offers" figure.
-/// Used for both the lifetime total and any narrower window (e.g. one month).
+/// Sums [ShoppingHistoryItem.savingsPerUnit] × [ShoppingHistoryItem.pricingQuantity]
+/// across every item in every trip in [trips], in euros and unrounded; the
+/// screen rounds with `roundedSavingsCents` ("ca. 3,20 € gespart, laut
+/// Händler"). Used for both the lifetime total and any narrower window.
 double totalSavingsOf(Iterable<ShoppingHistory> trips) {
   var total = 0.0;
   for (final trip in trips) {
     for (final item in trip.items) {
       final perUnit = item.savingsPerUnit;
-      if (perUnit != null) total += perUnit * item.quantity;
+      if (perUnit != null) total += perUnit * item.pricingQuantity;
     }
   }
   return total;

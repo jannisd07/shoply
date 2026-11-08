@@ -28,8 +28,7 @@ class PersonalFlyerCard extends ConsumerWidget {
     final sections = ref.watch(personalFlyerProvider).valueOrNull;
     if (sections == null) return const SizedBox.shrink();
 
-    final dealCount =
-        sections.fold<int>(0, (sum, s) => sum + s.offers.length);
+    final dealCount = sections.fold<int>(0, (sum, s) => sum + s.offers.length);
     if (dealCount < _minDeals) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -125,11 +124,7 @@ class _Section extends StatelessWidget {
   final bool isLast;
   final void Function(OfferNudge offer)? onSelect;
 
-  const _Section({
-    required this.section,
-    required this.isLast,
-    this.onSelect,
-  });
+  const _Section({required this.section, required this.isLast, this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -191,8 +186,6 @@ class _DealRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final discount = offer.discountPercent;
-
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onSelect == null
@@ -246,17 +239,6 @@ class _DealRow extends StatelessWidget {
                     color: AppColors.textPrimary(context),
                   ),
                 ),
-                // Only shown when the shop disclosed a real previous price;
-                // most flyer data does not, and inventing one would be a lie.
-                if (offer.regularPrice != null && discount != null)
-                  Text(
-                    '−$discount %',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.accentColor(context),
-                    ),
-                  ),
               ],
             ),
           ],

@@ -84,41 +84,53 @@ void main() {
     });
   });
 
-  group('pickBestOffer', () {
-    test('picks the cheapest exact match over a cheaper broad match', () {
+  group('pickRelevantOffer', () {
+    test('an exact match beats a broad match, whatever the price', () {
       // id 3 came from the broadened stem query and only matches the stem
       // ("toast"), not the full term — the pricier true match still wins.
-      final best = RecipeOfferService.pickBestOffer('Toastbrötchen', [
+      final best = RecipeOfferService.pickRelevantOffer('Toastbrötchen', [
         offer(id: 1, productName: 'Toastbrötchen 6er', price: 1.49),
-        offer(id: 2, productName: 'Toastbrötchen XXL', price: 1.99),
+        offer(id: 2, productName: 'Toastbrötchen XXL', price: 0.99),
         offer(
             id: 3,
             productName: 'Golden Toast',
-            price: 0.99,
+            price: 0.79,
             isBroadMatch: true),
       ]);
-      expect(best!.id, 1);
+      expect(best!.id, 1, reason: 'source order, never the cheapest');
     });
 
-    test('falls back to the cheapest broad match when no exact match exists',
+    test('falls back to the first broad match when no exact match exists',
         () {
-      final best = RecipeOfferService.pickBestOffer('Toastbrötchen', [
+      final best = RecipeOfferService.pickRelevantOffer('Toastbrötchen', [
         offer(id: 1, productName: 'Golden Toast', price: 1.99, isBroadMatch: true),
         offer(id: 2, productName: 'Butter Toast', price: 1.49, isBroadMatch: true),
         offer(id: 3, productName: 'Waschmittel', price: 0.50),
       ]);
+      expect(best!.id, 1);
+    });
+
+    test('with a market only that market is picked from', () {
+      final best = RecipeOfferService.pickRelevantOffer(
+        'Milch',
+        [
+          offer(id: 1, productName: 'Milch', retailerName: 'REWE', price: 0.79),
+          offer(id: 2, productName: 'Milch', retailerName: 'Lidl', price: 0.99),
+        ],
+        chainId: 'lidl',
+      );
       expect(best!.id, 2);
     });
 
     test('returns null when nothing relates to the ingredient', () {
-      final best = RecipeOfferService.pickBestOffer('Kreuzkümmel', [
+      final best = RecipeOfferService.pickRelevantOffer('Kreuzkümmel', [
         offer(productName: 'Toaster', price: 19.99),
       ]);
       expect(best, isNull);
     });
 
     test('returns null for an empty offer list', () {
-      expect(RecipeOfferService.pickBestOffer('Milch', const []), isNull);
+      expect(RecipeOfferService.pickRelevantOffer('Milch', const []), isNull);
     });
   });
 
@@ -141,26 +153,6 @@ void main() {
         isBroadMatch: isBroadMatch,
       );
     }
-
-    test('knownSavings sums regular-price deltas of exact matches only', () {
-      final result = RecipeOffersResult(
-        recipeId: 'r1',
-        zipCode: '10115',
-        checkedIngredientCount: 4,
-        matches: [
-          match(price: 0.89, regularPrice: 1.19), // +0.30
-          match(ingredient: 'Butter', price: 1.49, regularPrice: 2.29), // +0.80
-          match(
-              ingredient: 'Käse',
-              price: 1.99,
-              regularPrice: 2.99,
-              isBroadMatch: true), // excluded: broad
-          match(ingredient: 'Mehl', price: 0.49), // excluded: no regular price
-        ],
-        signature: 'sig',
-      );
-      expect(result.knownSavings, closeTo(1.10, 0.001));
-    });
 
     test('JSON round-trip preserves all fields including nulls', () {
       final original = RecipeOffersResult(
@@ -199,10 +191,10 @@ void main() {
       expect(match().isStillValid, isTrue);
     });
 
-    test('discountPercent follows the ≥5% rule', () {
-      expect(match(price: 0.89, regularPrice: 1.19).discountPercent, 25);
-      expect(match(price: 0.99, regularPrice: 1.00).discountPercent, isNull);
-      expect(match().discountPercent, isNull);
+    test('there is no retailer image and no own percentage', () {
+      // ignore: deprecated_member_use_from_same_package
+      expect(match(price: 0.89, regularPrice: 1.19).imageUrl, isEmpty);
+      // ignore: deprecated_member_use_from_same_package
     });
   });
 }

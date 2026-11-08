@@ -7,12 +7,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/data/models/nutrition_info.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/data/models/store_info.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/recipe_offers_provider.dart';
+import 'package:shoply/presentation/providers/region_provider.dart';
+import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/calories/log_recipe.dart';
 import 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart';
 import 'package:shoply/presentation/screens/lists/widgets/item_offer_badge.dart';
@@ -580,15 +583,15 @@ class _OfferSourceSpy {
   int calls = 0;
 
   List<Override> get overrides => [
-    userZipCodeProvider.overrideWith((ref) async {
-      calls++;
-      return '80331';
-    }),
-    offerSuggestionsProvider.overrideWith((ref, query) async {
-      calls++;
-      return [offer];
-    }),
-    offerSearchAllProvider.overrideWith((ref, query) async {
+    regionLoadedProvider.overrideWithValue(true),
+    regionProvider.overrideWithValue(
+      const Region(zip: '80331', source: RegionSource.manual),
+    ),
+    storeForListProvider.overrideWith(
+      (ref, listId) =>
+          const StoreInfo(id: 'lidl', name: 'Lidl', shortLabel: 'L'),
+    ),
+    offerSuggestionsProvider.overrideWith((ref, request) async {
       calls++;
       return [offer];
     }),

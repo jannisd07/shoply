@@ -1,9 +1,6 @@
-import 'package:shoply/data/models/nearby_store.dart';
-
-/// Models for live supermarket offers (marktguru) and basket price
-/// comparison across nearby stores.
-
-/// A single offer of a product at a retailer, valid for a date range.
+/// A single offer of a product at a retailer (marktguru), valid for a date
+/// range. Offers are only ever shown for one market at a time; the app never
+/// compares markets or sums a basket (Kap. 12, rule 2).
 class StoreOffer {
   final int id;
   final String productName;
@@ -110,18 +107,23 @@ class StoreOffer {
     return !_nonFoodCategories.any((c) => cat.contains(c));
   }
 
-  /// Offer product image served by the marktguru CDN.
-  String get imageUrl =>
-      'https://mg2de.b-cdn.net/api/v1/offers/$id/images/default/0/medium.jpg';
+  /// Retailer images are not licensed (Kap. 12, rule 7): always empty, so
+  /// no image is ever loaded from the offers source. Kept only for
+  /// `weekly_deals_screen.dart` until it shows the category symbol.
+  @Deprecated('Retailer images are not licensed; show the category symbol')
+  String get imageUrl => '';
 
+  /// "statt" prices the retailer states itself. A UVP is the manufacturer's
+  /// recommendation, not the retailer's former price, so it never counts.
   static final _regularPricePattern = RegExp(
-    r'(?:normalpreis|statt|uvp|vorher|bisher)[:\s]*([0-9]+[.,][0-9]{1,2})',
+    r'(?:normalpreis|statt|vorher|bisher)[:\s]*([0-9]+[.,][0-9]{1,2})',
     caseSensitive: false,
   );
 
-  /// The regular (non-offer) price, when the retailer discloses it:
-  /// either via the API's oldPrice or embedded in the description
-  /// ("Normalpreis: 2.29", "statt 3,49", "UVP 4,99").
+  /// The retailer's own "statt" price ("laut Händler statt 1,19 €"), when it
+  /// states one: the API's oldPrice or a "Normalpreis"/"statt"/"vorher"/
+  /// "bisher" price in the description. Never a UVP. The app knows no
+  /// regular shelf prices of its own.
   double? get regularPrice {
     if (oldPrice != null && oldPrice! > price) return oldPrice;
     final match = _regularPricePattern.firstMatch(description);
@@ -132,12 +134,12 @@ class StoreOffer {
     return null;
   }
 
-  /// Discount vs. the regular price in percent (null below 5% or unknown).
-  int? get discountPercent {
-    final regular = regularPrice;
-    if (regular == null || regular <= 0) return null;
-    final percent = ((1 - price / regular) * 100).round();
-    return percent >= 5 ? percent : null;
+  /// Whether this offer is from the market [chainId] (a
+  /// `StoreChainDirectory` id, which is the marktguru `uniqueName`).
+  bool isFromChain(String chainId) {
+    final name = retailerUniqueName.toLowerCase();
+    final chain = chainId.toLowerCase();
+    return name == chain || name.startsWith('$chain-');
   }
 
   bool get isValidNow {
@@ -178,6 +180,34 @@ class StoreOffer {
     return '${referencePrice!.toStringAsFixed(2)} €/$unitShortName';
   }
 
+  /// The offer in the shape of the marktguru API, so [fromJson] reads it
+  /// back (the list sync keeps offers on the device for 6 h).
+  /// [isBroadMatch] is not part of it.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'price': price,
+        'oldPrice': oldPrice,
+        'description': description,
+        'product': {'name': productName},
+        'brand': brandName == null ? null : {'name': brandName},
+        'unit': unitShortName == null ? null : {'shortName': unitShortName},
+        'advertisers': [
+          {'name': retailerName, 'uniqueName': retailerUniqueName},
+        ],
+        'categories': [
+          if (categoryName != null) {'name': categoryName},
+        ],
+        'validityDates': [
+          {
+            'from': validFrom?.toIso8601String(),
+            'to': validTo?.toIso8601String(),
+          },
+        ],
+        'volume': volume,
+        'quantity': packQuantity,
+        'referencePrice': referencePrice,
+      };
+
   static StoreOffer? fromJson(Map<String, dynamic> json) {
     final price = (json['price'] as num?)?.toDouble();
     final product = json['product'] as Map<String, dynamic>?;
@@ -217,179 +247,5 @@ class StoreOffer {
       packQuantity: (json['quantity'] as num?)?.toDouble(),
       referencePrice: (json['referencePrice'] as num?)?.toDouble(),
     );
-  }
-}
-
-/// One shopping-list item matched (or not) with its cheapest offer at a store.
-class BasketItemMatch {
-  final String itemName;
-  final StoreOffer? offer;
-
-  const BasketItemMatch({required this.itemName, this.offer});
-
-  bool get hasOffer => offer != null;
-}
-
-/// Per-store summary for the comparable basket.
-///
-/// [comparableTotal] always covers the SAME set of items across every store:
-/// where the store has its own offer we use it, otherwise we fill with the
-/// cheapest offer found for that item anywhere. That makes store totals
-/// directly comparable (no partial-basket confusion), while [matchedCount]
-/// still shows how many items are genuinely on offer at this store.
-class StoreBasketResult {
-  final String retailerName;
-  final String retailerUniqueName;
-  final List<BasketItemMatch> matches;
-  final double comparableTotal;
-
-  const StoreBasketResult({
-    required this.retailerName,
-    required this.retailerUniqueName,
-    required this.matches,
-    required this.comparableTotal,
-  });
-
-  int get matchedCount => matches.where((m) => m.hasOffer).length;
-
-  /// Sum of the store's own offers only (may cover fewer items).
-  double get ownTotal => matches
-      .where((m) => m.hasOffer)
-      .fold(0.0, (sum, m) => sum + m.offer!.price);
-
-  double get savings => matches.where((m) => m.hasOffer).fold(0.0, (sum, m) {
-        final regular = m.offer!.regularPrice;
-        return regular != null ? sum + (regular - m.offer!.price) : sum;
-      });
-}
-
-/// Full comparison of the basket across all nearby stores.
-class BasketComparison {
-  final String zipCode;
-
-  /// Number of list items that at least one store has on offer (the basis
-  /// for the comparable totals).
-  final int comparableItemCount;
-  final List<StoreBasketResult> stores;
-
-  const BasketComparison({
-    required this.zipCode,
-    required this.comparableItemCount,
-    required this.stores,
-  });
-
-  /// Stores sorted cheapest-first by the comparable basket total.
-  List<StoreBasketResult> get ranked {
-    final sorted = List<StoreBasketResult>.from(stores)
-      ..sort((a, b) {
-        final byTotal = a.comparableTotal.compareTo(b.comparableTotal);
-        if (byTotal != 0) return byTotal;
-        return b.matchedCount.compareTo(a.matchedCount);
-      });
-    return sorted;
-  }
-
-  /// Best store: the cheapest comparable basket that has at least one own
-  /// offer, so we never recommend a store that carries none of the items.
-  StoreBasketResult? get bestStore {
-    for (final store in ranked) {
-      if (store.matchedCount > 0) return store;
-    }
-    return null;
-  }
-
-  /// Among stores with a real, nearby branch (resolved via OpenStreetMap),
-  /// the cheapest one — used to recommend a "closest reasonable option"
-  /// when the outright cheapest store turns out to be far away. Returns
-  /// null when the cheapest store already has a nearby branch (no
-  /// alternative needed), when no store has distance data at all, or when
-  /// every nearby alternative costs meaningfully more than the cheapest
-  /// option (not "reasonable" anymore).
-  StoreBasketResult? closestReasonableAlternative(
-    List<NearbyStore> nearbyStores, {
-    double maxDistanceMeters = 3000,
-    double maxExtraCost = 3.0,
-    double maxExtraFraction = 0.15,
-  }) {
-    if (nearbyStores.isEmpty) return null;
-    final best = bestStore;
-    if (best == null) return null;
-
-    double? distanceTo(StoreBasketResult store) {
-      for (final n in nearbyStores) {
-        if (n.retailerUniqueName == store.retailerUniqueName) {
-          return n.distanceMeters;
-        }
-      }
-      return null;
-    }
-
-    final bestDistance = distanceTo(best);
-    if (bestDistance != null && bestDistance <= maxDistanceMeters) {
-      return null;
-    }
-
-    StoreBasketResult? closest;
-    double? closestDistance;
-    for (final store in ranked) {
-      if (store.matchedCount == 0) continue;
-      final distance = distanceTo(store);
-      if (distance == null || distance > maxDistanceMeters) continue;
-      if (closest == null || distance < closestDistance!) {
-        closest = store;
-        closestDistance = distance;
-      }
-    }
-    if (closest == null || closest.retailerUniqueName == best.retailerUniqueName) {
-      return null;
-    }
-
-    final extra = closest.comparableTotal - best.comparableTotal;
-    final extraFraction =
-        best.comparableTotal > 0 ? extra / best.comparableTotal : 0.0;
-    if (extra <= maxExtraCost || extraFraction <= maxExtraFraction) {
-      return closest;
-    }
-    return null;
-  }
-
-  /// Number of comparable-basket items where every offer found (at any
-  /// store) was only a broad/generic-term match, not an exact match of the
-  /// item's name — i.e. items whose price data is lower-confidence and
-  /// worth a heads-up in the comparison sheet.
-  int get broadMatchOnlyCount {
-    final itemNames = <String>{
-      for (final store in stores)
-        for (final match in store.matches) match.itemName,
-    };
-    var count = 0;
-    for (final name in itemNames) {
-      final offersForItem = [
-        for (final store in stores)
-          for (final match in store.matches)
-            if (match.itemName == name && match.hasOffer) match.offer!,
-      ];
-      if (offersForItem.isNotEmpty && offersForItem.every((o) => o.isBroadMatch)) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  /// The cheapest current offer for a single list item across all stores,
-  /// or null when no store has it on offer. [itemName] must be the trimmed
-  /// item name the comparison was built from.
-  StoreOffer? cheapestOfferFor(String itemName) {
-    StoreOffer? cheapest;
-    for (final store in stores) {
-      for (final match in store.matches) {
-        final offer = match.offer;
-        if (offer == null || match.itemName != itemName) continue;
-        if (cheapest == null || offer.price < cheapest.price) {
-          cheapest = offer;
-        }
-      }
-    }
-    return cheapest;
   }
 }

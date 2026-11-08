@@ -10,6 +10,8 @@ import 'package:shoply/data/services/offer_price_service.dart';
 /// (Feature 8: "this recipe is cheaper this week — these ingredients are on
 /// offer").
 ///
+/// Offers are picked by relevance, never by price across markets.
+///
 /// Cost discipline: one offer search per eligible ingredient (staples
 /// skipped, capped at [maxCheckedIngredients]), all going through
 /// [OfferPriceService]'s serialized throttle and 30-minute in-memory search
@@ -43,21 +45,25 @@ class RecipeOfferService {
   };
 
   /// Offers for [ingredientNames] around [zipCode], via the persistent cache
-  /// when the exact recipe+zip+ingredients snapshot was checked within
-  /// [cacheTtl]. Never throws — a failed search for one ingredient simply
-  /// yields no match for it, and such an incomplete result is not cached.
+  /// when the exact recipe+zip+market+ingredients snapshot was checked within
+  /// [cacheTtl]. With [chainId] only that market's offers count. Never
+  /// throws — a failed search for one ingredient simply yields no match for
+  /// it, and such an incomplete result is not cached.
   Future<RecipeOffersResult> getOffers({
     required String recipeId,
     required List<String> ingredientNames,
     required String zipCode,
+    String? chainId,
   }) async {
     final names = eligibleIngredientNames(ingredientNames);
-    final signature = '$recipeId|$zipCode|${names.join(',')}';
+    final signature =
+        '$recipeId|$zipCode|${chainId ?? ''}|${names.join(',')}';
 
     final cached = await _loadCached(recipeId, signature);
     if (cached != null) return cached;
 
-    final fetched = await matchOffers(names, zipCode: zipCode);
+    final fetched =
+        await matchOffers(names, zipCode: zipCode, chainId: chainId);
     final result = RecipeOffersResult(
       recipeId: recipeId,
       zipCode: zipCode,
@@ -70,20 +76,28 @@ class RecipeOfferService {
     return result;
   }
 
-  /// The best current offer for each of [names] around [zipCode], in input
-  /// order (names without a relevant offer are left out). `complete` is
-  /// false when at least one search failed. Never throws.
+  /// The relevant current offer for each of [names] around [zipCode], in
+  /// input order (names without a relevant offer are left out); with
+  /// [chainId] only at that market. `complete` is false when at least one
+  /// search failed. Never throws.
   ///
   /// Searches run concurrently; OfferPriceService's throttle still spaces
   /// out the actual request starts.
   static Future<({List<RecipeIngredientOffer> matches, bool complete})>
-      matchOffers(List<String> names, {required String zipCode}) async {
+      matchOffers(
+    List<String> names, {
+    required String zipCode,
+    String? chainId,
+  }) async {
     var complete = true;
     final fetched = await Future.wait(names.map((name) async {
       final offers = await OfferPriceService.instance
-          .trySearchOffers(name, zipCode: zipCode);
+          .trySearchOffers(name, zipCode: zipCode, chainId: chainId);
       if (offers == null) complete = false;
-      return MapEntry(name, pickBestOffer(name, offers ?? const []));
+      return MapEntry(
+        name,
+        pickRelevantOffer(name, offers ?? const [], chainId: chainId),
+      );
     }));
 
     return (
@@ -116,30 +130,26 @@ class RecipeOfferService {
     return result;
   }
 
-  /// The best current offer for one product term: the cheapest offer whose
-  /// product name genuinely relates to it. Exact-term matches win over
-  /// generic-stem broad matches; offers matching neither way are ignored
-  /// entirely (no match beats a wrong product on a proactive surface).
-  /// Returns null when nothing relevant is on offer. Generic enough to match
-  /// any product name (recipe ingredient or shopping-list item) against
-  /// offers — also used by [PersonalizedDealsService].
-  static StoreOffer? pickBestOffer(
-      String ingredientName, List<StoreOffer> offers) {
-    StoreOffer? bestExact;
-    StoreOffer? bestBroad;
+  /// The offer to show for one product term: the first offer, in the order
+  /// of the source (relevance), whose product name genuinely relates to it;
+  /// exact-term matches win over generic-stem broad matches, offers matching
+  /// neither way are ignored (no match beats a wrong product). With
+  /// [chainId] only that market's offers are considered. Never chooses by
+  /// price, so no market is ever played off against another (Kap. 12,
+  /// rule 2). Also used for the offers of list items.
+  static StoreOffer? pickRelevantOffer(
+    String ingredientName,
+    List<StoreOffer> offers, {
+    String? chainId,
+  }) {
+    StoreOffer? firstBroad;
     for (final offer in offers) {
-      if (isRelevantMatch(ingredientName, offer)) {
-        if (bestExact == null || offer.price < bestExact.price) {
-          bestExact = offer;
-        }
-      } else if (offer.isBroadMatch) {
-        // Already stem-relevance-guarded by OfferPriceService's fallback.
-        if (bestBroad == null || offer.price < bestBroad.price) {
-          bestBroad = offer;
-        }
-      }
+      if (chainId != null && !offer.isFromChain(chainId)) continue;
+      if (isRelevantMatch(ingredientName, offer)) return offer;
+      // Already stem-relevance-guarded by OfferPriceService's fallback.
+      if (offer.isBroadMatch) firstBroad ??= offer;
     }
-    return bestExact ?? bestBroad;
+    return firstBroad;
   }
 
   /// Whether [offer]'s product name contains the full search term, or — for

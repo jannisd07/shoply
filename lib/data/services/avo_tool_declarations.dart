@@ -221,29 +221,11 @@ List<Tool> buildAvoTools() => [
         ),
       ),
       FunctionDeclaration(
-        'compare_list_prices',
-        'Compare the TOTAL cost of everything on a shopping list across nearby '
-            'supermarkets and say which store is cheapest overall — e.g. "which '
-            'store is cheapest for my list?" or "how much would I save at Aldi '
-            'vs Rewe?". Different from search_offers, which only looks up ONE '
-            'product. Only covers list items currently matched to a live '
-            'promotional offer, not full regular-shelf pricing — say so if '
-            'coverage is partial. Requires the user\'s zip code (PLZ).',
-        Schema.object(
-          properties: {
-            'list_id': Schema.string(
-              description:
-                  'List to compare — omit to use the first/most recent list',
-            ),
-          },
-        ),
-      ),
-      FunctionDeclaration(
         'get_personalized_deals',
         'Show LIVE current supermarket offers (Angebote) that match items already '
             'sitting on the user\'s shopping lists — e.g. "what deals do I have?" or '
             '"anything on offer for my list?". Different from search_offers (looks up '
-            'ONE named product) and compare_list_prices (whole-list total cost). '
+            'ONE named product) '
             'Requires the user\'s zip code (PLZ).',
         Schema.object(
           properties: {

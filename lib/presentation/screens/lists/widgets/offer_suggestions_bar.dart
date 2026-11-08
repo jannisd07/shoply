@@ -9,6 +9,8 @@ import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/providers/region_provider.dart';
+import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/zip_code_sheet.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -64,25 +66,24 @@ class OfferSuggestionsBar extends ConsumerWidget {
         : ref.watch(offersVisibleForListProvider(listId));
     if (!visible) return const SizedBox.shrink();
 
-    final zipAsync = ref.watch(userZipCodeProvider);
-    if (!zipAsync.hasValue) return const SizedBox.shrink();
-    // No real zip: suggestions still work through the nationwide fallback
-    // zip, but nudge for a real one so prices become local.
-    final needsZip = zipAsync.value == null;
-
-    final offersAsync = ref.watch(offerSuggestionsProvider(query));
-    final offers = offersAsync.valueOrNull ?? const <StoreOffer>[];
-    if (offers.isEmpty) {
-      if (needsZip) {
-        return _ZipCodeNudge(
-          onTap: () async {
-            HapticFeedback.selectionClick();
-            await showZipCodeSheet(context);
-          },
-        );
-      }
-      return const SizedBox.shrink();
+    // No region: never ask the offers source, only nudge once for a zip code.
+    if (!ref.watch(regionLoadedProvider)) return const SizedBox.shrink();
+    if (ref.watch(regionProvider) == null) {
+      return _ZipCodeNudge(
+        onTap: () async {
+          HapticFeedback.selectionClick();
+          await showZipCodeSheet(context);
+        },
+      );
     }
+
+    final offers = ref
+            .watch(offerSuggestionsProvider((listId: listId, query: query)))
+            .valueOrNull ??
+        const <StoreOffer>[];
+    if (offers.isEmpty) return const SizedBox.shrink();
+    final storeName =
+        listId == null ? '' : ref.watch(storeForListProvider(listId))?.name ?? '';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -115,10 +116,12 @@ class OfferSuggestionsBar extends ConsumerWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    context.tr('offers_nearby').toUpperCase(),
+                    context.tr(
+                      'offer_suggestions_header',
+                      params: {'store': storeName},
+                    ),
                     style: TextStyle(
-                      fontSize: 9.5,
-                      letterSpacing: 1.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textSecondary(context),
                     ),
@@ -160,47 +163,6 @@ class OfferSuggestionsBar extends ConsumerWidget {
               ),
             ),
           ),
-          if (needsZip)
-            GestureDetector(
-              onTap: () async {
-                HapticFeedback.selectionClick();
-                await showZipCodeSheet(context);
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(
-                      color: AppColors.divider(context),
-                      width: 0.5,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.location_on_outlined,
-                      size: 12,
-                      color: AppColors.textSecondary(context),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        context.tr('offers_nationwide_set_zip'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary(context),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -424,28 +386,6 @@ class _OfferRow extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (offer.discountPercent != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentColor(context)
-                              .withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '-${offer.discountPercent}%',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.accentColor(context),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                    ],
                     Text(
                       '${offer.price.toStringAsFixed(2)} €',
                       style: PaperTextStyles.serif(

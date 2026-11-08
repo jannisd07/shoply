@@ -3,6 +3,14 @@
 // Neue Schlüssel bekommen das Bereichs-Präfix, siehe docs/redesign/arbeitsteilung.md 3.6.
 
 const Map<String, String> offersEn = {
+  'offer_summary':
+      '{matched} of {total} items on offer at {store} this week, in your area',
+  'offer_summary_saved':
+      '{matched} of {total} items on offer at {store} this week, about €{amount} saved, in your area',
+  'offer_summary_one':
+      '{matched} of {total} item on offer at {store} this week, in your area',
+  'offer_summary_one_saved':
+      '{matched} of {total} item on offer at {store} this week, about €{amount} saved, in your area',
   'weekly_deals_title': 'This week\'s deals',
   'search_deals_hint': 'Search for a product…',
   'deals_matching_your_lists': 'Matching your lists',
@@ -15,7 +23,7 @@ const Map<String, String> offersEn = {
   'zip_code_label': 'Zip {zip}',
   'instead_of_price': 'was {price} €',
   'saves_amount': 'saves {amount} €',
-  'offers_nearby': 'Offers nearby',
+  'offer_suggestions_header': 'On offer at {store} · in your area',
   'price_data_from_offers': 'Compare prices across nearby stores',
   'known_of_items': 'known ({known}/{total} items)',
   'cheapest_at': 'Cheapest: {store}',
@@ -30,7 +38,6 @@ const Map<String, String> offersEn = {
   'recipe_offers_title': 'On offer this week',
   'recipe_offers_subtitle':
       '{count} of {total} ingredients are on offer near you',
-  'recipe_offers_save': 'Save up to {amount} € vs. regular prices',
   'similar_product_note':
       'Matched by category, not the exact name you typed — double-check it\'s the right product before adding.',
   'broad_match_items_note':
@@ -71,6 +78,14 @@ const Map<String, String> offersEn = {
 };
 
 const Map<String, String> offersDe = {
+  'offer_summary':
+      '{matched} von {total} Artikeln diese Woche bei {store} im Angebot, in deiner Region',
+  'offer_summary_saved':
+      '{matched} von {total} Artikeln diese Woche bei {store} im Angebot, ca. {amount} € gespart, in deiner Region',
+  'offer_summary_one':
+      '{matched} von {total} Artikel diese Woche bei {store} im Angebot, in deiner Region',
+  'offer_summary_one_saved':
+      '{matched} von {total} Artikel diese Woche bei {store} im Angebot, ca. {amount} € gespart, in deiner Region',
   'weekly_deals_title': 'Angebote der Woche',
   'search_deals_hint': 'Produkt suchen…',
   'deals_matching_your_lists': 'Passend zu deinen Listen',
@@ -84,7 +99,7 @@ const Map<String, String> offersDe = {
   'zip_code_label': 'PLZ {zip}',
   'instead_of_price': 'statt {price} €',
   'saves_amount': 'spart {amount} €',
-  'offers_nearby': 'Angebote in der Nähe',
+  'offer_suggestions_header': 'Bei {store} im Angebot · in deiner Region',
   'price_data_from_offers': 'Preise der Märkte in der Nähe vergleichen',
   'known_of_items': 'bekannt ({known}/{total} Artikel)',
   'cheapest_at': 'Günstigster: {store}',
@@ -100,7 +115,6 @@ const Map<String, String> offersDe = {
   'recipe_offers_title': 'Diese Woche im Angebot',
   'recipe_offers_subtitle':
       '{count} von {total} Zutaten sind bei dir im Angebot',
-  'recipe_offers_save': 'Spare bis zu {amount} € gegenüber Normalpreisen',
   'similar_product_note':
       'Über die Kategorie gefunden, nicht den genauen Namen — bitte prüfen, ob es das richtige Produkt ist, bevor du es hinzufügst.',
   'broad_match_items_note':

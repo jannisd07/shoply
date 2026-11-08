@@ -12,7 +12,6 @@ import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
-import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/models/weekly_nutrition_summary.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
@@ -36,6 +35,7 @@ import 'package:shoply/data/services/user_service.dart';
 import 'package:shoply/data/services/water_log_service.dart';
 import 'package:shoply/data/services/weight_log_service.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/state/diet_challenge_provider.dart';
@@ -261,11 +261,9 @@ class AvoAssistantService {
         case 'get_app_info':
           return _toolAppInfo(args, payloads);
         case 'search_offers':
-          return await _toolSearchOffers(args);
+          return await _toolSearchOffers(args, ref, context);
         case 'get_restock_suggestions':
           return await _toolRestockSuggestions(args);
-        case 'compare_list_prices':
-          return await _toolCompareListPrices(args, ref, context);
         case 'get_personalized_deals':
           return await _toolGetPersonalizedDeals(args, ref);
         case 'split_trip_cost':
@@ -799,127 +797,64 @@ class AvoAssistantService {
     return {'topic': topic, 'answer': answer};
   }
 
-  Future<Map<String, Object?>> _toolSearchOffers(Map<String, Object?> args) async {
+  /// Offers for one product at the market of the list in context (Kap. 12:
+  /// only that market, never a comparison across markets, prices "laut
+  /// Händler", "in deiner Region"). Without a region or a confirmed market
+  /// it asks for it instead of searching.
+  Future<Map<String, Object?>> _toolSearchOffers(
+    Map<String, Object?> args,
+    WidgetRef ref,
+    AvoContext? context,
+  ) async {
     final query = (args['query'] as String?)?.trim() ?? '';
     if (query.isEmpty) return {'error': 'query is required'};
 
-    final zip = await UserLocationService.instance.getZipCode();
-    if (zip == null || zip.isEmpty) {
+    final region = await UserLocationService.instance.getRegion();
+    if (region == null) {
       return {
         'found': 0,
-        'note': 'No location available — ask the user for their zip code '
-            '(PLZ), set it via update_setting key "zip_code", then search '
-            'again.',
+        'note': 'No region set. Ask the user for their zip code (PLZ), set it '
+            'via update_setting key "zip_code", then search again.',
       };
     }
 
-    final offers = await OfferPriceService.instance.searchOffers(query, zipCode: zip);
+    final listId = (args['list_id'] as String?) ??
+        (context?.lists?.isNotEmpty == true ? context!.lists!.first.id : null);
+    final store = listId == null ? null : ref.read(storeForListProvider(listId));
+    if (store == null) {
+      return {
+        'found': 0,
+        'note': 'The list has no confirmed market. Ask which market the user '
+            'shops at; never compare markets.',
+      };
+    }
+
+    final offers = await OfferPriceService.instance
+        .searchOffers(query, zipCode: region.zip, chainId: store.id);
     if (offers.isEmpty) {
-      return {'found': 0, 'note': 'No current offers found for "$query" near $zip.'};
+      return {
+        'found': 0,
+        'store': store.name,
+        'note': 'No current offer for "$query" at ${store.name} in the '
+            "user's region.",
+      };
     }
 
     final top = offers.take(5).toList();
     return {
       'found': top.length,
-      'cheapest_store': top.first.retailerName,
-      'cheapest_price': top.first.price,
-      'offers': top
-          .map((o) => {
-                'product': o.productName,
-                'price': o.price,
-                'old_price': o.oldPrice,
-                'unit': o.unitShortName,
-                'store': o.retailerName,
-              })
-          .toList(),
-    };
-  }
-
-  /// Whole-list version of [_toolSearchOffers] — reuses [basketComparisonProvider]
-  /// (the same infra `list_detail_screen.dart`'s price-comparison sheet and the
-  /// home screen's `PriceComparisonNudgeCard` already use) instead of duplicating
-  /// the store-ranking logic.
-  Future<Map<String, Object?>> _toolCompareListPrices(
-    Map<String, Object?> args,
-    WidgetRef ref,
-    AvoContext? context,
-  ) async {
-    var listId = args['list_id'] as String?;
-    var listName = 'your list';
-    if (listId == null || listId.isEmpty) {
-      final firstList = context?.lists?.isNotEmpty == true ? context!.lists!.first : null;
-      if (firstList == null) return {'error': 'No lists available'};
-      listId = firstList.id;
-      listName = firstList.name;
-    } else if (context?.lists != null) {
-      for (final l in context!.lists!) {
-        if (l.id == listId) {
-          listName = l.name;
-          break;
-        }
-      }
-    }
-
-    final zip = await UserLocationService.instance.getZipCode();
-    if (zip == null || zip.isEmpty) {
-      return {
-        'found': false,
-        'note': 'No location available — ask the user for their zip code '
-            '(PLZ), set it via update_setting key "zip_code", then compare '
-            'again.',
-      };
-    }
-
-    final comparison = await ref.read(basketComparisonProvider(listId).future);
-    if (comparison == null || comparison.comparableItemCount == 0) {
-      return {
-        'found': false,
-        'list_name': listName,
-        'note': 'No current offers match any item on "$listName" near $zip. '
-            'This only compares items that are on a live promotional offer '
-            'right now, not full regular-shelf prices.',
-      };
-    }
-
-    return summarizeBasketComparison(comparison, listName);
-  }
-
-  /// Shapes a [BasketComparison] into the JSON summary handed back to
-  /// Gemini: top 3 stores that actually have a matched item (cheapest
-  /// first), the savings of the cheapest vs. the next-cheapest, and a
-  /// confidence note when some matches are only broad/generic-term ones.
-  /// Pure and unit-tested independently of the network/Riverpod plumbing
-  /// that builds the [BasketComparison] in the first place.
-  @visibleForTesting
-  static Map<String, Object?> summarizeBasketComparison(
-    BasketComparison comparison,
-    String listName,
-  ) {
-    final ranked = comparison.ranked.where((s) => s.matchedCount > 0).take(3).toList();
-    final best = comparison.bestStore;
-    final secondCheapest = ranked.length > 1 ? ranked[1] : null;
-    final savings = (best != null && secondCheapest != null)
-        ? secondCheapest.comparableTotal - best.comparableTotal
-        : null;
-
-    return {
-      'found': true,
-      'list_name': listName,
-      'comparable_item_count': comparison.comparableItemCount,
-      'best_store': best?.retailerName,
-      'stores': ranked
-          .map((s) => {
-                'store': s.retailerName,
-                'total': double.parse(s.comparableTotal.toStringAsFixed(2)),
-                'matched_items': s.matchedCount,
-              })
-          .toList(),
-      if (savings != null && savings > 0.01)
-        'savings_vs_next_cheapest': double.parse(savings.toStringAsFixed(2)),
-      if (comparison.broadMatchOnlyCount > 0)
-        'note': '${comparison.broadMatchOnlyCount} matched item(s) are only a '
-            'similar-product match, not an exact one — mention this is an '
-            'estimate, not an exact total.',
+      'store': store.name,
+      'wording': 'Say "bei ${store.name} im Angebot, in deiner Region" and '
+          '"laut Händler" for any regular price. Never compare markets.',
+      'offers': [
+        for (final o in top)
+          {
+            'product': o.productName,
+            'price': o.price,
+            if (o.regularPrice != null) 'regular_price_per_retailer': o.regularPrice,
+            'unit': o.unitShortName,
+          },
+      ],
     };
   }
 
@@ -970,8 +905,6 @@ class AvoAssistantService {
                 'product': m.productName,
                 'price': m.price,
                 if (m.regularPrice != null) 'regular_price': m.regularPrice,
-                if (m.discountPercent != null)
-                  'discount_percent': m.discountPercent,
                 'store': m.retailerName,
                 if (m.isBroadMatch) 'similar_product': true,
               })

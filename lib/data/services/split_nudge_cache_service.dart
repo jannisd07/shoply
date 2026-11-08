@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Persists which "split this trip?" home-screen nudge the user last
 /// dismissed, so it doesn't reappear for that exact trip. A genuinely
 /// different trip (a new completed shopping run) always surfaces normally —
-/// mirrors `HomePriceComparisonCacheService`'s single-last-dismissed-value
+/// keeps a single last-dismissed value
 /// shape, since only one nudge is ever shown at a time.
 class SplitNudgeCacheService {
   static SplitNudgeCacheService? _instance;

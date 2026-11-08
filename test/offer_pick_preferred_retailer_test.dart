@@ -1,8 +1,8 @@
 // Which shop's offer gets shown for an item you buy regularly.
 //
 // The point of the home-screen flyer is "your bananas are on offer at your
-// REWE". Pointing at a Netto across town for four cents less is noise, so the
-// usual shop wins unless another one is meaningfully cheaper.
+// REWE". Kap. 12 forbids comparing markets, so only the shop where you
+// usually buy the item counts; another shop never wins, however cheap.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
@@ -28,32 +28,22 @@ StoreOffer offer(
     );
 
 void main() {
-  test('without a known shop the cheapest wins', () {
-    final pick = AvoNudgeService.pickOffer([
-      offer('Netto', 1.29),
-      offer('REWE', 1.49),
-    ]);
-    expect(pick!.retailerName, 'Netto');
+  test('without a usual market there is no offer nudge', () {
+    expect(
+      AvoNudgeService.pickOffer([offer('Netto', 1.29), offer('REWE', 1.49)]),
+      isNull,
+    );
   });
 
-  test('a few cents elsewhere does not displace your usual shop', () {
+  test('only the usual market counts, never a cheaper one elsewhere', () {
     final pick = AvoNudgeService.pickOffer(
-      [offer('Netto', 1.29), offer('REWE', 1.49)],
+      [offer('Netto', 0.79), offer('REWE', 1.99)],
       preferredRetailer: 'REWE',
     );
     expect(pick!.retailerName, 'REWE');
   });
 
-  test('a real saving does displace it', () {
-    final pick = AvoNudgeService.pickOffer(
-      [offer('Netto', 0.79), offer('REWE', 1.99)],
-      preferredRetailer: 'REWE',
-    );
-    expect(pick!.retailerName, 'Netto');
-  });
-
-  test('your shop is used even when it is the pricier one, within tolerance',
-      () {
+  test('matches the market by name or unique name, case-insensitive', () {
     final pick = AvoNudgeService.pickOffer(
       [offer('Aldi', 1.00), offer('Lidl', 1.40)],
       preferredRetailer: 'lidl',
@@ -61,36 +51,36 @@ void main() {
     expect(pick!.retailerName, 'Lidl');
   });
 
-  test('falls back when your shop has no offer for this item', () {
-    final pick = AvoNudgeService.pickOffer(
-      [offer('Netto', 1.29)],
-      preferredRetailer: 'REWE',
-    );
-    expect(pick!.retailerName, 'Netto');
-  });
-
-  test('a disclosed discount is preferred over a marginally cheaper price', () {
-    // 20% off at 1.60 beats an undiscounted 1.55 — the flyer is about deals.
-    final pick = AvoNudgeService.pickOffer([
-      offer('Netto', 1.55),
-      offer('REWE', 1.60, oldPrice: 2.00),
-    ]);
-    expect(pick!.retailerName, 'REWE');
-  });
-
-  test('no offers at all yields nothing', () {
-    expect(AvoNudgeService.pickOffer([]), isNull);
+  test('no offer at the usual market means no nudge', () {
     expect(
-      AvoNudgeService.pickOffer([], preferredRetailer: 'REWE'),
+      AvoNudgeService.pickOffer(
+        [offer('Netto', 1.29)],
+        preferredRetailer: 'REWE',
+      ),
       isNull,
     );
   });
 
-  test('an empty preferred retailer behaves like none', () {
+  test('within the market a disclosed discount beats a cheaper price', () {
     final pick = AvoNudgeService.pickOffer(
-      [offer('Netto', 1.29), offer('REWE', 1.49)],
-      preferredRetailer: '   ',
+      [offer('REWE', 1.55), offer('REWE', 1.60, oldPrice: 2.00)],
+      preferredRetailer: 'REWE',
     );
-    expect(pick!.retailerName, 'Netto');
+    expect(pick!.price, 1.60);
+  });
+
+  test('no offers at all yields nothing', () {
+    expect(AvoNudgeService.pickOffer([]), isNull);
+    expect(AvoNudgeService.pickOffer([], preferredRetailer: 'REWE'), isNull);
+  });
+
+  test('an empty preferred retailer behaves like none', () {
+    expect(
+      AvoNudgeService.pickOffer(
+        [offer('Netto', 1.29), offer('REWE', 1.49)],
+        preferredRetailer: '   ',
+      ),
+      isNull,
+    );
   });
 }

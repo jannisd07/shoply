@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
@@ -10,6 +11,9 @@ import 'package:shoply/data/models/store_offer.dart';
 ///
 /// marktguru aggregates the current Angebote of the big German grocery
 /// chains (REWE, Lidl, Kaufland, Netto, PENNY, Aldi, Edeka, …) per zip code.
+/// One search per term and zip code, never whole catalogues or several zip
+/// codes in advance (§ 87b UrhG, Kap. 12 rule 10); callers ask only with a
+/// real region and while offers are available.
 /// The API keys ship embedded in the marktguru web app and are extracted here
 /// at runtime. There is no bundled fallback pair: without keys the lookup
 /// returns null and the offer widgets show nothing.
@@ -17,15 +21,31 @@ import 'package:shoply/data/models/store_offer.dart';
 /// Note: regular shelf prices are not publicly available for German
 /// supermarkets — price data therefore covers current offers only.
 class OfferPriceService {
-  OfferPriceService._(this._client);
+  OfferPriceService._(
+    this._client, {
+    Duration requestGap = _requestGap,
+    DateTime Function() now = DateTime.now,
+  })  : _throttle = RequestThrottle(requestGap),
+        _now = now;
   static final OfferPriceService instance = OfferPriceService._(http.Client());
 
-  /// A fresh instance on a fake HTTP client, for tests.
+  /// A fresh instance on a fake HTTP client, for tests; requests are not
+  /// spaced out unless [requestGap] says so.
   @visibleForTesting
-  factory OfferPriceService.forTesting(http.Client client) =>
-      OfferPriceService._(client);
+  factory OfferPriceService.forTesting(
+    http.Client client, {
+    Duration requestGap = Duration.zero,
+    DateTime Function() now = DateTime.now,
+  }) =>
+      OfferPriceService._(client, requestGap: requestGap, now: now);
+
+  /// Minimum time between two request starts to the offers source.
+  static const _requestGap = Duration(milliseconds: 250);
 
   final http.Client _client;
+
+  /// Clock of the search and key caches; a fake one in tests.
+  final DateTime Function() _now;
 
   static const _baseUrl = 'https://api.marktguru.de/api/v1';
   static const _keysPrefsKey = 'marktguru_keys_v1';
@@ -58,88 +78,105 @@ class OfferPriceService {
   String? _apiKey;
   String? _clientKey;
 
-  final Map<String, _CachedOffers> _searchCache = {};
+  /// Raw search results per query, zip and limit; least recently used out
+  /// beyond [_searchCacheSize] entries (Kap. 12, rule 10).
+  final LinkedHashMap<String, _CachedOffers> _searchCache = LinkedHashMap();
   static const _searchCacheTtl = Duration(minutes: 30);
+  static const _searchCacheSize = 200;
 
   /// Identical concurrent searches share one request.
   final Map<String, Future<List<StoreOffer>?>> _inFlight = {};
 
-  /// Concurrent callers (e.g. a basket comparison via Future.wait) still
-  /// space out request starts.
-  final _throttle = RequestThrottle(const Duration(milliseconds: 250));
+  /// Concurrent callers (a list's offer sync) still space out request
+  /// starts.
+  final RequestThrottle _throttle;
 
   /// A single key re-extraction shared by all concurrent callers.
   Future<void>? _keysRefresh;
 
-  /// Search current offers for [query] around [zipCode].
-  /// Returns offers sorted by value (cheapest first), grocery chains only;
-  /// empty when nothing was found or the request failed.
+  /// Current offers for [query] around [zipCode], in the order of the source
+  /// (relevance), grocery chains only; empty when nothing was found or the
+  /// request failed. With [chainId] only that market's offers come back.
   Future<List<StoreOffer>> searchOffers(
     String query, {
     required String zipCode,
+    String? chainId,
     int limit = 30,
   }) async {
-    return await trySearchOffers(query, zipCode: zipCode, limit: limit) ??
+    return await trySearchOffers(
+          query,
+          zipCode: zipCode,
+          chainId: chainId,
+          limit: limit,
+        ) ??
         const [];
   }
 
   /// Like [searchOffers], but returns null when a request failed (network,
   /// timeout, non-200) so callers can tell "no offers" from "don't know"
   /// and avoid caching a failure. Failures are not cached here either.
+  ///
+  /// With [chainId] and no exact hit at that market, the search is
+  /// broadened once to the head word ("Golden Toast" → "toast"); what the
+  /// market has under it comes back flagged [StoreOffer.isBroadMatch].
+  /// Other markets never trigger or take part in that.
   Future<List<StoreOffer>?> trySearchOffers(
     String query, {
     required String zipCode,
+    String? chainId,
     int limit = 30,
-  }) {
+  }) async {
     final normalized = query.trim().toLowerCase();
-    if (normalized.length < 2) return Future.value(const <StoreOffer>[]);
+    if (normalized.length < 2) return const <StoreOffer>[];
 
+    final results = await _cachedSearch(normalized, zipCode, limit);
+    if (results == null || chainId == null) return results;
+
+    final atChain = [
+      for (final offer in results)
+        if (offer.isFromChain(chainId)) offer,
+    ];
+    if (atChain.isNotEmpty) return atChain;
+
+    final generic = _genericTerm(normalized);
+    if (generic == null || generic == normalized) return atChain;
+    final broader = await _cachedSearch(generic, zipCode, limit);
+    if (broader == null) return null;
+    return [
+      for (final offer in broader)
+        if (offer.isFromChain(chainId) &&
+            offer.productName.toLowerCase().contains(generic))
+          offer.asBroadMatch(),
+    ];
+  }
+
+  Future<List<StoreOffer>?> _cachedSearch(
+    String normalized,
+    String zipCode,
+    int limit,
+  ) {
     final cacheKey = '$normalized|$zipCode|$limit';
-    final cached = _searchCache[cacheKey];
+    final cached = _searchCache.remove(cacheKey);
     if (cached != null &&
-        DateTime.now().difference(cached.fetchedAt) < _searchCacheTtl) {
+        _now().difference(cached.fetchedAt) < _searchCacheTtl) {
+      _searchCache[cacheKey] = cached;
       return Future.value(cached.offers);
     }
 
     // Block body on purpose: an arrow would return the removed future, which
     // is this very future, and whenComplete would then wait on itself forever.
-    return _inFlight[cacheKey] ??= _search(normalized, zipCode, limit)
-        .whenComplete(() {
+    return _inFlight[cacheKey] ??=
+        _rawSearch(normalized, zipCode: zipCode, limit: limit).then((offers) {
+      if (offers != null) {
+        _searchCache[cacheKey] = _CachedOffers(_now(), offers);
+        while (_searchCache.length > _searchCacheSize) {
+          _searchCache.remove(_searchCache.keys.first);
+        }
+      }
+      return offers;
+    }).whenComplete(() {
       _inFlight.remove(cacheKey);
     });
-  }
-
-  Future<List<StoreOffer>?> _search(
-    String normalized,
-    String zipCode,
-    int limit,
-  ) async {
-    var results = await _rawSearch(normalized, zipCode: zipCode, limit: limit);
-    if (results == null) return null;
-
-    // Branded/compound/specific terms often miss (e.g. "golden toast" → 0, or
-    // "Toastbrötchen" → only one store). Retry with a broader generic stem and
-    // merge in the comparable products so all stores show up. The stem-matched
-    // fallback is relevance-guarded (product name must contain the stem) so a
-    // short prefix can't pull in unrelated items.
-    final generic = _genericTerm(normalized);
-    final retailerCount = results.map((o) => o.retailerUniqueName).toSet().length;
-    if (generic != null && generic != normalized && retailerCount < 2) {
-      final fallback = await _rawSearch(generic, zipCode: zipCode, limit: limit);
-      if (fallback == null) return null;
-      final seen = results.map((o) => o.id).toSet();
-      results = [
-        ...results,
-        ...fallback
-            .where((o) =>
-                seen.add(o.id) && o.productName.toLowerCase().contains(generic))
-            .map((o) => o.asBroadMatch()),
-      ]..sort(_byValue);
-    }
-
-    _searchCache['$normalized|$zipCode|$limit'] =
-        _CachedOffers(DateTime.now(), results);
-    return results;
   }
 
   /// One API search; null when the request failed.
@@ -184,8 +221,7 @@ class OfferPriceService {
           .where((o) => _isGrocery(o.retailerUniqueName))
           .where((o) => o.isFood)
           .where((o) => o.isValidNow)
-          .toList()
-        ..sort(_byValue);
+          .toList();
 
       debugPrint('✅ [OFFERS] "$q" @$zipCode → ${results.length} offers');
       return results;
@@ -195,8 +231,7 @@ class OfferPriceService {
     }
   }
 
-  /// Reduce a branded/compound/specific query to a broader stem so the API
-  /// returns comparable products across stores.
+  /// Reduce a branded/compound/specific query to a broader stem.
   ///
   /// German compounds carry their meaning in the **last** element: "Olivenöl"
   /// is a kind of Öl, not a kind of Olive. Multi-word queries therefore keep
@@ -226,40 +261,6 @@ class OfferPriceService {
     'bio', 'frische', 'frisch', 'die', 'der', 'das', 'mit', 'ohne', 'und',
     'aus', 'von', 'fein', 'gut', 'natur', 'classic', 'original',
   };
-
-  /// Order offers by actual value rather than by sticker price.
-  ///
-  /// Sorting on [StoreOffer.price] alone means the smallest pack always wins —
-  /// a 100 g tub at €1.00 outranks a 500 g tub at €2.00 — which biased every
-  /// basket total downward. Where both offers disclose a Grundpreis in the
-  /// *same* unit, compare that instead; €/kg against €/l would be meaningless,
-  /// so those fall back to the sticker price.
-  static int _byValue(StoreOffer a, StoreOffer b) {
-    final ra = a.referencePrice;
-    final rb = b.referencePrice;
-    if (ra != null &&
-        rb != null &&
-        a.unitShortName != null &&
-        a.unitShortName == b.unitShortName) {
-      final byUnit = ra.compareTo(rb);
-      if (byUnit != 0) return byUnit;
-    }
-    return a.price.compareTo(b.price);
-  }
-
-  /// The best-value offer per retailer for [query] (used for basket totals).
-  Future<Map<String, StoreOffer>> cheapestPerRetailer(
-    String query, {
-    required String zipCode,
-  }) async {
-    final offers = await searchOffers(query, zipCode: zipCode);
-    final byRetailer = <String, StoreOffer>{};
-    for (final offer in offers) {
-      // Offers are sorted by price, so the first one per retailer wins.
-      byRetailer.putIfAbsent(offer.retailerUniqueName, () => offer);
-    }
-    return byRetailer;
-  }
 
   /// Exposes the compound-splitting stem for tests — this is where the
   /// "Olivenöl priced as olives" class of bug lives.
@@ -294,7 +295,7 @@ class OfferPriceService {
         final json = jsonDecode(stored) as Map<String, dynamic>;
         final fetchedAt = DateTime.tryParse(json['fetchedAt'] as String? ?? '');
         if (fetchedAt != null &&
-            DateTime.now().difference(fetchedAt) < _keysMaxAge) {
+            _now().difference(fetchedAt) < _keysMaxAge) {
           _apiKey = json['apiKey'] as String?;
           _clientKey = json['clientKey'] as String?;
           if (_hasKeys) return true;
@@ -304,7 +305,7 @@ class OfferPriceService {
 
     final failedAt = _keysFailedAt;
     if (failedAt != null &&
-        DateTime.now().difference(failedAt) < _keysRetryCooldown) {
+        _now().difference(failedAt) < _keysRetryCooldown) {
       return false;
     }
     await _refreshKeys();
@@ -346,7 +347,7 @@ class OfferPriceService {
             jsonEncode({
               'apiKey': apiKey,
               'clientKey': clientKey,
-              'fetchedAt': DateTime.now().toIso8601String(),
+              'fetchedAt': _now().toIso8601String(),
             }),
           );
           debugPrint('✅ [OFFERS] Refreshed marktguru API keys');
@@ -357,7 +358,7 @@ class OfferPriceService {
     } catch (e) {
       debugPrint('⚠️ [OFFERS] Key refresh failed ($e), offers paused');
     }
-    _keysFailedAt = DateTime.now();
+    _keysFailedAt = _now();
   }
 }
 

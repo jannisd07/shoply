@@ -31,12 +31,14 @@ ShoppingHistoryItem _historyItem({
   double? price,
   double? priceOldValue,
   double quantity = 1.0,
+  String? unit,
 }) {
   return ShoppingHistoryItem(
     id: 'i',
     historyId: 'h',
     name: 'Milch',
     quantity: quantity,
+    unit: unit,
     price: price,
     priceOldValue: priceOldValue,
   );
@@ -98,6 +100,35 @@ void main() {
 
     test('empty trip list is zero, not an error', () {
       expect(totalSavingsOf(const []), 0.0);
+    });
+
+    test('a measured quantity counts the pack saving once, not per gram', () {
+      // 500 g cheese bought as one offer pack: 0,40 € saved, not 200 €.
+      final trips = [
+        _trip(DateTime(2026, 1, 1), [
+          _historyItem(
+            price: 1.59,
+            priceOldValue: 1.99,
+            quantity: 500,
+            unit: 'g',
+          ),
+        ]),
+      ];
+      expect(totalSavingsOf(trips), closeTo(0.40, 0.001));
+    });
+
+    test('pieces with a unit like "Stk" still multiply', () {
+      final trips = [
+        _trip(DateTime(2026, 1, 1), [
+          _historyItem(
+            price: 0.99,
+            priceOldValue: 1.19,
+            quantity: 3,
+            unit: 'Stk',
+          ),
+        ]),
+      ];
+      expect(totalSavingsOf(trips), closeTo(0.60, 0.001));
     });
   });
 

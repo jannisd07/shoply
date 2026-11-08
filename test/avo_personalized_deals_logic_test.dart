@@ -45,7 +45,6 @@ void main() {
         'product': 'milk',
         'price': 0.89,
         'regular_price': 1.19,
-        'discount_percent': 25,
         'store': 'Aldi',
       });
       expect(deals[1], {

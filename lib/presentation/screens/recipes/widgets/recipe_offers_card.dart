@@ -45,7 +45,6 @@ class RecipeOffersCard extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textSecondary =
         isDark ? const Color(0xFF6B6B6B) : const Color(0xFF9CA3AF);
-    final savings = result.knownSavings;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -78,18 +77,6 @@ class RecipeOffersCard extends ConsumerWidget {
             }),
             style: TextStyle(fontSize: 12, color: textSecondary),
           ),
-          if (savings >= 0.5) ...[
-            const SizedBox(height: 6),
-            Text(
-              context.tr('recipe_offers_save',
-                  params: {'amount': savings.toStringAsFixed(2)}),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.accentColor(context),
-              ),
-            ),
-          ],
           const SizedBox(height: 10),
           for (var i = 0; i < result.matches.length; i++) ...[
             if (i > 0)
@@ -198,26 +185,6 @@ class _IngredientOfferRow extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (match.discountPercent != null) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentColor(context)
-                            .withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '-${match.discountPercent}%',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.accentColor(context),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                  ],
                   Text(
                     '${match.price.toStringAsFixed(2)} €',
                     style: PaperTextStyles.serif(

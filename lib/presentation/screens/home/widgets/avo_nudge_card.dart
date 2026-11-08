@@ -179,8 +179,8 @@ class AvoNudgeCard extends ConsumerWidget {
   }
 }
 
-/// "Frische Vollmilch · −23 % · 0,99 € · Lidl" when the retailer disclosed
-/// a regular price, else "Frische Vollmilch · 0,99 € · Lidl". Always names
+/// "Frische Vollmilch · 0,99 € statt 1,29 € laut Händler · Lidl" when the
+/// retailer states a regular price, else "Frische Vollmilch · 0,99 € · Lidl". Always names
 /// the actual offered product — it can be more specific than the item.
 String _offerLine(BuildContext context, OfferNudge offer) {
   if (offer.hasDisclosedDiscount) {
@@ -188,7 +188,7 @@ String _offerLine(BuildContext context, OfferNudge offer) {
       'offer_nudge_line',
       params: {
         'product': offer.productName,
-        'pct': '${offer.discountPercent}',
+        'regular': offer.regularPrice!.toStringAsFixed(2),
         'store': offer.retailerName,
         'price': offer.price.toStringAsFixed(2),
       },

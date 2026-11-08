@@ -49,7 +49,7 @@ const _suggestionKeys = [
 /// 'discover_recipes' intentionally reuses the recipe-search chip already
 /// in the general pool above rather than adding a near-duplicate.
 const _priorityChipKeys = {
-  'save_money': 'chip_cheapest_store',
+  'save_money': 'chip_offers_this_week',
   'share_lists': 'chip_split_last_trip',
   'eat_healthier': 'chip_healthy_dinner',
   'discover_recipes': 'chip_quick_recipes',

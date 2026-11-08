@@ -51,7 +51,7 @@ class RestockSuggestion {
 /// A regularly-bought item that is due again soon AND currently on offer at
 /// a store around the user's real location — Avo's "relevant Angebot" nudge.
 ///
-/// [regularPrice]/[discountPercent] are set only when the retailer actually
+/// [regularPrice] is set only when the retailer actually
 /// discloses a regular price ("statt 1,49") — most flyer offers don't, so
 /// the nudge never invents a discount figure, it just shows the offer.
 ///
@@ -66,7 +66,6 @@ class OfferNudge {
   final String productName;
   final double price;
   final double? regularPrice;
-  final int? discountPercent;
   final String retailerName;
   final DateTime? validTo;
   final String? unitSizeLabel;
@@ -79,7 +78,6 @@ class OfferNudge {
     required this.productName,
     required this.price,
     this.regularPrice,
-    this.discountPercent,
     required this.retailerName,
     this.validTo,
     this.unitSizeLabel,
@@ -90,7 +88,7 @@ class OfferNudge {
   bool get isStillValid => validTo == null || DateTime.now().isBefore(validTo!);
 
   /// Whether the retailer disclosed a real previous price to compare against.
-  bool get hasDisclosedDiscount => regularPrice != null && discountPercent != null;
+  bool get hasDisclosedDiscount => regularPrice != null;
 
   Map<String, dynamic> toJson() => {
         'itemName': itemName,
@@ -98,7 +96,6 @@ class OfferNudge {
         'productName': productName,
         'price': price,
         'regularPrice': regularPrice,
-        'discountPercent': discountPercent,
         'retailerName': retailerName,
         'validTo': validTo?.toIso8601String(),
         'unitSizeLabel': unitSizeLabel,
@@ -116,7 +113,6 @@ class OfferNudge {
       productName: json['productName'] as String? ?? itemName,
       price: price,
       regularPrice: (json['regularPrice'] as num?)?.toDouble(),
-      discountPercent: (json['discountPercent'] as num?)?.round(),
       retailerName: json['retailerName'] as String? ?? '',
       validTo: DateTime.tryParse(json['validTo'] as String? ?? ''),
       unitSizeLabel: json['unitSizeLabel'] as String?,
@@ -172,7 +168,6 @@ class AvoNudgeService {
   /// undiscounted one. (Disclosed regular prices are rare in flyer data —
   /// verified live: most staple offers carry no "statt" price — so this is
   /// a preference, not a requirement.)
-  static const int _minOfferDiscountPercent = 10;
 
   /// Hard cap on offer-API searches per computation (results are cached).
   static const int _maxOfferLookups = 6;
@@ -293,6 +288,7 @@ class AvoNudgeService {
       final snoozed = await _loadSnoozes(_snoozeKey);
       final today = DateTime.now().weekday;
       final candidates = <ItemPurchaseStats>[];
+      // Only items with a usual market: offers of other markets never show.
       final weekdays = <String, int?>{};
       for (final s in stats) {
         final avg = s.averageDaysBetween;
@@ -352,9 +348,9 @@ class AvoNudgeService {
     try {
       // Runs in the background (home card, scheduled reminder): never pop
       // the location permission dialog from here.
-      final zipInfo = await UserLocationService.instance
-          .getZipInfo(allowPermissionPrompt: false);
-      if (!zipInfo.isReal) return [];
+      final region = await UserLocationService.instance
+          .getRegion(allowPermissionPrompt: false);
+      if (region == null) return [];
 
       final stats = await _getStats();
       if (stats.isEmpty) return [];
@@ -383,7 +379,7 @@ class AvoNudgeService {
       final lookups = candidates.take(_maxOfferLookups).toList();
 
       final signature =
-          '${zipInfo.zipCode}|${lookups.map((s) => s.itemName).join('|')}';
+          '${region.zip}|${lookups.map((s) => s.itemName).join('|')}';
       final cached = await _loadOfferCache(signature);
       if (cached != null) {
         return cached
@@ -398,7 +394,7 @@ class AvoNudgeService {
       for (final s in lookups) {
         final offer = await _bestOfferFor(
           s.itemName,
-          zipInfo.zipCode,
+          region.zip,
           preferredRetailer: s.preferredRetailer,
         );
         if (offer == null) continue;
@@ -408,7 +404,6 @@ class AvoNudgeService {
           productName: offer.productName,
           price: offer.price,
           regularPrice: offer.regularPrice,
-          discountPercent: offer.discountPercent,
           retailerName: offer.retailerName,
           validTo: offer.validTo,
           unitSizeLabel: offer.unitSizeLabel,
@@ -477,11 +472,8 @@ class AvoNudgeService {
     return false;
   }
 
-  /// The best live offer for [itemName]: among offers that actually match
-  /// the item (see [offerMatchesItem]), the cheapest one with a disclosed
-  /// discount of at least [_minOfferDiscountPercent]% — or, since most
-  /// flyer offers disclose no regular price at all, the cheapest relevant
-  /// offer.
+  /// The live offer for [itemName] at the person's usual market for it, if
+  /// one actually matches the item (see [offerMatchesItem] and [pickOffer]).
   Future<StoreOffer?> _bestOfferFor(
     String itemName,
     String zipCode, {
@@ -497,49 +489,30 @@ class AvoNudgeService {
   }
 
   /// Choose which offer to surface, given the already relevance-filtered
-  /// [offers] (price-sorted, cheapest first).
-  ///
-  /// Where the user habitually shops beats a few cents elsewhere: telling
-  /// someone their bananas are cheap at a Netto across town is noise if they
-  /// always shop at REWE. So an offer from [preferredRetailer] wins unless
-  /// another shop is meaningfully cheaper — [_rivalMustBeatBy] guards against
-  /// hiding a genuinely worthwhile saving.
+  /// [offers] (price-sorted, cheapest first): only offers of the market the
+  /// person usually buys the item at ([preferredRetailer]). Kap. 12 allows
+  /// no comparison across markets, so another market never wins and an item
+  /// without a usual market gets no offer nudge. Within that market a
+  /// "statt" price the retailer states itself beats the first (cheapest)
+  /// offer; the app never computes its own discount.
   @visibleForTesting
   static StoreOffer? pickOffer(
     List<StoreOffer> offers, {
     String? preferredRetailer,
   }) {
-    if (offers.isEmpty) return null;
-
-    StoreOffer? best(Iterable<StoreOffer> candidates) {
-      StoreOffer? cheapest;
-      for (final offer in candidates) {
-        cheapest ??= offer;
-        final discount = offer.discountPercent;
-        if (discount != null && discount >= _minOfferDiscountPercent) {
-          return offer;
-        }
-      }
-      return cheapest;
-    }
-
-    final overall = best(offers);
     final preferred = preferredRetailer?.trim().toLowerCase();
-    if (preferred == null || preferred.isEmpty) return overall;
+    if (preferred == null || preferred.isEmpty) return null;
 
-    final atPreferred = best(offers.where((o) =>
-        o.retailerName.toLowerCase() == preferred ||
-        o.retailerUniqueName.toLowerCase() == preferred));
-    if (atPreferred == null) return overall;
-    if (overall == null) return atPreferred;
-
-    final saving = atPreferred.price - overall.price;
-    return saving > _rivalMustBeatBy ? overall : atPreferred;
+    StoreOffer? first;
+    for (final offer in offers) {
+      final atPreferred = offer.retailerName.toLowerCase() == preferred ||
+          offer.retailerUniqueName.toLowerCase() == preferred;
+      if (!atPreferred) continue;
+      first ??= offer;
+      if (offer.regularPrice != null) return offer;
+    }
+    return first;
   }
-
-  /// How much cheaper another shop must be before it displaces the user's
-  /// usual one in an offer nudge.
-  static const double _rivalMustBeatBy = 0.50;
 
   /// Snooze an offer nudge until its offer expires (or a week, when the
   /// offer has no end date) — it stops being relevant on its own.

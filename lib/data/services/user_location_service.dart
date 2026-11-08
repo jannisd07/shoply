@@ -1,19 +1,61 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Resolves the user's zip code (PLZ) for nearby-offers lookups.
-///
-/// Priority: manual override → fresh GPS fix (reverse geocoded) → cached
-/// value. The zip is cached for a day; a manual PLZ set by the user wins
-/// until cleared.
-/// Zip code plus whether it's the user's real location (manual/GPS) or a
-/// generic fallback used only so the offers feature is never empty.
-class ZipInfo {
-  final String zipCode;
-  final bool isReal;
-  const ZipInfo(this.zipCode, this.isReal);
+/// Where a [Region] comes from: the device location or a zip code the
+/// person typed.
+enum RegionSource { gps, manual }
+
+/// The person's real region for offers (Kap. 12, rule 4). There is no
+/// stand-in: without a location and without a typed zip code there is no
+/// region, and no offer request is made anywhere.
+@immutable
+class Region {
+  const Region({required this.zip, this.city, required this.source});
+
+  /// Five-digit German zip code (PLZ).
+  final String zip;
+
+  /// Town of the zip code when the location resolved it, e.g. "Ulm".
+  final String? city;
+
+  final RegionSource source;
+
+  @override
+  bool operator ==(Object other) =>
+      other is Region &&
+      other.zip == zip &&
+      other.city == city &&
+      other.source == source;
+
+  @override
+  int get hashCode => Object.hash(zip, city, source);
+
+  @override
+  String toString() => 'Region($zip, $city, ${source.name})';
+}
+
+/// Whether [zip] is a German zip code: exactly five digits.
+bool isValidZip(String zip) => RegExp(r'^\d{5}$').hasMatch(zip);
+
+/// What the region provider reads and writes; [UserLocationService] in the
+/// app, a fake in tests.
+abstract interface class RegionLookup {
+  /// The current region, or null. Asks for location permission only with
+  /// [allowPermissionPrompt].
+  Future<Region?> getRegion({
+    bool allowPermissionPrompt = false,
+    bool forceRefresh = false,
+  });
+
+  /// Saves a typed zip code; an empty string removes it.
+  Future<void> setManualZipCode(String zip);
+
+  /// Fires after every change of the region, from whichever screen.
+  Stream<void> get changes;
 }
 
 /// Raw GPS coordinates, used for distance-based store lookups (there's no
@@ -25,7 +67,12 @@ class UserCoordinates {
   const UserCoordinates(this.latitude, this.longitude);
 }
 
-class UserLocationService {
+/// Resolves the person's region (zip code and town) for offer lookups.
+///
+/// Priority: typed zip code → cached location (a day) → a fresh location
+/// fix (reverse geocoded, Germany only) → the last known location. Never
+/// asks for location permission unless the caller says so.
+class UserLocationService implements RegionLookup {
   UserLocationService._();
   static final UserLocationService instance = UserLocationService._();
 
@@ -33,6 +80,7 @@ class UserLocationService {
   // ones (e.g. the simulator's US location). Bumping the key drops those.
   static const _zipKey = 'offers_zip_code_v2';
   static const _zipTimeKey = 'offers_zip_fetched_at_v2';
+  static const _cityKey = 'offers_city_v2';
   static const _manualZipKey = 'offers_zip_manual';
   static const _cacheMaxAge = Duration(hours: 24);
 
@@ -40,47 +88,44 @@ class UserLocationService {
   static const _lonKey = 'offers_lon_v1';
   static const _coordsTimeKey = 'offers_coords_fetched_at_v1';
 
-  /// Central German zip used only when we have no real location, so search
-  /// suggestions still return offers from the big nationwide chains.
-  static const String defaultZip = '10115';
-
   /// After a failed GPS fix (no permission, timeout, outside Germany) don't
   /// try again for this long — every attempt can take up to 10 s.
   static const _gpsRetryAfter = Duration(minutes: 30);
   DateTime? _gpsFailedAt;
 
-  /// One GPS fix shared by concurrent callers (zip, zip info, coordinates).
+  /// One GPS fix shared by concurrent callers (zip and coordinates).
   Future<Position?>? _positionInFlight;
 
-  /// Always returns a usable zip. [isReal] is false when it's [defaultZip],
-  /// which the UI surfaces as a "set your PLZ" hint.
-  ///
-  /// Pass `allowPermissionPrompt: false` from background work so it never
-  /// pops the system location dialog.
-  Future<ZipInfo> getZipInfo({
-    bool forceRefresh = false,
-    bool allowPermissionPrompt = true,
-  }) async {
-    final zip = await getZipCode(
-      forceRefresh: forceRefresh,
-      allowPermissionPrompt: allowPermissionPrompt,
-    );
-    if (zip != null && zip.isNotEmpty) return ZipInfo(zip, true);
-    return const ZipInfo(defaultZip, false);
-  }
+  final _changes = StreamController<void>.broadcast();
 
-  Future<String?> getZipCode({
+  @override
+  Stream<void> get changes => _changes.stream;
+
+  @override
+  Future<Region?> getRegion({
+    bool allowPermissionPrompt = false,
     bool forceRefresh = false,
-    bool allowPermissionPrompt = true,
   }) async {
     final prefs = await SharedPreferences.getInstance();
 
     final manual = prefs.getString(_manualZipKey);
-    if (manual != null && manual.isNotEmpty) return manual;
+    if (manual != null && manual.isNotEmpty) {
+      return Region(zip: manual, source: RegionSource.manual);
+    }
+
+    Region? cachedGps() {
+      final zip = prefs.getString(_zipKey);
+      if (zip == null || zip.isEmpty) return null;
+      return Region(
+        zip: zip,
+        city: prefs.getString(_cityKey),
+        source: RegionSource.gps,
+      );
+    }
 
     if (!forceRefresh) {
-      final cached = prefs.getString(_zipKey);
       final fetchedAt = DateTime.tryParse(prefs.getString(_zipTimeKey) ?? '');
+      final cached = cachedGps();
       if (cached != null &&
           fetchedAt != null &&
           DateTime.now().difference(fetchedAt) < _cacheMaxAge) {
@@ -88,21 +133,42 @@ class UserLocationService {
       }
     }
 
-    final fromGps = await _zipFromGps(
+    final fromGps = await _regionFromGps(
       forceRefresh: forceRefresh,
       allowPermissionPrompt: allowPermissionPrompt,
     );
     if (fromGps != null) {
-      await prefs.setString(_zipKey, fromGps);
+      final changed = prefs.getString(_zipKey) != fromGps.zip;
+      await prefs.setString(_zipKey, fromGps.zip);
       await prefs.setString(_zipTimeKey, DateTime.now().toIso8601String());
+      if (fromGps.city == null) {
+        await prefs.remove(_cityKey);
+      } else {
+        await prefs.setString(_cityKey, fromGps.city!);
+      }
+      if (changed) _changes.add(null);
       return fromGps;
     }
 
-    // GPS failed — fall back to any stale cache.
-    return prefs.getString(_zipKey);
+    // GPS failed — fall back to the last known location.
+    return cachedGps();
   }
 
-  /// User-entered PLZ override (empty string clears it).
+  /// The zip code of [getRegion], for callers that only need the number.
+  Future<String?> getZipCode({
+    bool forceRefresh = false,
+    bool allowPermissionPrompt = false,
+  }) async {
+    final region = await getRegion(
+      forceRefresh: forceRefresh,
+      allowPermissionPrompt: allowPermissionPrompt,
+    );
+    return region?.zip;
+  }
+
+  /// User-entered PLZ override (empty string clears it). Every screen that
+  /// shows offers follows the change through [changes].
+  @override
   Future<void> setManualZipCode(String zip) async {
     final prefs = await SharedPreferences.getInstance();
     final trimmed = zip.trim();
@@ -111,6 +177,7 @@ class UserLocationService {
     } else {
       await prefs.setString(_manualZipKey, trimmed);
     }
+    _changes.add(null);
   }
 
   Future<String?> getManualZipCode() async {
@@ -118,7 +185,7 @@ class UserLocationService {
     return prefs.getString(_manualZipKey);
   }
 
-  Future<String?> _zipFromGps({
+  Future<Region?> _regionFromGps({
     required bool forceRefresh,
     required bool allowPermissionPrompt,
   }) async {
@@ -135,21 +202,25 @@ class UserLocationService {
       );
 
       // Offers are Germany-only, so only accept a German placemark. A
-      // non-DE location (e.g. the simulator's default US coordinates) must
-      // fall through to the nationwide default zip instead of querying with
-      // a foreign postal code that returns zero offers.
+      // non-DE location (e.g. the simulator's default US coordinates) means
+      // no region rather than a foreign postal code that returns no offers.
       for (final p in placemarks) {
         final isGerman = (p.isoCountryCode?.toUpperCase() == 'DE') ||
             (p.country == 'Deutschland') ||
             (p.country == 'Germany');
         final zip = p.postalCode;
-        if (isGerman && zip != null && zip.isNotEmpty) {
+        if (isGerman && zip != null && isValidZip(zip)) {
           debugPrint('✅ [LOCATION] Resolved German zip code: $zip');
-          return zip;
+          final city = p.locality?.trim();
+          return Region(
+            zip: zip,
+            city: city == null || city.isEmpty ? null : city,
+            source: RegionSource.gps,
+          );
         }
       }
 
-      debugPrint('⚠️ [LOCATION] No German placemark found; using fallback zip');
+      debugPrint('⚠️ [LOCATION] No German placemark found; no region');
       _gpsFailedAt = DateTime.now();
       return null;
     } catch (e) {
@@ -189,7 +260,7 @@ class UserLocationService {
     return UserCoordinates(position.latitude, position.longitude);
   }
 
-  /// Shared permission-check + fix, used by both the zip resolver and
+  /// Shared permission-check + fix, used by both the region resolver and
   /// [getCoordinates]. Concurrent callers share one fix; every successful
   /// fix also refreshes the cached coordinates.
   Future<Position?> _getPosition({

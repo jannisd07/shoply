@@ -1,6 +1,6 @@
 import 'package:shoply/data/models/store_offer.dart';
 
-/// One recipe ingredient matched with its best current supermarket offer
+/// One recipe ingredient matched with its current supermarket offer
 /// (Feature 8: "this recipe is cheaper this week — these ingredients are on
 /// offer"). A slim, JSON-serializable snapshot of the matched [StoreOffer] so
 /// results can live in a persistent cache without persisting the full offer
@@ -52,19 +52,10 @@ class RecipeIngredientOffer {
     );
   }
 
-  /// Offer product image served by the marktguru CDN (same URL scheme as
-  /// [StoreOffer.imageUrl]).
-  String get imageUrl =>
-      'https://mg2de.b-cdn.net/api/v1/offers/$offerId/images/default/0/medium.jpg';
-
-  /// Discount vs. the regular price in percent (null below 5% or unknown) —
-  /// same rule as [StoreOffer.discountPercent].
-  int? get discountPercent {
-    final regular = regularPrice;
-    if (regular == null || regular <= 0) return null;
-    final percent = ((1 - price / regular) * 100).round();
-    return percent >= 5 ? percent : null;
-  }
+  /// Retailer images are not licensed (Kap. 12, rule 7): always empty. Kept
+  /// only for `weekly_deals_screen.dart` until it shows the category symbol.
+  @Deprecated('Retailer images are not licensed; show the category symbol')
+  String get imageUrl => '';
 
   /// Whether the offer's validity window is still open. Cached results can
   /// outlive an offer's end date (weekly Angebote vs. a 6h cache read hours
@@ -137,13 +128,6 @@ class RecipeOffersResult {
     required this.matches,
     required this.signature,
   });
-
-  /// Known savings vs. regular prices, summed over exact (non-broad) matches
-  /// whose retailer disclosed a regular price. Broad matches are excluded —
-  /// "save €X" shouldn't be claimed off a merely similar product.
-  double get knownSavings => matches
-      .where((m) => !m.isBroadMatch && m.regularPrice != null)
-      .fold(0.0, (sum, m) => sum + (m.regularPrice! - m.price));
 
   RecipeOffersResult copyWithMatches(List<RecipeIngredientOffer> newMatches) {
     return RecipeOffersResult(
