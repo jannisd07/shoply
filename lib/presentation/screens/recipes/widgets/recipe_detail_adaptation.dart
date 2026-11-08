@@ -281,7 +281,7 @@ AdaptedIngredient _check(
   final name = ingredient.name;
   final allergens = [
     for (final c in profile.allergies)
-      if (_contains(c, matchers[c]!, name)) c,
+      if (matchers[c]!.contains(name)) c,
   ];
   final diets = [
     for (final d in profile.diets)
@@ -319,31 +319,6 @@ AdaptedIngredient _check(
   );
 }
 
-/// Cheeses the shared [AllergenMatcher] does not list yet (it knows Feta,
-/// Gouda, Ghee … since 0e1d0e8). Folded, matched as words or word ends.
-/// Reported to Teil B for the matcher itself.
-const _moreMilkWords = ['edamer', 'labneh', 'raclette', 'manchego'];
-
-const _lactoseFree = ['laktosefrei', 'lactose free', 'lactosefree'];
-
-/// [matcher] plus [_moreMilkWords] for milk and lactose.
-bool _contains(AllergyConstraint c, AllergenMatcher matcher, String text) {
-  if (matcher.contains(text)) return true;
-  final type = c.type;
-  if (type != AllergyType.milk && type != AllergyType.lactose) return false;
-  final folded = AllergenMatcher.fold(text);
-  if (type == AllergyType.lactose && _lactoseFree.any(folded.contains)) {
-    return false;
-  }
-  final tokens = recipeTokens(text);
-  final joined = ' ${tokens.join(' ')} ';
-  return _moreMilkWords.any(
-    (w) => w.contains(' ')
-        ? joined.contains(' $w ')
-        : tokens.any((t) => t == w || (t.endsWith(w) && !_plantCompound(t, w))),
-  );
-}
-
 /// A substitute is safe when it is meant for every reason of its
 /// ingredient and does not bring an allergen or diet conflict of its own.
 bool _isSafe(
@@ -361,7 +336,7 @@ bool _isSafe(
   }
   for (final c in profile.allergies) {
     if (_avoids(sub, c)) continue;
-    if (_contains(c, matchers[c]!, sub.substitute)) return false;
+    if (matchers[c]!.contains(sub.substitute)) return false;
   }
   for (final d in profile.diets) {
     if (_suits(sub, d)) continue;
@@ -471,7 +446,7 @@ bool breaksRecipeDiet(String name, RecipeDiet diet) {
   if (diet == RecipeDiet.pescatarian) return false;
   if (_seafood.contains(name)) return true;
   if (diet == RecipeDiet.vegetarian) return false;
-  return _contains(const AllergyConstraint(raw: 'milk'), _dairy, name) ||
+  return _dairy.contains(name) ||
       _eggs.contains(name) ||
       tokens.any((t) => t.contains('honig') || t == 'honey');
 }
