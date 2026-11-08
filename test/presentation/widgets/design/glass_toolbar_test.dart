@@ -276,6 +276,33 @@ void main() {
       expectNoClippedText(tester);
       expect(tester.getSize(find.byType(GlassToolbar)).height, greaterThan(44));
     });
+
+    testWidgets('squeezed title moves below the buttons (AX5, 320 pt)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await loadLayoutFonts();
+      await tester.pumpWidget(
+        _harness(
+          GlassToolbar(
+            leading: _back(),
+            title: 'Artikel',
+            trailing: [AppButton.primary(label: 'Fertig', onPressed: () {})],
+          ),
+          textScale: 3.1,
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      final title = tester.getRect(find.text('Artikel'));
+      expect(title.width, greaterThan(80));
+      expect(
+        title.top,
+        greaterThan(tester.getRect(find.text('Fertig')).bottom),
+      );
+    });
   });
 
   group('ScrollEdgeFade', () {

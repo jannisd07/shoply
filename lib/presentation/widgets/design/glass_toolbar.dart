@@ -6,6 +6,10 @@ import 'package:shoply/core/design/design.dart';
 
 const double _topGap = 7; // D2: toolbar top 54 under a 47 pt status bar
 const double _itemGap = 8; // D2: gap between toolbar items
+
+/// Below this width beside the buttons the title moves to its own line
+/// under them (large text sizes on narrow screens).
+const double _minTitleWidth = 80;
 const double _fadeSolidStop = 0.3; // D2: linear-gradient(bg 30 %, transparent)
 
 /// The top row of the floating layer (D2 toolbar): [leading] at the start,
@@ -233,42 +237,53 @@ class _RenderToolbarLayout extends RenderBox
         ? 0.0
         : trailingSize.width + _itemGap;
 
+    final besideWidth = bounded
+        ? math.max(0.0, maxWidth - leadingSpace - trailingSpace)
+        : double.infinity;
+    // Too little room beside the buttons: the title gets its own line.
+    final titleBelow =
+        middle != null && bounded && besideWidth < _minTitleWidth;
     final middleSize = middle == null
         ? Size.zero
         : layoutChild(
             middle,
-            loose.copyWith(
-              maxWidth: bounded
-                  ? math.max(0.0, maxWidth - leadingSpace - trailingSpace)
-                  : double.infinity,
-            ),
+            loose.copyWith(maxWidth: titleBelow ? maxWidth : besideWidth),
           );
 
     final contentWidth = leadingSpace + middleSize.width + trailingSpace;
     final width = bounded ? maxWidth : contentWidth;
-    final height = [
+    final rowHeight = [
       AvoSizes.toolbarButton,
       leadingSize.height,
-      middleSize.height,
+      if (!titleBelow) middleSize.height,
       trailingSize.height,
     ].reduce(math.max);
+    final height = titleBelow
+        ? rowHeight + _itemGap + middleSize.height
+        : rowHeight;
     final size = constraints.constrain(Size(width, height));
 
     // Middle: centred on the row, pushed aside by leading/trailing if needed.
     var middleX = (size.width - middleSize.width) / 2;
-    final minX = leadingSpace;
-    final maxX = size.width - trailingSpace - middleSize.width;
-    if (middleX > maxX) middleX = maxX;
-    if (middleX < minX) middleX = minX;
+    if (!titleBelow) {
+      final minX = leadingSpace;
+      final maxX = size.width - trailingSpace - middleSize.width;
+      if (middleX > maxX) middleX = maxX;
+      if (middleX < minX) middleX = minX;
+    }
 
-    double y(Size child) => (size.height - child.height) / 2;
+    double y(Size child) => (rowHeight - child.height) / 2;
     double x(double ltr, Size child) => _textDirection == TextDirection.ltr
         ? ltr
         : size.width - ltr - child.width;
 
     return _ToolbarGeometry(size, {
       if (leading != null) leading: Offset(x(0, leadingSize), y(leadingSize)),
-      if (middle != null) middle: Offset(x(middleX, middleSize), y(middleSize)),
+      if (middle != null)
+        middle: Offset(
+          x(middleX, middleSize),
+          titleBelow ? rowHeight + _itemGap : y(middleSize),
+        ),
       if (trailing != null)
         trailing: Offset(
           x(size.width - trailingSize.width, trailingSize),
@@ -305,12 +320,16 @@ class _RenderToolbarLayout extends RenderBox
   }
 
   @override
-  double computeMinIntrinsicHeight(double width) =>
-      _maxHeight((child) => child.getMinIntrinsicHeight(width));
+  double computeMinIntrinsicHeight(double width) => width.isFinite
+      ? _compute(
+          BoxConstraints(maxWidth: width),
+          ChildLayoutHelper.dryLayoutChild,
+        ).size.height
+      : _maxHeight((child) => child.getMinIntrinsicHeight(width));
 
   @override
   double computeMaxIntrinsicHeight(double width) =>
-      _maxHeight((child) => child.getMaxIntrinsicHeight(width));
+      computeMinIntrinsicHeight(width);
 
   double _maxHeight(double Function(RenderBox child) height) =>
       children.map(height).fold(AvoSizes.toolbarButton, math.max);
