@@ -1,251 +1,96 @@
-import 'package:flutter/material.dart';
-import 'package:shoply/core/constants/app_colors.dart';
+import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
+
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/nutrition_info.dart';
+import 'package:shoply/presentation/widgets/design/bar_chart.dart';
+import 'package:shoply/presentation/widgets/design/inset_section.dart';
 
-/// Widget to display nutrition information for a recipe
-class NutritionInfoWidget extends StatelessWidget {
+/// Daily reference intakes of an average adult (EU 1169/2011, Annex XIII),
+/// what the bars are measured against.
+const double _referenceKcal = 2000;
+const double _referenceProteinG = 50;
+const double _referenceCarbsG = 260;
+const double _referenceFatG = 70;
+
+/// Vertical room around one bar row (inset rows are at least 44 high).
+const double _rowVertical = AvoSpacing.m;
+
+/// "Nährwerte" of a recipe (Konzept 13 §12.1 Nr. 6): energy, protein,
+/// carbohydrates and fat per serving, each as an [AvoHorizontalBar] against
+/// the daily reference, in an [InsetSection] with the footnote "pro
+/// Portion". The values never change with the servings stepper.
+///
+/// Renders nothing without values.
+class RecipeNutritionSection extends StatelessWidget {
+  const RecipeNutritionSection({super.key, required this.nutrition});
+
+  /// Per serving.
   final NutritionInfo nutrition;
-  final int servings;
-  final bool expanded;
-
-  const NutritionInfoWidget({
-    super.key,
-    required this.nutrition,
-    this.servings = 1,
-    this.expanded = false,
-  });
 
   @override
   Widget build(BuildContext context) {
-    if (!nutrition.hasData) {
-      return const SizedBox.shrink();
-    }
+    if (!nutrition.hasData) return const SizedBox.shrink();
+    final language = Localizations.localeOf(context).languageCode;
+    final grams = NumberFormat('0.#', language);
+    String g(double v) => context.tr(
+      'recipe_detail_grams',
+      params: {'n': v >= 10 ? '${v.round()}' : grams.format(v)},
+    );
 
-    final textPrimary = AppColors.textPrimary(context);
-    final textSecondary = AppColors.textSecondary(context);
-    final cardColor = AppColors.recipeSurface(context);
-
-    // Adjust for servings if needed
-    final adjustedNutrition = servings > 1 
-        ? nutrition.adjustForServings(1, servings) 
-        : nutrition;
-
-    if (expanded) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(12),
+    Widget bar(String label, String value, double amount, double reference) {
+      final fraction = (amount / reference).clamp(0.0, 1.0);
+      final percent = (amount / reference * 100).round();
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AvoSpacing.l,
+          vertical: _rowVertical,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.local_fire_department_rounded, 
-                    size: 20, color: const Color(0xFFFF6B6B)),
-                const SizedBox(width: 8),
-                Text(
-                  context.tr('nutrition_info'),
-                  style: TextStyle(
-                    color: textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                if (servings > 1)
-                  Text(
-                    '${context.tr('for')} $servings ${context.tr('servings')}',
-                    style: TextStyle(
-                      color: textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Calories (highlight)
-            if (adjustedNutrition.calories != null)
-              _buildCalorieRow(context, adjustedNutrition.calories!),
-            const SizedBox(height: 12),
-            // Macros
-            Row(
-              children: [
-                if (adjustedNutrition.proteinG != null)
-                  Expanded(child: _buildMacroChip(
-                    context, 
-                    context.tr('protein'), 
-                    '${adjustedNutrition.proteinG!.toStringAsFixed(0)}g',
-                    const Color(0xFF5AC8FA),
-                  )),
-                if (adjustedNutrition.carbsG != null)
-                  Expanded(child: _buildMacroChip(
-                    context, 
-                    context.tr('carbs'), 
-                    '${adjustedNutrition.carbsG!.toStringAsFixed(0)}g',
-                    AppColors.recipeStarGold,
-                  )),
-                if (adjustedNutrition.fatG != null)
-                  Expanded(child: _buildMacroChip(
-                    context, 
-                    context.tr('fat'), 
-                    '${adjustedNutrition.fatG!.toStringAsFixed(0)}g',
-                    AppColors.recipeStep,
-                  )),
-              ],
-            ),
-            // Additional info
-            if (adjustedNutrition.fiberG != null || 
-                adjustedNutrition.sugarG != null || 
-                adjustedNutrition.sodiumMg != null) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  if (adjustedNutrition.fiberG != null)
-                    _buildSmallInfo(context, context.tr('fiber'), 
-                        '${adjustedNutrition.fiberG!.toStringAsFixed(0)}g'),
-                  if (adjustedNutrition.sugarG != null)
-                    _buildSmallInfo(context, context.tr('sugar'), 
-                        '${adjustedNutrition.sugarG!.toStringAsFixed(0)}g'),
-                  if (adjustedNutrition.sodiumMg != null)
-                    _buildSmallInfo(context, context.tr('sodium'), 
-                        '${adjustedNutrition.sodiumMg}mg'),
-                ],
-              ),
-            ],
-          ],
+        child: AvoHorizontalBar(
+          label: label,
+          value: value,
+          fraction: fraction,
+          semanticValue: context.tr(
+            'recipe_detail_nutrition_value',
+            params: {'value': value, 'percent': '$percent'},
+          ),
         ),
       );
     }
 
-    // Compact view
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.local_fire_department_rounded, 
-              size: 16, color: const Color(0xFFFF6B6B)),
-          const SizedBox(width: 4),
-          Text(
-            '${adjustedNutrition.calories ?? '-'} kcal',
-            style: TextStyle(
-              color: textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (adjustedNutrition.proteinG != null) ...[
-            const SizedBox(width: 8),
-            Text(
-              '${adjustedNutrition.proteinG!.toStringAsFixed(0)}g P',
-              style: TextStyle(color: textSecondary, fontSize: 12),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCalorieRow(BuildContext context, int calories) {
-    return Row(
+    final kcal = nutrition.calories;
+    final protein = nutrition.proteinG;
+    final carbs = nutrition.carbsG;
+    final fat = nutrition.fatG;
+    return InsetSection(
+      header: context.tr('recipe_detail_nutrition'),
+      footer: context.tr('recipe_detail_nutrition_footer'),
+      showSeparators: false,
       children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFF6B6B).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
+        if (kcal != null)
+          bar(
+            context.tr('recipe_detail_energy'),
+            context.tr('recipe_detail_kcal', params: {'n': '$kcal'}),
+            kcal.toDouble(),
+            _referenceKcal,
           ),
-          child: const Center(
-            child: Icon(Icons.local_fire_department_rounded, 
-                color: Color(0xFFFF6B6B), size: 24),
+        if (protein != null)
+          bar(
+            context.tr('recipe_detail_protein'),
+            g(protein),
+            protein,
+            _referenceProteinG,
           ),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$calories',
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              context.tr('calories'),
-              style: TextStyle(
-                color: AppColors.textSecondary(context),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMacroChip(BuildContext context, String label, String value, Color color) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+        if (carbs != null)
+          bar(
+            context.tr('recipe_detail_carbs'),
+            g(carbs),
+            carbs,
+            _referenceCarbsG,
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: AppColors.textSecondary(context),
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSmallInfo(BuildContext context, String label, String value) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.textSecondary(context),
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          value,
-          style: TextStyle(
-            color: AppColors.textPrimary(context),
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        if (fat != null)
+          bar(context.tr('recipe_detail_fat'), g(fat), fat, _referenceFatG),
       ],
     );
   }

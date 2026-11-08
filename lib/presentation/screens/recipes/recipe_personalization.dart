@@ -1,4 +1,5 @@
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/data/services/allergen_matcher.dart';
 
 /// Pure scoring function behind the Recipes screen's "For You" section.
 ///
@@ -32,10 +33,11 @@ double scoreForYouRecipe(
     }
   }
 
+  // Word boundaries and compounds, German and English ("milk" finds
+  // "Vollmilch", "eggs" no longer finds "Reis"; Konzept 13 §2.3).
+  final names = [for (final i in recipe.ingredients) i.name];
   for (final allergy in allergies) {
-    if (recipe.ingredients.any(
-      (ing) => ing.name.toLowerCase().contains(allergy.toLowerCase()),
-    )) {
+    if (AllergenMatcher([allergy]).anyIngredient(names)) {
       score -= 5.0; // Heavy penalty for allergens
     }
   }

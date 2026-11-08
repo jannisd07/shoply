@@ -1,5 +1,9 @@
+import 'dart:async';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 
 /// Interactive 5-star rating widget
@@ -54,19 +58,24 @@ class _StarRatingWidgetState extends State<StarRatingWidget> {
   Widget build(BuildContext context) {
     final displayRating = _hoverRating ?? _currentRating;
     final filledColor = widget.filledColor ?? AppColors.recipeStarGold;
-    final emptyColor = widget.emptyColor ?? AppColors.recipeBorderColor(context);
+    final emptyColor =
+        widget.emptyColor ?? AppColors.recipeBorderColor(context);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (index) {
         final starNumber = index + 1;
         return MouseRegion(
-          onEnter: widget.readOnly ? null : (_) {
-            setState(() => _hoverRating = starNumber.toDouble());
-          },
-          onExit: widget.readOnly ? null : (_) {
-            setState(() => _hoverRating = null);
-          },
+          onEnter: widget.readOnly
+              ? null
+              : (_) {
+                  setState(() => _hoverRating = starNumber.toDouble());
+                },
+          onExit: widget.readOnly
+              ? null
+              : (_) {
+                  setState(() => _hoverRating = null);
+                },
           child: GestureDetector(
             onTap: widget.readOnly || widget.onRatingChanged == null
                 ? null
@@ -109,11 +118,7 @@ class _StarRatingWidgetState extends State<StarRatingWidget> {
       color = emptyColor;
     }
 
-    return Icon(
-      icon,
-      size: widget.size,
-      color: color,
-    );
+    return Icon(icon, size: widget.size, color: color);
   }
 }
 
@@ -207,78 +212,134 @@ class CompactStarRating extends StatelessWidget {
   }
 }
 
-/// Large star rating display for recipe detail page
-/// Shows stars, numeric rating, and allows user to rate
-class LargeStarRating extends StatelessWidget {
-  final double averageRating;
-  final int ratingCount;
-  final int? userRating;
-  final Function(double) onRate;
+/// Stars stop growing with Dynamic Type at xxxL (glyphs, Konzept 00 E-04).
+const double _starGrowthLimit = 23 / 17;
 
-  const LargeStarRating({
+/// Star glyph at the default text size (SF Symbol next to 17 pt text).
+const double _starSize = 24;
+
+/// "Deine Bewertung" with five stars in the accent colour (Konzept 13
+/// §12.1 Nr. 10, D2): every star is a 44 pt target; tapping star 4 fills
+/// 1 to 4, dragging across follows the finger with the selection haptic per
+/// star (Konzept 13 E-13). VoiceOver: one adjustable element, "Deine
+/// Bewertung, 4 von 5 Sternen", swipe up or down to change. From AX1 on the
+/// stars move below the title.
+class RecipeRatingRow extends StatefulWidget {
+  const RecipeRatingRow({
     super.key,
-    required this.averageRating,
-    required this.ratingCount,
-    this.userRating,
+    required this.rating,
     required this.onRate,
   });
 
+  /// The person's rating, 1 to 5; null when not rated yet.
+  final int? rating;
+
+  /// Called with the new rating (1 to 5).
+  final ValueChanged<int> onRate;
+
+  @override
+  State<RecipeRatingRow> createState() => _RecipeRatingRowState();
+}
+
+class _RecipeRatingRowState extends State<RecipeRatingRow> {
+  int? _dragging;
+
+  int _starAt(double dx) => (dx / AvoSizes.hitTarget).floor().clamp(0, 4) + 1;
+
+  void _dragTo(double dx) {
+    final star = _starAt(dx);
+    if (star == _dragging) return;
+    setState(() => _dragging = star);
+    unawaited(AvoHaptics.selection());
+  }
+
+  void _endDrag() {
+    final star = _dragging;
+    setState(() => _dragging = null);
+    if (star != null) widget.onRate(star);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Average rating display
-        Row(
-          children: [
-            Text(
-              averageRating.toStringAsFixed(1),
-              style: const TextStyle(
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
+    final colors = context.colors;
+    final shown = _dragging ?? widget.rating ?? 0;
+    final scale =
+        (context.typography.sizeOf(AvoTextStyle.body) /
+                AvoTypography.forFactor(1).sizeOf(AvoTextStyle.body))
+            .clamp(1.0, _starGrowthLimit);
+    final title = context.tr('recipe_detail_your_rating');
+    final value = widget.rating == null
+        ? context.tr('recipe_detail_not_rated')
+        : context.tr('recipe_detail_stars', params: {'n': '${widget.rating}'});
+    final current = widget.rating ?? 0;
+
+    final stars = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTapUp: (d) => widget.onRate(_starAt(d.localPosition.dx)),
+      onHorizontalDragStart: (d) => _dragTo(d.localPosition.dx),
+      onHorizontalDragUpdate: (d) => _dragTo(d.localPosition.dx),
+      onHorizontalDragEnd: (_) => _endDrag(),
+      onHorizontalDragCancel: () => setState(() => _dragging = null),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 1; i <= 5; i++)
+            SizedBox.square(
+              dimension: AvoSizes.hitTarget,
+              child: Center(
+                child: Icon(
+                  i <= shown ? CupertinoIcons.star_fill : CupertinoIcons.star,
+                  size: _starSize * scale,
+                  color: colors.tint,
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CompactStarRating(
-                  averageRating: averageRating,
-                  ratingCount: ratingCount,
-                  starSize: 20,
-                  showCount: false,
-                ),
-                Text(
-                  ratingCount == 1
-                      ? context.tr('ratings_count_one')
-                      : context.tr('ratings_count',
-                          params: {'count': '$ratingCount'}),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        // User rating section - always show rating widget
-        Text(
-          context.tr(userRating == null ? 'rate_this_recipe' : 'your_rating'),
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+        ],
+      ),
+    );
+
+    final label = Text(title, style: context.text(AvoTextStyle.body));
+    return Semantics(
+      container: true,
+      label: title,
+      value: value,
+      increasedValue: context.tr(
+        'recipe_detail_stars',
+        params: {'n': '${(current + 1).clamp(1, 5)}'},
+      ),
+      decreasedValue: context.tr(
+        'recipe_detail_stars',
+        params: {'n': '${(current - 1).clamp(1, 5)}'},
+      ),
+      onIncrease: current < 5 ? () => widget.onRate(current + 1) : null,
+      onDecrease: current > 1 ? () => widget.onRate(current - 1) : null,
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AvoSpacing.l,
+            vertical: AvoSpacing.xs,
           ),
+          child: context.isAccessibilityText
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: AvoSpacing.s),
+                      child: label,
+                    ),
+                    stars,
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: label),
+                    const SizedBox(width: AvoSpacing.s),
+                    stars,
+                  ],
+                ),
         ),
-        const SizedBox(height: 8),
-        StarRatingWidget(
-          key: ValueKey(userRating), // Force rebuild when rating changes
-          initialRating: userRating?.toDouble() ?? 0,
-          onRatingChanged: onRate,
-          size: 32,
-        ),
-      ],
+      ),
     );
   }
 }
