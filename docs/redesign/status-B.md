@@ -54,6 +54,13 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
     Text-Pillen; A-L1 Listen-Info „Markt“ → `openStorePicker(…, from: StorePickerOrigin.info)`; A-D1
     Preis-Schnittstelle in `ItemRepository`; A-Q1 `owner.sh`: `test/layout/screens/b/*` gehört B.
 
+14. **Nach dem Avo-Tab (a3a25e2):** `AvoComposerField` mit drittem Zustand „Antwort anhalten“ (`onStop`),
+    `enabled`, `maxLength`/Zähler, eigenem `semanticLabel`, Foto-Knopf mit Pull-down; kompakte `ItemRow` (56 hoch,
+    Kreis 22, Bild 36/Radius 9); `AppButton` „gefüllt neutral“ und „gefüllt destruktiv“ + Token `destructiveFill`;
+    Glyphen `plus.bubble`, `leaf`, `switch.2`, `checklist`; Neue-Liste-Editor mit vorbefülltem Namen;
+    `ProFeatures`-Eintrag `avo_questions` (A9); Punkt am Avo-Tab bei neuer Antwort; `home_avo_card.dart` auf
+    `openAvoWithQuestion` aus `b_slots.dart` umstellen (die eigene gleichnamige Funktion dort löschen).
+
 Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
 5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald
 `categorizeLocal` gepusht ist). Danke auch für `addItems`/`undoAddItems` und `parseItemInput`: Der Wochenplan und Avo
@@ -126,6 +133,9 @@ Entschieden am 08.11.2026:
   „shoply“ werden migriert, nicht einfach umbenannt.
 
 Offen:
+- Avo-Tab (Empfehlungen umgesetzt, bitte bestätigen): Karte vor Text (K2); „Neues Gespräch“ als Glas-Knopf (K6/K7);
+  Pro-Zeile beim Tageslimit höchstens 1× pro Woche, nur Free; fester Vorschlag „Setz Backpapier dazu“ im
+  Einkaufsmodus (Spec-Wortlaut) – gewollt?
 - **Abo-RPCs** (Advisor, alt): Sofortmaßnahme angewendet (`20261108003000`), kein `anon` mehr, nur das eigene Konto.
   Selbst-Pro ohne Beleg bleibt bis zur Belegprüfung möglich (`docs/OPEN-ISSUES.md` oben).
 - Gemini-Key widerrufen und Monatsgrenze in der Claude Console setzen (Owner).
