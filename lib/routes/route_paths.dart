@@ -26,6 +26,9 @@ abstract final class RoutePaths {
     queryParameters: name == null ? null : {'name': name},
   ).toString();
 
+  /// Shopping mode of a list (full screen above the tab bar).
+  static String shopping(String listId) => '$lists/$listId/shopping';
+
   /// Tab "Rezepte".
   static const recipes = '/recipes';
 
