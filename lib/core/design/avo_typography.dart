@@ -160,7 +160,8 @@ class AvoTypography {
       fontSize: size / _factor,
       height: lineHeightOf(style) / size,
       fontWeight: weight ?? _weights[style],
-      letterSpacing: tracking / _factor,
+      // Flutter's TextScaler scales only fontSize, so tracking stays in points.
+      letterSpacing: tracking,
       color: color,
       textBaseline: TextBaseline.alphabetic,
       leadingDistribution: TextLeadingDistribution.even,
