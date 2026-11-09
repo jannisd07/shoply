@@ -7,9 +7,11 @@ import 'package:shoply/data/services/supabase_service.dart';
 
 /// Notification categories, each backed by a device-local preference toggle.
 ///
-/// The [prefsKey]s of the seven pre-existing categories intentionally match
-/// the keys the notifications settings screen has always written, so toggles
-/// users already saved keep their value now that they are actually enforced.
+/// The [prefsKey]s intentionally match the keys the notifications settings
+/// screen has always written, so toggles users already saved keep their value
+/// now that they are actually enforced. A sender passes its category to
+/// `NotificationService.showNotification`/`scheduleNotification` (local) or
+/// maps its push `type` to one (`FCMService`).
 enum NotificationCategory {
   listActivity('notif_items_added', true),
   shoppingCompleted('notif_shopping_completed', true),
@@ -18,7 +20,22 @@ enum NotificationCategory {
   recipeComments('notif_comments', true),
   newRecipes('notif_new_recipes', false),
   weeklySummary('notif_weekly_summary', true),
-  avoNudges('notif_avo_nudges', true);
+  avoNudges('notif_avo_nudges', true),
+
+  /// "Jemand kauft ein" (push type `shopping_started`, sent by the server).
+  shoppingStarted('notif_shopping_started', true),
+
+  /// Cooking-mode step timers (local, time-sensitive).
+  cookingTimer('notif_cooking_timer', true),
+
+  /// Wochenplan "An die nächste Woche erinnern" (default off).
+  planReminder('notif_plan_reminder', false),
+
+  /// Kalorien "Ideen fürs Abendessen" (Avo's local evening reminder).
+  dinnerIdeas('notif_dinner_ideas', true),
+
+  /// Kosten teilen "Offene Beträge".
+  costSplitOpen('notif_cost_split_open', true);
 
   final String prefsKey;
   final bool defaultValue;

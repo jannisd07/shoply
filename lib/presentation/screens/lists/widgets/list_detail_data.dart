@@ -10,6 +10,7 @@ import 'package:shoply/presentation/screens/lists/item_editor_screen.dart';
 import 'package:shoply/presentation/screens/lists/list_settings_screen.dart';
 import 'package:shoply/presentation/screens/lists/widgets/attachment_sheet.dart';
 import 'package:shoply/presentation/screens/lists/widgets/share_list_dialog.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/list_preferences.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
@@ -59,6 +60,14 @@ final listDetailIsOwnerProvider = Provider.family<bool?, String>((ref, listId) {
   if (list == null || me == null) return null;
   return list.ownerId == me;
 });
+
+/// Whether list rows show item pictures: Teil B's rule
+/// ([articleImagesShown]: its switch, never from AX1) and "Artikelbilder
+/// anzeigen" in Einstellungen › Listen ([ListPreferences.showItemImages]).
+/// For the list and the shopping mode.
+bool listImagesShown(BuildContext context, WidgetRef ref) =>
+    articleImagesShown(context, ref) &&
+    ref.watch(listPreferencesProvider.select((p) => p.showItemImages));
 
 /// Sum of the saved prices of the open [items] (price × count for piece
 /// items), or null when none of them has a price. Owner rule 07.11.2026:
@@ -147,6 +156,11 @@ class ListDetailActions {
     required String listId,
     required GlobalKey anchorKey,
   }) => openListImport(context, listId: listId, anchorKey: anchorKey);
+
+  /// "Angebote dieser Liste" (Teil B, S9).
+  Future<void> openListOffers(BuildContext context, String listId) async {
+    await GoRouter.of(context).push<void>(offerListLocation(listId));
+  }
 
   /// "Einkauf abschließen" (Teil B); true when the trip was saved.
   Future<bool> checkout(BuildContext context, String listId) =>

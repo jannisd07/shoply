@@ -74,8 +74,9 @@ class _AllListsScreenState extends ConsumerState<AllListsScreen> {
 
   void _becameVisible() {
     if (!mounted) return;
-    ref.read(avoScreenContextProvider.notifier).state =
-        const AvoScreenContext(screen: 'lists');
+    ref.read(avoScreenContextProvider.notifier).state = const AvoScreenContext(
+      screen: 'lists',
+    );
     final lists = ref.read(allListsSourceProvider).valueOrNull;
     if (lists != null) setState(() => _snapshot = listOrderSnapshot(lists));
   }
@@ -360,6 +361,9 @@ class _AllListsScreenState extends ConsumerState<AllListsScreen> {
         if (hero != null) _quickAdd(hero, s);
       },
       onRetry: _refresh,
+      onWeeklyOffers: ref.watch(offersAvailableProvider)
+          ? () => unawaited(context.push<void>(weeklyOffersLocation()))
+          : null,
     );
 
     return ColoredBox(
@@ -384,12 +388,7 @@ class _AllListsScreenState extends ConsumerState<AllListsScreen> {
               ),
             ],
           ),
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: ScrollEdgeFade(),
-          ),
+          const Positioned(top: 0, left: 0, right: 0, child: ScrollEdgeFade()),
           Positioned(
             top: GlassToolbar.topOffset(context),
             left: 0,

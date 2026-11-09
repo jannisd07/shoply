@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/physics.dart';
@@ -38,6 +40,10 @@ const double _kSubheadAtLarge = 15;
 /// Gap between symbol and text, and before the action.
 const double _kSymbolGap = AvoSpacing.s;
 
+/// Largest share of the row (after the symbol) the action may take beside
+/// the text; a wider action moves below it.
+const double _kMaxInlineActionShare = 0.5;
+
 /// Pressed opacity next to [AvoMotion.pressedScale] (Konzept 00 §12.20).
 const double _kPressedOpacity = 0.9;
 
@@ -58,8 +64,9 @@ IconData _symbolFor(StatusKind kind) => switch (kind) {
 /// brings its own 16 pt side margins. The whole row is one VoiceOver element
 /// (the action is its double-tap) and a live region: it is announced politely
 /// when it appears or its text changes (on iOS through an explicit
-/// announcement, where live regions do not speak by themselves). From AX1 on
-/// the action moves below the text. Haptics for a failure belong to the
+/// announcement, where live regions do not speak by themselves). From AX1 on,
+/// and whenever it would take more than half of the row, the action moves
+/// below the text, where it may wrap. Haptics for a failure belong to the
 /// failing action, not to this row.
 class StatusRow extends StatefulWidget {
   /// Creates a status row.
@@ -164,27 +171,43 @@ class _StatusRowState extends State<StatusRow> {
       content = message;
     } else {
       final action = _StatusAction(label: label, onTap: onAction);
-      if (context.isAccessibilityText) {
-        content = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            message,
-            Padding(
-              padding: EdgeInsetsDirectional.only(
-                start: symbolSize + _kSymbolGap,
-              ),
-              child: action,
+      final stacked = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          message,
+          Padding(
+            padding: EdgeInsetsDirectional.only(
+              start: symbolSize + _kSymbolGap,
             ),
-          ],
-        );
+            child: action,
+          ),
+        ],
+      );
+      if (context.isAccessibilityText) {
+        content = stacked;
       } else {
-        content = Row(
-          children: [
-            Expanded(child: message),
-            const SizedBox(width: _kSymbolGap),
-            action,
-          ],
+        content = LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final actionWidth = _actionWidth(context, label);
+            // The action sits after the text only while it leaves the
+            // sentence most of the row; otherwise it moves below the text
+            // (320 pt at ×1.35 with "Erneut versuchen").
+            if (width.isFinite &&
+                actionWidth + _kSymbolGap >
+                    (width - symbolSize - _kSymbolGap) *
+                        _kMaxInlineActionShare) {
+              return stacked;
+            }
+            return Row(
+              children: [
+                Expanded(child: message),
+                const SizedBox(width: _kSymbolGap),
+                action,
+              ],
+            );
+          },
         );
       }
     }
@@ -207,6 +230,29 @@ class _StatusRowState extends State<StatusRow> {
       ),
     );
   }
+}
+
+TextStyle _actionStyle(BuildContext context) => context.text(
+  AvoTextStyle.subhead,
+  color: context.colors.tint,
+  weight: FontWeight.w600,
+);
+
+/// Width of the action label on one line, at the current text size.
+double _actionWidth(BuildContext context, String label) {
+  var style = _actionStyle(context);
+  if (MediaQuery.boldTextOf(context)) {
+    style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+  }
+  final painter = TextPainter(
+    text: TextSpan(text: label, style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final width = math.max(painter.width.ceilToDouble(), AvoSizes.hitTarget);
+  painter.dispose();
+  return width;
 }
 
 /// Tinted text action with a 44 pt target that dims and shrinks on touch.
@@ -283,14 +329,7 @@ class _StatusActionState extends State<_StatusAction>
                 child: Transform.scale(scale: scale, child: child),
               );
             },
-            child: Text(
-              widget.label,
-              style: context.text(
-                AvoTextStyle.subhead,
-                color: context.colors.tint,
-                weight: FontWeight.w600,
-              ),
-            ),
+            child: Text(widget.label, style: _actionStyle(context)),
           ),
         ),
       ),

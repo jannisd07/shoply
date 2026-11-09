@@ -253,6 +253,16 @@ List<RouteBase> _bBranch(AppBranch branch) => [
   ...?historyBranchRoutes[branch],
 ];
 
+/// Teil B's full-screen roots above the tab bar, from all B area files, in
+/// the order [buildAppRoutes] mounts them (before the shell).
+List<RouteBase> bRootRoutes() => [
+  ...avoRootRoutes,
+  ...caloriesRootRoutes,
+  ...planRootRoutes,
+  ...offersRootRoutes,
+  ...historyRootRoutes,
+];
+
 /// All routes of the app, assembled from the area files in `routes/areas/`.
 ///
 /// The five D2 tabs (see [AppBranch]): Home, Listen, Avo, Rezepte, Profil.
@@ -262,6 +272,11 @@ List<RouteBase> _bBranch(AppBranch branch) => [
 /// Routes outside the shell open full screen above the tab bar.
 List<RouteBase> buildAppRoutes() => [
   ...authRoutes,
+  // Teil B's full-screen roots come before the shell (A-R1): several start
+  // with a prefix the shell owns (`/offers/offer/:id`, `/calories/add`), and
+  // ahead of it they always open above the tab that asked and close back to
+  // it, whatever the shell's children match.
+  ...bRootRoutes(),
   StatefulShellRoute(
     // Entering the app from the onboarding or a sign-in fades in (Konzept 17
     // §3.12: the onboarding fades out, the list lies below; scale 0.98 to 1).
@@ -313,13 +328,13 @@ List<RouteBase> buildAppRoutes() => [
       StatefulShellBranch(
         routes: [
           ...listsBranchRoutes,
+          // No ModuleGate here: B's own gate inside buildOffersRoot handles
+          // the kill switch, the module off on opening and the silent close
+          // when it flips while open (angebote.md 1.3, status-B 15).
           GoRoute(
             path: RoutePaths.offers,
             name: 'offers',
-            builder: (context, state) => ModuleGate(
-              module: AppModule.offers,
-              child: buildOffersRoot(context, state),
-            ),
+            builder: buildOffersRoot,
             routes: offersChildRoutes,
           ),
           GoRoute(
@@ -364,11 +379,6 @@ List<RouteBase> buildAppRoutes() => [
   ...recipesRoutes,
   ...profileRoutes,
   ...paywallRoutes,
-  ...avoRootRoutes,
-  ...caloriesRootRoutes,
-  ...planRootRoutes,
-  ...offersRootRoutes,
-  ...historyRootRoutes,
   // Component gallery for comparing with D2; never in release builds.
   if (kDebugMode)
     GoRoute(

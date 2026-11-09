@@ -214,10 +214,15 @@ List<SettingsSearchHit> searchSettings(
 bool _isPage(SettingsSearchHit hit, String group) =>
     hit.entry.rowId == null && Uri.parse(hit.entry.route).path == group;
 
+/// Shown when the route exists, the offers term is allowed and both the
+/// row's module and its page's module are on: a Kalorien row on the Avo
+/// page needs Avo **and** Kalorien (status-B 16).
 bool _visible(SettingsSearchEntry entry, SettingsSearchScope scope) {
   if (entry.offersTerm && scope.killSwitch) return false;
-  final module = entry.module ?? profilePageOf(entry.route)?.module;
-  if (module != null && !scope.enabledModules.contains(module)) return false;
+  bool off(AppModule? m) => m != null && !scope.enabledModules.contains(m);
+  if (off(entry.module) || off(profilePageOf(entry.route)?.module)) {
+    return false;
+  }
   return entry.route == RoutePaths.pro ||
       isRouteRegistered(scope.routes, entry.route);
 }

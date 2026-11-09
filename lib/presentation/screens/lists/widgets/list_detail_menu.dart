@@ -12,6 +12,7 @@ enum ListDetailMenuAction {
   info,
   rename,
   storeOrder,
+  offers,
   toggleOffers,
   importNote,
   delete,
@@ -21,7 +22,8 @@ enum ListDetailMenuAction {
 /// The rows of the "Mehr" menu, in groups. Entries without meaning are left
 /// out rather than dimmed (Konzept 11 §1.3): "Einkaufen" only with open
 /// items, "Einkauf abschließen" only with done ones, the offers entry only
-/// with the offers module, delete for the creator and leave for members.
+/// with the offers module ("Angebote dieser Liste" only while they show),
+/// delete for the creator and leave for members.
 List<AvoMenuEntry> listDetailMenuEntries(
   BuildContext context, {
   required bool hasOpen,
@@ -67,12 +69,17 @@ List<AvoMenuEntry> listDetailMenuEntries(
     item(ListDetailMenuAction.storeOrder, 'list_detail_menu_order'),
     if (offersAvailable) ...[
       const AvoMenuDivider(),
+      if (!offersHidden)
+        item(
+          ListDetailMenuAction.offers,
+          'list_detail_menu_offers',
+          icon: AvoIcons.tag,
+        ),
       item(
         ListDetailMenuAction.toggleOffers,
         offersHidden
             ? 'list_detail_menu_show_offers'
             : 'list_detail_menu_hide_offers',
-        icon: AvoIcons.tag,
       ),
     ],
     const AvoMenuDivider(),

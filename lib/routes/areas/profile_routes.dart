@@ -19,6 +19,7 @@ import 'package:shoply/routes/areas/calories_routes.dart';
 import 'package:shoply/routes/areas/history_routes.dart';
 import 'package:shoply/routes/areas/offers_routes.dart';
 import 'package:shoply/routes/areas/plan_routes.dart';
+import 'package:shoply/routes/areas/system_routes.dart';
 import 'package:shoply/routes/route_error_screen.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -111,6 +112,7 @@ final List<RouteBase> profileBranchRoutes = [
       ...planSettingsRoutes,
       ...caloriesSettingsRoutes,
       ...historySettingsRoutes,
+      ...systemSettingsRoutes,
     ],
   ),
 ];

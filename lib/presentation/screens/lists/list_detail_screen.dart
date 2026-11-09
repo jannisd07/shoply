@@ -28,6 +28,7 @@ import 'package:shoply/presentation/screens/lists/widgets/list_detail_menu.dart'
 import 'package:shoply/presentation/screens/lists/widgets/list_detail_parts.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_drag_controller.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_item_tile.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_maybe_also.dart';
 import 'package:shoply/presentation/screens/onboarding/onboarding_steps.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -173,6 +174,10 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
   bool _settled = false;
   bool _disposed = false;
   bool _focusChecked = false;
+
+  /// When the person closed the keyboard on purpose (tap in the list, an
+  /// item, the menu); the add field then stays closed after a route.
+  DateTime? _dismissedAt;
   Animation<double>? _routeAnimation;
   double _titleHeight = 0;
 
@@ -362,7 +367,17 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
   }
 
   void _dismissKeyboard() {
-    if (_focus.hasFocus) _focus.unfocus();
+    if (!_focus.hasFocus) return;
+    _dismissedAt = DateTime.now();
+    _focus.unfocus();
+  }
+
+  /// The add field may take the focus back after a route (A-C4) unless the
+  /// keyboard was closed on purpose just before.
+  bool _refocusAllowed() {
+    final at = _dismissedAt;
+    return at == null ||
+        DateTime.now().difference(at) > const Duration(seconds: 1);
   }
 
   Future<void> _refresh() async {
@@ -608,6 +623,43 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     );
   }
 
+  /// A row of "Vielleicht auch": on the list with "Widerrufen".
+  Future<void> _addMaybeAlso(MaybeAlsoSuggestion suggestion) async {
+    final repository = ref.read(itemRepositoryProvider);
+    final notifier = _items;
+    try {
+      final result = await repository.addItems(_listId, [
+        NewItem(
+          name: suggestion.name,
+          quantity: suggestion.quantity,
+          category: suggestion.categoryId,
+        ),
+      ]);
+      unawaited(notifier.loadItems());
+      if (!mounted || _disposed) return;
+      AvoToast.show(
+        context,
+        message: context.tr(
+          'list_detail_added_one',
+          params: {'name': suggestion.name},
+        ),
+        actionLabel: context.tr('common_undo'),
+        onAction: () async {
+          try {
+            await repository.undoAddItems(result.token);
+          } catch (e) {
+            debugPrint('❌ [LIST_DETAIL] Undo add failed: $e');
+            _failed();
+          }
+          unawaited(notifier.loadItems());
+        },
+      );
+    } catch (e) {
+      debugPrint('❌ [LIST_DETAIL] Add suggestion failed: $e');
+      _failed();
+    }
+  }
+
   // ---------------------------------------------------------------- menu
 
   void _openMenu(_ListView? view) {
@@ -659,6 +711,8 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
           await _loadCustomCategories();
           unawaited(_items.loadItems());
         }
+      case ListDetailMenuAction.offers:
+        await _actions.openListOffers(context, _listId);
       case ListDetailMenuAction.toggleOffers:
         await setOffersHiddenForList(ref, _listId, !offersHidden);
       case ListDetailMenuAction.importNote:
@@ -796,7 +850,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
     final name = list?.name ?? _listName;
     final offline = ref.watch(isOfflineProvider);
     final offers = ref.watch(offersAvailableProvider);
-    final images = articleImagesShown(context, ref);
+    final images = listImagesShown(context, ref);
     final members = list?.isShared ?? false
         ? ref.watch(listDetailMembersProvider(_listId)).valueOrNull ??
               const <String>[]
@@ -902,6 +956,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
               controller: _controller,
               focusNode: _focus,
               onSubmitted: _submit,
+              refocusAllowed: _refocusAllowed,
               totalText: sum == null ? null : formatListTotal(sum, language),
             ),
           ),
@@ -948,7 +1003,15 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
       ];
     }
 
+    final maybeAlso = _GapWhenFilled(
+      gap: AvoSpacing.section,
+      child: ListMaybeAlsoSection(listId: _listId, onAdd: _addMaybeAlso),
+    );
+
     if (view.items.isEmpty) {
+      // Right after the onboarding the tip T1 already says what to type,
+      // and the room belongs to the suggestion panel (Konzept 17 §3.12).
+      if (widget.arrival == OnboardingArrival.created) return const [];
       return [
         SliverToBoxAdapter(
           child: EmptyState(
@@ -959,6 +1022,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
             onAction: _importNote,
           ),
         ),
+        SliverToBoxAdapter(child: maybeAlso),
       ];
     }
 
@@ -1008,6 +1072,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
         gap: AvoSpacing.section,
         child: ListOfferSummary(listId: _listId),
       ),
+      maybeAlso,
       doneSection,
     ];
     return [

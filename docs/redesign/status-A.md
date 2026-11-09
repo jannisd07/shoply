@@ -53,6 +53,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A7 Onboarding, Login, Tipps | **gebaut** (Ablauf mit Wiederaufnahme, Konto mit Apple/Google/E-Mail-Code, Passwort, Router mit gemerkten Links, Tipp-Zeilen statt Tutorial); Server-Entwurf und offen in `a7-stand.md` | 09.11.2026 | `870da50`, `de77f8a`, `f189222`, `git log --grep Onboarding` |
 | A8 Profil und Einstellungen | **gebaut** (Profil mit Suche, neun Einstellungsseiten, Profil bearbeiten, Konto, Abmelden, Konto löschen ohne Server); Server-Entwurf und offen in `a8-stand.md` | 09.11.2026 | `8f67ca8`, `28d2463`, `git log --grep "Einstellung\|Konto\|Profil"` |
 | AB1 Anfragen von B: Komponenten und Daten | **erledigt** (A-C1, A-C2, A-C3, A-C5, A-C7, A-C8, A-C9, A-D1, Composer, AppButton-Varianten, NavRow, Avatar xl, Suche mit Mikrofon, Toast mit Ziel, Symbole); API in `ab1-stand.md` | 09.11.2026 | `f259477`, `git log --grep AB1` |
+| AB2 Anfragen von B: Listen, Router, Reste | **erledigt** (A-C4, A-L1–A-L4, A-R1–A-R3, status-B 15/16, Listen-Schalter, Mitteilungs-Kategorien, T6/T7, A-C6, `ThemeMode.system`); offen in `ab2-stand.md` | 09.11.2026 | `git log --grep AB2` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
@@ -183,8 +184,8 @@ Provider in `lib/presentation/widgets/slots/b_slots.dart`; Stufe 2: Home-Abschni
 | A-Q1 Layout-Tests | **erledigt**: `test/layout/screens/b/*` gehört B | `ac3fb9a` |
 | A-O1 Region im Onboarding | **festgelegt wie vorgeschlagen**: B zeichnet Inhalt und „Weiter“ und ruft `onDone`; A zeichnet Rahmen, Titel, Satz, Fortschritt, Zurück, „Überspringen“ (`OnboardingStepPage` ohne eigene Hauptaktion) | mit A7 |
 | A-C1, A-C2, A-C3, A-C5, A-C7, A-C8, A-C9, A-D1 | **erledigt** (AB1), API in `ab1-stand.md`; dazu status-B 14 (Composer, AppButton gefüllt neutral/destruktiv + `destructiveFill`, Glyphen) | AB1, `git log --grep AB1` |
-| A-C4, A-L1–A-L4, Polsterung um `ListOfferSummary` | angenommen; Listen-Screens (A7-Teil „Tipps“ hat `list_detail_screen.dart` gerade in Arbeit, die Polsterung ist ihm mitgegeben) | nach A7 |
-| A-R1–A-R3 | angenommen; Router (A7-Teil „Ablauf“ hat `app_router.dart` gerade in Arbeit) | nach A7 |
+| A-C4, A-L1–A-L4, Polsterung um `ListOfferSummary` | **erledigt** (AB2), API in `ab2-stand.md` | `git log --grep AB2` |
+| A-R1–A-R3, status-B 15 und 16 | **erledigt** (AB2): B-Vollbild-Routen vor der Shell, `/offers` ohne `ModuleGate`, Deep Link `offers`, `system_routes.dart`, Suche, `openUrl` → `Future<bool>`, `DestructiveRow`, `StatusRow`, Pin-Rennen, A-C6, Provider umgestellt | `git log --grep AB2` |
 | A-P1 | angenommen; Profil | A8 |
 | `openAvoWithQuestion` | `home_avo_card.dart` stellt A auf den b_slots-Helfer um und löscht die eigene Funktion, sobald B ihn liefert | wenn B meldet |
 

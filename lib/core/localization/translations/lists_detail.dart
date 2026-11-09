@@ -60,6 +60,20 @@ const Map<String, String> listsDetailEn = {
   'list_detail_leave_message':
       'You won’t see the list anymore. The others keep it.',
   'list_detail_leave_confirm': 'Leave',
+  // A-C4: suggestion panel above the add field
+  'list_detail_suggestions': 'Suggestions',
+  'list_detail_start_1': 'Milk',
+  'list_detail_start_2': 'Bread',
+  'list_detail_start_3': 'Eggs',
+  'list_detail_start_4': 'Bananas',
+  'list_detail_start_5': 'Butter',
+  'list_detail_added_one': '{name} added',
+  // "Maybe also" (Konzept 11 §1.1 item 9)
+  'list_detail_maybe_also': 'Maybe also',
+  'list_detail_maybe_also_rhythm': 'You buy it about every {n} days',
+  'list_detail_maybe_also_hide': 'Hide',
+  // A-L1: offers in the "More" menu
+  'list_detail_menu_offers': 'Offers for this list',
 };
 
 const Map<String, String> listsDetailDe = {
@@ -121,4 +135,18 @@ const Map<String, String> listsDetailDe = {
   'list_detail_leave_message':
       'Du siehst die Liste danach nicht mehr. Die anderen behalten sie.',
   'list_detail_leave_confirm': 'Verlassen',
+  // A-C4: Vorschlags-Panel über dem Eingabefeld
+  'list_detail_suggestions': 'Vorschläge',
+  'list_detail_start_1': 'Milch',
+  'list_detail_start_2': 'Brot',
+  'list_detail_start_3': 'Eier',
+  'list_detail_start_4': 'Bananen',
+  'list_detail_start_5': 'Butter',
+  'list_detail_added_one': '{name} hinzugefügt',
+  // "Vielleicht auch" (Konzept 11 §1.1 Punkt 9)
+  'list_detail_maybe_also': 'Vielleicht auch',
+  'list_detail_maybe_also_rhythm': 'Kaufst du etwa alle {n} Tage',
+  'list_detail_maybe_also_hide': 'Ausblenden',
+  // A-L1: Angebote im Menü "Mehr"
+  'list_detail_menu_offers': 'Angebote dieser Liste',
 };

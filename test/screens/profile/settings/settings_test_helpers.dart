@@ -101,6 +101,9 @@ class FakeProfileBackend implements ProfileSettingsBackend {
 /// Records the system calls.
 class FakeExternalActions implements SettingsExternalActions {
   bool mailOpens = true;
+
+  /// What [openUrl] answers (false: nothing could open the link).
+  bool urlOpens = true;
   final List<({String to, String subject, String? body})> mails = [];
   final List<Uri> urls = [];
   final List<String> copied = [];
@@ -118,7 +121,10 @@ class FakeExternalActions implements SettingsExternalActions {
   }
 
   @override
-  Future<void> openUrl(Uri url) async => urls.add(url);
+  Future<bool> openUrl(Uri url) async {
+    urls.add(url);
+    return urlOpens;
+  }
 
   @override
   Future<void> openAppSettings() async => appSettings++;

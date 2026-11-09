@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/data/services/list_store_repository.dart';
+import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/all_lists_data.dart';
 import 'package:shoply/presentation/screens/lists/widgets/all_lists_new_list.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_info_actions.dart';
@@ -26,7 +28,78 @@ List<Override> _overrides(FakeListActions actions) => [
   listActionsProvider.overrideWithValue(actions),
 ];
 
+/// Records the market writes of "Neue Liste".
+class _Stores extends Fake implements ListStoreRepository {
+  final writes = <String>[];
+
+  @override
+  Future<void> setExplicit(String listId, String chainId) async =>
+      writes.add('$listId:$chainId');
+}
+
 void main() {
+  testWidgets('A-L3: a preselected market shows and is saved with the list; '
+      'the id comes back', (tester) async {
+    final actions = FakeListActions();
+    final stores = _Stores();
+    String? id;
+    await loadLayoutFonts();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._overrides(actions),
+          listStoreRepositoryProvider.overrideWithValue(stores),
+        ],
+        child: layoutHarness(
+          const LayoutCase(width: 390, scale: 1),
+          Builder(
+            builder: (context) => Center(
+              child: GestureDetector(
+                onTap: () async => id = await openNewListEditorForId(
+                  context,
+                  initialName: 'Lidl-Einkauf',
+                  storeChainId: 'lidl',
+                ),
+                child: const Text('start'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('start'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lidl'), findsOneWidget);
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(stores.writes, ['new:lidl']);
+    expect(id, 'new');
+  });
+
+  testWidgets('without a market: "No fixed store", nothing saved', (
+    tester,
+  ) async {
+    final stores = _Stores();
+    await loadLayoutFonts();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._overrides(FakeListActions()),
+          listStoreRepositoryProvider.overrideWithValue(stores),
+        ],
+        child: layoutHarness(
+          const LayoutCase(width: 390, scale: 1),
+          const NewListEditor(initialName: 'Party'),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('No fixed store'), findsOneWidget);
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(stores.writes, isEmpty);
+  });
+
   testWidgets('"Create" waits for a name, takes the next free colour or the '
       'chosen one, and returns the list', (tester) async {
     final actions = FakeListActions();
@@ -84,6 +157,16 @@ void main() {
       overrides: _overrides(FakeListActions()),
       child: const NewListEditor(
         initialName: 'Wocheneinkauf fürs lange Wochenende mit Freunden',
+      ),
+    ),
+  );
+  layoutMatrix(
+    'NewListEditor with a market',
+    (context) => ProviderScope(
+      overrides: _overrides(FakeListActions()),
+      child: const NewListEditor(
+        initialName: 'Lidl',
+        storeChainId: 'aldi-sued',
       ),
     ),
   );

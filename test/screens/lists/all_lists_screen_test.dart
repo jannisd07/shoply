@@ -13,6 +13,7 @@ import 'package:shoply/presentation/screens/lists/widgets/list_info_colors.dart'
 import 'package:shoply/presentation/screens/lists/widgets/share_members.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/last_list_provider.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/empty_state.dart';
 import 'package:shoply/presentation/widgets/design/list_card.dart';
 import 'package:shoply/presentation/widgets/design/quick_add_tile.dart';
@@ -101,15 +102,19 @@ List<Override> _overrides({
   List<QuickAddSuggestion> quick = _quick,
   bool offline = false,
   FakeListActions? actions,
+  bool offers = false,
 }) => [
   allListsSourceProvider.overrideWithValue(lists ?? AsyncData(_lists)),
   authUserIdProvider.overrideWithValue('u1'),
-  lastAccessedListProvider.overrideWith((ref) => LastAccessedListNotifier(null)),
+  lastAccessedListProvider.overrideWith(
+    (ref) => LastAccessedListNotifier(null),
+  ),
   pinnedListProvider.overrideWith((ref) => PinnedListNotifier(null)),
   isOfflineProvider.overrideWithValue(offline),
   allListsQuickAddProvider.overrideWithValue(quick),
   listMembersProvider.overrideWith((ref, id) async => _members[id] ?? const []),
   listActionsProvider.overrideWithValue(actions ?? FakeListActions()),
+  offersAvailableProvider.overrideWithValue(offers),
 ];
 
 Widget _content(BuildContext context, {List<ShoppingListModel>? lists}) {
@@ -169,10 +174,7 @@ void main() {
     test('big card: pinned, then last opened, then last used', () {
       expect(pickHeroList(_lists)!.id, 'w');
       expect(pickHeroList(_lists, lastOpenedId: 'r')!.id, 'r');
-      expect(
-        pickHeroList(_lists, pinnedId: 'g', lastOpenedId: 'r')!.id,
-        'g',
-      );
+      expect(pickHeroList(_lists, pinnedId: 'g', lastOpenedId: 'r')!.id, 'g');
       expect(pickHeroList(_lists, pinnedId: 'gone')!.id, 'w');
       expect(pickHeroList(const []), isNull);
     });
@@ -193,6 +195,46 @@ void main() {
       ]);
     });
 
+    test(
+      'list of today: pinned, last opened, last changed; first in pickers',
+      () {
+        expect(orderTodayFirst(_lists, 'g').map((l) => l.id), [
+          'g',
+          'w',
+          'wg',
+          'r',
+        ]);
+        expect(orderTodayFirst(_lists, null).first.id, 'w');
+        final container = ProviderContainer(
+          overrides: [
+            listsNotifierProvider.overrideWith(
+              (ref) => _FixedLists(AsyncData(_lists)),
+            ),
+            lastAccessedListProvider.overrideWith(
+              (ref) => LastAccessedListNotifier(null),
+            ),
+            pinnedListProvider.overrideWith((ref) => PinnedListNotifier(null)),
+          ],
+        );
+        addTearDown(container.dispose);
+        expect(container.read(todayListProvider)?.id, 'w');
+        container.read(pinnedListProvider.notifier).pin('r');
+        expect(container.read(todayListProvider)?.id, 'r');
+        expect(container.read(listsTodayFirstProvider).first.id, 'r');
+      },
+    );
+
+    test('a pin set before the stored value is read stays', () async {
+      SharedPreferences.setMockInitialValues({'pinned_list_u1': 'g'});
+      final notifier = PinnedListNotifier('u1');
+      addTearDown(notifier.dispose);
+      expect(notifier.state.loaded, isFalse);
+      await notifier.pin('w');
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.state.listId, 'w');
+    });
+
     test('search is case-insensitive', () {
       expect(filterLists(_lists, 'rew').map((l) => l.id), ['r']);
       expect(filterLists(_lists, '  '), _lists);
@@ -205,10 +247,7 @@ void main() {
       expect(paletteColorOfHex('#007aff')?.id, 'blue');
       expect(paletteColorOfHex('nope'), isNull);
       expect(nextFreePaletteColor(_lists).id, 'yellow');
-      expect(
-        fallbackPaletteColor('abc').id,
-        fallbackPaletteColor('abc').id,
-      );
+      expect(fallbackPaletteColor('abc').id, fallbackPaletteColor('abc').id);
     });
   });
 
@@ -229,6 +268,16 @@ void main() {
     expect(find.text('6 open · by Tom'), findsOneWidget);
     expect(find.text('All done'), findsOneWidget);
     expect(find.text('9/9'), findsOneWidget);
+  });
+
+  testWidgets('"Sparen" only with offers, opens "Angebote der Woche"', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, _overrides());
+    expect(find.text('SAVINGS'), findsNothing);
+    await _pumpScreen(tester, _overrides(offers: true));
+    await tester.scrollUntilVisible(find.text('Offers this week'), 200);
+    expect(find.text('SAVINGS'), findsOneWidget);
   });
 
   testWidgets('sets Avo\'s screen context to the lists', (tester) async {
@@ -315,10 +364,8 @@ void main() {
 
   layoutMatrix(
     'AllListsContent',
-    (context) => ProviderScope(
-      overrides: _overrides(),
-      child: _content(context),
-    ),
+    (context) =>
+        ProviderScope(overrides: _overrides(), child: _content(context)),
     scrollable: true,
   );
   layoutMatrix(
@@ -366,4 +413,13 @@ void main() {
     ),
     scrollable: true,
   );
+}
+
+/// The lists without a repository.
+class _FixedLists extends StateNotifier<AsyncValue<List<ShoppingListModel>>>
+    implements ListsNotifier {
+  _FixedLists(super.state);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

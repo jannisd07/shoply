@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/modules/app_modules.dart';
+import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/presentation/screens/profile/account/account_backend.dart'
     show SignInMethod;
 import 'package:shoply/presentation/screens/profile/profile_root_data.dart';
@@ -203,6 +204,35 @@ Widget _body(BuildContext context, ProfileRootData data, {String query = ''}) =>
     ProfileRootBody(data: data, query: query, onOpen: (_) {});
 
 void main() {
+  test('Pro row: a used trial offers all benefits instead', () {
+    const used = ProSubscriptionDetails(status: 'expired', trialEndsAt: null);
+    final usedTrial = ProSubscriptionDetails(
+      status: 'inactive',
+      trialEndsAt: DateTime(2026, 10, 1),
+    );
+    const fresh = ProSubscriptionDetails(status: 'inactive');
+    expect(
+      ProRowStatus.ofDetails(SubscriptionStatus.notSubscribed, null),
+      ProRowStatus.trialAvailable,
+    );
+    expect(
+      ProRowStatus.ofDetails(SubscriptionStatus.notSubscribed, fresh),
+      ProRowStatus.trialAvailable,
+    );
+    expect(
+      ProRowStatus.ofDetails(SubscriptionStatus.notSubscribed, usedTrial),
+      ProRowStatus.subscribe,
+    );
+    expect(
+      ProRowStatus.ofDetails(SubscriptionStatus.notSubscribed, used),
+      ProRowStatus.subscribe,
+    );
+    expect(
+      ProRowStatus.ofDetails(SubscriptionStatus.subscribed, usedTrial),
+      ProRowStatus.active,
+    );
+  });
+
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets('title, search, person, Avo Pro and the sections of today', (

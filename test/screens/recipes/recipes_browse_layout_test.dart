@@ -6,6 +6,8 @@ import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_cards
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_home.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_page.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_search.dart';
+import 'package:shoply/presentation/widgets/design/inset_section.dart';
+import 'package:shoply/presentation/widgets/tips/tip_row.dart';
 
 import '../../layout/layout_matrix.dart';
 import 'recipes_browse_fakes.dart';
@@ -43,6 +45,7 @@ Widget _home(
   bool offline = false,
   bool plan = false,
   bool hint = false,
+  bool tip = false,
   bool loading = false,
   bool empty = false,
 }) {
@@ -67,6 +70,23 @@ Widget _home(
       filters: availableQuickFilters(_catalogue),
       filter: RecipeQuickFilter.vegetarian,
       onFilter: (_) {},
+      tip: tip
+          ? Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: InsetSection(
+                children: [
+                  TipRow(
+                    text:
+                        'Tipp: Stell Ernährung und Allergien ein, dann passen sich Rezepte an dich an.',
+                    hideLabel: 'Ausblenden',
+                    onHide: () {},
+                    actionLabel: 'Einstellen',
+                    onAction: () {},
+                  ),
+                ],
+              ),
+            )
+          : null,
       showDietHint: hint,
       onDietHint: () {},
       onDismissDietHint: () {},
@@ -148,6 +168,10 @@ void main() {
   layoutMatrix(
     'RecipesBrowseContent (offline, plan segment, diet tip)',
     (context) => _home(context, offline: true, plan: true, hint: true),
+  );
+  layoutMatrix(
+    'RecipesBrowseContent (tip T7 below the title)',
+    (context) => _home(context, tip: true),
   );
   layoutMatrix(
     'RecipesBrowseContent (first load)',

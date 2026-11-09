@@ -98,6 +98,7 @@ class RecipesBrowseContent extends StatelessWidget {
     this.filters = const [RecipeQuickFilter.forYou],
     this.filter = RecipeQuickFilter.forYou,
     required this.onFilter,
+    this.tip,
     this.showDietHint = false,
     this.onDietHint,
     this.onDismissDietHint,
@@ -147,7 +148,14 @@ class RecipesBrowseContent extends StatelessWidget {
   final RecipeQuickFilter filter;
   final ValueChanged<RecipeQuickFilter> onFilter;
 
-  /// The one-time tip "Ernährung und Allergien einstellen".
+  /// The tab's one-time tip (T6, T7), usually a `TipSlot` that wraps its row
+  /// in an `InsetSection`; it sits below the large title and takes no space
+  /// without a tip. Hidden, but kept alive, while searching, loading or on
+  /// the Wochenplan, so the visit stays the same.
+  final Widget? tip;
+
+  /// The older diet hint row ("Ernährung und Allergien einstellen"); the tab
+  /// shows T7 through [tip] instead.
   final bool showDietHint;
   final VoidCallback? onDietHint;
   final VoidCallback? onDismissDietHint;
@@ -236,6 +244,19 @@ class RecipesBrowseContent extends StatelessWidget {
           key: const ValueKey('status'),
           padding: const EdgeInsets.only(top: _kStatusGap),
           child: status,
+        ),
+      );
+    }
+
+    final tipWidget = tip;
+    if (tipWidget != null) {
+      children.add(
+        KeyedSubtree(
+          key: const ValueKey('tip'),
+          child: Offstage(
+            offstage: _plan || searching || loading,
+            child: tipWidget,
+          ),
         ),
       );
     }

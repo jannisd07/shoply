@@ -14,6 +14,13 @@ import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/presentation/providers/offer_lookup_provider.dart'
+    show offerListNameProvider;
+import 'package:shoply/presentation/providers/recipe_offers_provider.dart'
+    show
+        recipeIngredientOffersProvider,
+        recipeOfferKey,
+        recipeOffersCachedProvider;
 import 'package:shoply/presentation/screens/recipes/cooking_mode_screen.dart'
     show cookingProgressProvider;
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_action_bar.dart';
@@ -648,6 +655,15 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
         ? null
         : ref.watch(recipeListOpenItemsProvider(target.id));
 
+    // Teil B's offers (S15) for the target list: the pill at each
+    // ingredient and the summary as the last row of "Zutaten".
+    final offerListId = offersOn && ref.watch(offersRemoteEnabledProvider)
+        ? target?.id
+        : null;
+    final offerRow = offerListId == null
+        ? null
+        : _offerSummary(recipe, offerListId);
+
     final lines = [
       for (final info in adaptation.ingredients)
         _line(
@@ -659,6 +675,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
           language: language,
           listName: target?.name,
           openItems: openItems,
+          offerListId: offerListId,
         ),
     ];
     final stepTexts = adaptation.steps(recipe, adapted: adapted);
@@ -703,12 +720,8 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
         onAdapted: adaptation.hasSubstitutes
             ? (v) => setState(() => _adapted = v)
             : null,
+        footer: offerRow,
       ),
-      // Teil B: "Diese Woche im Angebot"; renders nothing without offers.
-      if (offersOn) ...[
-        const SizedBox(height: AvoSpacing.l),
-        RecipeOffersCard(recipe: recipe),
-      ],
       const SizedBox(height: AvoSpacing.s),
       RecipeStepsSection(steps: steps),
       if (nutrition != null && nutrition.hasData) ...[
@@ -868,6 +881,28 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     return notes.isEmpty ? null : notes.join('\n');
   }
 
+  /// Teil B's "3 Zutaten diese Woche bei Lidl im Angebot" for [listId], or
+  /// null while it would show nothing (then "Zutaten" has no empty row).
+  /// Also hands the offers to the ingredient pills.
+  Widget? _offerSummary(Recipe recipe, String listId) {
+    final key = recipeOfferKey(recipe.id, [
+      for (final i in recipe.ingredients) i.name,
+    ], listId);
+    ref.listen(recipeOffersCachedProvider(key), (_, next) {
+      final offers = next.valueOrNull;
+      if (offers != null) {
+        ref
+            .read(recipeIngredientOffersProvider.notifier)
+            .remember(listId, offers);
+      }
+    });
+    final offers = ref.watch(recipeOffersCachedProvider(key)).valueOrNull;
+    if (offers == null || offers.matches.isEmpty) return null;
+    final name = ref.watch(offerListNameProvider(listId));
+    if (name == null || name.isEmpty) return null;
+    return RecipeOfferSummary(recipe: recipe, listId: listId);
+  }
+
   RecipeIngredientLine _line(
     BuildContext context,
     AdaptedIngredient info, {
@@ -877,6 +912,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     required String language,
     required String? listName,
     required List<ShoppingItemModel>? openItems,
+    String? offerListId,
   }) {
     final replaced = adapted && info.isAdapted;
     final scaled = scaleIngredient(
@@ -896,6 +932,14 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
           ? recipeAllergenName(context, info.allergens.first)
           : null,
       unchecked: info.unchecked,
+      // Offers are looked up for the recipe's own ingredients, so a
+      // replaced one has none.
+      offerBadge: offerListId == null || replaced
+          ? null
+          : IngredientOfferBadge(
+              listId: offerListId,
+              ingredient: info.original,
+            ),
       sublines: [
         if (replaced) ?recipeInsteadText(context, info),
         if (onList)

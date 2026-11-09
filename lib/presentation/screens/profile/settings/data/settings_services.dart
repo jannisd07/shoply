@@ -25,8 +25,10 @@ abstract interface class SettingsExternalActions {
     String? body,
   });
 
-  /// Opens [url] in Safari (outside the app).
-  Future<void> openUrl(Uri url);
+  /// Opens [url] outside the app (Safari, or the app the link belongs to,
+  /// like Kurzbefehle). False when nothing could open it, so the caller can
+  /// say so.
+  Future<bool> openUrl(Uri url);
 
   /// Opens the iOS settings of the app (permissions, language per app).
   Future<void> openAppSettings();
@@ -70,11 +72,12 @@ class DefaultSettingsExternalActions implements SettingsExternalActions {
   }
 
   @override
-  Future<void> openUrl(Uri url) async {
+  Future<bool> openUrl(Uri url) async {
     try {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
+      return await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
       debugPrint('⚠️ [SETTINGS] Link could not be opened: $e');
+      return false;
     }
   }
 

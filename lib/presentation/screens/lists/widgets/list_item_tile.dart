@@ -8,6 +8,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/core/utils/item_quantity.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_detail_data.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_drag_controller.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
@@ -147,7 +148,7 @@ class _ListItemTileState extends ConsumerState<ListItemTile> {
     final colors = context.colors;
     final deleteLabel = context.tr('list_detail_delete_item');
     // Without pictures (setting off, AX sizes) the row leaves no gap.
-    final images = articleImagesShown(context, ref);
+    final images = listImagesShown(context, ref);
 
     final row = ItemRow(
       title: item.name,

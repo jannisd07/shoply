@@ -36,6 +36,19 @@ void main() {
     expect(m('shoply://history/t1'), '/history/t1');
   });
 
+  test('A-R3: Angebote der Woche with filter and search', () {
+    expect(m('shoply://offers'), '/offers');
+    expect(m('shoply://offers?filter=regulars'), '/offers?filter=regulars');
+    expect(m('shoply://offers?q=Milch'), '/offers?q=Milch');
+    expect(
+      m('shoply://offers?filter=regulars&q=Butter'),
+      '/offers?filter=regulars&q=Butter',
+    );
+    // Other values and blank searches drop out; deeper paths stay.
+    expect(m('shoply://offers?filter=all&q=%20'), '/offers');
+    expect(m('shoply://offers/list/l1'), '/offers/list/l1');
+  });
+
   test('action and unknown links land on Home', () {
     expect(m('shoply://add-item?name=Milch'), '/home');
     expect(m('shoply://create-list?name=Party'), '/home');

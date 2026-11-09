@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 
 /// Local notifications for cooking timers. Overridden in tests.
@@ -36,6 +37,7 @@ class NotificationCookingAlerts implements CookingTimerAlerts {
         title: title,
         body: body,
         scheduledFor: at,
+        category: NotificationCategory.cookingTimer,
       );
     } catch (e) {
       debugPrint('⚠️ [COOKING] Timer notification not planned: $e');

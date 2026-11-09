@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/state/last_list_provider.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 
@@ -41,26 +42,34 @@ class PinnedListNotifier extends StateNotifier<PinnedList> {
 
   final String? _userId;
 
+  /// [pin] ran before the stored value was read: that choice wins over the
+  /// stored one (status-B 16, `AvoSettingsBridge` pins right at start).
+  bool _pinnedBeforeLoad = false;
+
   String get _key => 'pinned_list_$_userId';
 
   Future<void> _load() async {
     if (_userId == null) {
-      state = const PinnedList(loaded: true);
+      if (!_pinnedBeforeLoad) state = const PinnedList(loaded: true);
       return;
     }
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (mounted) {
+      if (mounted && !_pinnedBeforeLoad) {
         state = PinnedList(loaded: true, listId: prefs.getString(_key));
       }
     } catch (e) {
       debugPrint('⚠️ [ALL_LISTS] Failed to read pinned list: $e');
-      if (mounted) state = const PinnedList(loaded: true);
+      if (mounted && !_pinnedBeforeLoad) {
+        state = const PinnedList(loaded: true);
+      }
     }
   }
 
-  /// Pins [listId], or unpins with null.
+  /// Pins [listId], or unpins with null. A pin set while the stored value
+  /// is still being read is kept.
   Future<void> pin(String? listId) async {
+    if (!state.loaded) _pinnedBeforeLoad = true;
     state = PinnedList(loaded: true, listId: listId);
     if (_userId == null) return;
     try {
@@ -146,6 +155,46 @@ ShoppingListModel? pickHeroList(
     }
   }
   return lists.reduce((a, b) => listUsedAt(b).isAfter(listUsedAt(a)) ? b : a);
+}
+
+/// "Die Liste von heute" (Konzept 01 §2.2, angebote.md L9, A-L4): the
+/// pinned list, else the one opened last on this device, else the one
+/// changed last; null without lists or while they load. Same rule as the
+/// big card of the overview ([pickHeroList]). Never switches by itself
+/// (K-28): it only follows a pin, an opened list or a change.
+final todayListProvider = Provider<ShoppingListModel?>((ref) {
+  final lists = ref.watch(listsNotifierProvider).valueOrNull;
+  if (lists == null || lists.isEmpty) return null;
+  return pickHeroList(
+    lists,
+    pinnedId: ref.watch(pinnedListProvider).listId,
+    lastOpenedId: ref.watch(lastAccessedListProvider).valueOrNull,
+  );
+});
+
+/// The person's lists with [todayListProvider] first, then by last change
+/// (newest first): the order of "Auf welche Liste?" (S10) and of other
+/// list pickers (A-L4).
+final listsTodayFirstProvider = Provider<List<ShoppingListModel>>((ref) {
+  final lists = ref.watch(listsNotifierProvider).valueOrNull;
+  if (lists == null || lists.isEmpty) return const [];
+  return orderTodayFirst(lists, ref.watch(todayListProvider)?.id);
+});
+
+/// [lists] with [todayId] first, the rest by last change, newest first.
+List<ShoppingListModel> orderTodayFirst(
+  List<ShoppingListModel> lists,
+  String? todayId,
+) {
+  final rest = [
+    for (final l in lists)
+      if (l.id != todayId) l,
+  ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return [
+    for (final l in lists)
+      if (l.id == todayId) l,
+    ...rest,
+  ];
 }
 
 /// A snapshot of "last changed" per list, taken when the page opens, so the

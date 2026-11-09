@@ -9,6 +9,7 @@ import 'package:shoply/presentation/widgets/design/filter_chip.dart';
 import 'package:shoply/presentation/widgets/design/recipe_card.dart';
 import 'package:shoply/presentation/widgets/design/segmented_control.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
+import 'package:shoply/presentation/widgets/tips/tip_row.dart';
 
 import 'recipes_browse_fakes.dart';
 import 'recipes_browse_harness.dart';
@@ -268,14 +269,14 @@ void main() {
     expect(find.byType(RecipeHeroCard), findsOneWidget);
   });
 
-  testWidgets('diet tip without a profile, wiped away for good', (
+  testWidgets('without the tip service: no tip and no older diet hint', (
     tester,
   ) async {
     await pumpBrowse(tester, _ready());
-    const tip = 'Set your diet and allergies. Recipes adapt to them.';
-    expect(find.text(tip), findsOneWidget);
-    await tester.tap(find.bySemanticsLabel('Close'));
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text(tip), findsNothing);
+    expect(
+      find.text('Set your diet and allergies. Recipes adapt to them.'),
+      findsNothing,
+    );
+    expect(find.byType(TipRow), findsNothing);
   });
 }

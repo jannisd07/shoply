@@ -132,6 +132,21 @@ abstract final class RoutePaths {
   static const stores = '/stores';
   static const checkout = '/checkout';
 
+  /// Teil B's full-screen routes whose paths start with a root the shell
+  /// owns (A-R1). They are mounted before the shell, open above the tab
+  /// that asked and close back to it. Teil B's helpers (`offer_paths.dart`)
+  /// build the full locations with their query parameters.
+  static const offersOfferPattern = '$offers/offer/:offerId';
+  static const offersRecipePattern = '$offers/recipe/:recipeId';
+
+  /// "Angebote bei {Markt}" (a push in the Listen tab, not full screen).
+  static const offersListPattern = '$offers/list/:listId';
+  static const storesPick = '$stores/pick';
+  static const storesRegion = '$stores/region';
+  static const caloriesAdd = '$calories/add';
+  static const caloriesScan = '$calories/scan';
+  static const caloriesGoalsSetup = '$calories/goals/setup';
+
   // --- Debug ------------------------------------------------------------------
   /// Component gallery (`ComponentGallery`): every design component in light,
   /// dark, AX5 and Increase Contrast, to compare with D2. Registered in debug

@@ -2,7 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/presentation/screens/lists/widgets/add_suggestion_panel.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_detail_composer.dart';
+import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
 import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
 import 'package:shoply/presentation/widgets/design/glass_surface.dart';
@@ -27,6 +30,7 @@ Future<void> _pump(
   FocusNode? focus,
   ValueChanged<String>? onSubmitted,
   List<Override> overrides = const [],
+  bool Function()? refocusAllowed,
 }) async {
   await loadLayoutFonts();
   tester.view.physicalSize = Size(layout.width * 3, kLayoutHeight * 3);
@@ -53,6 +57,7 @@ Future<void> _pump(
                 focusNode: node,
                 onSubmitted: onSubmitted ?? (_) {},
                 totalText: sum,
+                refocusAllowed: refocusAllowed,
               ),
             ),
           ],
@@ -62,6 +67,35 @@ Future<void> _pump(
   );
   await tester.pump();
 }
+
+final _at = DateTime(2026, 11, 9, 10);
+
+ShoppingItemModel _item(String name, {bool checked = false}) =>
+    ShoppingItemModel(
+      id: name,
+      listId: 'l1',
+      name: name,
+      isChecked: checked,
+      createdAt: _at,
+      updatedAt: _at,
+    );
+
+/// The list's items without a server.
+class _Items extends StateNotifier<AsyncValue<List<ShoppingItemModel>>>
+    implements ItemsNotifier {
+  _Items(List<ShoppingItemModel> items) : super(AsyncValue.data(items));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+List<Override> _panelOverrides({
+  List<ShoppingItemModel> items = const [],
+  List<String> frequent = const [],
+}) => [
+  itemsNotifierProvider.overrideWith((ref, id) => _Items(items)),
+  addFrequentItemNamesProvider.overrideWith((ref) async => frequent),
+];
 
 void _expectFieldNotClipped(WidgetTester tester, String label) {
   final box = tester.renderObject<RenderBox>(find.byType(CupertinoTextField));
@@ -148,7 +182,9 @@ void main() {
       expect(find.text(_sum), findsOneWidget);
       expect(find.bySemanticsLabel('Dictate'), findsNothing);
       expect(
-        tester.widget<AddItemAccessory>(find.byType(AddItemAccessory)).onDictate,
+        tester
+            .widget<AddItemAccessory>(find.byType(AddItemAccessory))
+            .onDictate,
         isNull,
       );
     });
@@ -200,6 +236,197 @@ void main() {
       expect(find.byType(OfferSuggestionsBar), findsNothing);
     });
   });
+
+  group('A-C4 suggestion panel', () {
+    const layout = LayoutCase(width: 390, scale: 1);
+
+    testWidgets('before the first letter: the start suggestions', (
+      tester,
+    ) async {
+      final submitted = <String>[];
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await _pump(
+        tester,
+        layout: layout,
+        focus: focus,
+        onSubmitted: submitted.add,
+        overrides: _panelOverrides(
+          items: [_item('Eggs'), _item('Bread', checked: true)],
+        ),
+      );
+      expect(find.byType(AddSuggestionPanel), findsNothing);
+      focus.requestFocus();
+      await tester.pump();
+      await tester.pump();
+      // "Eggs" is open on the list already; a checked "Bread" is not.
+      for (final name in ['Milk', 'Bread', 'Bananas', 'Butter']) {
+        expect(find.text(name), findsOneWidget, reason: name);
+      }
+      expect(find.text('Eggs'), findsNothing);
+      await tester.tap(find.text('Bananas'));
+      expect(submitted, ['Bananas']);
+
+      // Typing replaces them.
+      await tester.enterText(find.byType(CupertinoTextField), 'M');
+      await tester.pump();
+      expect(find.text('Butter'), findsNothing);
+    });
+
+    testWidgets('five own frequent items replace the fixed ones', (
+      tester,
+    ) async {
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await _pump(
+        tester,
+        layout: layout,
+        focus: focus,
+        overrides: _panelOverrides(
+          frequent: ['Hafermilch', 'Tofu', 'Äpfel', 'Kaffee', 'Reis', 'Salz'],
+        ),
+      );
+      focus.requestFocus();
+      await tester.pumpAndSettle();
+      for (final name in ['Hafermilch', 'Tofu', 'Äpfel', 'Kaffee', 'Reis']) {
+        expect(find.text(name), findsOneWidget, reason: name);
+      }
+      expect(find.text('Salz'), findsNothing);
+      expect(find.text('Milk'), findsNothing);
+    });
+
+    testWidgets('fewer than five own items: the fixed ones', (tester) async {
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await _pump(
+        tester,
+        layout: layout,
+        focus: focus,
+        overrides: _panelOverrides(frequent: ['Tofu']),
+      );
+      focus.requestFocus();
+      await tester.pumpAndSettle();
+      expect(find.text('Milk'), findsOneWidget);
+      expect(find.text('Tofu'), findsNothing);
+    });
+
+    testWidgets('focus comes back after a route opened from the panel', (
+      tester,
+    ) async {
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await _pump(
+        tester,
+        layout: layout,
+        focus: focus,
+        overrides: _panelOverrides(),
+      );
+      focus.requestFocus();
+      await tester.pump();
+      final context = tester.element(find.byType(ListDetailComposer));
+      // Like "Postleitzahl festlegen": keyboard down, then the route.
+      focus.unfocus();
+      Navigator.of(
+        context,
+      ).push(CupertinoPageRoute<void>(builder: (_) => const Text('Region')));
+      await tester.pumpAndSettle();
+      expect(focus.hasFocus, isFalse);
+      Navigator.of(context).pop();
+      await tester.pumpAndSettle();
+      expect(focus.hasFocus, isTrue);
+    });
+
+    testWidgets(
+      'no focus after a route when the keyboard was closed on purpose',
+      (tester) async {
+        final focus = FocusNode();
+        addTearDown(focus.dispose);
+        await _pump(
+          tester,
+          layout: layout,
+          focus: focus,
+          overrides: _panelOverrides(),
+          refocusAllowed: () => false,
+        );
+        focus.requestFocus();
+        await tester.pump();
+        final context = tester.element(find.byType(ListDetailComposer));
+        focus.unfocus();
+        Navigator.of(
+          context,
+        ).push(CupertinoPageRoute<void>(builder: (_) => const Text('Item')));
+        await tester.pumpAndSettle();
+        Navigator.of(context).pop();
+        await tester.pumpAndSettle();
+        expect(focus.hasFocus, isFalse);
+      },
+    );
+
+    testWidgets('a route opened long after the keyboard closed: no focus', (
+      tester,
+    ) async {
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await _pump(
+        tester,
+        layout: layout,
+        focus: focus,
+        overrides: _panelOverrides(),
+      );
+      final context = tester.element(find.byType(ListDetailComposer));
+      Navigator.of(
+        context,
+      ).push(CupertinoPageRoute<void>(builder: (_) => const Text('Item')));
+      await tester.pumpAndSettle();
+      Navigator.of(context).pop();
+      await tester.pumpAndSettle();
+      expect(focus.hasFocus, isFalse);
+    });
+
+    testWidgets('B block: at most five rows high, scrolls inside', (
+      tester,
+    ) async {
+      await loadLayoutFonts();
+      tester.view.physicalSize = const Size(390 * 3, kLayoutHeight * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        layoutHarness(
+          layout,
+          const Align(
+            alignment: Alignment.bottomCenter,
+            child: AddSuggestionPanel(
+              offers: SizedBox(height: 2000, child: Text('offers')),
+            ),
+          ),
+        ),
+      );
+      final height = tester.getSize(find.byType(AddSuggestionPanel)).height;
+      expect(height, lessThanOrEqualTo(kAddPanelMaxRows * 52 + 0.5));
+      expect(height, greaterThan(0));
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('nothing to show: no panel', (tester) async {
+      await tester.pumpWidget(
+        layoutHarness(layout, const AddSuggestionPanel()),
+      );
+      expect(find.byType(SingleChildScrollView), findsNothing);
+    });
+  });
+
+  layoutMatrix(
+    'AddSuggestionPanel start suggestions',
+    (context) => Align(
+      alignment: Alignment.bottomCenter,
+      child: AddSuggestionPanel(
+        starts: const ['Milch', 'Brot', 'Eier', 'Bananen', 'Butter'],
+        onPick: (_) {},
+      ),
+    ),
+    checkTapTargets: true,
+  );
 
   layoutMatrix(
     'ListDetailComposer with sum',

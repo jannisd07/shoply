@@ -63,8 +63,16 @@ ListActivity _event(
 
 final _events = [
   _event(ListActivityType.itemAdded),
-  _event(ListActivityType.itemChecked, item: 'Joghurt', ago: const Duration(minutes: 40)),
-  _event(ListActivityType.itemChecked, item: 'Eier', ago: const Duration(minutes: 44)),
+  _event(
+    ListActivityType.itemChecked,
+    item: 'Joghurt',
+    ago: const Duration(minutes: 40),
+  ),
+  _event(
+    ListActivityType.itemChecked,
+    item: 'Eier',
+    ago: const Duration(minutes: 44),
+  ),
   _event(
     ListActivityType.itemAdded,
     user: 'u1',
@@ -91,9 +99,7 @@ List<Override> _overrides({
   offersHiddenForListProvider.overrideWith((ref, id) => false),
   storeForListProvider.overrideWith((ref, id) => null),
   listChangesProvider.overrideWith((ref, id) async => events ?? _events),
-  categoryOrderOpenCountsProvider.overrideWith(
-    (ref, id) => const {'dairy': 3},
-  ),
+  categoryOrderOpenCountsProvider.overrideWith((ref, id) => const {'dairy': 3}),
 ];
 
 Future<ProviderContainer> _pump(
@@ -141,7 +147,9 @@ void main() {
       expect(find.text('Wocheneinkauf'), findsOneWidget);
       expect(find.text('Created by Jannis · since Oct 12'), findsOneWidget);
       expect(find.text('Store order'), findsOneWidget);
-      expect(find.text('Offers on this list'), findsOneWidget);
+      expect(find.text('Show offers'), findsOneWidget);
+      expect(find.text('Store for this list'), findsOneWidget);
+      expect(find.text('No fixed store'), findsOneWidget);
       expect(find.text('MEMBERS (2)'), findsOneWidget);
       expect(find.text('You · Creator'), findsOneWidget);
       expect(find.text('Invite people'), findsOneWidget);
@@ -237,7 +245,10 @@ void main() {
       await _pump(
         tester,
         _info,
-        _overrides(list: _list(owner: 'tom'), actions: actions),
+        _overrides(
+          list: _list(owner: 'tom'),
+          actions: actions,
+        ),
         height: 2400,
       );
       expect(find.text('Delete list'), findsNothing);
@@ -278,12 +289,7 @@ void main() {
     });
 
     testWidgets('no changes yet', (tester) async {
-      await _pump(
-        tester,
-        _info,
-        _overrides(events: const []),
-        height: 2400,
-      );
+      await _pump(tester, _info, _overrides(events: const []), height: 2400);
       expect(find.text('No changes yet.'), findsOneWidget);
       expect(find.text('Show all'), findsNothing);
     });
@@ -330,9 +336,9 @@ void main() {
         Builder(
           builder: (context) => Center(
             child: GestureDetector(
-              onTap: () async => result = await Navigator.of(context).push<bool>(
-                MaterialPageRoute(builder: (_) => screen),
-              ),
+              onTap: () async => result = await Navigator.of(
+                context,
+              ).push<bool>(MaterialPageRoute(builder: (_) => screen)),
               child: const Text('start'),
             ),
           ),
@@ -396,10 +402,7 @@ void main() {
     'ListActivitiesScreen',
     (context) => ProviderScope(
       overrides: _overrides(),
-      child: const ListActivitiesScreen(
-        listId: 'w',
-        listName: 'Wocheneinkauf',
-      ),
+      child: const ListActivitiesScreen(listId: 'w', listName: 'Wocheneinkauf'),
     ),
   );
 }

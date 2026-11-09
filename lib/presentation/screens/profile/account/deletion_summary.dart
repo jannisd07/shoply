@@ -10,6 +10,11 @@ import 'package:shoply/presentation/screens/lists/widgets/share_members.dart';
 import 'package:shoply/presentation/screens/profile/account/account_backend.dart';
 import 'package:shoply/presentation/screens/profile/account/profile_edit_controller.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart'
+    show
+        openSplitBalancesCountProvider,
+        subscriptionFamilySharedProvider,
+        subscriptionRenewsOnProvider;
 
 /// A shared list the person created, and who gets it (Konzept 18 §7.3,
 /// F18-08: the member who joined first). [memberName] is null while the
@@ -154,6 +159,8 @@ final deletionSummaryProvider = Provider<DeletionSummary>((ref) {
   final recipes = ref.watch(ownRecipeCountProvider).valueOrNull;
   final caloriesOn = ref.watch(moduleEnabledProvider(AppModule.calories));
   final status = ref.watch(subscriptionStatusProvider).valueOrNull;
+  // Through Family Sharing the subscription is not the person's own.
+  final familyShared = ref.watch(subscriptionFamilySharedProvider) == true;
   return DeletionSummary(
     name: ref.watch(accountDisplayNameProvider),
     ownLists: sorted.own,
@@ -162,6 +169,8 @@ final deletionSummaryProvider = Provider<DeletionSummary>((ref) {
     ownRecipes: recipes,
     trips: trips,
     calories: caloriesOn ? CalorieDiary.on : CalorieDiary.none,
-    pro: status == SubscriptionStatus.subscribed,
+    pro: status == SubscriptionStatus.subscribed && !familyShared,
+    proRenewsOn: ref.watch(subscriptionRenewsOnProvider),
+    openBalances: ref.watch(openSplitBalancesCountProvider).valueOrNull,
   );
 });

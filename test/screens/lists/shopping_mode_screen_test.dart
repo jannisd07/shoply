@@ -8,6 +8,7 @@ import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart';
 import 'package:shoply/presentation/screens/lists/shopping_mode_screen.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_aisles.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/list_preferences.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
@@ -111,7 +112,11 @@ void main() {
   late ProviderContainer container;
   late List<String> checkouts;
 
-  Future<void> open(WidgetTester tester, {bool saves = true}) async {
+  Future<void> open(
+    WidgetTester tester, {
+    bool saves = true,
+    ListPreferences prefs = const ListPreferences(),
+  }) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -127,6 +132,9 @@ void main() {
           (ref, listId) async => const ShoppingAisleOrder(),
         ),
         isOfflineProvider.overrideWithValue(false),
+        listPreferencesProvider.overrideWith(
+          (ref) => ListPreferencesNotifier(null)..state = prefs,
+        ),
         checkoutRunnerProvider.overrideWithValue((context, ref, listId) async {
           checkouts.add(listId);
           return saves;
@@ -169,6 +177,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('open'), findsOneWidget);
     expect(awake.calls, ['on', 'off', 'on', 'off']);
+  });
+
+  testWidgets('"Bildschirm anlassen" off: the screen may sleep', (
+    tester,
+  ) async {
+    await open(tester, prefs: const ListPreferences(keepScreenOn: false));
+    expect(awake.calls, isEmpty);
+
+    // Switched on while open (Avo, Einstellungen): on at once.
+    final notifier = container.read(listPreferencesProvider.notifier);
+    await notifier.update(const ListPreferences());
+    await tester.pump();
+    expect(awake.calls, ['on']);
+    await notifier.update(const ListPreferences(keepScreenOn: false));
+    await tester.pump();
+    expect(awake.calls, ['on', 'off']);
   });
 
   testWidgets('tells Avo it is the shopping mode, hands back on leaving', (

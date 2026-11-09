@@ -1,7 +1,9 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/app_router.dart';
+import 'package:shoply/routes/areas/offers_routes.dart' show buildOffersRoot;
 import 'package:shoply/routes/route_paths.dart';
 
 /// Collects `name -> full path` for every named GoRoute, depth first.
@@ -23,6 +25,83 @@ Map<String, String> _collect(List<RouteBase> routes, [String parent = '']) {
     }
   }
   return out;
+}
+
+/// The real route table, for matching without building any screen.
+RouteConfiguration _config() => RouteConfiguration(
+  ValueNotifier(RoutingConfig(routes: buildAppRoutes())),
+  navigatorKey: rootNavigatorKey,
+);
+
+/// A small router in the same order as [buildAppRoutes]: Teil B's
+/// full-screen roots first, then the shell with the Listen (Angebote) and
+/// Rezepte tabs, plus Home.
+GoRouter _miniRouter(String initial) {
+  Widget label(String text) => Center(child: Text(text));
+  return GoRouter(
+    initialLocation: initial,
+    routes: [
+      GoRoute(
+        path: RoutePaths.offersOfferPattern,
+        builder: (_, s) => label('Angebot ${s.pathParameters['offerId']}'),
+      ),
+      GoRoute(
+        path: RoutePaths.caloriesAdd,
+        builder: (_, __) => label('Essen eintragen'),
+      ),
+      StatefulShellRoute.indexedStack(
+        builder: (_, __, shell) => shell,
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: RoutePaths.home, builder: (_, __) => label('Home')),
+              GoRoute(
+                path: RoutePaths.calories,
+                builder: (_, __) => label('Tagebuch'),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: RoutePaths.offers,
+                builder: (_, __) => label('Angebote der Woche'),
+                routes: [
+                  GoRoute(
+                    path: 'list/:listId',
+                    builder: (_, __) => label('Angebote bei'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: RoutePaths.recipes,
+                builder: (_, __) => label('Rezepte'),
+                routes: [
+                  GoRoute(
+                    path: ':recipeId',
+                    builder: (_, __) => label('Rezeptdetail'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+Future<GoRouter> _pumpMini(WidgetTester tester, String initial) async {
+  final router = _miniRouter(initial);
+  await tester.pumpWidget(
+    WidgetsApp.router(routerConfig: router, color: const Color(0xFF000000)),
+  );
+  await tester.pumpAndSettle();
+  return router;
 }
 
 void main() {
@@ -104,6 +183,110 @@ void main() {
     expect(paths(AppBranch.recipes), contains(RoutePaths.plan));
     final lists = shell.branches[AppBranch.lists.index].routes.first as GoRoute;
     expect((lists.routes.single as GoRoute).path, ':listId');
+  });
+
+  group('A-R1: Teil B full screens come before the shell', () {
+    test('every B root route is mounted ahead of the shell', () {
+      final routes = buildAppRoutes();
+      final shell = routes.indexWhere((r) => r is StatefulShellRoute);
+      for (final r in bRootRoutes()) {
+        final i = routes.indexOf(r);
+        expect(i, isNonNegative);
+        expect(i, lessThan(shell), reason: (r as GoRoute).path);
+      }
+    });
+
+    test('they match above the tab bar, the shell keeps its own pushes', () {
+      final config = _config();
+      bool aboveTabs(String location) {
+        final m = config.findMatch(location);
+        expect(m.isError, isFalse, reason: location);
+        return m.matches.first is! ShellRouteMatch;
+      }
+
+      String pattern(String location) => config.findMatch(location).fullPath;
+
+      expect(aboveTabs('/offers/offer/42'), isTrue);
+      expect(pattern('/offers/offer/42'), RoutePaths.offersOfferPattern);
+      expect(aboveTabs('/offers/recipe/r1?list=l1'), isTrue);
+      expect(pattern('/offers/recipe/r1'), RoutePaths.offersRecipePattern);
+      expect(aboveTabs(RoutePaths.storesPick), isTrue);
+      expect(aboveTabs(RoutePaths.storesRegion), isTrue);
+      expect(aboveTabs('${RoutePaths.caloriesAdd}?meal=dinner'), isTrue);
+      expect(pattern(RoutePaths.caloriesAdd), RoutePaths.caloriesAdd);
+      expect(aboveTabs(RoutePaths.caloriesScan), isTrue);
+      expect(aboveTabs(RoutePaths.caloriesGoalsSetup), isTrue);
+
+      expect(aboveTabs(RoutePaths.offers), isFalse);
+      expect(aboveTabs('/offers/list/l1'), isFalse);
+      expect(pattern('/offers/list/l1'), RoutePaths.offersListPattern);
+      expect(aboveTabs(RoutePaths.calories), isFalse);
+      expect(aboveTabs('/calories/goals'), isFalse);
+    });
+
+    testWidgets('/offers/offer/x opens over Rezepte and closes back to it', (
+      tester,
+    ) async {
+      final router = await _pumpMini(tester, RoutePaths.recipes);
+      expect(find.text('Rezepte'), findsOneWidget);
+      router.push('/offers/offer/x');
+      await tester.pumpAndSettle();
+      expect(find.text('Angebot x'), findsOneWidget);
+      expect(find.text('Angebote der Woche'), findsNothing);
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Rezepte'), findsOneWidget);
+      expect(find.text('Angebot x'), findsNothing);
+    });
+
+    testWidgets('/calories/add opens over Rezepte and closes back to it', (
+      tester,
+    ) async {
+      final router = await _pumpMini(tester, RoutePaths.recipes);
+      router.push('${RoutePaths.caloriesAdd}?meal=dinner');
+      await tester.pumpAndSettle();
+      expect(find.text('Essen eintragen'), findsOneWidget);
+      expect(find.text('Tagebuch'), findsNothing);
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Rezepte'), findsOneWidget);
+    });
+  });
+
+  group('A-R2: guards', () {
+    test('/offers uses the root builder of Teil B, no ModuleGate', () {
+      final shell = buildAppRoutes().whereType<StatefulShellRoute>().single;
+      final offers = shell.branches[AppBranch.lists.index].routes
+          .whereType<GoRoute>()
+          .singleWhere((r) => r.path == RoutePaths.offers);
+      // B's gate inside buildOffersRoot covers kill switch and module.
+      expect(offers.builder, buildOffersRoot);
+    });
+  });
+
+  group('Kalorien A-R3: a recipe from the Home tab (today)', () {
+    test('/recipe/:id opens above any tab, /recipes/:id lives in Rezepte', () {
+      final config = _config();
+      expect(
+        config.findMatch('/recipe/r1').matches.first,
+        isNot(isA<ShellRouteMatch>()),
+      );
+      expect(
+        config.findMatch(RoutePaths.recipe('r1')).matches.first,
+        isA<ShellRouteMatch>(),
+      );
+    });
+
+    testWidgets('pushing /recipes/:id from Home shows the Rezepte tab; '
+        'back returns to Home', (tester) async {
+      final router = await _pumpMini(tester, RoutePaths.home);
+      router.push(RoutePaths.recipe('r1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rezeptdetail'), findsOneWidget);
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Home'), findsOneWidget);
+    });
   });
 
   test(

@@ -29,8 +29,8 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   final Ref _ref;
   static const String _themeModeKey = 'theme_mode';
 
-  // Paper design is light-first; users can still switch in settings.
-  ThemeModeNotifier(this._ref) : super(ThemeMode.light) {
+  // Follows the system until the person picks a theme (K-32).
+  ThemeModeNotifier(this._ref) : super(ThemeMode.system) {
     _load();
   }
 

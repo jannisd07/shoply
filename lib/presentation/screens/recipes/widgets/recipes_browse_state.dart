@@ -12,6 +12,7 @@ import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/data/services/recipe_features_service.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/presentation/screens/lists/widgets/all_lists_data.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/profile_settings.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/last_list_provider.dart';
@@ -106,10 +107,20 @@ Future<void> refreshRecipeCatalogue(WidgetRef ref) async {
 
 // ------------------------------------------------------------- diet profile
 
-/// The person's allergies and diet (Konzept 13 §2.3).
-final recipeDietProfileProvider = Provider<RecipeDietProfile>(
-  (ref) => RecipeDietProfile.of(ref.watch(currentUserProvider).valueOrNull),
-);
+/// The person's allergies and diet (Konzept 13 §2.3), with "Rezepte
+/// automatisch anpassen" from Ernährung & Allergien.
+final recipeDietProfileProvider = Provider<RecipeDietProfile>((ref) {
+  final profile = RecipeDietProfile.of(
+    ref.watch(currentUserProvider).valueOrNull,
+  );
+  final autoAdapt = ref.watch(recipeAutoAdaptProvider);
+  if (autoAdapt == profile.autoAdapt) return profile;
+  return RecipeDietProfile(
+    allergies: profile.allergies,
+    diets: profile.diets,
+    autoAdapt: autoAdapt,
+  );
+});
 
 /// True once the profile is known (or there is nobody signed in), so the tab
 /// can fix "Für dich" only after allergies are taken into account.

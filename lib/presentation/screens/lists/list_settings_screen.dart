@@ -1,4 +1,3 @@
-
 import 'package:flutter/cupertino.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,9 +35,9 @@ import 'package:shoply/routes/route_paths.dart';
 const double _kDisabledOpacity = 0.4;
 
 /// Listen-Info (Konzept 11 §10, full screen instead of a sheet): name,
-/// colour, store order and offers, members with "Personen einladen",
-/// pinning, recent changes, and "Liste löschen" (creator) or "Liste
-/// verlassen". Changes apply at once, so there is no "Fertig".
+/// colour, market ("Markt wählen"), store order and "Angebote anzeigen",
+/// members with "Personen einladen", pinning, recent changes, and "Liste
+/// löschen" (creator) or "Liste verlassen". Changes apply at once, so there is no "Fertig".
 ///
 /// Everything comes from the local state first (lists, cached members);
 /// the leading button is an X when the screen was opened as a cover and a
@@ -147,10 +146,8 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
   void _openOrder() {
     Navigator.of(context).push<bool>(
       CupertinoPageRoute(
-        builder: (_) => CategoryOrderScreen(
-          listId: widget.listId,
-          listName: _currentName,
-        ),
+        builder: (_) =>
+            CategoryOrderScreen(listId: widget.listId, listName: _currentName),
       ),
     );
   }
@@ -158,10 +155,8 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
   void _openChanges() {
     Navigator.of(context).push<void>(
       CupertinoPageRoute(
-        builder: (_) => ListActivitiesScreen(
-          listId: widget.listId,
-          listName: _currentName,
-        ),
+        builder: (_) =>
+            ListActivitiesScreen(listId: widget.listId, listName: _currentName),
       ),
     );
   }
@@ -311,6 +306,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
     final pinned = ref.watch(pinnedListProvider).listId == widget.listId;
     final offersOn = ref.watch(offersAvailableProvider);
     final offersHidden = ref.watch(offersHiddenForListProvider(widget.listId));
+    final store = ref.watch(storeForListProvider(widget.listId));
     final changes = bundleChanges(
       ref.watch(listChangesProvider(widget.listId)).valueOrNull ?? const [],
     );
@@ -414,8 +410,18 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
           ),
           InsetSection(
             header: context.tr('list_ov_section_store'),
-            headerTrailing: StoreChip(listId: widget.listId),
             children: [
+              // "Markt" opens "Markt wählen" (S2) directly; the picker saves
+              // the choice and shows the undo toast itself (A-L1).
+              NavRow(
+                title: context.tr('list_ov_store_row'),
+                value: store?.name ?? context.tr('offer_store_none'),
+                onTap: () => openStorePicker(
+                  context,
+                  listId: widget.listId,
+                  from: StorePickerOrigin.info,
+                ),
+              ),
               NavRow(title: context.tr('list_ov_order'), onTap: _openOrder),
               if (offersOn)
                 ToggleRow(
@@ -485,11 +491,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
                   ]
                 : [
                     for (final c in changes.take(kListInfoChangeCount))
-                      ListChangeRow(
-                        change: c,
-                        currentUserId: userId,
-                        now: now,
-                      ),
+                      ListChangeRow(change: c, currentUserId: userId, now: now),
                   ],
           ),
           const SizedBox(height: AvoSpacing.section),

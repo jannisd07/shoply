@@ -3,10 +3,11 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/screens/profile/account/account_backend_supabase.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart'
+    show pendingChangesCountProvider;
 import 'package:url_launcher/url_launcher.dart';
 
 /// How the account signs in (Konzept 18 §7.1 "Angemeldet mit").
@@ -227,19 +228,13 @@ final accountClockProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
 );
 
-/// How many changes wait in the device queues (Kalorien, Wochenplan) and
-/// would be lost on sign-out (Konzept 18 §7.2). A function, so the count is
-/// read at the moment of the tap. Overridden in tests.
-final unsentChangesProvider = Provider<int Function()>((ref) {
-  return () {
-    final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
-    if (prefs == null) return 0;
-    return countUnsentChanges(
-      prefs,
-      userId: ref.read(accountIdentityProvider)?.userId,
-    );
-  };
-});
+/// How many changes wait in the device queues and would be lost on sign-out
+/// (Konzept 18 §7.2). Kept for older callers: it is Teil B's
+/// `pendingChangesCountProvider`, which counts the right keys per account.
+@Deprecated('Use pendingChangesCountProvider (b_slots.dart).')
+final unsentChangesProvider = Provider<int Function()>(
+  (ref) => ref.watch(pendingChangesCountProvider),
+);
 
 /// Entries of the write queues that keep changes on the device until they
 /// are sent: the calorie queue and the meal plan outbox of [userId].

@@ -210,39 +210,75 @@ void main() {
     expect(action.left, closeTo(text.left, 1));
   });
 
-  testWidgets(
-    'announces on iOS when it appears and when the text changes',
-    (tester) async {
-      var text = _offline;
-      late StateSetter update;
-      await _pump(
-        tester,
-        StatefulBuilder(
-          builder: (context, setState) {
-            update = setState;
-            return StatusRow(kind: StatusKind.offline, text: text);
-          },
-        ),
-      );
-      await tester.pump();
-      var announcements = tester.takeAnnouncements();
-      expect(announcements.map((a) => a.message), [_offline]);
+  testWidgets('a long action moves below the text at 320 pt ×1.35', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      StatusRow(
+        kind: StatusKind.permission,
+        text: 'Standort ist aus.',
+        actionLabel: 'In Einstellungen erlauben',
+        onAction: () {},
+      ),
+      layout: const LayoutCase(width: 320, scale: 1.35),
+    );
+    expect(tester.takeException(), isNull);
+    final text = tester.getRect(find.text('Standort ist aus.'));
+    final action = tester.getRect(find.text('In Einstellungen erlauben'));
+    expect(action.top, greaterThanOrEqualTo(text.bottom));
+    expect(action.left, closeTo(text.left, 1));
+    expect(action.right, lessThanOrEqualTo(320 - AvoSpacing.screen + 0.5));
+  });
 
-      update(() => text = '3 Änderungen werden gesendet.');
-      await tester.pump();
-      await tester.pump();
-      announcements = tester.takeAnnouncements();
-      expect(announcements.map((a) => a.message), [
-        '3 Änderungen werden gesendet.',
-      ]);
+  testWidgets('a short action stays beside the text', (tester) async {
+    await _pump(
+      tester,
+      StatusRow(
+        kind: StatusKind.failed,
+        text: 'Nicht gespeichert.',
+        actionLabel: 'Erneut',
+        onAction: () {},
+      ),
+    );
+    final text = tester.getRect(find.text('Nicht gespeichert.'));
+    final action = tester.getRect(find.text('Erneut'));
+    // The sentence fills its Expanded; the action sits after it.
+    expect(action.left, greaterThanOrEqualTo(text.right));
+    expect(action.top, lessThan(text.bottom));
+  });
 
-      update(() {});
-      await tester.pump();
-      await tester.pump();
-      expect(tester.takeAnnouncements(), isEmpty);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-  );
+  testWidgets('announces on iOS when it appears and when the text changes', (
+    tester,
+  ) async {
+    var text = _offline;
+    late StateSetter update;
+    await _pump(
+      tester,
+      StatefulBuilder(
+        builder: (context, setState) {
+          update = setState;
+          return StatusRow(kind: StatusKind.offline, text: text);
+        },
+      ),
+    );
+    await tester.pump();
+    var announcements = tester.takeAnnouncements();
+    expect(announcements.map((a) => a.message), [_offline]);
+
+    update(() => text = '3 Änderungen werden gesendet.');
+    await tester.pump();
+    await tester.pump();
+    announcements = tester.takeAnnouncements();
+    expect(announcements.map((a) => a.message), [
+      '3 Änderungen werden gesendet.',
+    ]);
+
+    update(() {});
+    await tester.pump();
+    await tester.pump();
+    expect(tester.takeAnnouncements(), isEmpty);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   testWidgets('leaves announcing to the live region elsewhere', (tester) async {
     await _pump(
@@ -286,6 +322,12 @@ void main() {
         const StatusRow(
           kind: StatusKind.permission,
           text: 'Standort ist aus. In Einstellungen erlauben, 1,5 km Umkreis.',
+        ),
+        StatusRow(
+          kind: StatusKind.permission,
+          text: 'Mitteilungen sind in iOS aus.',
+          actionLabel: 'In Einstellungen erlauben',
+          onAction: () {},
         ),
       ],
     ),

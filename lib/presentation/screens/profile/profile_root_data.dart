@@ -47,6 +47,22 @@ enum ProRowStatus {
   /// A purchase waits for approval (Ask to Buy): "Wartet auf Freigabe".
   pending;
 
+  /// [of], refined by the account's subscription facts (Teil B's
+  /// `proSubscriptionDetailsProvider`): without Pro, a trial that was
+  /// already used offers "Alle Vorteile ansehen" instead of the trial.
+  static ProRowStatus ofDetails(
+    SubscriptionStatus status,
+    ProSubscriptionDetails? details,
+  ) {
+    final base = of(status);
+    if (base == ProRowStatus.trialAvailable &&
+        details != null &&
+        !details.trialEligible) {
+      return ProRowStatus.subscribe;
+    }
+    return base;
+  }
+
   static ProRowStatus of(SubscriptionStatus status) => switch (status) {
     SubscriptionStatus.unknown => ProRowStatus.unknown,
     SubscriptionStatus.notSubscribed => ProRowStatus.trialAvailable,
@@ -355,7 +371,10 @@ final profileRootDataProvider = Provider<ProfileRootData>((ref) {
   final notifications = ref.watch(notificationSettingsProvider);
   return ProfileRootData(
     identity: ref.watch(profileIdentityProvider),
-    pro: ProRowStatus.of(status),
+    pro: ProRowStatus.ofDetails(
+      status,
+      ref.watch(proSubscriptionDetailsProvider).valueOrNull,
+    ),
     enabledModules: {
       for (final m in AppModule.values)
         if (modules.isEnabled(m)) m,

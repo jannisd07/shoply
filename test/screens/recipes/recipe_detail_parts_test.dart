@@ -190,6 +190,61 @@ void main() {
     (_) => const SizedBox(height: kLayoutHeight, child: RecipeReportScreen()),
   );
 
+  layoutMatrix(
+    'RecipeIngredientsSection (offer pill and summary row)',
+    (_) => RecipeIngredientsSection(
+      lines: const [
+        RecipeIngredientLine(
+          name: 'Laktosefreie Bio-Vollmilch',
+          amount: '500 ml',
+          offerBadge: _Pill(),
+        ),
+        RecipeIngredientLine(
+          name: 'Salz',
+          amount: '',
+          offerBadge: SizedBox.shrink(),
+        ),
+      ],
+      servings: 2,
+      onServings: (_) {},
+      footer: const _Footer(),
+    ),
+    scrollable: true,
+  );
+
+  testWidgets('offer pill joins the row label; the footer is the last row', (
+    tester,
+  ) async {
+    await loadLayoutFonts();
+    _phone(tester, 390);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      layoutHarness(
+        const LayoutCase(width: 390, scale: 1),
+        RecipeIngredientsSection(
+          lines: const [
+            RecipeIngredientLine(
+              name: 'Milch',
+              amount: '500 ml',
+              offerBadge: _Pill(),
+            ),
+          ],
+          servings: 2,
+          onServings: (_) {},
+          footer: const _Footer(),
+        ),
+      ),
+    );
+    expect(
+      tester.getSemantics(find.text('Milch')).label,
+      'Milch, 500 ml\non offer for 0.99 €',
+    );
+    final milk = tester.getRect(find.text('Milch'));
+    final footer = tester.getRect(find.byType(_Footer));
+    expect(footer.top, greaterThan(milk.bottom));
+    handle.dispose();
+  });
+
   testWidgets('stars: tap and VoiceOver adjust', (tester) async {
     await loadLayoutFonts();
     _phone(tester, 390);
@@ -258,4 +313,29 @@ void main() {
     await tester.pump();
     expect(tester.getSemantics(send), isSemantics(isEnabled: true));
   });
+}
+
+/// Stands in for Teil B's `IngredientOfferBadge`.
+class _Pill extends StatelessWidget {
+  const _Pill();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'on offer for 0.99 €',
+    child: const ExcludeSemantics(child: Text('0,99 €')),
+  );
+}
+
+/// Stands in for Teil B's `RecipeOfferSummary`.
+class _Footer extends StatelessWidget {
+  const _Footer();
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 52),
+    child: const Padding(
+      padding: EdgeInsets.all(8),
+      child: Text('3 Zutaten diese Woche bei Lidl im Angebot'),
+    ),
+  );
 }

@@ -56,7 +56,8 @@ owner_of() {
       echo B ;;
     lib/app.dart|lib/presentation/screens/main_scaffold.dart)
       echo A ;;
-    lib/routes/areas/avo*|lib/routes/areas/calories*|lib/routes/areas/plan*|lib/routes/areas/offers*|lib/routes/areas/history*)
+    lib/routes/areas/avo*|lib/routes/areas/calories*|lib/routes/areas/plan*|lib/routes/areas/offers*|lib/routes/areas/history*|\
+    lib/routes/areas/system*)
       echo B ;;
     lib/routes/*)
       echo A ;;

@@ -525,35 +525,64 @@ class ValueRow extends StatelessWidget {
 /// A centred destructive action row ("Abmelden", "Konto löschen"); put it in
 /// its own `InsetSection` at the end of a screen. Confirm with
 /// `showAvoConfirm` before acting.
+///
+/// Without [onTap] the row is disabled: the title is dimmed and VoiceOver
+/// reads it as dimmed. [subtitle] says why ("Noch kein Gespräch").
 class DestructiveRow extends StatelessWidget {
   /// Creates a destructive row.
-  const DestructiveRow({super.key, required this.title, required this.onTap});
+  const DestructiveRow({
+    super.key,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+  });
 
   /// The action, 17/22 in the destructive colour.
   final String title;
 
-  /// Runs the action (usually after a confirmation).
-  final VoidCallback onTap;
+  /// Runs the action (usually after a confirmation). Null disables the row.
+  final VoidCallback? onTap;
+
+  /// A centred 15/20 line below the title, e.g. why the row is disabled.
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final enabled = onTap != null;
+    final sub = subtitle;
     return Semantics(
       container: true,
       button: true,
-      label: title,
+      enabled: enabled,
+      label: _joinLabel([title, sub]),
       onTap: onTap,
       child: ExcludeSemantics(
         child: _RowShell(
           onTap: onTap,
           child: Center(
             heightFactor: 1,
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: context.text(
-                AvoTextStyle.body,
-                color: context.colors.destructive,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: context.text(
+                    AvoTextStyle.body,
+                    color: enabled ? colors.destructive : colors.secondaryLabel,
+                  ),
+                ),
+                if (sub != null)
+                  Text(
+                    sub,
+                    textAlign: TextAlign.center,
+                    style: context.text(
+                      AvoTextStyle.subhead,
+                      color: colors.secondaryLabel,
+                    ),
+                  ),
+              ],
             ),
           ),
         ),

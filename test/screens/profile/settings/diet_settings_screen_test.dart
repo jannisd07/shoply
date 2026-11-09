@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/presentation/screens/profile/settings/data/profile_settings.dart';
 import 'package:shoply/presentation/screens/profile/settings/diet_settings_screen.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_state.dart';
 import 'package:shoply/presentation/widgets/design/filter_chip.dart';
 
 import '../../../layout/layout_matrix.dart';
@@ -146,6 +147,8 @@ void main() {
     await tester.tap(find.text('Adapt recipes automatically'));
     await tester.pump();
     expect(container.read(recipeAutoAdaptProvider), isFalse);
+    // The recipe tab reads the switch through the diet profile.
+    expect(container.read(recipeDietProfileProvider).autoAdapt, isFalse);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('setp_recipe_auto_adapt_u1'), isFalse);
   });

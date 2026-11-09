@@ -173,6 +173,7 @@ void main() {
         _en('list_detail_menu_info'),
         _en('list_detail_menu_rename'),
         _en('list_detail_menu_order'),
+        _en('list_detail_menu_offers'),
         _en('list_detail_menu_hide_offers'),
         _en('list_detail_menu_import'),
         _en('list_detail_menu_delete'),
@@ -187,6 +188,7 @@ void main() {
       expect(reduced, isNot(contains(_en('list_detail_menu_shop'))));
       expect(reduced, isNot(contains(_en('list_detail_menu_checkout'))));
       expect(reduced, isNot(contains(_en('list_detail_menu_hide_offers'))));
+      expect(reduced, isNot(contains(_en('list_detail_menu_offers'))));
       expect(reduced.last, _en('list_detail_menu_leave'));
       expect(
         labels(context, hidden: true),

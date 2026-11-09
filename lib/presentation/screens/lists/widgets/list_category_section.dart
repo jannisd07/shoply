@@ -9,11 +9,11 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/utils/category_detector.dart';
 import 'package:shoply/data/models/custom_category.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_detail_data.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_drag_controller.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/item_row.dart';
-import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
 /// One aisle of the list screen with its items, sorted.
 class ListCategoryGroup {
@@ -178,7 +178,7 @@ class ListAisleSection extends ConsumerWidget {
     final rows = InsetSection(
       separatorIndent: ItemRow.separatorIndentOf(
         context,
-        withThumb: articleImagesShown(context, ref),
+        withThumb: listImagesShown(context, ref),
       ),
       children: [for (final item in group.items) rowBuilder(item)],
     );

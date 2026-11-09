@@ -386,6 +386,36 @@ void main() {
       expect(tester.getSize(find.byType(DestructiveRow)).height, 52);
       handle.dispose();
     });
+
+    testWidgets('without onTap: dimmed, disabled, subtitle read', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(
+        tester,
+        const DestructiveRow(
+          title: 'Gespräch löschen',
+          subtitle: 'Noch kein Gespräch',
+          onTap: null,
+        ),
+      );
+      expect(
+        _textColor(tester, 'Gespräch löschen'),
+        AvoColors.light.secondaryLabel,
+      );
+      expect(find.text('Noch kein Gespräch'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byType(DestructiveRow)),
+        isSemantics(
+          label: 'Gespräch löschen, Noch kein Gespräch',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: false,
+          hasTapAction: false,
+        ),
+      );
+      handle.dispose();
+    });
   });
 
   layoutMatrix(
@@ -469,6 +499,11 @@ void main() {
         DestructiveRow(
           title: 'Liste „Laktosefreie Bio-Vollmilch“ löschen',
           onTap: () {},
+        ),
+        const DestructiveRow(
+          title: 'Gespräch löschen',
+          subtitle: 'Noch kein Gespräch',
+          onTap: null,
         ),
       ],
     ),

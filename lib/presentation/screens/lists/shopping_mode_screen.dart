@@ -10,15 +10,18 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/lists/item_editor_screen.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_detail_data.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_aisles.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_header.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_view.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/list_preferences.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/success_moment.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
-/// Keeps the screen on while the shopping mode is open (Konzept 11 §5.1).
+/// Keeps the screen on while the shopping mode is open (Konzept 11 §5.1)
+/// and "Bildschirm anlassen" is on (Einstellungen › Listen).
 abstract interface class ShoppingKeepAwake {
   Future<void> enable();
   Future<void> disable();
@@ -99,6 +102,10 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
   AvoScreenContext? _previousContext;
   AvoScreenContext? _ownContext;
   bool _awake = false;
+  bool _foreground = true;
+
+  /// "Bildschirm anlassen" in Einstellungen › Listen.
+  bool get _keepOn => ref.read(listPreferencesProvider).keepScreenOn;
 
   @override
   void initState() {
@@ -117,14 +124,15 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _session.state = _ownSession;
     });
-    _setAwake(true);
+    _setAwake(_keepOn);
     // Tip T2 is done however the shopping mode was opened.
     ref.read(tipServiceProvider).note(TipEvent.shoppingStarted);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _setAwake(state == AppLifecycleState.resumed);
+    _foreground = state == AppLifecycleState.resumed;
+    _setAwake(_foreground && _keepOn);
   }
 
   @override
@@ -209,6 +217,11 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
         ref.watch(shoppingListNameProvider(listId)) ?? widget.listName ?? '';
     _tellAvo(name);
     final items = itemsState.valueOrNull;
+    // The switch can change while the shopping mode is open (Avo).
+    ref.listen<bool>(
+      listPreferencesProvider.select((p) => p.keepScreenOn),
+      (_, on) => _setAwake(_foreground && on),
+    );
 
     return ShoppingModeView(
       listId: listId,
@@ -220,7 +233,7 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
           const ShoppingAisleOrder(),
       companions: ref.watch(shoppingCompanionsProvider(listId)),
       offline: ref.watch(isOfflineProvider),
-      showImages: articleImagesShown(context, ref),
+      showImages: listImagesShown(context, ref),
       onToggle: (item, checked) => notifier.toggleItemChecked(item.id, checked),
       onAdd: () =>
           unawaited(openItemEditor(context, listId: listId, prefill: '')),

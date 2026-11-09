@@ -14,6 +14,8 @@ import 'package:shoply/presentation/screens/profile/account/account_backend.dart
 import 'package:shoply/presentation/screens/profile/account/deletion_summary.dart';
 import 'package:shoply/presentation/screens/profile/account/profile_edit_controller.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart'
+    show pendingChangesCountProvider;
 
 import '../../../layout/layout_matrix.dart';
 import '../../auth/auth_fakes.dart';
@@ -163,7 +165,7 @@ class AccountTestWorld {
     accountDeletionProvider.overrideWithValue(deletion),
     accountSessionProvider.overrideWithValue(session),
     accountClockProvider.overrideWithValue(() => now),
-    unsentChangesProvider.overrideWithValue(() => unsent),
+    pendingChangesCountProvider.overrideWithValue(() => unsent),
     photoPickerProvider.overrideWithValue((source) async {
       opened.add('picker:${source.name}');
       final error = pickerError;

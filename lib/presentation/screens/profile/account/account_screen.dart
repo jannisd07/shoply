@@ -13,6 +13,8 @@ import 'package:shoply/presentation/screens/profile/settings/widgets/settings_pa
 import 'package:shoply/presentation/widgets/design/row_highlight.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart'
+    show pendingChangesCountProvider;
 import 'package:shoply/routes/route_paths.dart';
 
 /// Konto (`/settings/account`, Konzept 18 §7.1, §7.2): email and sign-in
@@ -42,7 +44,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   bool _signingOut = false;
 
   int _unsentChanges() =>
-      ref.read(unsentChangesProvider)() +
+      ref.read(pendingChangesCountProvider)() +
       ref.read(profileEditControllerProvider.notifier).unsentChanges;
 
   Future<void> _signOut() async {

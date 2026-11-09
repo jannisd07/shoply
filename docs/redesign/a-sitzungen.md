@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (AB1 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (AB2 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -37,15 +37,15 @@ für die nächste Sitzung geben.
 | A7 Onboarding, Login, Tipps | erledigt | `a7-stand.md`, `a7-server-entwurf.sql` |
 | A8 Profil und Einstellungen | erledigt | `a8-stand.md`, `a8-server-entwurf.sql` |
 | AB1 Anfragen von B: Komponenten und Daten | erledigt | `ab1-stand.md` |
-| **AB2 Anfragen von B: Listen, Router, Reste aus A5–A8** | **Als Nächstes** | unten |
+| AB2 Anfragen von B: Listen, Router, Reste aus A5–A8 | erledigt | `ab2-stand.md` |
 | A9 Pro und Paywall | wartet auf den Owner (Free/Pro: Varianten A/B/C in `pro-konzept.md`) | prompt §5 A9, Konzept 18 Kap. 8–9 |
 | A10 App-Icon und Maskottchen | wartet auf den Owner (Maskottchen F-17-11) | prompt §5 A10 |
-| A12 Aufräumen und Analysen | offen | prompt §5 A12, „Aufräumen“ in a5–a8-stand |
+| **A12 Aufräumen und Analysen** | **Als Nächstes** (A9/A10 warten weiter auf den Owner) | prompt §5 A12, „Aufräumen“ in a5–a8-stand, „Offen bei A“ in `ab2-stand.md` |
 | A11 Qualität für alle A-Screens | offen (braucht Builds, Platte prüfen) | prompt §5 A11 |
 | S6 Gegenprüfung von B | offen | prompt §5 A11 „Gegenprüfung“ |
 | S5 Bereiche fertig | offen | prompt §11 |
 
-Reihenfolge: AB2, dann A9 oder A10, sobald der Owner entschieden hat, sonst A12, A11, S6, S5. Fragt die Sitzung den
+Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst A12, A11, S6, S5. Fragt die Sitzung den
 Owner zu Beginn nach A9/A10, nur wenn eins davon „Als Nächstes“ ist.
 
 ### AB1 Anfragen von B: Komponenten und Daten
@@ -76,11 +76,18 @@ Modul-Wächter, Deep Links), dazu „Offen bei A“ aus `a5-stand.md` bis `a8-st
 Mitteilungs-Kategorien durchsetzen, `recipeAutoAdaptProvider`, `ThemeMode.system`, T6 im Rezepte-Tab,
 Startvorschläge im Accessory).
 
-**Abstimmen mit B (Stand 09.11.2026):** B's Zweig `feature/b-settings-a8` (auf origin, nicht auf `main`) ersetzt in
+**Erledigt (B hat `feature/b-settings-a8` mit A's OK auf `main` gebracht, `c37182f`):** B's Zweig `feature/b-settings-a8` (auf origin, nicht auf `main`) ersetzt in
 A's `settings_search_index.dart` und dessen Test `bSettingsPagesSearchEntries` durch B's eigene Suchliste. Die nächste
 B-Sitzung klärt das vor dem Merge; die A-Sitzung prüft den Diff (`git diff main...origin/feature/b-settings-a8 --
 lib/presentation/screens/profile test/screens/profile`) und gibt das OK oder bessert nach. B's Übergabe:
 `b-sitzungen.md`.
+
+### A12 Aufräumen und Analysen
+
+Quellen: prompt §5 A12, „Aufräumen“ und „Offen bei A“ in `a7-stand.md`, `a8-stand.md`, `ab1-stand.md`,
+`ab2-stand.md` (alte Texte, ungenutzte Services, Paper-Reste in A-Dateien, `@Deprecated`-Aliase wie
+`unsentChangesProvider`, sobald B nichts mehr davon nutzt). Vorher `status-B.md` auf neue Anfragen an A prüfen; die
+gehen vor.
 
 ## Arbeitsweise (erprobt in A5–A8)
 

@@ -23,6 +23,7 @@ import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
+import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 import 'package:shoply/routes/areas/plan_routes.dart';
 import 'package:shoply/routes/route_paths.dart';
@@ -234,6 +235,16 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
     );
   }
 
+  /// The older diet hint was wiped away (before T7 took its place): T7 is
+  /// hidden for good. After the frame, because hiding notifies the slot.
+  void _retireDietTip() {
+    final tips = ref.read(tipServiceProvider);
+    if (!tips.isAttached || tips.isFinished(TipId.diet)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) tips.dismiss(TipId.diet);
+    });
+  }
+
   // --------------------------------------------------------------- build
 
   @override
@@ -336,17 +347,26 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
       );
     }
 
-    // The one-time tip of the tab (Konzept 17 §6.1): T7 for now in the diet
-    // hint below the chips; T6 needs a tip slot under the large title in
-    // RecipesBrowseContent first. Without the tip service (before start,
-    // other areas' tests) the hint keeps its own rule.
-    final tipsOn = ref.watch(tipServiceProvider).isAttached;
-    final dietHint =
-        signedIn &&
-        profileKnown &&
-        !profile.hasProfile &&
-        !prefs.dietHintDismissed;
-    Widget content(TipId? tip, VoidCallback hideTip) => RecipesBrowseContent(
+    // The one-time tip of the tab (Konzept 17 §6.1) below the large title:
+    // T6 "Zutaten auf die Liste" on the first visit, T7 "Ernährung und
+    // Allergien" with "Einstellen" later. Someone who wiped away the older
+    // diet hint does not get T7.
+    if (prefs.dietHintDismissed) _retireDietTip();
+    final tip = TipSlot(
+      place: TipPlace.recipes,
+      only: prefs.dietHintDismissed
+          ? const {TipId.recipeToList}
+          : const {TipId.recipeToList, TipId.diet},
+      facts: TipFacts(
+        ready: !signedIn || profileKnown,
+        dietSet: signedIn && profileKnown ? profile.hasProfile : null,
+      ),
+      wrap: (context, row) => Padding(
+        padding: const EdgeInsets.only(top: AvoSpacing.s),
+        child: InsetSection(children: [row]),
+      ),
+    );
+    final content = RecipesBrowseContent(
       loading: !catalogue.known,
       catalogueEmpty: catalogue.known && recipes.isEmpty,
       searchController: _search,
@@ -367,12 +387,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
       filters: filters,
       filter: filter,
       onFilter: (f) => setState(() => _filter = f),
-      showDietHint: dietHint && (!tipsOn || tip == TipId.diet),
-      onDietHint: () => context.push(RoutePaths.dietPreferences),
-      onDismissDietHint: () {
-        hideTip();
-        ref.read(recipesBrowsePrefsProvider.notifier).dismissDietHint();
-      },
+      tip: tip,
       home: home,
       fits: fits,
       showCalories: calories,
@@ -409,17 +424,7 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
                       kRecipesTitleGap,
                   bottom: ShellInsets.bottom(context),
                 ),
-                sliver: TipSlot.builder(
-                  place: TipPlace.recipes,
-                  only: const {TipId.diet},
-                  facts: TipFacts(
-                    ready: !signedIn || profileKnown,
-                    dietSet: signedIn && profileKnown
-                        ? profile.hasProfile
-                        : null,
-                  ),
-                  builder: (context, tip, hide) => content(tip, hide),
-                ),
+                sliver: content,
               ),
             ],
           ),

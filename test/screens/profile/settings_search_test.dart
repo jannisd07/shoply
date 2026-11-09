@@ -197,6 +197,19 @@ void main() {
       ]);
     });
 
+    test('a row needs its own module and its page\'s module', () {
+      // "Kalorien, Gewicht und Ziele" is a Kalorien row on the Avo page.
+      List<String> find(Set<AppModule> modules) => _titles(
+        'Gewicht und Ziele',
+        modules: modules,
+        entries: bSettingsSearchEntries,
+      );
+      const row = 'Kalorien, Gewicht und Ziele';
+      expect(find({AppModule.calories}), isNot(contains(row)));
+      expect(find({AppModule.avo}), isNot(contains(row)));
+      expect(find({AppModule.avo, AppModule.calories}), contains(row));
+    });
+
     test('kill switch: offers words find nothing, markets are "Märkte"', () {
       expect(_titles('Prospekt'), ['Preise & Angebote']);
       expect(_titles('Prospekt', killSwitch: true), isEmpty);

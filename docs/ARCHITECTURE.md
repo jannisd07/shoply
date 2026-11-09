@@ -140,8 +140,10 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   `/calories/add` (S3), `/calories/add/photo` (S4), `/calories/add/estimate` (S5, das Foto nur als `extra`; ohne
   Foto zurück zur Kamera), `/calories/scan` (S6), `/calories/add/food/:foodId` (S7), `/calories/add/manual` (S8),
   `/calories/entry/:entryId?date=` (S9), `/calories/add/recipe/:recipeId` (S10, `openLogRecipe` in `b_slots.dart`
-  pusht sie mit dem Rezept als `extra`) und `/calories/goals/setup` (S14). go_router fällt von `/calories` auf diese
-  Root-Routen zurück, deshalb dürfen sie hinter der Shell stehen.
+  pusht sie mit dem Rezept als `extra`) und `/calories/goals/setup` (S14). Alle Vollbild-Routen von Teil B
+  (`bRootRoutes()` in `app_router.dart`: Avo, Kalorien, Plan, Angebote, Verlauf) stehen **vor** der Shell, damit sie
+  über dem aktuellen Tab öffnen (AB2, A-R1). Einstellungsseiten von B für Siri und Widgets: `systemSettingsRoutes` in
+  `lib/routes/areas/system_routes.dart` (B), unter `/settings` eingehängt.
 - **Eintrage-Ablauf:** Die Seiten von S3 bis S8 tragen den Namen `kCalorieFlowPageName`. Nach „Eintragen“ schließt
   `popCalorieFlow` den ganzen Ablauf, die Person landet dort, wo S3 geöffnet wurde (Home, Rezept, Avo); der
   Rückgängig-Hinweis steht dort. Kamera → Schätzung und Kamera → Menge ersetzen die Kamera-Seite (`pushReplacement`).

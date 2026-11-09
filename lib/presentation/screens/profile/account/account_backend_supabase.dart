@@ -96,30 +96,13 @@ class SupabaseAccountSecurity implements AccountSecurityService {
 
   @override
   Future<void> requestEmailChange(String newEmail) =>
-      SupabaseService.instance.updateUser(UserAttributes(email: newEmail));
+      SupabaseService.instance.requestEmailChange(newEmail);
 
+  /// Confirms with the code; `users.email` follows in
+  /// `SupabaseService.verifyEmailChange` (Teil B, A8).
   @override
-  Future<void> verifyEmailChange(String newEmail, String code) async {
-    await _client.auth.verifyOTP(
-      email: newEmail,
-      token: code,
-      type: OtpType.emailChange,
-    );
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) return;
-    try {
-      // `users.email` mirrors the auth address (no trigger yet, A8 report).
-      await _client
-          .from('users')
-          .update({
-            'email': newEmail,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', userId);
-    } catch (e) {
-      debugPrint('[ACCOUNT] users.email not updated: ${e.runtimeType}');
-    }
-  }
+  Future<void> verifyEmailChange(String newEmail, String code) =>
+      SupabaseService.instance.verifyEmailChange(newEmail, code);
 }
 
 /// Konto löschen against the Edge Function `delete-account` (E18-09, draft

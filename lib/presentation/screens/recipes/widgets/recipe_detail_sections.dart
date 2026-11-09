@@ -157,6 +157,7 @@ class RecipeIngredientLine {
     this.allergen,
     this.unchecked = false,
     this.adapted = false,
+    this.offerBadge,
   });
 
   /// "Feta" or, adapted, "laktosefreier Hirtenkäse".
@@ -176,6 +177,10 @@ class RecipeIngredientLine {
 
   /// Replaced for the person: swap sign before the name.
   final bool adapted;
+
+  /// Teil B's offer pill after the name (`IngredientOfferBadge`); it may
+  /// render nothing. Its own sentence joins the row's VoiceOver label.
+  final Widget? offerBadge;
 }
 
 /// "Zutaten" (Konzept 13 §12.1 Nr. 7): servings stepper, "Für dich
@@ -190,9 +195,14 @@ class RecipeIngredientsSection extends StatelessWidget {
     required this.onServings,
     this.adapted,
     this.onAdapted,
+    this.footer,
   });
 
   final List<RecipeIngredientLine> lines;
+
+  /// The group's last row, e.g. Teil B's `RecipeOfferSummary`; pass it only
+  /// when it shows something (an empty row would leave a gap).
+  final Widget? footer;
   final int servings;
   final ValueChanged<int> onServings;
 
@@ -228,6 +238,7 @@ class RecipeIngredientsSection extends StatelessWidget {
             ),
           ),
         for (final line in lines) _IngredientRow(line: line),
+        ?footer,
       ],
     );
   }
@@ -355,38 +366,51 @@ class _IngredientRow extends StatelessWidget {
       ...line.sublines,
     ].join(', ');
 
-    return Semantics(
-      label: label,
-      excludeSemantics: true,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AvoSpacing.l,
-            vertical: AvoSpacing.m - AvoSpacing.xxs,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final badge = line.offerBadge;
+    final name = badge == null
+        ? ExcludeSemantics(child: nameText)
+        : Wrap(
+            spacing: AvoSpacing.s,
+            runSpacing: AvoSpacing.xxs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    nameText,
-                    for (final sub in line.sublines)
-                      Text(
+              ExcludeSemantics(child: nameText),
+              badge,
+            ],
+          );
+
+    final row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AvoSpacing.l,
+          vertical: AvoSpacing.m - AvoSpacing.xxs,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  name,
+                  for (final sub in line.sublines)
+                    ExcludeSemantics(
+                      child: Text(
                         sub,
                         style: context.text(
                           AvoTextStyle.subhead,
                           color: colors.secondaryLabel,
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
-              if (!inline && amount.isNotEmpty) ...[
-                const SizedBox(width: AvoSpacing.m),
-                Text(
+            ),
+            if (!inline && amount.isNotEmpty) ...[
+              const SizedBox(width: AvoSpacing.m),
+              ExcludeSemantics(
+                child: Text(
                   amount,
                   textAlign: TextAlign.end,
                   style: context.text(
@@ -395,11 +419,19 @@ class _IngredientRow extends StatelessWidget {
                     tabular: true,
                   ),
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
+    );
+    if (badge == null) {
+      return Semantics(label: label, excludeSemantics: true, child: row);
+    }
+    // The pill speaks its own sentence ("im Angebot für 0,99 €"), merged
+    // after the row's label; the row's texts are excluded one by one.
+    return MergeSemantics(
+      child: Semantics(label: label, child: row),
     );
   }
 }

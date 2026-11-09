@@ -13,12 +13,14 @@ import 'package:shoply/presentation/state/auth_provider.dart';
 
 /// One switch of Einstellungen › Mitteilungen (Konzept 18 §5.5, K18-06).
 ///
-/// Switches with a [category] are the categories the app already enforces
-/// ([NotificationPreferencesService]); the others are stored under their own
-/// key until the sender reads them (`user_notification_prefs`).
+/// Every switch is a [NotificationCategory]: the app checks it wherever it
+/// shows or plans a notification ([NotificationPreferencesService]). Pushes
+/// the server sends while the app is closed still need the account copy
+/// (`user_notification_prefs`). A switch without a category would be stored
+/// under its own `key`.
 enum NotificationSetting {
   /// "Jemand kauft ein" (`shopping_started`).
-  shoppingStarted(key: 'notif_shopping_started'),
+  shoppingStarted(category: NotificationCategory.shoppingStarted),
 
   /// "Änderungen an Listen", bundled (K-39).
   listChanges(category: NotificationCategory.listActivity),
@@ -33,16 +35,16 @@ enum NotificationSetting {
   restock(category: NotificationCategory.avoNudges),
 
   /// "Kochtimer" (time-sensitive).
-  cookingTimer(key: 'notif_cooking_timer'),
+  cookingTimer(category: NotificationCategory.cookingTimer),
 
   /// Wochenplan: "An die nächste Woche erinnern" (default off).
-  planReminder(key: 'notif_plan_reminder', defaultOn: false),
+  planReminder(category: NotificationCategory.planReminder),
 
   /// Kalorien: "Ideen fürs Abendessen".
-  dinnerIdeas(key: 'notif_dinner_ideas'),
+  dinnerIdeas(category: NotificationCategory.dinnerIdeas),
 
   /// Kosten teilen: "Offene Beträge".
-  costSplitOpen(key: 'notif_cost_split_open'),
+  costSplitOpen(category: NotificationCategory.costSplitOpen),
 
   /// "Bewertungen und Likes".
   recipeLikes(category: NotificationCategory.recipeLikes),

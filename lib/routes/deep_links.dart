@@ -1,3 +1,5 @@
+import 'package:shoply/presentation/screens/offers/offer_paths.dart'
+    show weeklyOffersLocation;
 import 'package:shoply/routes/route_paths.dart';
 
 /// The one place that turns a `shoply://` link into an app path (Teil A).
@@ -38,11 +40,21 @@ String mapCustomSchemeLink(Uri uri) {
       }
       return withQuery('${RoutePaths.recipes}${rest()}');
 
+    // "Angebote der Woche": `?filter=regulars` opens "Oft gekauft", `?q=`
+    // fills the search (A-R3). Deeper paths are kept as they are.
+    case 'offers':
+      if (segments.isNotEmpty) {
+        return withQuery('${RoutePaths.offers}${rest()}');
+      }
+      return weeklyOffersLocation(
+        regulars: uri.queryParameters['filter'] == 'regulars',
+        query: uri.queryParameters['q'],
+      );
+
     // Teil B areas and the rest of the app, path kept as is.
     case 'plan':
     case 'calories':
     case 'avo':
-    case 'offers':
     case 'history':
     case 'splits':
     case 'settings':

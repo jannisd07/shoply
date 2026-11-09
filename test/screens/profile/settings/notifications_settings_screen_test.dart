@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/presentation/screens/profile/settings/data/notification_settings.dart';
 import 'package:shoply/presentation/screens/profile/settings/notifications_settings_screen.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
@@ -20,6 +21,28 @@ void main() {
     expect(NotificationSetting.planReminder.defaultOn, isFalse);
     expect(NotificationSetting.shoppingStarted.defaultOn, isTrue);
     expect(NotificationSetting.restock.prefsKey, 'notif_avo_nudges');
+  });
+
+  test('every switch is an enforced category with its old key', () {
+    for (final s in NotificationSetting.values) {
+      expect(s.category, isNotNull, reason: s.name);
+    }
+    expect(
+      NotificationSetting.shoppingStarted.prefsKey,
+      'notif_shopping_started',
+    );
+    expect(NotificationSetting.cookingTimer.prefsKey, 'notif_cooking_timer');
+    expect(NotificationSetting.planReminder.prefsKey, 'notif_plan_reminder');
+    expect(NotificationSetting.dinnerIdeas.prefsKey, 'notif_dinner_ideas');
+    expect(NotificationSetting.costSplitOpen.prefsKey, 'notif_cost_split_open');
+  });
+
+  test('the gate honours a switched-off category', () async {
+    SharedPreferences.setMockInitialValues({'notif_cooking_timer': false});
+    final gate = NotificationPreferencesService.instance;
+    expect(await gate.shouldShow(NotificationCategory.cookingTimer), isFalse);
+    expect(await gate.shouldShow(NotificationCategory.dinnerIdeas), isTrue);
+    expect(await gate.shouldShow(NotificationCategory.planReminder), isFalse);
   });
 
   layoutMatrix(

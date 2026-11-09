@@ -18,6 +18,7 @@ import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/item_row.dart';
 import 'package:shoply/presentation/widgets/design/list_card.dart';
 import 'package:shoply/presentation/widgets/design/search_field.dart';
+import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 import 'package:shoply/presentation/widgets/design/skeleton.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
@@ -39,7 +40,8 @@ enum AllListsPhase {
 }
 
 /// The menu and VoiceOver actions of one list (Konzept 11 §7).
-typedef ListMenuOpener = void Function(BuildContext anchor, ShoppingListModel list);
+typedef ListMenuOpener =
+    void Function(BuildContext anchor, ShoppingListModel list);
 
 /// The scrolling content of the Listen tab (D2-Home), without the toolbar:
 /// large title with the summary line, "Schnell wieder hinzufügen" for the
@@ -66,6 +68,7 @@ class AllListsContent extends StatelessWidget {
     required this.onJoin,
     required this.onQuickAdd,
     this.onRetry,
+    this.onWeeklyOffers,
   });
 
   final AllListsPhase phase;
@@ -103,6 +106,10 @@ class AllListsContent extends StatelessWidget {
   final VoidCallback onJoin;
   final ValueChanged<QuickAddSuggestion> onQuickAdd;
   final VoidCallback? onRetry;
+
+  /// Opens "Angebote der Woche" (S10) from the section "Sparen"; null
+  /// (offers module off, kill switch) leaves the section out.
+  final VoidCallback? onWeeklyOffers;
 
   @override
   Widget build(BuildContext context) {
@@ -289,6 +296,17 @@ class AllListsContent extends StatelessWidget {
         ),
       );
     }
+    final weekly = onWeeklyOffers;
+    if (weekly != null) {
+      out.add(
+        InsetSection(
+          header: context.tr('list_ov_section_saving'),
+          children: [
+            NavRow(title: context.tr('offer_week_title'), onTap: weekly),
+          ],
+        ),
+      );
+    }
     return out;
   }
 
@@ -340,9 +358,14 @@ List<String> _stackNames(
   List<ListMember> members,
   String? currentUserId,
 ) {
-  final you = [for (final m in members) if (m.userId == currentUserId) m];
+  final you = [
+    for (final m in members)
+      if (m.userId == currentUserId) m,
+  ];
   final others = otherMembers(members, currentUserId);
-  return [for (final m in [...you, ...others]) memberName(context, m)];
+  return [
+    for (final m in [...you, ...others]) memberName(context, m),
+  ];
 }
 
 class _ListRowEntry extends StatelessWidget {
@@ -393,6 +416,8 @@ class _ListRowEntry extends StatelessWidget {
           glyph: AvoIcon(AvoIcons.cart, color: colors.onTint),
           done: complete ? total : null,
           total: complete ? total : null,
+          // Rows have no cover to carry it: below the meta line (A-L2).
+          badge: ListOfferCountBadge(listId: list.id),
           accessory: names.isEmpty
               ? null
               : AvatarStack(

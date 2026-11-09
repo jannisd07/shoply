@@ -9,6 +9,9 @@ import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/lists/list_detail_screen.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_detail_data.dart';
+import 'package:shoply/presentation/screens/lists/widgets/list_maybe_also.dart';
+import 'package:shoply/presentation/screens/onboarding/onboarding_steps.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/list_preferences.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
@@ -235,6 +238,10 @@ class _Actions extends ListDetailActions {
   }
 
   @override
+  Future<void> openListOffers(BuildContext context, String listId) async =>
+      calls.add('offers:$listId');
+
+  @override
   Future<void> renameList(WidgetRef ref, String listId, String name) async =>
       calls.add('rename:$name');
 
@@ -262,6 +269,9 @@ class _Setup {
     this.list,
     this.offers = false,
     this.offline = false,
+    this.arrival,
+    this.maybeAlso = const [],
+    this.prefs = const ListPreferences(),
   }) : repository = _FakeRepository() {
     notifier = _FakeItems(repository, items ?? AsyncData(_items));
   }
@@ -272,6 +282,9 @@ class _Setup {
   final ShoppingListModel? list;
   final bool offers;
   final bool offline;
+  final OnboardingArrival? arrival;
+  final List<MaybeAlsoSuggestion> maybeAlso;
+  final ListPreferences prefs;
   final List<String> members = const ['Lena'];
 
   List<Override> get overrides => [
@@ -284,12 +297,17 @@ class _Setup {
     isOfflineProvider.overrideWithValue(offline),
     offersAvailableProvider.overrideWithValue(offers),
     listDetailActionsProvider.overrideWithValue(actions),
+    maybeAlsoSourceProvider.overrideWithValue(maybeAlso),
+    listPreferencesProvider.overrideWith(
+      (ref) => ListPreferencesNotifier(null)..state = prefs,
+    ),
   ];
 
   Widget screen({bool focusAdd = false}) => ListDetailScreen(
     listId: _listId,
     listName: 'Wocheneinkauf',
     focusAdd: focusAdd,
+    arrival: arrival,
   );
 }
 
@@ -429,6 +447,18 @@ void main() {
       expect(find.byType(ArticleImage), findsNothing);
       final row = tester.widget<ItemRow>(_row('Avocados'));
       expect(row.thumb, isNull);
+    });
+
+    testWidgets('"Artikelbilder anzeigen" off in Listen: no picture', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({'show_article_images': true});
+      await _pump(
+        tester,
+        _Setup(prefs: const ListPreferences(showItemImages: false)),
+      );
+      await tester.pump();
+      expect(tester.widget<ItemRow>(_row('Avocados')).thumb, isNull);
     });
 
     testWidgets('images on: Teil B picture in the row', (tester) async {
@@ -655,6 +685,26 @@ void main() {
       expect(container.read(offersHiddenForListProvider(_listId)), isTrue);
     });
 
+    testWidgets('"Angebote dieser Liste" with the module, not while hidden', (
+      tester,
+    ) async {
+      final setup = _Setup(offers: true);
+      await _pump(tester, setup);
+      await openMenu(tester);
+      await tester.tap(find.text(_en('list_detail_menu_offers')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(setup.actions.calls, ['offers:$_listId']);
+
+      await openMenu(tester);
+      await tester.tap(find.text(_en('list_detail_menu_hide_offers')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await openMenu(tester);
+      expect(find.text(_en('list_detail_menu_offers')), findsNothing);
+      expect(find.text(_en('list_detail_menu_show_offers')), findsOneWidget);
+    });
+
     testWidgets('delete list asks first, then goes to all lists', (
       tester,
     ) async {
@@ -716,6 +766,71 @@ void main() {
       await tester.tap(find.text(_en('list_detail_menu_import')));
       await tester.pump();
       expect(setup.actions.calls, ['import:$_listId']);
+    });
+
+    testWidgets('empty after the onboarding: no empty state next to T1', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _Setup(items: const AsyncData([]), arrival: OnboardingArrival.created),
+      );
+      expect(find.text(_en('list_detail_empty_title')), findsNothing);
+      expect(find.byType(EmptyState), findsNothing);
+    });
+
+    testWidgets('"Vielleicht auch": rhythm items, a tap adds with undo', (
+      tester,
+    ) async {
+      final setup = _Setup(
+        maybeAlso: const [
+          MaybeAlsoSuggestion(name: 'Kaffee', everyDays: 14),
+          // Open on the list already: left out.
+          MaybeAlsoSuggestion(name: 'Feta', everyDays: 7),
+        ],
+      );
+      await _pump(tester, setup);
+      final row = find.text('Kaffee');
+      await tester.scrollUntilVisible(
+        row,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(CustomScrollView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(
+        find.text(_en('list_detail_maybe_also_rhythm', {'n': '14'})),
+        findsOneWidget,
+      );
+      expect(
+        find.text(_en('list_detail_maybe_also').toUpperCase()),
+        findsOneWidget,
+      );
+      await tester.tap(row);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(setup.repository.batches.single.single.name, 'Kaffee');
+      expect(
+        find.text(_en('list_detail_added_one', {'name': 'Kaffee'})),
+        findsOneWidget,
+      );
+      await _settleTimers(tester);
+    });
+
+    testWidgets('"Vielleicht auch" off in Listen: no section', (tester) async {
+      await _pump(
+        tester,
+        _Setup(
+          maybeAlso: const [MaybeAlsoSuggestion(name: 'Kaffee', everyDays: 14)],
+          prefs: const ListPreferences(suggestions: false),
+        ),
+      );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -2000));
+      await tester.pump();
+      expect(find.text('Kaffee'), findsNothing);
     });
 
     testWidgets('all done: empty state with checkout, then "Erledigt"', (
