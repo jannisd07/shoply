@@ -99,5 +99,95 @@ void main() {
     expect(find.bySemanticsLabel('Back'), findsNothing);
   });
 
+  testWidgets('without a main action there is no action bar (A-O1)', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      OnboardingStepPage(
+        title: 'Angebote in deiner Region',
+        onBack: () {},
+        onSkip: () {},
+        children: const [Text('B-Inhalt mit eigenem Weiter')],
+      ),
+      const LayoutCase(width: 390, scale: 1),
+    );
+    expect(find.byType(AppButton), findsOneWidget); // only "Skip"
+    expect(find.text('Weiter'), findsNothing);
+    expect(find.text('B-Inhalt mit eigenem Weiter'), findsOneWidget);
+    expect(
+      tester.getRect(find.text('Skip')).top,
+      lessThan(tester.getRect(find.text('Angebote in deiner Region')).top),
+    );
+  });
+
+  testWidgets('skip can sit below the main action at every size', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      OnboardingStepPage(
+        title: 'Was soll Avo für dich tun?',
+        onSkip: () {},
+        skipLabel: 'Später entscheiden',
+        skipBelowAction: true,
+        primaryAction: AppButton.primary(label: 'Weiter', onPressed: () {}),
+      ),
+      const LayoutCase(width: 440, scale: 1),
+    );
+    expect(
+      tester.getRect(find.text('Später entscheiden')).top,
+      greaterThan(tester.getRect(find.text('Weiter')).top),
+    );
+  });
+
+  testWidgets('status, title trailing and action header have their place', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      OnboardingStepPage(
+        title: 'Dein Ziel',
+        message: 'Aus ein paar Angaben schätzen wir dein Tagesziel.',
+        status: const Text('Status'),
+        titleTrailing: const SizedBox.square(dimension: 72, child: Text('Avo')),
+        actionHeader: const Text('Etwa 1.650 kcal am Tag'),
+        primaryAction: AppButton.primary(label: 'Weiter', onPressed: () {}),
+        children: const [Text('Inhalt')],
+      ),
+      const LayoutCase(width: 390, scale: 1),
+    );
+    final title = tester.getRect(find.text('Dein Ziel'));
+    expect(tester.getRect(find.text('Avo')).left, greaterThan(title.right));
+    expect(
+      tester.getRect(find.text('Status')).top,
+      greaterThan(
+        tester
+            .getRect(
+              find.text('Aus ein paar Angaben schätzen wir dein Tagesziel.'),
+            )
+            .bottom,
+      ),
+    );
+    expect(
+      tester.getRect(find.text('Inhalt')).top,
+      greaterThanOrEqualTo(tester.getRect(find.text('Status')).bottom),
+    );
+    expect(
+      tester.getRect(find.text('Etwa 1.650 kcal am Tag')).bottom,
+      lessThanOrEqualTo(tester.getRect(find.text('Weiter')).top),
+    );
+  });
+
   layoutMatrix('OnboardingStepPage', (context) => _page(onSkip: () {}));
+
+  layoutMatrix(
+    'OnboardingStepPage ohne Hauptaktion',
+    (context) => OnboardingStepPage(
+      title: 'Angebote in deiner Region',
+      message: 'Du siehst nur Angebote der Märkte, in denen du einkaufst.',
+      onBack: () {},
+      onSkip: () {},
+    ),
+  );
 }

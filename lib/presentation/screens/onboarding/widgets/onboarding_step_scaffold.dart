@@ -139,12 +139,17 @@ class OnboardingStepPage extends StatelessWidget {
     required this.title,
     this.message,
     this.children = const [],
-    required this.primaryAction,
+    this.primaryAction,
     this.progress,
     this.onBack,
     this.backLabel,
+    this.backIcon,
     this.onSkip,
     this.skipLabel,
+    this.status,
+    this.titleTrailing,
+    this.actionHeader,
+    this.skipBelowAction = false,
   });
 
   /// The step's question or statement, `title1`.
@@ -156,8 +161,10 @@ class OnboardingStepPage extends StatelessWidget {
   /// The step's content: inset sections, toggle rows, chips, fields.
   final List<Widget> children;
 
-  /// The one main action, usually `AppButton.primary(expand: true)`.
-  final Widget primaryAction;
+  /// The one main action, usually `AppButton.primary(expand: true)`. Null
+  /// leaves out the action bar (the step's content brings its own action,
+  /// like Teil B's region step).
+  final Widget? primaryAction;
 
   /// Usually a [StepProgress]; nothing when null.
   final Widget? progress;
@@ -169,11 +176,31 @@ class OnboardingStepPage extends StatelessWidget {
   /// VoiceOver label of the back button; `back` by default.
   final String? backLabel;
 
+  /// Glyph of the back button; `chevron.left` by default (`xmark` for
+  /// "Abbrechen" in Neues Passwort, Konzept 17 §4.4).
+  final Widget? backIcon;
+
   /// Shows "Überspringen".
   final VoidCallback? onSkip;
 
   /// Text of the skip button; `skip` by default.
   final String? skipLabel;
+
+  /// A one-line status under the sentence (usually a `StatusRow`, which
+  /// brings its own 16 pt margins), read after the sentence by VoiceOver.
+  final Widget? status;
+
+  /// Next to the title and sentence, aligned to their last line (D2
+  /// X-Onboarding: Avo, 72 pt). Leave it out at accessibility sizes.
+  final Widget? titleTrailing;
+
+  /// Above the main action in the action bar, moving with it (Konzept 17
+  /// §3.10: the result line of "Dein Ziel").
+  final Widget? actionHeader;
+
+  /// Puts "Überspringen" below the main action at every size (D2
+  /// X-Onboarding: "Später entscheiden").
+  final bool skipBelowAction;
 
   @override
   Widget build(BuildContext context) {
@@ -189,7 +216,10 @@ class OnboardingStepPage extends StatelessWidget {
           // The skip capsule fits next to back (44) and progress (96) at
           // default sizes from 375 pt; below that and from AX1 it moves.
           final skipInBar =
-              onSkip != null && !context.isAccessibilityText && width >= 360;
+              onSkip != null &&
+              !skipBelowAction &&
+              !context.isAccessibilityText &&
+              width >= 360;
           final skipBelow = onSkip != null && !skipInBar;
 
           final topBar = Padding(
@@ -214,7 +244,8 @@ class OnboardingStepPage extends StatelessWidget {
                     child: onBack == null
                         ? const SizedBox.shrink()
                         : GlassIconButton(
-                            icon: const AvoIcon(AvoIcons.chevronBack),
+                            icon:
+                                backIcon ?? const AvoIcon(AvoIcons.chevronBack),
                             semanticLabel: backLabel ?? context.tr('back'),
                             onPressed: onBack,
                           ),
@@ -238,7 +269,11 @@ class OnboardingStepPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              primaryAction,
+              if (actionHeader != null) ...[
+                actionHeader!,
+                const SizedBox(height: AvoSpacing.m),
+              ],
+              if (primaryAction != null) primaryAction!,
               if (skipBelow)
                 Center(
                   child: AppButton.plain(label: skipText, onPressed: onSkip),
@@ -246,7 +281,7 @@ class OnboardingStepPage extends StatelessWidget {
             ],
           );
 
-          final header = Column(
+          final titleBlock = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Semantics(
@@ -257,6 +292,22 @@ class OnboardingStepPage extends StatelessWidget {
                 const SizedBox(height: _kTitleGap),
                 Text(message!, style: context.text(AvoTextStyle.body)),
               ],
+            ],
+          );
+          final header = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (titleTrailing == null)
+                titleBlock
+              else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(child: titleBlock),
+                    const SizedBox(width: AvoSpacing.m),
+                    titleTrailing!,
+                  ],
+                ),
               const SizedBox(height: _kContentGap),
             ],
           );
@@ -266,22 +317,34 @@ class OnboardingStepPage extends StatelessWidget {
           final barEstimate =
               AvoSizes.hitTarget +
               context.typography.lineHeightOf(AvoTextStyle.body) *
-                  (skipBelow ? 2 : 1) +
+                  ((skipBelow ? 2 : 1) + (actionHeader != null ? 2 : 0)) +
               AvoSpacing.l * 2;
+          final hasActions =
+              primaryAction != null || skipBelow || actionHeader != null;
           final pinned =
               barEstimate <= constraints.maxHeight * _kPinnedBarMaxShare;
 
+          Widget inset(Widget child) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
+            child: child,
+          );
           final content = ListView(
             padding: EdgeInsets.fromLTRB(
-              AvoSpacing.screen,
+              0,
               AvoSpacing.l,
-              AvoSpacing.screen,
-              pinned ? AvoSpacing.l : media.padding.bottom + AvoSpacing.l,
+              0,
+              pinned && hasActions
+                  ? AvoSpacing.l
+                  : media.padding.bottom + AvoSpacing.l,
             ),
             children: [
-              header,
-              ...children,
-              if (!pinned) ...[const SizedBox(height: AvoSpacing.xxl), actions],
+              inset(header),
+              if (status != null) status!,
+              for (final child in children) inset(child),
+              if (!pinned && hasActions) ...[
+                const SizedBox(height: AvoSpacing.xxl),
+                inset(actions),
+              ],
             ],
           );
 
@@ -289,7 +352,7 @@ class OnboardingStepPage extends StatelessWidget {
             children: [
               topBar,
               Expanded(child: content),
-              if (pinned)
+              if (pinned && hasActions)
                 _PinnedActionBar(
                   bottomInset: media.viewInsets.bottom > 0
                       ? media.viewInsets.bottom
