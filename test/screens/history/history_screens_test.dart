@@ -472,6 +472,29 @@ void main() {
       }
     });
 
+    testWidgets('a11y: share fields are named, the duplicate name is announced', (tester) async {
+      final handle = tester.ensureSemantics();
+      final world = HistoryWorld(prefs: prefs, trips: [histTrip('t1', histNow, cost: 10)]);
+      final router = await pumpHistory(tester, '/history/t1', await world.overrides());
+      router.push(historySplitLocation('t1'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Gesamtbetrag'), findsOneWidget);
+      await tester.tap(find.text('Individuell'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Anteil von Lena'), findsOneWidget);
+      await tester.tap(find.text('Person hinzufügen'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Person hinzufügen'), findsWidgets);
+      await tester.enterText(find.byType(EditableText).last, 'Lena');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(
+        tester.getSemantics(find.text('Lena ist schon dabei.')),
+        isSemantics(isLiveRegion: true, label: 'Lena ist schon dabei.'),
+      );
+      handle.dispose();
+    });
+
     testWidgets('module off: the alert comes first', (tester) async {
       final world = HistoryWorld(
         prefs: prefs,

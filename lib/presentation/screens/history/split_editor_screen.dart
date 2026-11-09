@@ -445,30 +445,41 @@ class _SplitEditorScreenState extends ConsumerState<SplitEditorScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              CupertinoTextField(
-                controller: _name,
-                focusNode: _nameFocus,
-                autofocus: true,
-                placeholder: context.tr('hist_split_name_placeholder'),
-                textCapitalization: TextCapitalization.words,
-                style: context.text(AvoTextStyle.body),
-                placeholderStyle: context.text(AvoTextStyle.body, color: colors.placeholder),
-                decoration: null,
-                padding: const EdgeInsets.symmetric(vertical: AvoSpacing.m - AvoSpacing.xxs),
-                onSubmitted: (_) => _addName(),
+              Semantics(
+                label: context.tr('hist_split_add_person'),
+                textField: true,
+                child: CupertinoTextField(
+                  controller: _name,
+                  focusNode: _nameFocus,
+                  autofocus: true,
+                  placeholder: context.tr('hist_split_name_placeholder'),
+                  textCapitalization: TextCapitalization.words,
+                  style: context.text(AvoTextStyle.body),
+                  placeholderStyle: context.text(AvoTextStyle.body, color: colors.placeholder),
+                  decoration: null,
+                  padding: const EdgeInsets.symmetric(vertical: AvoSpacing.m - AvoSpacing.xxs),
+                  onSubmitted: (_) => _addName(),
+                ),
               ),
               if (_nameTaken != null)
-                Row(
-                  children: [
-                    AvoIcon(AvoIcons.exclamationmarkCircle, size: 15, color: colors.destructive), // D2
-                    const SizedBox(width: AvoSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        context.tr('hist_split_name_taken', params: {'name': _nameTaken!}),
-                        style: context.text(AvoTextStyle.footnote),
+                // Said by VoiceOver as soon as it appears (3.3.1).
+                Semantics(
+                  liveRegion: true,
+                  container: true,
+                  child: Row(
+                    children: [
+                      ExcludeSemantics(
+                        child: AvoIcon(AvoIcons.exclamationmarkCircle, size: 15, color: colors.destructive), // D2
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: AvoSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          context.tr('hist_split_name_taken', params: {'name': _nameTaken!}),
+                          style: context.text(AvoTextStyle.footnote),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -858,7 +869,7 @@ class _ParticipantRow extends StatelessWidget {
                   placeholder: '0',
                   languageCode: lang,
                   initialCents: customInitial,
-                  semanticHint: context.tr('hist_split_share_a11y'),
+                  semanticLabel: context.tr('hist_split_share_of_a11y', params: {'name': name}),
                   onChanged: onCustom,
                 ),
               ),

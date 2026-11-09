@@ -28,6 +28,7 @@ class HistoryAmountField extends StatefulWidget {
     required this.onChanged,
     this.initialCents,
     this.semanticHint,
+    this.semanticLabel,
     this.focusNode,
   });
 
@@ -48,6 +49,9 @@ class HistoryAmountField extends StatefulWidget {
 
   /// Read after the label ("Für deinen Monatsrückblick.").
   final String? semanticHint;
+
+  /// VoiceOver label when [title] is not shown ("Anteil von Lena").
+  final String? semanticLabel;
 
   final FocusNode? focusNode;
 
@@ -108,13 +112,21 @@ class _HistoryAmountFieldState extends State<HistoryAmountField> {
       tabular: true,
     );
     final line = context.typography.lineHeightOf(AvoTextStyle.body);
-    final pad = ((AvoSizes.hitTarget - line) / 2).clamp(0.0, AvoSizes.hitTarget);
+    final pad = ((AvoSizes.hitTarget - line) / 2).clamp(
+      0.0,
+      AvoSizes.hitTarget,
+    );
 
     Widget field(TextAlign align) => ConstrainedBox(
       constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
       child: Center(
         child: Semantics(
-          label: '${widget.title}, ${widget.placeholder}',
+          label:
+              widget.semanticLabel ??
+              [
+                widget.title,
+                widget.placeholder,
+              ].where((t) => t.isNotEmpty).join(', '),
           hint: widget.semanticHint,
           textField: true,
           child: CupertinoTextField(
