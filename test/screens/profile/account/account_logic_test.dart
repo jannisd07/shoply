@@ -71,23 +71,6 @@ void main() {
         expect(removed, contains('setp_notif_time_restock'));
       },
     );
-
-    test('counts the waiting writes of calories and the meal plan', () async {
-      SharedPreferences.setMockInitialValues({
-        'cal_write_queue_v1': '[{"id":1},{"id":2}]',
-        'meal_plan_outbox_v1_u1': '[{"kind":"x"}]',
-        'meal_plan_outbox_v1_u2': '[{"kind":"x"},{"kind":"y"}]',
-      });
-      final prefs = await SharedPreferences.getInstance();
-      expect(countUnsentChanges(prefs, userId: 'u1'), 3);
-      expect(countUnsentChanges(prefs), 2);
-    });
-
-    test('broken queue JSON counts as empty', () async {
-      SharedPreferences.setMockInitialValues({'cal_write_queue_v1': '{'});
-      final prefs = await SharedPreferences.getInstance();
-      expect(countUnsentChanges(prefs, userId: 'u1'), 0);
-    });
   });
 
   group('identity', () {

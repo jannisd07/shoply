@@ -21,7 +21,9 @@ class ItemPrice {
   /// ISO 4217 code; Avo prices are in euros.
   final String currency;
 
-  /// Retailer chain id (`lidl`, `rewe` …), null for a manual price.
+  /// Retailer name as the store directory writes it ("Lidl", "Aldi Süd"),
+  /// not the chain id; read by the receipt history, store detection and
+  /// `isOfferPriceTaken`. Null for a manual price.
   final String? retailer;
 
   /// What the price is for ("1 l", "500 g"); null for one piece.

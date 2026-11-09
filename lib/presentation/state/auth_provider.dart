@@ -111,14 +111,3 @@ Future<Map<String, dynamic>> _createUserRow(User authUser) {
       .select()
       .single();
 }
-
-/// Auth service provider
-class AuthService {
-  final SupabaseService _supabase = SupabaseService.instance;
-
-  Future<void> updateDisplayName(String displayName) {
-    return _supabase.updateUserMetadata({'display_name': displayName});
-  }
-}
-
-final authServiceProvider = Provider<AuthService>((ref) => AuthService());

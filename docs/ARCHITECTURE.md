@@ -8,19 +8,19 @@ passt diese Datei im selben Commit an.
 ```
 lib/
 ├── main.dart            Start: Supabase vor runApp, alles andere parallel im Hintergrund
-├── app.dart             AvoApp (AdaptiveApp.router), Theme/Sprache, ScaffoldMessenger, TutorialOverlay
+├── app.dart             AvoApp (AdaptiveApp.router), Theme/Sprache, ScaffoldMessenger
 ├── routes/app_router.dart   GoRouter, Auth-Redirect (ohne Netzwerk), Deep Links
 ├── core/                config (env.dart), constants (Farben, Kategorien, Links), localization,
-│                        theme, utils (normalizeProductName, request_throttle, number_parsing), widgets/paper
+│                        theme, design (D2-Tokens), utils (normalizeProductName, request_throttle, number_parsing)
 ├── data/
 │   ├── models/          Datenklassen (Recipe+Ingredient in recipe.dart, ShoppingItemModel, ShoppingListModel …)
 │   ├── repositories/    ListRepository, ItemRepository – alle Listen-/Artikel-Zugriffe auf Supabase
-│   └── services/        ~60 Singletons (ServiceName.instance): Avo, Gemini, Rezepte, Push, Angebote, Kalorien …
+│   └── services/        ~60 Singletons (ServiceName.instance): Avo, Claude, Rezepte, Push, Angebote, Kalorien …
 └── presentation/
     ├── state/           Riverpod: auth, lists, items, recipes, theme, language
-    ├── providers/       Riverpod: subscription, ML-Empfehlungen, Preise/Angebote
+    ├── providers/       Riverpod: subscription, Preise/Angebote
     ├── screens/<feature>/          ein Ordner pro Bereich, Teil-Widgets in screens/<feature>/widgets/
-    └── widgets/         geteilte Widgets (common/, recipes/, recommendations/, tutorial/)
+    └── widgets/         geteilte Widgets (design/ = D2-Komponenten, common/, recipes/, slots/, tips/)
 ```
 
 Es gibt **keinen** Service-Locator mehr (`Services.x` ist gelöscht). Zugriff: `ServiceName.instance` oder ein

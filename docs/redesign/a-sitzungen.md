@@ -86,7 +86,9 @@ lib/presentation/screens/profile test/screens/profile`) und gibt das OK oder bes
 
 Quellen: prompt §5 A11 und §9, `konzept/20-qualitaet.md`, „Offen bei A“ in `ab1-stand.md`, `ab2-stand.md`,
 `a12-stand.md` (u. a. „Im Simulator ansehen“ aus AB2: Vorschlags-Panel, Listen-Info, Rezept-Zutaten mit Angeboten,
-Rezepte-Tab mit Tipp). Vorher `status-B.md` auf neue Anfragen an A prüfen; die gehen vor. Simulator-Build mit B
+Rezepte-Tab mit Tipp). Vorher `status-B.md` auf neue Anfragen an A prüfen; die gehen vor. **Zuerst status-B 17 (1):**
+`itemOfferRowExtras` aus `b_slots.dart` in Liste und Einkaufsmodus an `ItemRow` durchreichen (`trailingSemanticsLabel`,
+`trailingActions`, `contextMenuItems`; genauer Aufruf in status-B 17). 17 (2) ist mit A12 erledigt, 17 (3) entfällt. Simulator-Build mit B
 absprechen, vorher `df -h /System/Volumes/Data` (unter 10 GB keine Builds). Erst den Prüfplan schreiben (Screens,
 Zustände, Prüfmatrix, Barrierefreiheit), dann Funde beheben.
 

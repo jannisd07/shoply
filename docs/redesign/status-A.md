@@ -4,6 +4,9 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
+09.11.2026 (A12): Aufräumen und Analysen fertig, Ergebnis und Wünsche an B in [`a12-stand.md`](a12-stand.md), Analyse in
+[`feature-ideen.md`](feature-ideen.md). Als Nächstes: A11 (Qualität für alle A-Screens); A9/A10 warten auf den Owner.
+
 09.11.2026: **Eine Sitzung je Arbeitspaket** (Owner, Wochenlimit). Ablauf, offene Pakete und Start-Prompt für die
 nächste Sitzung: [`a-sitzungen.md`](a-sitzungen.md). AB1 (Komponenten und Daten für B) ist fertig, neue API in
 [`ab1-stand.md`](ab1-stand.md). Als Nächstes: AB2 (Listen, Router, Reste aus A5–A8).
@@ -54,6 +57,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A8 Profil und Einstellungen | **gebaut** (Profil mit Suche, neun Einstellungsseiten, Profil bearbeiten, Konto, Abmelden, Konto löschen ohne Server); Server-Entwurf und offen in `a8-stand.md` | 09.11.2026 | `8f67ca8`, `28d2463`, `git log --grep "Einstellung\|Konto\|Profil"` |
 | AB1 Anfragen von B: Komponenten und Daten | **erledigt** (A-C1, A-C2, A-C3, A-C5, A-C7, A-C8, A-C9, A-D1, Composer, AppButton-Varianten, NavRow, Avatar xl, Suche mit Mikrofon, Toast mit Ziel, Symbole); API in `ab1-stand.md` | 09.11.2026 | `f259477`, `git log --grep AB1` |
 | AB2 Anfragen von B: Listen, Router, Reste | **erledigt** (A-C4, A-L1–A-L4, A-R1–A-R3, status-B 15/16, Listen-Schalter, Mitteilungs-Kategorien, T6/T7, A-C6, `ThemeMode.system`); offen in `ab2-stand.md` | 09.11.2026 | `git log --grep AB2` |
+| A12 Aufräumen und Analysen | **erledigt** (13 tote Dateien, tote Symbole, 543 ungenutzte Textschlüssel, Paper-Reste bis auf die Paywall, `feature-ideen.md`, `claude/daily` pausieren); Wünsche an B in `a12-stand.md` | 09.11.2026 | `git log --grep A12` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
@@ -219,5 +223,6 @@ Offen:
   genannten offenen Fakten (Testzeitraum, Beleg-Prüfung, RPC-Rechte, rechtliche Links).
 - Neue Maskottchen-Grafiken und das finale App-Icon-Motiv (A10, mit Bild-Prompts).
 - TestFlight und App Store (erst am Ende).
+- Ideen aus [`feature-ideen.md`](feature-ideen.md) §5 (A12).
 
 Beantwortet am 07.11.2026: App-Name, Module beim ersten Start, `claude/daily`, Paletten, Abhak-Ring, Migration der Modulwahl (siehe oben).

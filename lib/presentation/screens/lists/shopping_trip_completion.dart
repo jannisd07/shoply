@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shoply/core/constants/app_colors.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/app_localizations.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
@@ -62,7 +62,7 @@ Future<void> completeShoppingTrip(
     icon: PlatformInfo.isIOS26OrHigher()
         ? 'checkmark.circle.fill'
         : Icons.check_circle_outline,
-    iconColor: AppColors.success,
+    iconColor: context.colors.tint,
     actions: [
       AlertAction(
         title: AppLocalizations.of(context).cancel,

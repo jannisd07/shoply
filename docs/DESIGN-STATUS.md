@@ -40,6 +40,11 @@ Vollbild, Komponenten-Blatt mit Tokens). Die Komponenten-Seite ist die Vorlage f
 
 ## Die drei Stile im Code
 
+> **Stand 09.11.2026 (A12):** In A-Dateien ist Paper bis auf die Paywall (`subscription_screen.dart`, kommt mit A9)
+> weg; `paper_widgets.dart`, `liquid_glass_button.dart`, `common/empty_state.dart` und `app_text_styles.dart` sind
+> gelöscht. `AppColors`/`PaperColors`/`design_system.dart` bleiben, solange B-Screens (Kalorien, Verlauf, alte
+> Home-Hinweise) sie nutzen. Die Tabelle unten ist der Stand vom 07.11.
+
 | Stil | Merkmale | Wo |
 |---|---|---|
 | **Paper** (Juli 2026) | warmes Papier-Beige, Serif (Georgia) über `PaperTextStyles`, Terrakotta `#C0502A`, Haarlinien | Profil, Einstellungen, Avo-Chat (teilweise), Listen-Detail (teilweise), Home-Streifen |
@@ -55,8 +60,6 @@ Vollbild, Komponenten-Blatt mit Tokens). Die Komponenten-Seite ist die Vorlage f
   ist nur hell, also brechen solche Stellen im Dark Mode.
 - **Die Schrift "Satoshi"** steht in `AppTextStyles` überall, ist aber nie eingebunden. iOS fällt still auf die
   Systemschrift zurück.
-- Datenservices enthalten UI: `contextual_prompt_service.dart` (Widgets mit harten Farben, nur Deutsch),
-  `dynamic_tutorial_service.dart` (Tutorial-Texte nur Deutsch).
 - CLAUDE.md beschreibt noch "dark-first, AppColors, liquid glass", die App selbst ist inzwischen eher Paper.
 
 ## Screens mit dem größten Mix

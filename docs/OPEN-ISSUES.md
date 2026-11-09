@@ -48,6 +48,10 @@ Stand: 2026-11-08.
 
 ## 3. CI und Release
 
+- **CI „Analyze and test“ ist abgeschaltet** (Owner, 09.11.2026: schlug immer fehl). Wieder an mit
+  `gh workflow enable "Analyze and test"`, sobald die Suite in CI grün läuft. Bis dahin prüfen die Sitzungen lokal.
+- **Routine `claude/daily` pausieren** (Entscheidung 09.11.2026): im Routine-Menü von Claude Code abschalten, nach
+  dem Redesign wieder einschalten. Der Zweig hat keine eigenen Commits.
 - **TestFlight-Secrets** im GitHub-Repo anlegen: `ENV_DART_BASE64`, `FIREBASE_OPTIONS_DART_BASE64`,
   `GOOGLE_SERVICE_INFO_PLIST_BASE64`, `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`,
   `APP_STORE_CONNECT_API_KEY` (Inhalt der `.p8`, Rolle Admin). Die alten `IOS_CERTIFICATE_*`-Secrets werden nicht

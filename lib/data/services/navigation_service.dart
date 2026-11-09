@@ -95,15 +95,4 @@ class NavigationService {
         if (listId != null) navigateToList(listId, listName: listName);
     }
   }
-
-  /// Navigate to diet preferences.
-  void navigateToDietPreferences() {
-    if (_router == null) {
-      debugPrint('⚠️ [NAVIGATION] Router not set');
-      return;
-    }
-
-    unawaited(_router!.push('/diet-preferences'));
-    debugPrint('✅ [NAVIGATION] Navigated to diet preferences');
-  }
 }

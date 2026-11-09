@@ -2,6 +2,15 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Aufräumen und Feature-Analyse (Teil A, A12)
+
+- 13 tote Dateien gelöscht (u. a. `paper_widgets.dart`, `app_text_styles.dart`, altes `common/empty_state.dart`,
+  `liquid_glass_button.dart`, ML-Empfehlungs-Abschnitt und -Provider), tote Symbole (`AuthService`,
+  `navigateToDietPreferences`, `unsentChangesProvider`, alte Sterne-Widgets).
+- 543 ungenutzte Textschlüssel aus A's Übersetzungsdateien entfernt (Deutsch und Englisch).
+- Paper in A-Dateien nur noch in der Paywall (A9).
+- Analyse `docs/redesign/feature-ideen.md`: Wettbewerbsvergleich und 22 Ideen mit Nutzen, Aufwand, Free/Pro.
+
 ## 2026-11-09: Einstellungen von Teil B und Schnittstellen für A8 (Teil B, BA8)
 
 - Neue Einstellungsseiten im Profil-Tab: Avo (`/settings/avo`: Einwilligungen, Gespeichertes, Gespräch löschen,
