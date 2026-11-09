@@ -496,7 +496,7 @@ class _AccountCodeScreenState extends ConsumerState<AccountCodeScreen> {
     final left = _cooldownLeft;
     final codeStyle = context
         .text(AvoTextStyle.title2, weight: FontWeight.w600, tabular: true)
-        .copyWith(letterSpacing: 0);
+        .copyWith(letterSpacing: 0); // design-check: ok Ziffern ohne Laufweite
     final codeError = _codeError;
     final statusText = _statusText;
     final Widget? status;

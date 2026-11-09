@@ -286,7 +286,7 @@ class _CodeStepState extends ConsumerState<CodeStep>
     final left = _cooldownLeft;
     final codeStyle = context
         .text(AvoTextStyle.title2, weight: FontWeight.w600, tabular: true)
-        .copyWith(letterSpacing: 0);
+        .copyWith(letterSpacing: 0); // design-check: ok Ziffern ohne Laufweite
     final status = _statusLine(context, offline);
     final complete = _controller.text.length == kCodeLength;
     final codeError = _codeError;
@@ -411,7 +411,9 @@ class CodeInputFormatter extends TextInputFormatter {
     String? digits;
     final old = oldValue.selection;
     final start = old.isValid ? math.min(old.start, old.end) : 0;
-    final end = newValue.selection.isValid ? newValue.selection.end : text.length;
+    final end = newValue.selection.isValid
+        ? newValue.selection.end
+        : text.length;
     if (start >= 0 && end >= start && end <= text.length) {
       digits = _sixDigits(text.substring(start, end));
     }

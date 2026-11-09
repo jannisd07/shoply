@@ -181,7 +181,8 @@ class ModuleChoiceCard extends StatelessWidget {
                           child: AvoIcon(
                             descriptor.icon,
                             size: _kTileGlyph,
-                            color: const Color(0xFFFFFFFF),
+                            // White glyph on a data colour (D2).
+                            color: const Color(0xFFFFFFFF), // D2
                           ),
                         ),
                       ),

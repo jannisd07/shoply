@@ -38,8 +38,9 @@ Future<void> completeShoppingTrip(
       message: context.tr('no_checked_items_message'),
       icon: PlatformInfo.isIOS26OrHigher()
           ? 'exclamationmark.circle.fill'
-          : Icons.info_outline,
-      iconColor: Colors.orange,
+          : Icons
+                .info_outline, // design-check: ok Android-Fallback des nativen Alerts
+      iconColor: context.colors.warning,
       actions: [
         AlertAction(
           title: context.tr('ok'),
@@ -61,7 +62,8 @@ Future<void> completeShoppingTrip(
     ),
     icon: PlatformInfo.isIOS26OrHigher()
         ? 'checkmark.circle.fill'
-        : Icons.check_circle_outline,
+        : Icons
+              .check_circle_outline, // design-check: ok Android-Fallback des nativen Alerts
     iconColor: context.colors.tint,
     actions: [
       AlertAction(
@@ -127,7 +129,7 @@ Future<void> completeShoppingTrip(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(context.tr('action_failed')),
-          backgroundColor: Colors.red,
+          backgroundColor: context.colors.destructive,
         ),
       );
     }
@@ -180,8 +182,8 @@ void _notifyMembers(
   if (recipients.isEmpty) return;
 
   final me = members.where((m) => m['user_id'] == userId).firstOrNull;
-  final myName = (me?['user'] as Map<String, dynamic>?)?['display_name']
-          as String? ??
+  final myName =
+      (me?['user'] as Map<String, dynamic>?)?['display_name'] as String? ??
       context.tr('someone');
 
   unawaited(

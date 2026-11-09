@@ -57,17 +57,17 @@ abstract final class ProfileTileColors {
   static const pro = Color(0xFF1F7A3A); // D2
   static const modules = Color(0xFF0062CC); // D2
   static const offers = Color(0xFF34C759); // D2
-  static const diet = Color(0xFF30B0C7); // iOS teal
-  static const personal = Color(0xFFAF52DE); // iOS purple
+  static const diet = Color(0xFF30B0C7); // D2 (iOS teal)
+  static const personal = Color(0xFFAF52DE); // D2 (iOS purple)
   static const lists = Color(0xFFFF9F0A); // D2
   static const notifications = Color(0xFFFF3B30); // D2
   static const appearance = Color(0xFF8E8E93); // D2
-  static const language = Color(0xFF007AFF); // iOS blue
-  static const siri = Color(0xFF5856D6); // iOS indigo
+  static const language = Color(0xFF007AFF); // D2 (iOS blue)
+  static const siri = Color(0xFF5856D6); // D2 (iOS indigo)
   static const widgets = Color(0xFFFF2D55); // D2
-  static const help = Color(0xFF32ADE6); // iOS cyan
-  static const legal = Color(0xFF636366); // iOS grey 2
-  static const account = Color(0xFFA2845E); // iOS brown
+  static const help = Color(0xFF32ADE6); // D2 (iOS cyan)
+  static const legal = Color(0xFF636366); // D2 (iOS grey 2)
+  static const account = Color(0xFFA2845E); // D2 (iOS brown)
 }
 
 /// The pages the profile root links to, in its order (Konzept 18 §3.2, §6).

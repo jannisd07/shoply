@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:shoply/core/design/design.dart';
 
 /// Real iOS 26 Liquid Glass (`UIGlassEffect`) via a native platform view, with
 /// a `BackdropFilter` frosted-glass fallback on Android.
@@ -77,7 +78,7 @@ class LiquidGlassContainer extends StatelessWidget {
   }
 
   Widget _buildFallback(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.colors;
     final borderRadius = isCircle
         ? BorderRadius.circular(999)
         : BorderRadius.circular(cornerRadius);
@@ -90,25 +91,10 @@ class LiquidGlassContainer extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: borderRadius,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? [
-                      Colors.white.withValues(alpha: 0.12),
-                      Colors.white.withValues(alpha: 0.06),
-                    ]
-                  : [
-                      Colors.white.withValues(alpha: 0.75),
-                      Colors.white.withValues(alpha: 0.55),
-                    ],
-            ),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.18)
-                  : Colors.white.withValues(alpha: 0.8),
-              width: 0.5,
-            ),
+            // D2 glass tokens: they follow the app's own light/dark choice
+            // and Increase Contrast (Theme.of is not set under CupertinoApp).
+            color: colors.glassFill,
+            border: Border.all(color: colors.glassBorder, width: 0.5),
           ),
           child: child,
         ),
@@ -186,13 +172,13 @@ class LiquidGlassShape {
   });
 
   Map<String, dynamic> toMap() => <String, dynamic>{
-        'x': rect.left,
-        'y': rect.top,
-        'width': rect.width,
-        'height': rect.height,
-        'cornerRadius': cornerRadius,
-        'isCapsule': isCapsule,
-      };
+    'x': rect.left,
+    'y': rect.top,
+    'width': rect.width,
+    'height': rect.height,
+    'cornerRadius': cornerRadius,
+    'isCapsule': isCapsule,
+  };
 }
 
 /// Several glass shapes sharing one `UIGlassContainerEffect`, so they bulge

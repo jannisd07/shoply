@@ -1,5 +1,6 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 
 /// Native destructive confirmation ("Delete X?" with Cancel / [confirmLabel]).
@@ -16,9 +17,11 @@ Future<bool> confirmDestructive(
     context: context,
     title: title,
     message: message,
-    icon: PlatformInfo.isIOS26OrHigher() ? 'trash.fill' : Icons.delete,
+    icon: PlatformInfo.isIOS26OrHigher()
+        ? 'trash.fill'
+        : Icons.delete, // design-check: ok Android-Fallback des nativen Alerts
     iconSize: iconSize,
-    iconColor: Colors.red,
+    iconColor: context.colors.destructive,
     actions: [
       AlertAction(
         title: context.tr('cancel'),

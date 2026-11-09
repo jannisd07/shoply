@@ -138,7 +138,10 @@ class _Initial extends StatelessWidget {
               weight: FontWeight.w600,
               color: colors.tint,
             )
-            .copyWith(fontSize: size * _kInitialFactor, height: 1);
+            .copyWith(
+              fontSize: size * _kInitialFactor, // design-check: ok Initialen
+              height: 1,
+            );
     return ColoredBox(
       color: background ?? colors.tintSoft,
       child: SizedBox.square(
