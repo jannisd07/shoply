@@ -301,6 +301,19 @@ void main() {
       final error = events.single as AvoStreamError;
       expect(error.code, 'rate_limited');
       expect(error.retryAfterS, 12);
+      expect(error.httpStatus, 429);
+    });
+
+    test('an error inside the stream has no HTTP status', () async {
+      final client = _sse([
+        'event: error\ndata: {"code":"provider_error"}\n\n',
+      ]);
+
+      final events = await _service(client).streamAvo(const {}).toList();
+
+      final error = events.single as AvoStreamError;
+      expect(error.code, 'provider_error');
+      expect(error.httpStatus, isNull);
     });
 
     test('no first event in time gives timeout', () async {

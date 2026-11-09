@@ -247,7 +247,9 @@ class AvoAssistantService {
       );
     } on _AvoStreamFailure catch (failure) {
       _conversation.rollback(mark);
-      debugPrint('❌ [AVO] Answer failed: ${failure.code}');
+      debugPrint(
+        '⚠️ [AVO] ${describeAvoFailure(failure.code, failure.httpStatus)}',
+      );
       return AvoResponse(
         message: _t(ref, _errorKeyFor(failure.code)),
         payloads: payloads,
@@ -286,8 +288,16 @@ class AvoAssistantService {
           onText(text);
         case AvoMessageDone():
           done = event;
-        case AvoStreamError(:final code, :final retryAfterS):
-          throw _AvoStreamFailure(code, retryAfterS: retryAfterS);
+        case AvoStreamError(
+            :final code,
+            :final retryAfterS,
+            :final httpStatus,
+          ):
+          throw _AvoStreamFailure(
+            code,
+            retryAfterS: retryAfterS,
+            httpStatus: httpStatus,
+          );
       }
     }
     final result = done;
@@ -901,8 +911,15 @@ class _RefListWriter implements AvoListWriter {
 /// An answer stream that ended with an error event (code as in
 /// [ClaudeException]).
 class _AvoStreamFailure implements Exception {
-  const _AvoStreamFailure(this.code, {this.retryAfterS});
+  const _AvoStreamFailure(this.code, {this.retryAfterS, this.httpStatus});
 
   final String code;
   final int? retryAfterS;
+  final int? httpStatus;
 }
+
+/// The log line of a failed Avo answer: server code and HTTP status only,
+/// never the question, the history or anything else of the person.
+@visibleForTesting
+String describeAvoFailure(String code, int? httpStatus) =>
+    'Answer failed: code=$code, http=${httpStatus ?? 'in stream'}';

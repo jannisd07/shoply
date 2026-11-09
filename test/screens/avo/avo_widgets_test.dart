@@ -17,6 +17,7 @@ import 'package:shoply/presentation/screens/avo/widgets/avo_large_title.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_message_text.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_status_line.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_status_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_user_bubble.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
@@ -821,6 +822,35 @@ void main() {
       );
       expect(find.byType(AvoFigure), findsNothing);
       handle.dispose();
+    });
+  });
+
+  group('failed answer (S6 P1)', () {
+    test('the log line names code and HTTP status, nothing else', () {
+      expect(
+        describeAvoFailure('provider_error', 502),
+        'Answer failed: code=provider_error, http=502',
+      );
+      expect(
+        describeAvoFailure('quota_exceeded', null),
+        'Answer failed: code=quota_exceeded, http=in stream',
+      );
+    });
+
+    testWidgets('provider_error shows the general error with retry', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          AvoErrorSection(
+            code: 'provider_error',
+            onRetry: () {},
+            onSignIn: () {},
+          ),
+        ),
+      );
+      expect(find.text("That didn't work."), findsOneWidget);
+      expect(find.text("Avo can't be reached right now."), findsOneWidget);
     });
   });
 }

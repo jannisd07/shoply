@@ -88,10 +88,14 @@ final class AvoToolCall {
 
 /// The stream failed and ends here; [code] as in [ClaudeException].
 final class AvoStreamError extends AvoStreamEvent {
-  const AvoStreamError(this.code, {this.retryAfterS});
+  const AvoStreamError(this.code, {this.retryAfterS, this.httpStatus});
 
   final String code;
   final int? retryAfterS;
+
+  /// The HTTP status when the server refused before streaming; null when
+  /// the error came inside the stream (or never reached the server).
+  final int? httpStatus;
 }
 
 /// The app's only way to Claude: POST `<SUPABASE_URL>/functions/v1/ai` with
@@ -372,7 +376,11 @@ class _AvoStreamSession {
           ClaudeService._decodeObject(utf8.decode(bytes, allowMalformed: true)),
           response.headers,
         );
-        _fail(error.code, retryAfterS: error.retryAfterS);
+        _fail(
+          error.code,
+          retryAfterS: error.retryAfterS,
+          httpStatus: response.statusCode,
+        );
         return;
       }
       _events = response.stream
@@ -434,10 +442,12 @@ class _AvoStreamSession {
     }
   }
 
-  void _fail(String code, {int? retryAfterS}) {
+  void _fail(String code, {int? retryAfterS, int? httpStatus}) {
     if (_finished) return;
     debugPrint('❌ [CLAUDE] avo_chat ended with $code');
-    controller.add(AvoStreamError(code, retryAfterS: retryAfterS));
+    controller.add(
+      AvoStreamError(code, retryAfterS: retryAfterS, httpStatus: httpStatus),
+    );
     finish();
   }
 
