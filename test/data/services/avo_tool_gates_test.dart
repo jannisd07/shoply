@@ -119,6 +119,63 @@ void main() {
       expect(mine.paidReset, isEmpty, reason: 'the payer stays paid');
     });
 
+    test('a payer who is another account (id and name): their share is the '
+        'one made again as paid, every other paid share is named (I-1)', () {
+      final trip = ShoppingHistory(
+        id: 't1',
+        userId: 'u1',
+        listName: 'Wocheneinkauf',
+        totalItems: 3,
+        completedAt: DateTime(2026, 10, 31),
+        totalCost: 42,
+        paidByUserId: 'u2',
+        paidByName: 'Lena',
+      );
+      final card =
+          avoSplitGate(
+                trip: trip,
+                // The model wrote the name in lower case.
+                others: const ['lena', 'Max'],
+                yourName: 'Jannis',
+                yourUserId: 'u1',
+                existing: [
+                  _split('Lena', paid: true),
+                  _split('Max', paid: true),
+                  _split('Jannis', paid: true),
+                ],
+              ).gate!.card.card!
+              as AvoSplitPreviewCard;
+      expect(card.payerUserId, 'u2');
+      expect(card.payerName, 'Lena');
+      expect(card.payerIsYou, isFalse);
+      expect(card.shares.map((s) => s.name), ['Jannis', 'Lena', 'Max']);
+      expect(card.paidReset, ['Max', 'Jannis']);
+      expect(
+        [
+          for (final s in card.shares)
+            if (avoIsPayersShare(
+              s,
+              payerIsYou: card.payerIsYou,
+              payerName: card.payerName,
+            ))
+              s.name,
+        ],
+        ['Lena'],
+      );
+
+      // The payer is not among the people: nobody's share stays paid.
+      final without =
+          avoSplitGate(
+                trip: trip,
+                others: const ['Max'],
+                yourName: 'Jannis',
+                yourUserId: 'u1',
+                existing: [_split('Lena', paid: true)],
+              ).gate!.card.card!
+              as AvoSplitPreviewCard;
+      expect(without.paidReset, ['Lena']);
+    });
+
     test('a trip without a total takes the one the person said', () {
       final plan = avoSplitGate(
         trip: _trip(),

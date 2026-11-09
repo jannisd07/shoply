@@ -17,6 +17,7 @@ class _GoalStore implements AvoGoalStore {
   final List<WeightLogEntry> weights = [];
   int _n = 0;
   bool failDelete = false;
+  bool failLog = false;
 
   @override
   String? get userId => 'u1';
@@ -33,6 +34,7 @@ class _GoalStore implements AvoGoalStore {
 
   @override
   Future<WeightLogEntry> logWeight(double kg) async {
+    if (failLog) throw Exception('offline');
     final e = WeightLogEntry(
       id: 'w${_n++}',
       userId: 'u1',
@@ -124,6 +126,27 @@ void main() {
       expect(store.stored!.dailyCalorieTarget, 2000);
     });
 
+    test('the weight fails after the goal was saved: the record says so, '
+        'undo restores the goal (M-f)', () async {
+      final store = _GoalStore()
+        ..stored = _goal(2000)
+        ..failLog = true;
+      var refreshed = 0;
+      final record = await avoApplyGoal(
+        store,
+        AvoGoalPreviewCard(goal: _goal(1800), writesWeight: true),
+        now: _now,
+        changed: () => refreshed++,
+      );
+      expect(store.stored!.dailyCalorieTarget, 1800);
+      expect(record.weightKg, isNull);
+      expect(record.weightFailed, isTrue);
+      expect(refreshed, 1, reason: 'the saved goal shows');
+      expect(await record.undo!(), AvoUndoResult.undone);
+      expect(store.stored!.dailyCalorieTarget, 2000);
+      expect(store.weights, isEmpty);
+    });
+
     test('today already has a weight: none written', () async {
       final store = _GoalStore()..stored = _goal(2000);
       await store.logWeight(79);
@@ -163,8 +186,8 @@ void main() {
   });
 
   group('Teilen (N1)', () {
-    test('keeps the trip\'s payer, refuses when the payer, the split or the '
-        'module changed', () async {
+    test('keeps the trip\'s payer, refuses when the payer or the module '
+        'changed', () async {
       final store = _SplitStore(paidByName: 'Lena');
       final card = AvoSplitPreviewCard(
         historyId: 't1',
@@ -191,6 +214,71 @@ void main() {
       expect(moved.created, isEmpty);
     });
 
+    test('a payer who is another account: their share carries their id, so '
+        'it is saved as paid (I-1)', () async {
+      final store = _SplitStore(paidByName: 'Lena', paidByUserId: 'u2');
+      final card = AvoSplitPreviewCard(
+        historyId: 't1',
+        tripDate: DateTime(2026, 10, 31),
+        total: 40,
+        totalFromTrip: true,
+        yourUserId: 'u1',
+        payerUserId: 'u2',
+        payerName: 'Lena',
+        payerIsYou: false,
+        shares: const [
+          (name: 'Jannis', amount: 20, isYou: true),
+          (name: 'Lena', amount: 20, isYou: false),
+        ],
+      );
+      expect(await avoSplitTrip(store, card, moduleOn: true), isNotNull);
+      final saved = store.created.single;
+      expect(saved.paidByUserId, 'u2');
+      expect(saved.paidByName, 'Lena');
+      expect(saved.shares.map((s) => s.userId), ['u1', 'u2']);
+    });
+
+    test(
+      'the split or the total changed since the card: nothing is written',
+      () async {
+        AvoSplitPreviewCard card({
+          List<({String name, bool paid})>? replaces,
+        }) => AvoSplitPreviewCard(
+          historyId: 't1',
+          tripDate: DateTime(2026, 10, 31),
+          total: 40,
+          totalFromTrip: true,
+          yourUserId: 'u1',
+          payerUserId: 'u1',
+          payerName: 'Jannis',
+          payerIsNew: true,
+          replaces: replaces ?? const [(name: 'Lena', paid: false)],
+          shares: const [
+            (name: 'Jannis', amount: 20, isYou: true),
+            (name: 'Lena', amount: 20, isYou: false),
+          ],
+        );
+        // Lena has paid her share since the card was shown.
+        final paidSince = _SplitStore(current: [_split('Lena', paid: true)]);
+        expect(await avoSplitTrip(paidSince, card(), moduleOn: true), isNull);
+        expect(paidSince.created, isEmpty);
+        // Someone split it again in between.
+        final splitSince = _SplitStore(
+          current: [_split('Lena'), _split('Max')],
+        );
+        expect(await avoSplitTrip(splitSince, card(), moduleOn: true), isNull);
+        expect(splitSince.created, isEmpty);
+        // The trip's total was corrected.
+        final totalSince = _SplitStore(current: [_split('Lena')])..total = 44;
+        expect(await avoSplitTrip(totalSince, card(), moduleOn: true), isNull);
+        expect(totalSince.created, isEmpty);
+        // As shown: written.
+        final same = _SplitStore(current: [_split('Lena')]);
+        expect(await avoSplitTrip(same, card(), moduleOn: true), isNotNull);
+        expect(same.created, hasLength(1));
+      },
+    );
+
     test('a trip without a payer gets the person, as the card said', () async {
       final store = _SplitStore();
       final card = AvoSplitPreviewCard(
@@ -215,9 +303,19 @@ void main() {
 }
 
 class _SplitStore implements AvoSplitStore {
-  _SplitStore({this.paidByName});
+  _SplitStore({
+    this.paidByName,
+    this.paidByUserId,
+    this.total = 40,
+    List<ExpenseSplit>? current,
+  }) : current = current ?? [];
 
   final String? paidByName;
+  final String? paidByUserId;
+  double total;
+
+  /// The split as it is stored now.
+  final List<ExpenseSplit> current;
   final List<
     ({String? paidByUserId, String? paidByName, List<SplitShare> shares})
   >
@@ -233,12 +331,13 @@ class _SplitStore implements AvoSplitStore {
     listName: 'Wocheneinkauf',
     totalItems: 3,
     completedAt: DateTime(2026, 10, 31),
-    totalCost: 40,
+    totalCost: total,
+    paidByUserId: paidByUserId,
     paidByName: paidByName,
   );
 
   @override
-  Future<List<ExpenseSplit>> splits(String historyId) async => const [];
+  Future<List<ExpenseSplit>> splits(String historyId) async => current;
 
   @override
   Future<void> createSplits({
@@ -253,3 +352,13 @@ class _SplitStore implements AvoSplitStore {
     shares: shares,
   ));
 }
+
+ExpenseSplit _split(String name, {bool paid = false}) => ExpenseSplit(
+  id: 's-$name',
+  historyId: 't1',
+  participantName: name,
+  amount: 20,
+  isPaid: paid,
+  createdAt: DateTime(2026, 10, 31),
+  updatedAt: DateTime(2026, 10, 31),
+);

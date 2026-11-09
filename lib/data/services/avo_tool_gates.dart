@@ -33,7 +33,8 @@ AvoGate avoRemovalGate(
       result: {
         'success': false,
         'not_shared': true,
-        'note': 'The person has not shared diet and allergies with Avo, so '
+        'note':
+            'The person has not shared diet and allergies with Avo, so '
             'nothing was looked up or changed. The app shows a card to share '
             'them; ask them to tap it, then ask again.',
       },
@@ -60,7 +61,8 @@ AvoGate avoRemovalGate(
     result: {
       'success': false,
       'requires_confirmation': true,
-      'note': 'The app shows a card to confirm. The entry stays until the '
+      'note':
+          'The app shows a card to confirm. The entry stays until the '
           'person taps Remove on it.',
     },
   );
@@ -174,6 +176,19 @@ AvoGate? avoPlanDayGate({
   );
 }
 
+/// Whether [share] is the payer's own: the person's share when they paid,
+/// else the share named like the trip's payer. "Teilen" saves exactly these
+/// as paid (`ExpenseSplitService.createSplits` decides by the share's user
+/// id, which `avoSplitTrip` sets to the payer's), so the card's footnote
+/// and the saved split agree for every payer (W1b re-review 2, I-1).
+bool avoIsPayersShare(
+  AvoShare share, {
+  required bool payerIsYou,
+  required String? payerName,
+}) => share.isYou
+    ? payerIsYou
+    : !payerIsYou && payerName != null && share.name == payerName;
+
 /// `split_trip_cost` (Kap. 5.2): the split as a preview; only "Teilen"
 /// saves it. The trip's own total always wins over the model's
 /// [modelTotal] (contract: a total only for a trip without one). Existing
@@ -218,9 +233,25 @@ AvoSplitPlan avoSplitGate({
   final payerIsYou =
       payerIsNew || (yourUserId != null && trip.paidByUserId == yourUserId);
   final payerName = payerIsNew ? yourName : trip.paidByName;
-  // The payer's own share is made again as paid; every other paid one is
-  // reset.
-  final payerShare = payerIsYou ? yourName : payerName;
+  // A name the model wrote differently ("lena") becomes the payer's own, so
+  // the card and the saved share use the same name.
+  String named(String n) =>
+      !payerIsYou &&
+          payerName != null &&
+          n.toLowerCase() == payerName.trim().toLowerCase()
+      ? payerName
+      : n;
+  final shares = <AvoShare>[
+    (name: yourName, amount: yours, isYou: true),
+    for (final n in names) (name: named(n), amount: share, isYou: false),
+  ];
+  // Exactly the shares "Teilen" makes again as paid ([avoIsPayersShare]);
+  // every other share paid now is reset, and the card says so.
+  final paidAgain = {
+    for (final s in shares)
+      if (avoIsPayersShare(s, payerIsYou: payerIsYou, payerName: payerName))
+        s.name,
+  };
   final card = AvoSplitPreviewCard(
     historyId: trip.id,
     tripDate: trip.completedAt,
@@ -231,16 +262,14 @@ AvoSplitPlan avoSplitGate({
     payerName: payerName,
     payerIsYou: payerIsYou,
     payerIsNew: payerIsNew,
-    shares: [
-      (name: yourName, amount: yours, isYou: true),
-      for (final n in names) (name: n, amount: share, isYou: false),
-    ],
+    shares: shares,
     replaces: [
       for (final s in existing) (name: s.participantName, paid: s.isPaid),
     ],
     paidReset: [
       for (final s in existing)
-        if (s.isPaid && s.participantName != payerShare) s.participantName,
+        if (s.isPaid && !paidAgain.contains(s.participantName))
+          s.participantName,
     ],
   );
   return (

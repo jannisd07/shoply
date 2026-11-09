@@ -146,6 +146,29 @@ void main() {
     );
   });
 
+  test('update_setting zip_code refused: postcode_set is what is stored, '
+      'never the attempted value (M-e)', () {
+    final refused = {
+      'success': false,
+      'key': 'zip_code',
+      'display_name': 'Zip code',
+      'new_value': '12',
+      'error': 'Zip code must be 4-5 digits (or empty to clear it)',
+    };
+    for (final stored in [true, false]) {
+      final out = _f(
+        'update_setting',
+        {...refused, 'postcode_set': stored},
+        health: true,
+        body: true,
+      );
+      expect(out['postcode_set'], stored);
+      expect(out.containsKey('new_value'), isFalse);
+    }
+    // Without the tool's reading only a change that went through counts.
+    expect(_f('update_setting', refused)['postcode_set'], isFalse);
+  });
+
   test('other tools pass unchanged', () {
     final r = {'found': 3, 'lists': []};
     expect(_f('get_lists', r), r);

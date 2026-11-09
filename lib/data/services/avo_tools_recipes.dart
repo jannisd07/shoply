@@ -361,6 +361,12 @@ extension AvoRecipeTools on AvoAssistantService {
     List<String> replacing = const [],
   }) async {
     final controller = ref.read(mealPlanControllerProvider);
+    // What "Ersetzen" takes out, as it is now: if taking it out fails (also
+    // half-way, after the plan changed on the device), these go back.
+    final replaced = {
+      for (final e in ref.read(planEntriesForDayProvider(day)))
+        if (replacing.contains(e.id)) e.id: e,
+    };
     // The new recipe first: if it cannot be planned, nothing is taken out.
     final added = await controller.addRecipeToPlan(
       recipeId,
@@ -374,8 +380,11 @@ extension AvoRecipeTools on AvoAssistantService {
       try {
         removed = await controller.removeEntries(replacing);
       } catch (e) {
-        // "Ersetzen" did not go through: take the new one back too.
-        await controller.undo(added.undo);
+        // "Ersetzen" did not go through: the day goes back to how it was,
+        // the replaced recipes in and the new one out, in one step.
+        await controller.undo(
+          MealPlanUndo(entries: {...added.undo.entries, ...replaced}),
+        );
         rethrow;
       }
     }

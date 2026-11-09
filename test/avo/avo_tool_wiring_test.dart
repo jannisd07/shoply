@@ -5,9 +5,11 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/expense_split.dart';
+import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/meal_plan.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
@@ -15,8 +17,10 @@ import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/models/weight_log_entry.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
+import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/data/services/avo_stores.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
+import 'package:shoply/data/services/meal_plan_repository.dart';
 import 'package:shoply/presentation/providers/meal_plan_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 
@@ -61,12 +65,7 @@ class _Splits implements AvoSplitStore {
 
 class _Goals implements AvoGoalStore {
   int writes = 0;
-
-  @override
-  String? get userId => 'u1';
-
-  @override
-  Future<NutritionGoal?> goal() async => NutritionGoal(
+  NutritionGoal stored = NutritionGoal(
     userId: 'u1',
     dailyCalorieTarget: 2000,
     createdAt: DateTime(2026),
@@ -74,9 +73,15 @@ class _Goals implements AvoGoalStore {
   );
 
   @override
+  String? get userId => 'u1';
+
+  @override
+  Future<NutritionGoal?> goal() async => stored;
+
+  @override
   Future<NutritionGoal> saveGoal(NutritionGoal goal) async {
     writes++;
-    return goal;
+    return stored = goal;
   }
 
   @override
@@ -93,6 +98,90 @@ class _Goals implements AvoGoalStore {
 }
 
 final _day = DateTime(2026, 11, 11);
+
+MealPlanEntry _entry(String id, String name) => MealPlanEntry(
+  id: id,
+  userId: 'u1',
+  planDate: _day,
+  recipeId: 'x-$id',
+  snapshot: PlanRecipeSnapshot(name: name, defaultServings: 2),
+  servings: 2,
+  createdAt: _day,
+  updatedAt: _day,
+);
+
+/// The plan as "Ersetzen" sees it: records the order of the calls.
+class _Plan extends MealPlanController {
+  _Plan(super.ref);
+
+  final calls = <String>[];
+  final undos = <MealPlanUndo>[];
+  bool failRemove = false;
+
+  @override
+  Future<({MealPlanEntry entry, MealPlanUndo undo})?> addRecipeToPlan(
+    String recipeId,
+    DateTime day,
+    int servings, {
+    Recipe? recipe,
+    MealType? mealType,
+  }) async {
+    calls.add('add');
+    return (
+      entry: _entry('new', 'Ofengemüse'),
+      undo: const MealPlanUndo(entries: {'new': null}),
+    );
+  }
+
+  @override
+  Future<MealPlanUndo> removeEntries(Iterable<String> entryIds) async {
+    calls.add('remove');
+    // As the device cache write can fail after the plan changed locally.
+    if (failRemove) throw StateError('cache');
+    return MealPlanUndo(entries: {for (final id in entryIds) id: null});
+  }
+
+  @override
+  Future<void> undo(MealPlanUndo undo) async {
+    calls.add('undo');
+    undos.add(undo);
+  }
+}
+
+/// The person's diet and allergies as the removal card's tap changes them.
+class _Profile {
+  _Profile(this.user);
+
+  UserModel user;
+  final calls = <String>[];
+
+  Future<SettingChangeResult> update(
+    WidgetRef ref,
+    String key,
+    Object? value,
+  ) async {
+    calls.add('$key:$value');
+    final entry = '$value';
+    final diet = key.startsWith('diet');
+    final list = diet ? user.dietPreferences : user.allergies;
+    final next = key.endsWith('_add')
+        ? [...list, entry]
+        : [
+            for (final e in list)
+              if (e != entry) e,
+          ];
+    user = diet
+        ? user.copyWith(dietPreferences: next)
+        : user.copyWith(allergies: next);
+    ref.invalidate(currentUserProvider);
+    return SettingChangeResult(
+      success: true,
+      key: key,
+      displayName: key,
+      newValue: entry,
+    );
+  }
+}
 
 Recipe _recipe() => Recipe(
   id: 'r',
@@ -114,6 +203,8 @@ Future<WidgetRef> _ref(WidgetTester tester, List<Override> overrides) async {
   late WidgetRef ref;
   await tester.pumpWidget(
     ProviderScope(
+      // A fresh container each time: overrides cannot change in place.
+      key: UniqueKey(),
       overrides: overrides,
       child: Consumer(
         builder: (context, r, _) {
@@ -134,11 +225,25 @@ void main() {
   final splits = _Splits();
   final goals = _Goals();
 
-  List<Override> overrides({Set<AppModule> on = const {}}) => [
-    currentUserProvider.overrideWith((ref) async => _user),
+  List<Override> overrides({
+    Set<AppModule> on = const {},
+    _Goals? goalStore,
+    _Splits? splitStore,
+    _Profile? profile,
+    void Function(_Plan plan)? plan,
+  }) => [
+    currentUserProvider.overrideWith((ref) async => profile?.user ?? _user),
     moduleEnabledProvider.overrideWith((ref, m) => on.contains(m)),
-    avoSplitStoreProvider.overrideWithValue(splits),
-    avoGoalStoreProvider.overrideWithValue(goals),
+    avoSplitStoreProvider.overrideWithValue(splitStore ?? splits),
+    avoGoalStoreProvider.overrideWithValue(goalStore ?? goals),
+    if (profile != null)
+      avoSettingUpdateProvider.overrideWithValue(profile.update),
+    if (plan != null)
+      mealPlanControllerProvider.overrideWith((ref) {
+        final p = _Plan(ref);
+        plan(p);
+        return p;
+      }),
     mealPlanRecipeLookupProvider.overrideWithValue((id) async => _recipe()),
     planEntriesForDayProvider.overrideWith(
       (ref, day) => [
@@ -230,7 +335,7 @@ void main() {
     final ref = await _ref(tester, overrides(on: {AppModule.calories}));
     for (final confirm in [false, true]) {
       final payloads = <AvoWidgetPayload>[];
-      await service.debugRunToolCall(
+      final block = await service.debugRunToolCall(
         'setup_nutrition_goal',
         {
           'goal_type': 'lose_weight',
@@ -250,6 +355,10 @@ void main() {
       final card = payloads.single.card! as AvoGoalPreviewCard;
       expect(card.previous?.dailyCalorieTarget, 2000);
       expect(card.writesWeight, isTrue, reason: 'no weight today yet');
+      // A write after the card would end as tool_failed here.
+      expect(_content(block), contains('"requires_confirmation":true'));
+      expect(_content(block), contains('would_log_weight_today'));
+      expect(block['is_error'], isNot(isTrue));
     }
     expect(goals.writes, 0);
   });
@@ -262,7 +371,7 @@ void main() {
       ('diet_remove', 'Vegetarisch'),
     ]) {
       final shared = <AvoWidgetPayload>[];
-      await service.debugRunToolCall(
+      final asked = await service.debugRunToolCall(
         'update_setting',
         {'key': key, 'value': value},
         ref,
@@ -271,6 +380,8 @@ void main() {
         body: false,
       );
       expect((shared.single.card! as AvoRemovalCard).entry, value);
+      expect(_content(asked), contains('"requires_confirmation":true'));
+      expect(_content(asked), isNot(contains('tool_failed')));
 
       final known = <AvoWidgetPayload>[];
       final a = await service.debugRunToolCall(
@@ -310,5 +421,182 @@ void main() {
     final card = payloads.single.card! as AvoPlanTakenCard;
     expect(card.plannedNames, ['Linsencurry']);
     expect(_content(block), contains('"asked":true'));
+  });
+
+  testWidgets('log_food only shows the estimate; nothing is saved', (
+    tester,
+  ) async {
+    final ref = await _ref(tester, overrides(on: {AppModule.calories}));
+    final payloads = <AvoWidgetPayload>[];
+    final block = await service.debugRunToolCall(
+      'log_food',
+      const {'food_name': 'Banane', 'calories': 105, 'meal_type': 'snack'},
+      ref,
+      payloads,
+      health: true,
+      body: true,
+    );
+    final card = payloads.single.card! as AvoEstimateCard;
+    expect(card.kcal, 105);
+    expect(_content(block), contains('"saved":false'));
+    expect(_content(block), isNot(contains('tool_failed')));
+    expect(payloads.any((p) => p.isDoneChange), isFalse);
+  });
+
+  testWidgets('a refused postcode answers with the stored state, not the '
+      'attempt (M-e)', (tester) async {
+    for (final (stored, expected) in [(null, false), ('79098', true)]) {
+      SharedPreferences.setMockInitialValues({
+        if (stored != null) 'offers_zip_manual': stored,
+      });
+      final ref = await _ref(tester, overrides());
+      final payloads = <AvoWidgetPayload>[];
+      final block = await tester.runAsync(
+        () => service.debugRunToolCall(
+          'update_setting',
+          const {'key': 'zip_code', 'value': '12'},
+          ref,
+          payloads,
+          health: true,
+          body: true,
+        ),
+      );
+      expect(_content(block!), contains('"postcode_set":$expected'));
+      expect(_content(block), isNot(contains('79098')));
+      expect(_content(block), isNot(contains('new_value')));
+      expect(payloads.single.card, isA<AvoSettingFailedCard>());
+    }
+  });
+
+  group('the taps (M-b)', () {
+    AvoSplitPreviewCard splitCard() => AvoSplitPreviewCard(
+      historyId: 't1',
+      tripDate: DateTime(2026, 10, 31),
+      total: 42.8,
+      totalFromTrip: true,
+      yourUserId: 'u1',
+      payerUserId: 'u1',
+      payerName: 'Jannis',
+      payerIsNew: true,
+      shares: const [
+        (name: 'Jannis', amount: 21.4, isYou: true),
+        (name: 'Lena', amount: 21.4, isYou: false),
+      ],
+    );
+
+    testWidgets('"Teilen" reads the module at the tap', (tester) async {
+      final store = _Splits();
+      var ref = await _ref(tester, overrides(splitStore: store));
+      expect(await service.splitTripForAvo(ref, splitCard()), isNull);
+      expect(store.writes, 0, reason: 'module off at the tap');
+      ref = await _ref(
+        tester,
+        overrides(splitStore: store, on: {AppModule.costSplit}),
+      );
+      expect(await service.splitTripForAvo(ref, splitCard()), isNotNull);
+      expect(store.writes, 1);
+    });
+
+    testWidgets('"Übernehmen" saves through the goal store and undoes', (
+      tester,
+    ) async {
+      final store = _Goals();
+      final ref = await _ref(tester, overrides(goalStore: store));
+      final record = await service.applyGoalForAvo(
+        ref,
+        AvoGoalPreviewCard(
+          goal: NutritionGoal(
+            userId: 'u1',
+            dailyCalorieTarget: 1800,
+            createdAt: DateTime(2026),
+            updatedAt: DateTime(2026),
+          ),
+        ),
+      );
+      expect(record.kcal, 1800);
+      expect(record.previousKcal, 2000);
+      expect(store.stored.dailyCalorieTarget, 1800);
+      expect(await record.undo!(), AvoUndoResult.undone);
+      expect(store.stored.dailyCalorieTarget, 2000);
+    });
+
+    testWidgets('"Entfernen" removes from the right list; undo only while '
+        'unchanged', (tester) async {
+      final profile = _Profile(_user);
+      final ref = await _ref(tester, overrides(profile: profile));
+      final diet = await service.removeEntryForAvo(
+        ref,
+        const AvoRemovalCard('Vegetarisch', diet: true),
+      );
+      expect(diet.key, 'diet_remove');
+      expect(profile.user.dietPreferences, isEmpty);
+      expect(profile.user.allergies, ['Erdnüsse']);
+      expect(await diet.undo!(), AvoUndoResult.undone);
+      expect(profile.user.dietPreferences, ['Vegetarisch']);
+
+      final allergy = await service.removeEntryForAvo(
+        ref,
+        const AvoRemovalCard('Erdnüsse'),
+      );
+      expect(allergy.key, 'allergies_remove');
+      expect(profile.user.allergies, isEmpty);
+      // The person added another allergy since: undo leaves it alone.
+      profile.user = profile.user.copyWith(allergies: ['Sesam']);
+      ref.invalidate(currentUserProvider);
+      expect(await allergy.undo!(), AvoUndoResult.changedSince);
+      expect(profile.user.allergies, ['Sesam']);
+      expect(profile.calls, [
+        'diet_remove:Vegetarisch',
+        'diet_add:Vegetarisch',
+        'allergies_remove:Erdnüsse',
+      ]);
+    });
+
+    testWidgets('"Ersetzen" plans the new recipe first, then takes the old '
+        'ones out (M-d)', (tester) async {
+      late _Plan plan;
+      final ref = await _ref(
+        tester,
+        overrides(on: {AppModule.mealPlan}, plan: (p) => plan = p),
+      );
+      final record = await service.planRecipeForAvo(
+        ref,
+        recipeId: 'r',
+        recipe: _recipe(),
+        day: _day,
+        servings: 2,
+        replacing: const ['e1'],
+      );
+      expect(record, isNotNull);
+      expect(plan.calls, ['add', 'remove']);
+    });
+
+    testWidgets('"Ersetzen" that fails half-way puts the day back in one '
+        'step: the old recipe in, the new one out (M-d)', (tester) async {
+      late _Plan plan;
+      final ref = await _ref(
+        tester,
+        overrides(
+          on: {AppModule.mealPlan},
+          plan: (p) => plan = p..failRemove = true,
+        ),
+      );
+      await expectLater(
+        service.planRecipeForAvo(
+          ref,
+          recipeId: 'r',
+          recipe: _recipe(),
+          day: _day,
+          servings: 2,
+          replacing: const ['e1'],
+        ),
+        throwsStateError,
+      );
+      expect(plan.calls, ['add', 'remove', 'undo']);
+      final back = plan.undos.single.entries;
+      expect(back['new'], isNull);
+      expect(back.containsKey('new'), isTrue);
+      expect(back['e1']?.snapshot.name, 'Linsencurry');
+    });
   });
 }

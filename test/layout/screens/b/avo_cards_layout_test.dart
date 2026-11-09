@@ -204,7 +204,12 @@ final _reads = [
   AvoWidgetPayload.card(
     const AvoRestockCard(
       [
-        (name: 'Hafermilch ungesüßt', everyDays: 6, quantity: 1, category: null),
+        (
+          name: 'Hafermilch ungesüßt',
+          everyDays: 6,
+          quantity: 1,
+          category: null,
+        ),
         (name: 'Eier', everyDays: 9, quantity: 10, category: null),
       ],
       listId: 'w',
@@ -376,6 +381,93 @@ final _settingsAndPhoto = [
   ),
 ];
 
+/// The previews with every line they can have (W1b re-review 2, M-c): a
+/// split with another payer and the reset note, one where the person becomes
+/// the payer, a goal that changes every field and logs today's weight, and
+/// the goal record whose weight could not be logged.
+final _previews = [
+  AvoWidgetPayload.card(
+    AvoSplitPreviewCard(
+      historyId: 't1',
+      tripDate: DateTime(2026, 10, 31),
+      total: 63.9,
+      totalFromTrip: true,
+      yourUserId: 'u1',
+      payerUserId: 'u2',
+      payerName: 'Lena-Marie Schneider',
+      payerIsYou: false,
+      shares: const [
+        (name: 'Jannis', amount: 21.3, isYou: true),
+        (name: 'Lena-Marie Schneider', amount: 21.3, isYou: false),
+        (name: 'Maximilian', amount: 21.3, isYou: false),
+      ],
+      replaces: const [
+        (name: 'Lena-Marie Schneider', paid: true),
+        (name: 'Maximilian', paid: true),
+        (name: 'Jannis', paid: true),
+      ],
+      paidReset: const ['Maximilian', 'Jannis'],
+    ),
+  ),
+  AvoWidgetPayload.card(
+    AvoSplitPreviewCard(
+      historyId: 't2',
+      tripDate: DateTime(2026, 11, 2),
+      total: 18.5,
+      totalFromTrip: false,
+      yourUserId: 'u1',
+      payerUserId: 'u1',
+      payerName: 'Jannis',
+      payerIsNew: true,
+      shares: const [
+        (name: 'Jannis', amount: 9.25, isYou: true),
+        (name: 'Lena-Marie', amount: 9.25, isYou: false),
+      ],
+      replaces: const [(name: 'Lena-Marie', paid: true)],
+      paidReset: const ['Lena-Marie'],
+    ),
+  ),
+  AvoWidgetPayload.card(
+    AvoGoalPreviewCard(
+      writesWeight: true,
+      goal: NutritionGoal(
+        userId: 'u1',
+        goalType: NutritionGoalType.loseWeight,
+        activityLevel: ActivityLevel.veryActive,
+        currentWeightKg: 82.5,
+        targetWeightKg: 75,
+        heightCm: 178,
+        timelineWeeks: 16,
+        dailyCalorieTarget: 1850,
+        proteinTargetG: 130,
+        carbsTargetG: 190,
+        fatTargetG: 62,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      ),
+      previous: NutritionGoal(
+        userId: 'u1',
+        goalType: NutritionGoalType.gainMuscle,
+        activityLevel: ActivityLevel.sedentary,
+        currentWeightKg: 84,
+        heightCm: 177,
+        dailyCalorieTarget: 2400,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      ),
+    ),
+  ),
+  AvoWidgetPayload.record(
+    const AvoGoalRecord(
+      tool: 'setup_nutrition_goal',
+      kcal: 1850,
+      previousKcal: 2400,
+      weightFailed: true,
+      undo: _undo,
+    ),
+  ),
+];
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -417,6 +509,30 @@ void main() {
     (_) => _Case(payloads: _settingsAndPhoto),
     scrollable: true,
     checkTapTargets: true,
+  );
+
+  layoutMatrix(
+    'Avo cards: split and goal previews with every line',
+    (_) => _Case(payloads: _previews),
+    scrollable: true,
+    checkTapTargets: true,
+    afterPump: (tester) async {
+      expect(
+        find.textContaining('Paid by Lena-Marie Schneider'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Maximilian and Jannis will be reset'), findsOneWidget);
+      expect(
+        find.textContaining("You'll be set as the person who paid."),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Target weight'), findsOneWidget);
+      expect(find.textContaining("as today's weight"), findsOneWidget);
+      expect(
+        find.textContaining("Today's weight could not be logged"),
+        findsOneWidget,
+      );
+    },
   );
 
   layoutMatrix(

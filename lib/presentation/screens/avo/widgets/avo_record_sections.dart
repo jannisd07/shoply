@@ -216,6 +216,7 @@ AvoRecordHead avoRecordHead(BuildContext context, AvoRecord r) {
               'avo_goal_weight_logged',
               params: {'kg': avoDecimal(context, r.weightKg!)},
             ),
+          if (r.weightFailed) context.tr('avo_goal_weight_failed'),
           context.tr('avo_guide_value'),
         ].join(' · '),
         icon: const Icon(CupertinoIcons.flag),
@@ -358,10 +359,7 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
         title: context.tr('avo_set_diet'),
         subtitle: context.tr(
           'avo_card_was',
-          params: {
-            'value': r.value,
-            'old': _value(context, r.key, r.previous),
-          },
+          params: {'value': r.value, 'old': _value(context, r.key, r.previous)},
         ),
         icon: const AvoIcon(avoLeafIcon),
         openLabel: null,
@@ -383,12 +381,16 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
     ),
     'accent_color' => ('avo_set_accent', const Icon(CupertinoIcons.paintbrush)),
     'language' => ('avo_set_language', const Icon(CupertinoIcons.globe)),
-    'notifications' => ('avo_set_notifications', const Icon(CupertinoIcons.bell)),
+    'notifications' => (
+      'avo_set_notifications',
+      const Icon(CupertinoIcons.bell),
+    ),
     'zip_code' => ('avo_set_region', const AvoIcon(AvoIcons.location)),
     'age' => ('avo_set_age', const AvoIcon(AvoIcons.person)),
     'gender' => ('avo_set_gender', const AvoIcon(AvoIcons.person)),
     'height_cm' => ('avo_set_height', const AvoIcon(AvoIcons.person)),
-    'display_name' || 'name' => ('avo_set_name', const AvoIcon(AvoIcons.person)),
+    'display_name' ||
+    'name' => ('avo_set_name', const AvoIcon(AvoIcons.person)),
     _ => ('avo_set_generic', const AvoIcon(avoTogglesIcon)),
   };
   final value = _value(context, r.key, r.value);

@@ -34,7 +34,7 @@ extension AvoSettingTools on AvoAssistantService {
     final result = await bridge.update(key, value);
     if (!result.success) {
       payloads.add(AvoWidgetPayload.card(AvoSettingFailedCard(key)));
-      return result.toJson();
+      return await _withPostcodeState(result.key, result.toJson());
     }
     final now = await _settingValue(ref, key);
     final entry = value?.toString().trim() ?? '';
@@ -54,7 +54,19 @@ extension AvoSettingTools on AvoAssistantService {
         ),
       ),
     );
-    return result.toJson();
+    return await _withPostcodeState(result.key, result.toJson());
+  }
+
+  /// A postcode change answers with whether a postcode is stored now, read
+  /// after the change (also after a refused one); the consent filter drops
+  /// the postcode itself (contract).
+  Future<Map<String, Object?>> _withPostcodeState(
+    String key,
+    Map<String, Object?> result,
+  ) async {
+    if (key != 'zip_code') return result;
+    final zip = await UserLocationService.instance.getManualZipCode();
+    return {...result, 'postcode_set': zip != null && zip.isNotEmpty};
   }
 
   /// A setting's current raw value (`dark`, `de`, `true`, a zip code; for
@@ -131,8 +143,9 @@ extension AvoSettingTools on AvoAssistantService {
   ) async {
     final remove = card.diet ? 'diet_remove' : 'allergies_remove';
     final add = card.diet ? 'diet_add' : 'allergies_add';
+    final update = ref.read(avoSettingUpdateProvider);
     final previous = await _settingValue(ref, remove);
-    final result = await AvoSettingsBridge(ref).update(remove, card.entry);
+    final result = await update(ref, remove, card.entry);
     if (!result.success) throw StateError(result.error ?? 'not removed');
     final after = await _settingValue(ref, remove);
     return AvoSettingRecord(
@@ -145,10 +158,10 @@ extension AvoSettingTools on AvoAssistantService {
           if (await _settingValue(ref, remove) != after) {
             return AvoUndoResult.changedSince;
           }
-          final back = await AvoSettingsBridge(ref).update(add, card.entry);
+          final back = await update(ref, add, card.entry);
           return back.success ? AvoUndoResult.undone : AvoUndoResult.failed;
         } catch (e) {
-          debugPrint('❌ [AVO] Entry not added back: $e');
+          debugPrint('❌ [AVO] Entry not added back: ${e.runtimeType}');
           return AvoUndoResult.failed;
         }
       },

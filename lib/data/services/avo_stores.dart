@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -6,6 +7,8 @@ import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/weight_log_entry.dart';
 import 'package:shoply/data/services/avo_assistant_models.dart';
+import 'package:shoply/data/services/avo_settings_bridge.dart';
+import 'package:shoply/data/services/avo_tool_gates.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
@@ -41,6 +44,21 @@ abstract interface class AvoSplitStore {
     String? paidByName,
   });
 }
+
+/// One settings change as Avo makes it (`AvoSettingsBridge.update`); the
+/// removal card's tap and its undo go through it, tests put a fake in.
+typedef AvoSettingUpdate =
+    Future<SettingChangeResult> Function(
+      WidgetRef ref,
+      String key,
+      Object? value,
+    );
+
+final avoSettingUpdateProvider = Provider<AvoSettingUpdate>(
+  (ref) =>
+      (widgetRef, key, value) =>
+          AvoSettingsBridge(widgetRef).update(key, value),
+);
 
 final avoGoalStoreProvider = Provider<AvoGoalStore>(
   (ref) => const _ServiceGoalStore(),
@@ -153,7 +171,9 @@ NutritionGoal avoMergedGoal(
 /// the card said so ([AvoGoalPreviewCard.writesWeight]) and today still
 /// has no entry. "Widerrufen" takes back exactly that, the weight entry
 /// first, so a failed step can be tried again (Avo's own leftover is never
-/// "Inzwischen geändert"). [changed] refreshes what shows the goal.
+/// "Inzwischen geändert"). When the weight cannot be written after the goal
+/// was saved, the record says so ([AvoGoalRecord.weightFailed]) and its
+/// undo restores the goal. [changed] refreshes what shows the goal.
 Future<AvoGoalRecord> avoApplyGoal(
   AvoGoalStore store,
   AvoGoalPreviewCard card, {
@@ -165,11 +185,19 @@ Future<AvoGoalRecord> avoApplyGoal(
     avoMergedGoal(card.goal, before, now: now),
   );
   WeightLogEntry? added;
+  var weightFailed = false;
   final kg = card.goal.currentWeightKg;
   if (card.writesWeight && kg != null) {
-    final latest = await store.latestWeight();
-    if (latest == null || !_sameDay(latest.loggedDate, now)) {
-      added = await store.logWeight(kg);
+    // The goal is saved by now: a failed weight entry is said on the card
+    // ("nicht eingetragen"), and "Widerrufen" still restores the goal.
+    try {
+      final latest = await store.latestWeight();
+      if (latest == null || !_sameDay(latest.loggedDate, now)) {
+        added = await store.logWeight(kg);
+      }
+    } catch (e) {
+      debugPrint('⚠️ [AVO] Weight for today not logged: ${e.runtimeType}');
+      weightFailed = true;
     }
   }
   changed?.call();
@@ -180,6 +208,7 @@ Future<AvoGoalRecord> avoApplyGoal(
     kcal: saved.dailyCalorieTarget ?? card.goal.dailyCalorieTarget ?? 0,
     previousKcal: had ? before.dailyCalorieTarget : null,
     weightKg: added?.weightKg,
+    weightFailed: weightFailed,
     undo: () async {
       try {
         final current = await store.goal();
@@ -260,7 +289,18 @@ Future<AvoSplitRecord?> avoSplitTrip(
     shares: [
       for (final s in card.shares)
         SplitShare(
-          userId: s.isYou ? userId : null,
+          // The payer's own share carries the payer's id, so it is saved as
+          // paid also when the payer is another account (the card's
+          // footnote counts on that, [avoIsPayersShare]).
+          userId: s.isYou
+              ? userId
+              : avoIsPayersShare(
+                  s,
+                  payerIsYou: card.payerIsYou,
+                  payerName: card.payerName,
+                )
+              ? card.payerUserId
+              : null,
           participantName: s.name,
           amount: s.amount,
         ),

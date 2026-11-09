@@ -167,6 +167,7 @@ final class AvoGoalRecord extends AvoRecord {
     required this.kcal,
     this.previousKcal,
     this.weightKg,
+    this.weightFailed = false,
   });
 
   final int kcal;
@@ -174,6 +175,10 @@ final class AvoGoalRecord extends AvoRecord {
 
   /// The weight entry for today it added, if any (named on the card).
   final double? weightKg;
+
+  /// The card was to log today's weight too and that failed; the goal is
+  /// saved (named on the card).
+  final bool weightFailed;
 }
 
 /// A setting Avo changed (`update_setting`), with the raw values so the card
