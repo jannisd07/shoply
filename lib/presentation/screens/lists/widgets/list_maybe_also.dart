@@ -5,12 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/presentation/screens/lists/widgets/list_info_rows.dart';
 import 'package:shoply/presentation/screens/profile/settings/data/list_preferences.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
-import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
+import 'package:shoply/presentation/widgets/design/item_row.dart';
 import 'package:shoply/presentation/widgets/design/swipe_actions.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
@@ -158,8 +157,9 @@ final listMaybeAlsoProvider =
     });
 
 /// "Vielleicht auch" (Konzept 11 §1.1 item 9): up to three items the person
-/// buys in a rhythm, each with its reason; a tap puts it on the list, a
-/// swipe hides it for 30 days. Renders nothing without rows.
+/// buys in a rhythm, each with its reason, as `ItemRow(suggestion: true)`
+/// (dashed ring with a plus); a tap puts it on the list, a swipe hides it
+/// for 30 days. Renders nothing without rows.
 class ListMaybeAlsoSection extends ConsumerWidget {
   const ListMaybeAlsoSection({
     super.key,
@@ -177,28 +177,27 @@ class ListMaybeAlsoSection extends ConsumerWidget {
     final hide = context.tr('list_detail_maybe_also_hide');
     return InsetSection(
       header: context.tr('list_detail_maybe_also'),
+      separatorIndent: ItemRow.separatorIndentOf(context, withThumb: false),
       children: [
         for (final s in rows)
-          SwipeActions(
+          ItemRow(
             key: ValueKey<String>('maybe-${s.name}'),
-            trailingActions: [
+            suggestion: true,
+            title: s.name,
+            subtitle: s.everyDays == null
+                ? null
+                : context.tr(
+                    'list_detail_maybe_also_rhythm',
+                    params: {'n': '${s.everyDays}'},
+                  ),
+            onTap: () => onAdd(s),
+            swipeActions: [
               SwipeAction(
                 label: hide,
                 onPressed: () =>
                     ref.read(maybeAlsoHiddenProvider.notifier).hide(s.name),
               ),
             ],
-            child: ListInfoActionRow(
-              label: s.name,
-              icon: AvoIcons.plusCircle,
-              subtitle: s.everyDays == null
-                  ? null
-                  : context.tr(
-                      'list_detail_maybe_also_rhythm',
-                      params: {'n': '${s.everyDays}'},
-                    ),
-              onTap: () => onAdd(s),
-            ),
           ),
       ],
     );

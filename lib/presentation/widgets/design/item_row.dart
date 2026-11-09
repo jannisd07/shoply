@@ -181,6 +181,7 @@ class ItemRow extends StatefulWidget {
     this.contextMenuItems = const [],
     this.swipeActions = const [],
     this.leadingSwipeActions = const [],
+    this.suggestion = false,
   });
 
   /// Hairline inset of regular rows with an image: the text edge, 110 pt
@@ -299,6 +300,12 @@ class ItemRow extends StatefulWidget {
   /// Actions revealed by swiping towards the start edge.
   final List<SwipeAction> leadingSwipeActions;
 
+  /// "Vielleicht auch" (Konzept 00 §12.8, Konzept 10 §1.1 Nr. 9): a dashed
+  /// ring with a plus instead of the check circle; the whole row (circle
+  /// included) runs [onTap], which puts the item on the list. Not a
+  /// checkbox for VoiceOver; [onToggle] and [checked] are ignored.
+  final bool suggestion;
+
   @override
   State<ItemRow> createState() => _ItemRowState();
 }
@@ -389,7 +396,8 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
     final state = _state;
     final failed = state == CheckState.failed;
     final done = widget.checked && !failed;
-    final canToggle = widget.onToggle != null;
+    final suggestion = widget.suggestion;
+    final canToggle = widget.onToggle != null && !suggestion;
     final opens = widget.onTap != null;
     final VoidCallback? bodyAction = opens
         ? widget.onTap
@@ -511,17 +519,19 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
     // ---- check zone: full height, circle centred (top-aligned from AX1)
     final firstLine = context.typography.lineHeightOf(m.title);
     final circleTop = math.max(0.0, m.padding + (firstLine - m.hit) / 2);
-    final circle = ExcludeSemantics(
-      child: CheckCircle(
-        checked: widget.checked,
-        itemName: widget.title,
-        onChanged: canToggle ? (v) => widget.onToggle!(v) : null,
-        size: m.checkSize,
-        state: widget.checkState,
-        byName: widget.checkedBy,
-        statusLabel: widget.statusLabel,
-      ),
-    );
+    final circle = suggestion
+        ? SuggestionCircle(size: m.checkSize)
+        : ExcludeSemantics(
+            child: CheckCircle(
+              checked: widget.checked,
+              itemName: widget.title,
+              onChanged: canToggle ? (v) => widget.onToggle!(v) : null,
+              size: m.checkSize,
+              state: widget.checkState,
+              byName: widget.checkedBy,
+              statusLabel: widget.statusLabel,
+            ),
+          );
     final zone = GestureDetector(
       behavior: HitTestBehavior.opaque,
       excludeFromSemantics: true,
@@ -601,7 +611,7 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
       child: Semantics(
         container: true,
         button: bodyAction != null,
-        checked: widget.checked,
+        checked: suggestion ? null : widget.checked,
         enabled: canToggle || opens,
         label: _label(),
         value: _value(context),

@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/physics.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 /// Size of a [CheckCircle].
 enum CheckCircleSize {
@@ -563,4 +564,77 @@ class _PressableState extends State<_Pressable>
       ),
     );
   }
+}
+
+// "Vielleicht auch" ring (Konzept 00 §12.8, Konzept 10 §1.1 Nr. 9).
+const int _suggestionDashes = 12; // Konzept 00 §12.8, gestrichelter Ring
+const double _suggestionDashShare = 0.55; // dash vs. gap along the ring
+
+/// The circle of a suggested item (`ItemRow(suggestion: true)`): a dashed
+/// ring in `uncheckedRing` with a small plus, the same size as
+/// [CheckCircle]. Decorative: the row reads the action.
+class SuggestionCircle extends StatelessWidget {
+  /// Creates a suggestion circle.
+  const SuggestionCircle({super.key, this.size = CheckCircleSize.regular});
+
+  /// The size of the [CheckCircle] it stands in for.
+  final CheckCircleSize size;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = _metricsOf(size);
+    final color = context.colors.uncheckedRing;
+    return ExcludeSemantics(
+      child: SizedBox.square(
+        dimension: m.hit,
+        child: Center(
+          child: SizedBox.square(
+            dimension: m.diameter,
+            child: CustomPaint(
+              painter: _DashedRingPainter(color: color, ring: m.ring),
+              child: Center(
+                child: AvoIcon(
+                  AvoIcons.plus,
+                  size: m.markBox * 0.75,
+                  color: color,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedRingPainter extends CustomPainter {
+  const _DashedRingPainter({required this.color, required this.ring});
+
+  final Color color;
+  final double ring;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final arcRect = rect.deflate(ring / 2);
+    const step = 2 * math.pi / _suggestionDashes;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = ring
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    for (var i = 0; i < _suggestionDashes; i++) {
+      canvas.drawArc(
+        arcRect,
+        -math.pi / 2 + i * step,
+        step * _suggestionDashShare,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedRingPainter old) =>
+      old.color != color || old.ring != ring;
 }

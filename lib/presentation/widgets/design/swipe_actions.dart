@@ -65,8 +65,10 @@ class SwipeAction {
 ///   [AvoMotion.fling]); a drag past [_fullSwipeShare] of the width, or a
 ///   flick that would carry it there, runs the first action ([fullSwipe]).
 ///   Crossing that threshold plays the light haptic once, in both directions.
-/// - An open row closes on a tap; its content takes no taps meanwhile. Reduce
-///   Motion: the row jumps instead of springing.
+/// - An open row closes on a tap; its content takes no taps meanwhile. Only
+///   one row is open at a time: starting to swipe another closes it, and so
+///   does scrolling the list it sits in (iOS). Reduce Motion: the row jumps
+///   instead of springing.
 /// - Every action is also a VoiceOver custom action, added to the enclosing
 ///   semantics node ([exposeSemantics]); a row that builds its own node (the
 ///   rows of this design system) sets it false and adds
@@ -121,6 +123,13 @@ class SwipeActions extends StatefulWidget {
 
 class _SwipeActionsState extends State<SwipeActions>
     with SingleTickerProviderStateMixin {
+  /// The row that is open or being swiped; at most one in the app (iOS).
+  static _SwipeActionsState? _current;
+
+  /// The list this row scrolls in; scrolling it closes the row.
+  ScrollPosition? _scroll;
+  bool _dragging = false;
+
   /// The row's offset towards the start in points; positive reveals the
   /// trailing actions, negative the leading ones.
   late final AnimationController _offset;
@@ -143,9 +152,25 @@ class _SwipeActionsState extends State<SwipeActions>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final position = Scrollable.maybeOf(context)?.position;
+    if (identical(position, _scroll)) return;
+    _scroll?.isScrollingNotifier.removeListener(_onScroll);
+    _scroll = position?..isScrollingNotifier.addListener(_onScroll);
+  }
+
+  @override
   void dispose() {
+    _scroll?.isScrollingNotifier.removeListener(_onScroll);
+    if (identical(_current, this)) _current = null;
     _offset.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    final scrolling = _scroll?.isScrollingNotifier.value ?? false;
+    if (scrolling && !_dragging && _isOpen) _close();
   }
 
   List<SwipeAction> _side(double direction) =>
@@ -191,6 +216,12 @@ class _SwipeActionsState extends State<SwipeActions>
   }
 
   void _start(DragStartDetails details) {
+    final other = _current;
+    if (other != null && !identical(other, this) && other.mounted) {
+      other._close();
+    }
+    _current = this;
+    _dragging = true;
     _settleToken++;
     _offset.stop();
     _raw = _offset.value;
@@ -227,6 +258,7 @@ class _SwipeActionsState extends State<SwipeActions>
   }
 
   void _end(DragEndDetails details) {
+    _dragging = false;
     final raw = details.primaryVelocity ?? 0;
     final velocity = _rtl ? raw : -raw; // positive = towards trailing
     final projected = _offset.value + AvoMotion.project(velocity);
@@ -255,6 +287,11 @@ class _SwipeActionsState extends State<SwipeActions>
     } else {
       _settle(0, velocity: velocity);
     }
+  }
+
+  void _cancel() {
+    _dragging = false;
+    if (_isOpen) _close();
   }
 
   Widget _reveal(BuildContext context, double offset) {
@@ -322,6 +359,7 @@ class _SwipeActionsState extends State<SwipeActions>
       onHorizontalDragStart: _start,
       onHorizontalDragUpdate: _update,
       onHorizontalDragEnd: _end,
+      onHorizontalDragCancel: _cancel,
       child: ClipRect(
         child: AnimatedBuilder(
           animation: _offset,

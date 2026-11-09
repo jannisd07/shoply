@@ -5,6 +5,7 @@ import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/services/allergen_matcher.dart';
 import 'package:shoply/data/services/ingredient_substitution_service.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_adaptation.dart';
 
 /// Pure helpers behind the Rezepte tab, the search and the category and
 /// "Alle" pages (Konzept 13 §2–6): every section is derived in memory from
@@ -273,8 +274,8 @@ bool _hasSafeSubstitute(
 
 bool _hasDietLabel(Recipe recipe, List<DietType> diets) => diets.every(
   (d) => d == DietType.vegetarian
-      ? hasRecipeLabel(recipe, 'vegetarian') || hasRecipeLabel(recipe, 'vegan')
-      : hasRecipeLabel(recipe, 'vegan'),
+      ? isShownVegetarian(recipe)
+      : isShownVegan(recipe),
 );
 
 // ------------------------------------------------------------------ labels
@@ -285,6 +286,14 @@ bool hasRecipeLabel(Recipe recipe, String label) {
   final needle = label.toLowerCase();
   return recipe.labels.any((l) => l.trim().toLowerCase() == needle);
 }
+
+/// Vegetarian (or vegan) as the detail shows it: the label holds and no
+/// ingredient breaks it ([recipeShownDiet], owner decision S5).
+bool isShownVegetarian(Recipe recipe) => recipeShownDiet(recipe) != null;
+
+/// Vegan as the detail shows it: a "vegan" recipe with honey or egg yolk
+/// does not count ([recipeShownDiet], owner decision S5).
+bool isShownVegan(Recipe recipe) => recipeShownDiet(recipe) == RecipeDiet.vegan;
 
 /// Diet labels the search offers as chips (Konzept 13 §4.1).
 const List<String> kRecipeDietLabels = [
@@ -323,9 +332,8 @@ bool matchesQuickFilter(Recipe r, RecipeQuickFilter filter) => switch (filter) {
   RecipeQuickFilter.forYou => true,
   RecipeQuickFilter.quick =>
     r.totalTimeMinutes > 0 && r.totalTimeMinutes <= kQuickRecipeMinutes,
-  RecipeQuickFilter.vegetarian =>
-    hasRecipeLabel(r, 'vegetarian') || hasRecipeLabel(r, 'vegan'),
-  RecipeQuickFilter.vegan => hasRecipeLabel(r, 'vegan'),
+  RecipeQuickFilter.vegetarian => isShownVegetarian(r),
+  RecipeQuickFilter.vegan => isShownVegan(r),
   RecipeQuickFilter.glutenFree => hasRecipeLabel(r, 'gluten-free'),
   RecipeQuickFilter.healthy => hasRecipeLabel(r, 'healthy'),
 };
@@ -695,9 +703,8 @@ bool matchesListFilter(
   RecipeListFilter.easy => hasRecipeLabel(r, 'easy'),
   RecipeListFilter.medium => hasRecipeLabel(r, 'medium'),
   RecipeListFilter.advanced => hasRecipeLabel(r, 'advanced'),
-  RecipeListFilter.vegetarian =>
-    hasRecipeLabel(r, 'vegetarian') || hasRecipeLabel(r, 'vegan'),
-  RecipeListFilter.vegan => hasRecipeLabel(r, 'vegan'),
+  RecipeListFilter.vegetarian => isShownVegetarian(r),
+  RecipeListFilter.vegan => isShownVegan(r),
   RecipeListFilter.glutenFree => hasRecipeLabel(r, 'gluten-free'),
   RecipeListFilter.healthy => hasRecipeLabel(r, 'healthy'),
 };
@@ -795,8 +802,9 @@ String? ingredientOfCategory(String categoryId) =>
     ? categoryId.substring(kIngredientCategoryPrefix.length).trim()
     : null;
 
-/// The recipes of a category page: exact label, or for `ingredient:<name>`
-/// every recipe with that ingredient.
+/// The recipes of a category page: exact label (vegan and vegetarian only
+/// while no ingredient breaks them), or for `ingredient:<name>` every recipe with
+/// that ingredient.
 List<Recipe> recipesInCategory(List<Recipe> catalogue, String categoryId) {
   final ingredient = ingredientOfCategory(categoryId);
   if (ingredient != null) {
@@ -808,9 +816,15 @@ List<Recipe> recipesInCategory(List<Recipe> catalogue, String categoryId) {
           r,
     ];
   }
+  final bool Function(Recipe) inCategory = switch (categoryId) {
+    'vegan' => isShownVegan,
+    'vegetarian' =>
+      (r) => hasRecipeLabel(r, 'vegetarian') && isShownVegetarian(r),
+    _ => (r) => hasRecipeLabel(r, categoryId),
+  };
   return [
     for (final r in catalogue)
-      if (hasRecipeLabel(r, categoryId)) r,
+      if (inCategory(r)) r,
   ];
 }
 

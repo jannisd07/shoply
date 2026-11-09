@@ -281,6 +281,59 @@ void main() {
     });
   });
 
+  group('diet filters check ingredients (owner, S5)', () {
+    final honey = browseRecipe(
+      'honey',
+      labels: const ['vegan'],
+      ingredients: const ['Haferflocken', 'Honig'],
+    );
+    final chicken = browseRecipe(
+      'chicken',
+      labels: const ['vegetarian'],
+      ingredients: const ['Reis', 'Hähnchen'],
+    );
+    final catalogue = [honey, chicken, ...browseCatalogue()];
+
+    test('a vegan label with honey counts as vegetarian, not vegan', () {
+      expect(matchesQuickFilter(honey, RecipeQuickFilter.vegan), isFalse);
+      expect(matchesQuickFilter(honey, RecipeQuickFilter.vegetarian), isTrue);
+      expect(
+        matchesListFilter(honey, RecipeListFilter.vegan, RecipeFit.neutral),
+        isFalse,
+      );
+      expect(recipesInCategory(catalogue, 'vegan').map((r) => r.id), [
+        'dal',
+        'soup',
+        'salad',
+      ]);
+    });
+
+    test('a vegetarian label with meat matches no diet filter', () {
+      expect(
+        matchesQuickFilter(chicken, RecipeQuickFilter.vegetarian),
+        isFalse,
+      );
+      expect(
+        matchesListFilter(
+          chicken,
+          RecipeListFilter.vegetarian,
+          RecipeFit.neutral,
+        ),
+        isFalse,
+      );
+      expect(
+        recipesInCategory(catalogue, 'vegetarian').map((r) => r.id),
+        isNot(contains('chicken')),
+      );
+    });
+
+    test('"Passt zu mir" checks the ingredients behind a vegan label', () {
+      final fit = recipeFitOf(honey, const RecipeDietProfile(diets: ['vegan']));
+      // Before S5 the label alone met the diet, with nothing adapted.
+      expect(fit.dietMet && fit.adapted == 0, isFalse);
+    });
+  });
+
   group('list pages (Konzept 13 §5–6)', () {
     test('categories match exact labels; ingredient pages by ingredient', () {
       final catalogue = [

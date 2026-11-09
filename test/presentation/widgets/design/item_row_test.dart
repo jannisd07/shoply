@@ -983,6 +983,56 @@ void main() {
     });
   });
 
+  group('suggestion ("Vielleicht auch")', () {
+    testWidgets('dashed ring instead of the check circle; circle and row add', (
+      tester,
+    ) async {
+      final calls = _haptics(tester);
+      var added = 0;
+      await _pump(
+        tester,
+        ItemRow(
+          title: 'Haferflocken',
+          subtitle: 'kaufst du etwa alle 10 Tage',
+          suggestion: true,
+          onTap: () => added++,
+        ),
+      );
+      expect(find.byType(SuggestionCircle), findsOneWidget);
+      expect(find.byType(CheckCircle), findsNothing);
+      await tester.tap(find.byType(SuggestionCircle));
+      await tester.tap(find.text('Haferflocken'));
+      expect(added, 2);
+      expect(calls, isEmpty);
+    });
+
+    testWidgets('VoiceOver: a button, not a checkbox', (tester) async {
+      final handle = tester.ensureSemantics();
+      var added = 0;
+      await _pump(
+        tester,
+        ItemRow(
+          title: 'Haferflocken',
+          subtitle: 'kaufst du etwa alle 10 Tage',
+          suggestion: true,
+          onTap: () => added++,
+        ),
+      );
+      expect(
+        find.semantics
+            .byLabel('Haferflocken, kaufst du etwa alle 10 Tage')
+            .evaluate()
+            .single,
+        isSemantics(isButton: true, hasCheckedState: false),
+      );
+      tester.semantics.tap(
+        find.semantics.byLabel('Haferflocken, kaufst du etwa alle 10 Tage'),
+      );
+      expect(added, 1);
+      handle.dispose();
+    });
+  });
+
   group('swipe actions', () {
     testWidgets('swipe reveals the actions, they are custom actions too', (
       tester,
@@ -1259,6 +1309,12 @@ void main() {
           checked: true,
           size: ItemRowSize.compact,
           onToggle: (_) {},
+        ),
+        ItemRow(
+          title: _long,
+          subtitle: 'kaufst du etwa alle 10 Tage',
+          suggestion: true,
+          onTap: () {},
         ),
       ],
     ),

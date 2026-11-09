@@ -12,6 +12,7 @@ import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/bar_chart.dart';
 import 'package:shoply/presentation/widgets/design/check_circle.dart';
+import 'package:shoply/presentation/widgets/design/chip_section.dart';
 import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
 import 'package:shoply/presentation/widgets/design/empty_state.dart';
 import 'package:shoply/presentation/widgets/design/filter_chip.dart';
@@ -25,17 +26,22 @@ import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/item_row.dart';
 import 'package:shoply/presentation/widgets/design/list_card.dart';
 import 'package:shoply/presentation/widgets/design/module_off_alert.dart';
+import 'package:shoply/presentation/widgets/design/picker_row.dart';
 import 'package:shoply/presentation/widgets/design/pro_badge.dart';
 import 'package:shoply/presentation/widgets/design/progress.dart';
 import 'package:shoply/presentation/widgets/design/quick_add_tile.dart';
 import 'package:shoply/presentation/widgets/design/recipe_card.dart';
+import 'package:shoply/presentation/widgets/design/reorderable_section.dart';
 import 'package:shoply/presentation/widgets/design/rolling_number.dart';
 import 'package:shoply/presentation/widgets/design/search_field.dart';
 import 'package:shoply/presentation/widgets/design/segmented_control.dart';
+import 'package:shoply/presentation/widgets/design/select_circle.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 import 'package:shoply/presentation/widgets/design/skeleton.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/success_moment.dart';
+import 'package:shoply/presentation/widgets/design/swipe_actions.dart';
+import 'package:shoply/presentation/widgets/design/text_field_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/presentation/widgets/design/value_stepper.dart';
 
@@ -266,6 +272,11 @@ class _GalleryBodyState extends State<_GalleryBody> {
   bool _notify = true;
   final List<bool> _items = [false, true];
   int _tab = 1;
+  final Set<String> _selected = {'Shakshuka mit Feta'};
+  List<String> _stores = ['Lidl', 'REWE', 'dm', 'Aldi Süd'];
+  bool _pickerOpen = false;
+  int _servings = 4;
+  String _unit = 'Stück';
   final TextEditingController _longEntry = TextEditingController(
     text:
         '2 Packungen laktosefreie Bio-Vollmilch 1,5 % Fett von der '
@@ -368,6 +379,7 @@ class _GalleryBodyState extends State<_GalleryBody> {
           ..._charts(context),
           ..._input(context),
           ..._menu(context),
+          ..._more(context),
           ..._feedback(context),
         ],
       ),
@@ -1864,6 +1876,236 @@ class _GalleryBodyState extends State<_GalleryBody> {
     ];
   }
 
+  // --- Weitere (AB1 bis S5) --------------------------------------------------
+
+  List<Widget> _more(BuildContext context) {
+    const recipes = ['Shakshuka mit Feta', 'Linsen-Dal mit Kokosmilch'];
+    return [
+      const _GroupHeader('Weitere Bausteine'),
+      _Demo(
+        'ItemRow Vorschlag („Vielleicht auch“)',
+        inset: false,
+        child: InsetSection(
+          header: 'Vielleicht auch',
+          separatorIndent: ItemRow.separatorIndentOf(context, withThumb: false),
+          children: [
+            ItemRow(
+              title: 'Haferflocken',
+              subtitle: 'kaufst du etwa alle 10 Tage',
+              suggestion: true,
+              onTap: () => _toast(context, 'Haferflocken hinzugefügt'),
+              swipeActions: [
+                SwipeAction(
+                  label: 'Ausblenden',
+                  onPressed: () => _toast(context, 'Ausgeblendet'),
+                ),
+              ],
+            ),
+            ItemRow(
+              title: 'Toilettenpapier',
+              subtitle: 'kaufst du meistens samstags',
+              suggestion: true,
+              onTap: () => _toast(context, 'Toilettenpapier hinzugefügt'),
+            ),
+          ],
+        ),
+      ),
+      _Demo(
+        'SwipeActions (nur eine Zeile offen)',
+        inset: false,
+        child: InsetSection(
+          children: [
+            for (final name in const ['Milch', 'Brot'])
+              SwipeActions(
+                trailingActions: [
+                  SwipeAction(
+                    label: 'Löschen',
+                    icon: AvoIcons.trash,
+                    destructive: true,
+                    onPressed: () => _toast(context, '$name gelöscht'),
+                  ),
+                  SwipeAction(
+                    label: 'Menge',
+                    onPressed: () => _toast(context, 'Menge von $name'),
+                  ),
+                ],
+                leadingActions: [
+                  SwipeAction(
+                    label: 'Erledigt',
+                    onPressed: () => _toast(context, '$name erledigt'),
+                  ),
+                ],
+                child: NavRow(title: name, onTap: _noop),
+              ),
+          ],
+        ),
+      ),
+      _Demo(
+        'SelectCircle',
+        inset: false,
+        child: InsetSection(
+          children: [
+            for (final name in recipes)
+              NavRow(
+                title: name,
+                leading: SelectCircle(
+                  selected: _selected.contains(name),
+                  semanticLabel: name,
+                  onChanged: (v) => setState(
+                    () => v ? _selected.add(name) : _selected.remove(name),
+                  ),
+                ),
+                onTap: () => setState(
+                  () => _selected.contains(name)
+                      ? _selected.remove(name)
+                      : _selected.add(name),
+                ),
+              ),
+            const NavRow(
+              title: 'Overnight Oats (deaktiviert)',
+              leading: SelectCircle(
+                selected: false,
+                semanticLabel: 'Overnight Oats',
+                onChanged: null,
+              ),
+            ),
+          ],
+        ),
+      ),
+      _Demo(
+        'ReorderableInsetSection',
+        inset: false,
+        child: ReorderableInsetSection(
+          header: 'Märkte in deiner Reihenfolge',
+          footer: 'Halten und ziehen, um die Reihenfolge zu ändern.',
+          labels: _stores,
+          onReorder: (from, to) => setState(() {
+            final next = [..._stores];
+            next.insert(to, next.removeAt(from));
+            _stores = next;
+          }),
+          children: [for (final store in _stores) NavRow(title: store)],
+        ),
+      ),
+      _Demo(
+        'TextFieldRow',
+        inset: false,
+        child: const InsetSection(
+          children: [
+            TextFieldRow(label: 'Name', placeholder: 'Wocheneinkauf'),
+            TextFieldRow(
+              label: 'Postleitzahl',
+              placeholder: '80331',
+              keyboardType: TextInputType.number,
+              maxLength: 5,
+              errorText: 'Bitte fünf Ziffern eingeben.',
+            ),
+            TextFieldRow(
+              label: 'E-Mail (deaktiviert)',
+              placeholder: 'lena@example.com',
+              enabled: false,
+            ),
+          ],
+        ),
+      ),
+      _Demo(
+        'ChipSection',
+        inset: false,
+        child: ChipSection(
+          header: 'Ernährung',
+          footer: 'Rezepte und Avo richten sich danach.',
+          chips: [
+            for (final label in _chipLabels)
+              AppFilterChip(
+                label: label,
+                selected: _chips.contains(label),
+                onSelected: (v) => setState(
+                  () => v ? _chips.add(label) : _chips.remove(label),
+                ),
+              ),
+          ],
+        ),
+      ),
+      _Demo(
+        'PickerRow, MenuValueRow',
+        inset: false,
+        child: InsetSection(
+          children: [
+            PickerRow(
+              title: 'Portionen',
+              value: '$_servings',
+              expanded: _pickerOpen,
+              onExpandedChanged: (v) => setState(() => _pickerOpen = v),
+              picker: NumberPicker(
+                value: _servings,
+                min: 1,
+                max: 12,
+                initial: 4,
+                semanticLabel: 'Portionen',
+                onChanged: (v) => setState(() => _servings = v),
+              ),
+            ),
+            MenuValueRow(
+              title: 'Einheit',
+              value: _unit,
+              items: [
+                for (final unit in const ['Stück', 'g', 'kg', 'L'])
+                  AvoMenuItem(
+                    label: unit,
+                    checked: _unit == unit,
+                    onSelected: () => setState(() => _unit = unit),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      _Demo(
+        'AvoSubmenu, Menü mit Vorschau',
+        child: _States([
+          _Labeled(
+            'Untermenü',
+            child: AvoMenuButton(
+              floating: false,
+              semanticLabel: 'Mehr zum Rezept',
+              items: [
+                AvoSubmenu(
+                  label: 'Zum Wochenplan',
+                  icon: AvoIcons.calendar,
+                  items: [
+                    for (final day in const ['Montag', 'Dienstag', 'Mittwoch'])
+                      AvoMenuItem(
+                        label: day,
+                        onSelected: () => _toast(context, 'Für $day geplant'),
+                      ),
+                  ],
+                ),
+                AvoMenuItem(
+                  label: 'Teilen',
+                  icon: AvoIcons.share,
+                  onSelected: () => _toast(context, 'Geteilt'),
+                ),
+              ],
+            ),
+          ),
+          _Labeled(
+            'mit Vorschau',
+            child: Builder(
+              builder: (context) => AppButton.secondary(
+                label: 'Öffnen',
+                onPressed: () => showAvoMenu(
+                  context,
+                  items: _menuItems(context),
+                  preview: const _MenuPreview(),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    ];
+  }
+
   // --- Dialoge und Rückmeldungen ----------------------------------------------
 
   List<Widget> _feedback(BuildContext context) {
@@ -2047,6 +2289,42 @@ class _Demo extends StatelessWidget {
         child,
     ],
   );
+}
+
+/// The lifted preview above a context menu (`showAvoMenu(preview:)`).
+class _MenuPreview extends StatelessWidget {
+  const _MenuPreview();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      width: 240,
+      padding: const EdgeInsets.all(AvoSpacing.l),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(AvoRadii.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Shakshuka mit Feta',
+            style: context.text(AvoTextStyle.headline),
+          ),
+          const SizedBox(height: AvoSpacing.xxs),
+          Text(
+            '25 Min. · 4 Portionen',
+            style: context.text(
+              AvoTextStyle.subhead,
+              color: colors.secondaryLabel,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Several states side by side, wrapping onto new lines.

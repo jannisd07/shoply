@@ -236,6 +236,61 @@ void main() {
       expect(_left(tester), 0);
     });
 
+    testWidgets('only one row is open: swiping another closes it', (
+      tester,
+    ) async {
+      Widget row(String name) => SwipeActions(
+        trailingActions: [
+          SwipeAction(label: 'Löschen $name', onPressed: () {}),
+        ],
+        child: Container(
+          key: Key(name),
+          height: 60,
+          width: double.infinity,
+          color: const Color(0xFFFFFFFF),
+          child: Text(name),
+        ),
+      );
+      await _pump(
+        tester,
+        Column(mainAxisSize: MainAxisSize.min, children: [row('a'), row('b')]),
+      );
+      await tester.drag(find.byKey(const Key('a')), const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.byKey(const Key('a'))).dx, -80);
+      await tester.drag(find.byKey(const Key('b')), const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.byKey(const Key('a'))).dx, 0);
+      expect(tester.getTopLeft(find.byKey(const Key('b'))).dx, -80);
+    });
+
+    testWidgets('scrolling the list closes the open row', (tester) async {
+      await _pump(
+        tester,
+        SizedBox(
+          height: 300,
+          child: ListView(
+            children: [
+              SwipeActions(
+                trailingActions: [
+                  SwipeAction(label: 'Löschen', onPressed: () {}),
+                ],
+                child: _row(),
+              ),
+              for (var i = 0; i < 20; i++)
+                SizedBox(height: 60, child: Text('Zeile $i')),
+            ],
+          ),
+        ),
+      );
+      await tester.drag(find.byKey(_rowKey), const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(_left(tester), -80);
+      await tester.drag(find.text('Zeile 1'), const Offset(0, -100));
+      await tester.pumpAndSettle();
+      expect(_left(tester), 0);
+    });
+
     testWidgets('leading actions open towards the end edge', (tester) async {
       await _pump(
         tester,
