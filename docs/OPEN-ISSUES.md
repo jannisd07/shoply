@@ -29,14 +29,14 @@ Stand: 2026-11-08.
 - **Migrationen „Einkauf abschließen“ anwenden (B8, W10), in zwei Schritten.** Beide Dateien sind idempotent.
   1. `supabase/migrations/20261109000000_b_trip_checkout.sql` sofort: `complete_shopping_trip` (atomar, „schon
      abgeschlossen“, nur noch abgehakte Artikel), `undo_shopping_trip`, `save_trip_split` (nur Mitglieder),
-     `set_trip_amount`, `set_trip_store` (W11, „Markt ändern“ im Einkauf-Detail), `open_split_shares`, Spalten `store_chain`, `store_source`, `total_cost_source`,
+     `set_trip_amount`, `set_trip_store` (W11, „Markt ändern“ im Einkauf-Detail), `clear_trip_split` (W11, Widerrufen
+     einer ersten Aufteilung samt Betrag und Zahler), `open_split_shares`, Spalten `store_chain`, `store_source`, `total_cost_source`,
      `completed_by`, `undo_*`. Alte Builds laufen damit unverändert weiter.
   2. `supabase/migrations/20261109000100_b_trip_checkout_rls.sql` erst, wenn nur noch Builds mit B8a im Umlauf sind
      (TestFlight aktualisiert, App-Store-Rollout fertig): schärfere RLS für `expense_splits` (direkt nur noch „bezahlt“)
      und Spalten-Rechte auf `shopping_history`/`shopping_history_items`. Vorher ausgeführt, scheitert „Kosten teilen“
-     in alten Builds (sie schreiben Anteile direkt). Danach löscht „Widerrufen“ einer ersten Aufteilung im Einkauf-Detail
-     (V7) sie nicht mehr (direktes Löschen ist dann gesperrt); dafür braucht es eine Server-Funktion
-     `clear_trip_split(p_trip_id)` (W11, noch nicht im Entwurf).
+     in alten Builds (sie schreiben Anteile direkt). „Widerrufen“ einer ersten Aufteilung läuft dann über
+     `clear_trip_split` aus Schritt 1.
   Bis Schritt 1 speichert die App mit den alten Einzel-Inserts (ohne „schon abgeschlossen“). Danach einmal einen
   Einkauf abschließen, teilen und widerrufen.
 - **Mitteilungen nach dem Einkauf serverseitig (B8).** Die App hält „{name} hat bei {store} eingekauft“ bis zum Ende
