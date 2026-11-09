@@ -12,7 +12,6 @@ import 'package:shoply/core/modules/module_labels.dart';
 import 'package:shoply/data/services/app_flags_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
-import 'package:shoply/presentation/screens/avo/widgets/avo_glyphs.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/pro_badge.dart';
@@ -95,7 +94,7 @@ class AvoModuleOffRow extends StatelessWidget {
         on || undone ? 'avo_module_on' : 'avo_module_off',
         params: {'module': name},
       ),
-      leading: const AvoSymbolTile(icon: AvoIcon(avoTogglesIcon)),
+      leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.switch2)),
       state: undone ? AvoSectionState.undone : AvoSectionState.done,
       actions: [
         if (on)

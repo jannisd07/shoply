@@ -45,7 +45,7 @@ AvoResultSection avoNutritionStatusSection(
   if (goal == null || goal <= 0) {
     return AvoResultSection(
       title: context.tr('avo_kcal_today', params: {'n': consumed}),
-      leading: const AvoSymbolTile(icon: Icon(CupertinoIcons.flame)),
+      leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.flame)),
       onOpen: () => _calories(context),
       actions: [view],
     );
@@ -106,7 +106,7 @@ AvoResultSection avoWeekSection(BuildContext context, AvoWeekCard card) {
   final today = DateTime.now();
   return AvoResultSection(
     title: sentence,
-    leading: const AvoSymbolTile(icon: Icon(CupertinoIcons.chart_bar)),
+    leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.chartBar)),
     details: [
       if (logged)
         Padding(

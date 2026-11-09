@@ -197,7 +197,7 @@ class FoodEntryRow extends StatelessWidget {
               ),
               if (pending) ...[
                 const SizedBox(width: AvoSpacing.xs),
-                Icon(CupertinoIcons.arrow_2_circlepath, size: _kSyncGlyph, color: colors.secondaryLabel),
+                AvoIcon(AvoIcons.sync, size: _kSyncGlyph, color: colors.secondaryLabel),
               ],
             ],
           );

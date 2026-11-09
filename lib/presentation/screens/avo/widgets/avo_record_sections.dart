@@ -12,7 +12,6 @@ import 'package:shoply/presentation/screens/avo/avo_card_format.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/avo_l10n.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_card_scope.dart';
-import 'package:shoply/presentation/screens/avo/widgets/avo_glyphs.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/screens/profile/settings/data/notification_settings.dart'
     show ReminderTime;
@@ -202,7 +201,7 @@ AvoRecordHead avoRecordHead(BuildContext context, AvoRecord r) {
                     params: {'kcal': avoInt(context, -left)},
                   ),
         ].join(' · '),
-        icon: const Icon(CupertinoIcons.flame),
+        icon: const AvoIcon(AvoIcons.flame),
         openLabel: view,
         open: calories,
       );
@@ -242,7 +241,7 @@ AvoRecordHead avoRecordHead(BuildContext context, AvoRecord r) {
           ),
           ?where,
         ].join(' · '),
-        icon: const AvoIcon(avoTogglesIcon),
+        icon: const AvoIcon(AvoIcons.switch2),
         openLabel: null,
         open: null,
       );
@@ -352,7 +351,7 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
           'avo_rec_allergy_added',
           params: {'allergen': r.value},
         ),
-        icon: const AvoIcon(avoLeafIcon),
+        icon: const AvoIcon(AvoIcons.leaf),
         openLabel: null,
         open: diet,
       );
@@ -363,7 +362,7 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
           'avo_rec_allergy_removed',
           params: {'allergen': r.value},
         ),
-        icon: const AvoIcon(avoLeafIcon),
+        icon: const AvoIcon(AvoIcons.leaf),
         openLabel: null,
         open: diet,
       );
@@ -374,7 +373,7 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
           'avo_card_was',
           params: {'value': r.value, 'old': _value(context, r.key, r.previous)},
         ),
-        icon: const AvoIcon(avoLeafIcon),
+        icon: const AvoIcon(AvoIcons.leaf),
         openLabel: null,
         open: diet,
       );
@@ -382,7 +381,7 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
       return (
         title: context.tr('avo_set_diet'),
         subtitle: context.tr('avo_rec_diet_removed', params: {'diet': r.value}),
-        icon: const AvoIcon(avoLeafIcon),
+        icon: const AvoIcon(AvoIcons.leaf),
         openLabel: null,
         open: diet,
       );
@@ -403,7 +402,7 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
     'height_cm' => ('avo_set_height', const AvoIcon(AvoIcons.person)),
     'display_name' ||
     'name' => ('avo_set_name', const AvoIcon(AvoIcons.person)),
-    _ => ('avo_set_generic', const AvoIcon(avoTogglesIcon)),
+    _ => ('avo_set_generic', const AvoIcon(AvoIcons.switch2)),
   };
   final value = _value(context, r.key, r.value);
   // The A8 keys name themselves (`avo_setkey_<key>`).

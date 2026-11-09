@@ -9,6 +9,7 @@ import 'package:shoply/presentation/screens/calories/widgets/calorie_colors.dart
 import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_macros.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_ring.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/rolling_number.dart';
 
 /// Minimum height of the number-and-ring line in the diary (D2: 152).
@@ -156,7 +157,7 @@ class _Subline extends StatelessWidget {
           const TextSpan(text: ' '),
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
-            child: Icon(CupertinoIcons.arrow_2_circlepath, size: _kSyncGlyph, color: colors.secondaryLabel),
+            child: AvoIcon(AvoIcons.sync, size: _kSyncGlyph, color: colors.secondaryLabel),
           ),
         ],
       ]),

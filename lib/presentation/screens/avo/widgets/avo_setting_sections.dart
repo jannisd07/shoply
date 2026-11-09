@@ -136,7 +136,7 @@ AvoResultSection avoSettingsLinkSection(
     subtitle: context.tr(noteKey),
     leading: const AvoSymbolTile(
       neutral: true,
-      icon: Icon(CupertinoIcons.person_crop_circle),
+      icon: AvoIcon(AvoIcons.personCircle),
     ),
     onOpen: open,
     actions: [

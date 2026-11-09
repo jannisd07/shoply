@@ -320,8 +320,8 @@ class _AvoResultSectionState extends State<AvoResultSection> {
                           top: AvoSpacing.xxs,
                           right: AvoSpacing.xs,
                         ),
-                        child: Icon(
-                          CupertinoIcons.arrow_2_circlepath,
+                        child: AvoIcon(
+                          AvoIcons.sync,
                           size: _syncGlyph,
                           color: colors.secondaryLabel,
                         ),

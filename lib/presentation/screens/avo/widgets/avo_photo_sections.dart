@@ -12,6 +12,7 @@ import 'package:shoply/presentation/screens/avo/widgets/avo_choice_card.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_list_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_record_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/check_circle.dart';
 import 'package:shoply/routes/app_destinations.dart';
 
@@ -48,7 +49,7 @@ class AvoPhotoChoice extends StatelessWidget {
               AvoChoiceOption(
                 id: AvoPhotoIntent.meal.name,
                 title: context.tr('avo_photo_as_meal'),
-                leading: const AvoSymbolTile(icon: Icon(CupertinoIcons.flame)),
+                leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.flame)),
               ),
             AvoChoiceOption(
               id: AvoPhotoIntent.list.name,
@@ -326,8 +327,8 @@ AvoResultSection avoPhotoErrorSection(
     title: text,
     leading: AvoSymbolTile(
       neutral: true,
-      icon: Icon(
-        error ? CupertinoIcons.exclamationmark_circle : CupertinoIcons.camera,
+      icon: AvoIcon(
+        error ? AvoIcons.exclamationmarkCircle : AvoIcons.camera,
         color: error ? colors.destructive : colors.secondaryLabel,
       ),
     ),

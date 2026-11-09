@@ -433,7 +433,7 @@ class HomeCalorieIdeasHint extends ConsumerWidget {
     final eaten = ref.watch(calorieDayProvider(today)).day?.totals.calories ?? 0;
     return HintRow(
       text: context.tr('cal_hint_ideas', params: {'kcal': context.kcal(goal - eaten)}),
-      leading: Icon(CupertinoIcons.flame, size: _kHintGlyph, color: context.colors.secondaryLabel),
+      leading: AvoIcon(AvoIcons.flame, size: _kHintGlyph, color: context.colors.secondaryLabel),
       onTap: () => context.push('${RoutePaths.calories}/ideas'),
       dismissLabel: context.tr('cal_hide_today'),
       onDismiss: () {

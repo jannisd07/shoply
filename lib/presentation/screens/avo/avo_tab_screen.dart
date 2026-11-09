@@ -27,7 +27,6 @@ import 'package:shoply/presentation/screens/avo/avo_photo_source.dart';
 import 'package:shoply/presentation/screens/avo/avo_suggestions.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_composer.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_context_chip.dart';
-import 'package:shoply/presentation/screens/avo/widgets/avo_glyphs.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_large_title.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_list_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_record_sections.dart';
@@ -759,7 +758,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
                   title: collapsed ? AppBrand.name : null,
                   trailing: [
                     GlassIconButton(
-                      icon: const AvoIcon(avoNewConversationIcon),
+                      icon: const AvoIcon(AvoIcons.plusBubble),
                       semanticLabel: context.tr('avo_new_conversation'),
                       onPressed: turns.isEmpty ? null : _newConversation,
                     ),
