@@ -2,6 +2,15 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Qualität der A-Screens, zweiter Teil (Teil A, A11b)
+
+- Für B's Wochenplan: Segment im Rezepte-Tab als Sliver, schwebende Leiste und eigene Toolbar-Knöpfe, grauer Grund.
+- `showAvoMenu` kann Untermenüs (`AvoSubmenu`) und eine Vorschau (Kontextmenü).
+- Simulator-Rundgang: Rezepte heißen nur noch „vegan“/„vegetarisch“, wenn keine Zutat dagegen spricht; Daten aus
+  früheren Jahren zeigen das Jahr.
+- Alle Symbole in A-Screens kommen aus `AvoIcons` (neu: Stern, Info, Buch, Glocke, Sortieren, Ersetzen, Anpassen).
+- Entwürfe zeigen einen Fehlerzustand mit „Erneut versuchen“ statt „Keine Entwürfe“.
+
 ## 2026-11-09: Qualität der A-Screens, erster Teil (Teil A, A11)
 
 - Prüfmatrix für die noch fehlenden A-Screens: Rezepte-Tab, Alle Rezepte, Kategorie, Bibliothek, Home als Ganzes,

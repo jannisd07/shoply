@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (A11 Teil 1 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (A11b erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -42,11 +42,11 @@ für die nächste Sitzung geben.
 | A10 App-Icon und Maskottchen | wartet auf den Owner (Maskottchen F-17-11) | prompt §5 A10 |
 | A12 Aufräumen und Analysen | erledigt | `a12-stand.md`, `feature-ideen.md` |
 | A11 Qualität, Teil 1 | erledigt | `a11-pruefplan.md`, `a11-stand.md` |
-| **A11b Qualität, Teil 2** | **Als Nächstes** (vorher: Owner im Simulator angemeldet? Platte ≥ 10 GB?) | „Offen bei A“ in `a11-stand.md` |
-| S6 Gegenprüfung von B | offen | prompt §5 A11 „Gegenprüfung“ |
+| A11b Qualität, Teil 2 | erledigt | `a11b-stand.md` |
+| **S6 Gegenprüfung von B** | **Als Nächstes** | prompt §5 A11 „Gegenprüfung“, „Offen bei A“ in `a11b-stand.md` |
 | S5 Bereiche fertig | offen | prompt §11 |
 
-Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst A11b, S6, S5. Fragt die Sitzung den
+Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst S6, S5. Fragt die Sitzung den
 Owner zu Beginn nach A9/A10, nur wenn eins davon „Als Nächstes“ ist.
 
 ### AB1 Anfragen von B: Komponenten und Daten
@@ -104,6 +104,14 @@ Flows Hinzufügen und Teilen mit `idiotensicher-testen`, fehlende `AvoIcons`-Gly
 (`bash tool/design_check.sh A` zeigt sie), Fehlerzustand der Entwürfe. **Nie** `flutter test integration_test/…` mit
 gebootetem Simulator (ersetzt die App, meldet ab). Platte: unter 15 GB keine Worktrees, unter 10 GB keine Builds,
 `build/` nach dem Rundgang löschen.
+
+### S6 Gegenprüfung von B
+
+Quellen: prompt §5 A11 „Gegenprüfung“ und §9, `status-B.md` (Meilensteine, „Anfragen an Teil A“ zuerst),
+`b-sitzungen.md`, „Von Teil B“ in `a11-stand.md` und `a11b-stand.md`. A prüft B's fertige Screens mit denselben
+Maßstäben wie die eigenen (Prüfmatrix, `bash tool/design_check.sh B`, harte Regel keine Sheets/Slider, Simulator-
+Stichproben nach Absprache), ändert B's Dateien nie und schreibt Funde als Wünsche in `s6-stand.md` „Von Teil B“
+und per Nachricht an B. Vorher fragen, ob der Owner im Simulator angemeldet ist.
 
 ### A12 Aufräumen und Analysen
 

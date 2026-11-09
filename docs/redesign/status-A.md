@@ -4,6 +4,10 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
+09.11.2026 (A11b): Qualität Teil 2 fertig: B's Wünsche (status-B 18, A-P1–A-P4, A-K10), Simulator-Rundgang mit
+Funden, keine `CupertinoIcons` mehr in A-Dateien, Fehlerzustand der Entwürfe; Ergebnis in
+[`a11b-stand.md`](a11b-stand.md). Als Nächstes: S6 (Gegenprüfung von B); A9/A10 warten auf den Owner.
+
 09.11.2026 (A12): Aufräumen und Analysen fertig, Ergebnis und Wünsche an B in [`a12-stand.md`](a12-stand.md), Analyse in
 [`feature-ideen.md`](feature-ideen.md). Als Nächstes: A11 (Qualität für alle A-Screens); A9/A10 warten auf den Owner.
 
@@ -59,6 +63,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | AB2 Anfragen von B: Listen, Router, Reste | **erledigt** (A-C4, A-L1–A-L4, A-R1–A-R3, status-B 15/16, Listen-Schalter, Mitteilungs-Kategorien, T6/T7, A-C6, `ThemeMode.system`); offen in `ab2-stand.md` | 09.11.2026 | `git log --grep AB2` |
 | A12 Aufräumen und Analysen | **erledigt** (13 tote Dateien, tote Symbole, 543 ungenutzte Textschlüssel, Paper-Reste bis auf die Paywall, `feature-ideen.md`, `claude/daily` pausieren); Wünsche an B in `a12-stand.md` | 09.11.2026 | `git log --grep A12` |
 | A11 Qualität, Teil 1 | **erledigt**: Prüfmatrix für alle A-Screens (außer Paywall), `tool/design_check.sh` (A: 0 Funde), Messtests `integration_test/perf/`, status-B 17 (1), 4 Fehler behoben; Simulator nur bis zur Abmeldung; Rest in `a11-stand.md` (→ A11b) | 09.11.2026 | `git log --grep A11` |
+| A11b Qualität, Teil 2 | **erledigt**: status-B 18, A-P1–A-P4, A-K10 (`AvoSubmenu`, Vorschau), Simulator-Rundgang hell/dunkel/AX3 (Rezept „vegan“ mit Eigelb, Datum ohne Jahr behoben), Flows Hinzufügen/Teilen, alle `CupertinoIcons` → `AvoIcons`, Fehlerzustand Entwürfe | 09.11.2026 | `git log --grep A11b` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
@@ -192,6 +197,9 @@ Provider in `lib/presentation/widgets/slots/b_slots.dart`; Stufe 2: Home-Abschni
 | A-C4, A-L1–A-L4, Polsterung um `ListOfferSummary` | **erledigt** (AB2), API in `ab2-stand.md` | `git log --grep AB2` |
 | A-R1–A-R3, status-B 15 und 16 | **erledigt** (AB2): B-Vollbild-Routen vor der Shell, `/offers` ohne `ModuleGate`, Deep Link `offers`, `system_routes.dart`, Suche, `openUrl` → `Future<bool>`, `DestructiveRow`, `StatusRow`, Pin-Rennen, A-C6, Provider umgestellt | `git log --grep AB2` |
 | A-P1 | angenommen; Profil | A8 |
+| status-B 17 (1), 18 | **erledigt** (A11, A11b) | `004b3fd`, `git log --grep "A11b: Wuensche"` |
+| Wochenplan A-P1–A-P4 (`b-screens/wochenplan.md`) | **erledigt** (A11b): Segment als Sliver, `buildPlanFloatingBar` über der Tab-Leiste, `buildPlanToolbarActions` statt Gespeichert/Mehr, Grund folgt dem Segment; Platzhalter in `plan_routes.dart` mit B's OK | `git log --grep "A11b: Wuensche"` |
+| A-K10 Untermenüs, Kontextmenü mit Vorschau | **erledigt** (A11b): `AvoSubmenu`, `showAvoMenu(preview:)`; Ziehen aus der Vorschau nicht | `git log --grep "A11b: Wuensche"` |
 | `openAvoWithQuestion` | `home_avo_card.dart` stellt A auf den b_slots-Helfer um und löscht die eigene Funktion, sobald B ihn liefert | wenn B meldet |
 
 ## Hinweise für B
