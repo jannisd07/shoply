@@ -32,6 +32,15 @@ Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-
 - Alle Symbole in A-Screens kommen aus `AvoIcons` (neu: Stern, Info, Buch, Glocke, Sortieren, Ersetzen, Anpassen).
 - Entwürfe zeigen einen Fehlerzustand mit „Erneut versuchen“ statt „Keine Entwürfe“.
 
+## 2026-11-09: Einkauf abschließen neu (Teil B, B8a/W10)
+
+- „Einkauf abschließen“ ist ein Vollbild `/checkout/:listId` statt Alert, Markt-Sheet und Snackbar: Markt
+  vorausgewählt (Liste, gelernt, Standort „(hier)“), Betrag optional („42,8“ → „42,80 €“), Kosten teilen als Schalter,
+  Ersparnis nur mit „ca.“ und „laut Händler“. Danach Erfolgsmoment und „Einkauf gespeichert · Widerrufen“.
+- Datenschicht: Verlauf lokal pro Konto (3 Monate, mindestens 50), Seiten zu 30, beim Abschluss ergänzt statt neu
+  geladen; Betrag nur aus Eingabe (Bug 7); Markt als Ketten-ID. Migration-Entwurf `b_trip_checkout` (Owner wendet an),
+  bis dahin Rückfall auf die alten Inserts.
+
 ## 2026-11-09: Qualität der A-Screens, erster Teil (Teil A, A11)
 
 - Prüfmatrix für die noch fehlenden A-Screens: Rezepte-Tab, Alle Rezepte, Kategorie, Bibliothek, Home als Ganzes,

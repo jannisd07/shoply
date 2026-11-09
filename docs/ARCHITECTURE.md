@@ -74,7 +74,11 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 `screens/lists/list_detail_screen.dart` (~770 Zeilen, vorher 3.457) delegiert an `screens/lists/widgets/`:
 `item_form_dialog.dart` (ein Dialog für Neu und Bearbeiten), `list_item_tile.dart`, `list_category_section.dart`
 (`groupItemsByCategory()`, gecacht), `list_drag_controller.dart` (Drag ohne `setState`), `list_detail_menu.dart`,
-`share_list_dialog.dart`, `list_detail_parts.dart` und `shopping_trip_completion.dart` (Einkauf abschließen).
+`share_list_dialog.dart` und `list_detail_parts.dart`. „Einkauf abschließen“ gehört Teil B: `openCheckoutFlow`
+(`b_slots.dart`) pusht `/checkout/:listId` (`screens/history/checkout/`), speichert über
+`tripHistoryProvider` (`presentation/state/trip_history_provider.dart`: lokaler Verlauf pro Konto, optimistisch,
+Widerrufen) und `ShoppingHistoryService.completeTrip` (Server-Funktion `complete_shopping_trip`, Rückfall auf
+Einzel-Inserts, solange die Migration fehlt).
 
 ## Rezepte
 

@@ -26,6 +26,18 @@ Stand: 2026-11-08.
   zurück. Spalte anlegen (besser pro Mitglied: `list_members.order_index`) oder Umsortieren entfernen.
 - **Edge Function `send-push-notification` deployen.** Code ist korrigiert, aber erst nach dem Deploy live:
   `supabase functions deploy send-push-notification` (Autorisierung ergänzt, keine Debug-Logs an den Aufrufer).
+- **Migration „Einkauf abschließen“ anwenden (B8, W10).** `supabase/migrations/20261109000000_b_trip_checkout.sql`
+  im SQL-Editor ausführen (idempotent). Bringt `complete_shopping_trip` (atomar, „schon abgeschlossen“),
+  `undo_shopping_trip`, `save_trip_split`, `set_trip_amount`, `open_split_shares`, die Spalten `store_chain`,
+  `store_source`, `total_cost_source`, `completed_by` und schärfere RLS für `expense_splits` (nur noch „bezahlt“
+  direkt änderbar). Bis dahin speichert die App mit den alten Einzel-Inserts weiter (ohne „schon abgeschlossen“, ohne
+  echtes Widerrufen der Aufteilung). Danach einmal einen Einkauf abschließen und widerrufen.
+- **Mitteilungen nach dem Einkauf serverseitig (B8).** Die App hält „{name} hat bei {store} eingekauft“ bis zum Ende
+  des Widerrufen-Fensters auf dem Gerät zurück (höchstens 2 Minuten, nach App-Ende beim nächsten Start) und schreibt
+  sie in der Sprache des Absenders. Für die Sprache des Empfängers und Bündelung (Kap. 19) braucht es eine Edge
+  Function mit Verzögerung.
+- **Datenschutz: Standort beim Abschluss (B8).** Beim Einkauf abschließen gehen Koordinaten an Overpass
+  (OpenStreetMap), um den Markt zu erkennen. In die Datenschutzerklärung aufnehmen.
 
 ## 2. Sicherheit und Abos
 
