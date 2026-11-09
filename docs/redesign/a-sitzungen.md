@@ -64,7 +64,10 @@ Pull-down), Einzelheiten in `b-screens/wochenplan.md` (nicht verwechseln mit A-P
 
 ### AB2 Anfragen von B: Listen, Router, Reste aus A5–A8
 
-Zuerst `status-B.md` „Anfragen an Teil A“ auf Neues seit AB1 prüfen und `ab1-stand.md` „Offen bei A“ lesen (die
+Zuerst `status-B.md` „Anfragen an Teil A“ auf Neues seit AB1 prüfen (mindestens Nr. 16 aus BA8 `c37182f`:
+`DestructiveRow` gedimmt mit `onTap: null` + `subtitle`, `StatusRow`-Aktion ohne Umbruch, `system_routes.dart` in
+`profile_routes` einhängen, Suche `_visible` prüft Modul von Zeile und Seite, Rennen in `PinnedListNotifier._load`,
+`SettingsExternalActions.openUrl` als `Future<bool>`, Aufrufer auf B's neue Provider umstellen) und `ab1-stand.md` „Offen bei A“ lesen (die
 neuen Komponenten dort beim Listen-Umbau nutzen, z. B. `ItemRow(trailingSemanticsLabel:, contextMenuItems:)`).
 
 A-C4 (Accessory: B-Block, Fokus zurück), A-L1–A-L4 (Listenkopf mit `StoreChip`, Listen-Info „Markt“ und „Angebote
