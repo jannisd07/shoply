@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/hint_row.dart';
+import 'package:shoply/presentation/widgets/design/swipe_actions.dart';
 
 import '../../../layout/layout_matrix.dart';
 
@@ -198,6 +202,121 @@ void main() {
     expect(text.top, greaterThan(figure.bottom));
   });
 
+  group('title, swipe and menu (A-C3)', () {
+    testWidgets('bold title above the secondary text; the label has both', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(
+        tester,
+        const HintRow(title: 'Du sparst 3,20 €', text: _text),
+      );
+      final title = tester.widget<Text>(find.text('Du sparst 3,20 €')).style!;
+      expect(title.fontSize, 15);
+      expect(title.fontWeight, FontWeight.w700);
+      expect(title.color, AvoColors.light.label);
+      final body = tester.widget<Text>(find.text(_text)).style!;
+      expect(body.color, AvoColors.light.secondaryLabel);
+      expect(
+        tester.getRect(find.text('Du sparst 3,20 €')).bottom,
+        lessThanOrEqualTo(tester.getRect(find.text(_text)).top),
+      );
+      expect(find.bySemanticsLabel('Du sparst 3,20 €, $_text'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('without a title nothing changes', (tester) async {
+      await _pump(tester, const HintRow(text: _text));
+      expect(
+        tester.widget<Text>(find.text(_text)).style!.color,
+        AvoColors.light.label,
+      );
+    });
+
+    testWidgets('swipe shows the action, a full swipe runs it', (tester) async {
+      var hidden = 0;
+      await _pump(
+        tester,
+        HintRow(
+          text: _text,
+          onDismiss: () {},
+          swipeActions: [
+            SwipeAction(
+              label: 'Ausblenden',
+              icon: AvoIcons.eyeSlash,
+              onPressed: () => hidden++,
+            ),
+          ],
+        ),
+      );
+      await tester.drag(find.text(_text), const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Ausblenden'), findsOneWidget);
+      await tester.tap(find.text('Ausblenden'));
+      await tester.pumpAndSettle();
+      expect(hidden, 1);
+
+      await tester.drag(find.text(_text), const Offset(-300, 0));
+      await tester.pumpAndSettle();
+      expect(hidden, 2);
+    });
+
+    testWidgets('the swipe surface has the card radius', (tester) async {
+      await _pump(
+        tester,
+        HintRow(
+          text: _text,
+          swipeActions: [SwipeAction(label: 'Ausblenden', onPressed: () {})],
+        ),
+      );
+      await tester.drag(find.text(_text), const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      final clip = tester.widget<ClipRRect>(
+        find.ancestor(
+          of: find.text('Ausblenden'),
+          matching: find.byType(ClipRRect),
+        ),
+      );
+      expect(clip.borderRadius, BorderRadius.circular(AvoRadii.card));
+    });
+
+    testWidgets('long press opens the menu, entries are custom actions', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      var chosen = 0;
+      var taps = 0;
+      await _pump(
+        tester,
+        HintRow(
+          text: _text,
+          onTap: () => taps++,
+          contextMenuItems: [
+            AvoMenuItem(label: 'Ausblenden', onSelected: () => chosen++),
+          ],
+          swipeActions: [SwipeAction(label: 'Später', onPressed: () {})],
+        ),
+      );
+      expect(
+        tester.getSemantics(find.bySemanticsLabel(_text)),
+        isSemantics(
+          isButton: true,
+          customActions: const [
+            CustomSemanticsAction(label: 'Ausblenden'),
+            CustomSemanticsAction(label: 'Später'),
+          ],
+        ),
+      );
+      await tester.longPress(find.text(_text));
+      await tester.pumpAndSettle();
+      expect(taps, 0);
+      await tester.tap(find.text('Ausblenden'));
+      await tester.pumpAndSettle();
+      expect(chosen, 1);
+      handle.dispose();
+    });
+  });
+
   layoutMatrix(
     'HintRow with figure, action and close',
     (context) => Padding(
@@ -222,5 +341,23 @@ void main() {
       padding: EdgeInsets.all(AvoSpacing.screen),
       child: HintRow(text: 'Tipp: Schreib „2 Laktosefreie Bio-Vollmilch“.'),
     ),
+  );
+
+  layoutMatrix(
+    'HintRow savings card: title, swipe action, close',
+    (context) => Padding(
+      padding: const EdgeInsets.all(AvoSpacing.screen),
+      child: HintRow(
+        title: 'Du sparst 3,20 € bei Lidl',
+        text: '4 von 11 Artikeln diese Woche im Angebot, Vollmilch für 1,29 €.',
+        leading: const AvoFigure(pose: AvoPose.thinking, size: 44),
+        onTap: () {},
+        onDismiss: () {},
+        swipeActions: [SwipeAction(label: 'Ausblenden', onPressed: () {})],
+        contextMenuItems: [AvoMenuItem(label: 'Ausblenden', onSelected: () {})],
+      ),
+    ),
+    scrollable: true,
+    checkTapTargets: true,
   );
 }

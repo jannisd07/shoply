@@ -9,6 +9,7 @@ import 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart'
 import 'package:shoply/presentation/screens/lists/shopping_mode_screen.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_aisles.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
@@ -188,6 +189,50 @@ void main() {
       container.read(avoScreenContextProvider),
       const AvoScreenContext(screen: 'list', listId: 'l1'),
     );
+  });
+
+  testWidgets('sets the shopping mode session while open, clears it after', (
+    tester,
+  ) async {
+    final before = DateTime.now();
+    await open(tester);
+    expect(container.read(shoppingModeSessionProvider), isNotNull);
+    final session = container.read(shoppingModeSessionProvider)!;
+    expect(session.listId, 'l1');
+    expect(session.startedAt.isBefore(before), isFalse);
+
+    await tester.tap(find.bySemanticsLabel('Back').hitTestable());
+    await tester.pumpAndSettle();
+    expect(container.read(shoppingModeSessionProvider), isNull);
+  });
+
+  testWidgets('leaving keeps a session that belongs to another list', (
+    tester,
+  ) async {
+    await open(tester);
+    final other = ShoppingModeSession(listId: 'l2', startedAt: _at);
+    container.read(shoppingModeSessionProvider.notifier).state = other;
+
+    await tester.tap(find.bySemanticsLabel('Back').hitTestable());
+    await tester.pumpAndSettle();
+    expect(container.read(shoppingModeSessionProvider), other);
+  });
+
+  testWidgets('a stacked shopping mode gives the session back on closing', (
+    tester,
+  ) async {
+    await open(tester);
+    // `open` ran the first mode; pretend one was already running below.
+    final below = ShoppingModeSession(listId: 'l0', startedAt: _at);
+    await tester.tap(find.bySemanticsLabel('Back').hitTestable());
+    await tester.pumpAndSettle();
+    container.read(shoppingModeSessionProvider.notifier).state = below;
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(container.read(shoppingModeSessionProvider)!.listId, 'l1');
+    await tester.tap(find.bySemanticsLabel('Back').hitTestable());
+    await tester.pumpAndSettle();
+    expect(container.read(shoppingModeSessionProvider), below);
   });
 
   testWidgets('checks off through the list notifier', (tester) async {

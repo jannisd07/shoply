@@ -11,6 +11,7 @@ import 'package:shoply/presentation/screens/profile/account/account_search.dart'
 import 'package:shoply/presentation/screens/profile/account/account_widgets.dart';
 import 'package:shoply/presentation/screens/profile/account/profile_edit_controller.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
+import 'package:shoply/presentation/widgets/design/avatar.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/full_screen_editor.dart';
@@ -307,11 +308,16 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
         behavior: HitTestBehavior.opaque,
         excludeFromSemantics: true,
         onTap: _openMenu,
-        child: ProfilePhotoAvatar(
-          name: name,
-          photo: state.removed ? null : state.localPhoto,
-          url: state.removed ? null : profile.avatarUrl,
-          syncing: state.uploading,
+        child: ExcludeSemantics(
+          child: Avatar(
+            name: name,
+            size: AvatarSize.xl,
+            image: profileAvatarImage(
+              photo: state.removed ? null : state.localPhoto,
+              url: state.removed ? null : profile.avatarUrl,
+            ),
+            syncing: state.uploading,
+          ),
         ),
       ),
     );

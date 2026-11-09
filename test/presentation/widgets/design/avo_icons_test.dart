@@ -336,6 +336,28 @@ void main() {
       expect(fork.styleFor(filled: true), AvoIconStyle.stroke);
     });
 
+    test('the AB1 glyphs exist and drawing is non-trivial', () {
+      const names = [
+        'plusBubble', 'leaf', 'switch2', 'eurosignCircle', 'filter', //
+        'filterCircle', 'filterCircleFill', 'checkmarkCircle',
+        'cartBadgePlus', 'bag', 'chartBar', 'listBullet', 'arrowDown',
+        'chevronUpChevronDown',
+      ];
+      expect(AvoIcons.all.keys, containsAll(names));
+      for (final name in names) {
+        final bounds = AvoIcons.all[name]!.shapes
+            .map((s) => s.toPath().getBounds())
+            .reduce((a, b) => a.expandToInclude(b));
+        // Fills most of the 24 grid, within the 2 pt margin of the set.
+        expect(bounds.width, greaterThan(8), reason: name);
+        expect(bounds.height, greaterThan(8), reason: name);
+        expect(bounds.left, greaterThanOrEqualTo(1.5), reason: name);
+        expect(bounds.top, greaterThanOrEqualTo(1.5), reason: name);
+        expect(bounds.right, lessThanOrEqualTo(22.5), reason: name);
+        expect(bounds.bottom, lessThanOrEqualTo(22.5), reason: name);
+      }
+    });
+
     test('only chevrons mirror in right-to-left text', () {
       final mirrored = AvoIcons.all.entries
           .where((e) => e.value.matchTextDirection)

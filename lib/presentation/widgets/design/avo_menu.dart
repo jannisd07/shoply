@@ -21,6 +21,7 @@ const double _rowVertical = 11; // (44 - 22) / 2 at the default size
 const double _iconSize = 20; // SF Symbol next to 17 pt text
 const double _checkSize = 16; // checkmark column
 const double _checkGap = AvoSpacing.s;
+const double _leadingSlot = 28; // iOS: 20 pt glyph or store mark column
 const double _dividerSpace = AvoSpacing.xs; // above and below the hairline
 const double _anchorGap = AvoSpacing.s; // between trigger and menu
 const double _edge = AvoSpacing.screen; // from the screen edges
@@ -43,8 +44,8 @@ const Offset _dropOffset = Offset(0, 6); // D2
 const double _dropBlur = 20; // D2
 const double _dropAlpha = 0.10; // D2
 
-/// One entry of a menu for [showAvoMenu]: an [AvoMenuItem] or an
-/// [AvoMenuDivider].
+/// One entry of a menu for [showAvoMenu]: an [AvoMenuItem], an
+/// [AvoMenuTitle] or an [AvoMenuDivider].
 @immutable
 sealed class AvoMenuEntry {
   const AvoMenuEntry();
@@ -63,6 +64,9 @@ class AvoMenuItem extends AvoMenuEntry {
     this.destructive = false,
     this.enabled = true,
     this.checked = false,
+    this.leading,
+    this.trailing,
+    this.trailingLabel,
   });
 
   /// The title, also what VoiceOver reads first.
@@ -85,6 +89,33 @@ class AvoMenuItem extends AvoMenuEntry {
 
   /// Shows a checkmark at the start: the current choice of a group.
   final bool checked;
+
+  /// A glyph or mark before the text, for example a store mark. It sits in
+  /// its own column (after the checkmark column) that is reserved in every
+  /// row of the menu as soon as one row has a [leading]; it grows with
+  /// Dynamic Type up to xxxL and is decorative for VoiceOver (the label says
+  /// what it shows). It must not take taps of its own.
+  final Widget? leading;
+
+  /// A small widget between the text and the [icon], for example a
+  /// `ProBadge`. It must not take taps of its own; the whole row is the
+  /// target.
+  final Widget? trailing;
+
+  /// What VoiceOver adds after the label for [trailing] ("Pro-Funktion").
+  /// Without it the trailing widget is not read.
+  final String? trailingLabel;
+}
+
+/// A heading line inside a menu ("Markt", "Auf welche Liste?"): small
+/// semibold secondary text, no action, not focusable, read as a heading.
+/// Put it first, or at the start of a group after an [AvoMenuDivider].
+class AvoMenuTitle extends AvoMenuEntry {
+  /// Creates a title line.
+  const AvoMenuTitle(this.text);
+
+  /// The heading; it wraps instead of being cut off.
+  final String text;
 }
 
 /// Separates groups of [AvoMenuItem]s with a hairline band.
@@ -94,7 +125,10 @@ class AvoMenuDivider extends AvoMenuEntry {
 }
 
 /// Opens an iOS pull-down menu that grows out of its trigger (Konzept 00
-/// §12.24; no bottom sheet, no action sheet).
+/// §12.24; no bottom sheet, no action sheet). Entries are rows
+/// ([AvoMenuItem]), headings ([AvoMenuTitle]) and group separators
+/// ([AvoMenuDivider]); several groups in one menu are written as items
+/// separated by dividers.
 ///
 /// The trigger is [anchorRect] (global coordinates), else the widget of
 /// [anchorKey], else the widget of [context]. The menu is about 250 pt wide
@@ -184,6 +218,35 @@ List<AvoMenuEntry> _normalize(List<AvoMenuEntry> items) {
   }
   while (out.isNotEmpty && out.last is AvoMenuDivider) {
     out.removeLast();
+  }
+  // A title needs a row before the next divider or the end.
+  final kept = <AvoMenuEntry>[];
+  for (var i = 0; i < out.length; i++) {
+    if (out[i] is AvoMenuTitle) {
+      var hasRow = false;
+      for (var j = i + 1; j < out.length && out[j] is! AvoMenuDivider; j++) {
+        if (out[j] is AvoMenuItem) {
+          hasRow = true;
+          break;
+        }
+      }
+      if (!hasRow) continue;
+    }
+    kept.add(out[i]);
+  }
+  out
+    ..clear()
+    ..addAll(kept);
+  while (out.isNotEmpty && out.last is AvoMenuDivider) {
+    out.removeLast();
+  }
+  for (var i = out.length - 1; i > 0; i--) {
+    if (out[i] is AvoMenuDivider && out[i - 1] is AvoMenuDivider) {
+      out.removeAt(i);
+    }
+  }
+  while (out.isNotEmpty && out.first is AvoMenuDivider) {
+    out.removeAt(0);
   }
   return out;
 }
@@ -359,6 +422,9 @@ class _MenuPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reserveCheck = entries.any((e) => e is AvoMenuItem && e.checked);
+    final reserveLeading = entries.any(
+      (e) => e is AvoMenuItem && e.leading != null,
+    );
     final firstEnabled = entries.indexWhere(
       (e) => e is AvoMenuItem && e.enabled,
     );
@@ -370,8 +436,10 @@ class _MenuPanel extends StatelessWidget {
           final AvoMenuItem item => _MenuRow(
             item: item,
             reserveCheck: reserveCheck,
+            reserveLeading: reserveLeading,
             autofocus: i == firstEnabled,
           ),
+          final AvoMenuTitle title => _MenuTitle(text: title.text),
           AvoMenuDivider() => const _MenuDivider(),
         },
     ];
@@ -448,6 +516,34 @@ class _MenuSurface extends StatelessWidget {
   }
 }
 
+class _MenuTitle extends StatelessWidget {
+  const _MenuTitle({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    header: true,
+    container: true,
+    label: text,
+    excludeSemantics: true,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: _rowHorizontal,
+        vertical: AvoSpacing.s,
+      ),
+      child: Text(
+        text,
+        style: context.text(
+          AvoTextStyle.footnote,
+          color: context.colors.secondaryLabel,
+          weight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+}
+
 class _MenuDivider extends StatelessWidget {
   const _MenuDivider();
 
@@ -470,11 +566,13 @@ class _MenuRow extends StatefulWidget {
   const _MenuRow({
     required this.item,
     required this.reserveCheck,
+    required this.reserveLeading,
     required this.autofocus,
   });
 
   final AvoMenuItem item;
   final bool reserveCheck;
+  final bool reserveLeading;
   final bool autofocus;
 
   @override
@@ -507,6 +605,8 @@ class _MenuRowState extends State<_MenuRow> {
     final scale = _iconScale(context);
     final subtitle = item.subtitle;
     final icon = item.icon;
+    final trailing = item.trailing;
+    final leading = item.leading;
 
     Widget row = Row(
       children: [
@@ -522,6 +622,15 @@ class _MenuRowState extends State<_MenuRow> {
                 : null,
           ),
           const SizedBox(width: _checkGap),
+        ],
+        if (widget.reserveLeading) ...[
+          SizedBox(
+            width: _leadingSlot * scale,
+            child: leading == null
+                ? null
+                : ExcludeSemantics(child: Center(child: leading)),
+          ),
+          const SizedBox(width: AvoSpacing.m),
         ],
         Expanded(
           child: Column(
@@ -543,6 +652,10 @@ class _MenuRowState extends State<_MenuRow> {
             ],
           ),
         ),
+        if (trailing != null) ...[
+          const SizedBox(width: AvoSpacing.s),
+          trailing,
+        ],
         if (icon != null) ...[
           const SizedBox(width: AvoSpacing.m),
           AvoIcon(icon, size: _iconSize * scale, color: foreground),
@@ -572,7 +685,11 @@ class _MenuRowState extends State<_MenuRow> {
     );
     if (!enabled) row = Opacity(opacity: _disabledOpacity, child: row);
 
-    final label = subtitle == null ? item.label : '${item.label}, $subtitle';
+    final label = [
+      item.label,
+      ?subtitle,
+      if (trailing != null) ?item.trailingLabel,
+    ].join(', ');
     return Semantics(
       container: true,
       button: true,

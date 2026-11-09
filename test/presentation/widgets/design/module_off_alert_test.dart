@@ -33,7 +33,11 @@ class _Run {
   var enabled = 0;
 }
 
-Future<_Run> _open(WidgetTester tester, {String module = 'Calories'}) async {
+Future<_Run> _open(
+  WidgetTester tester, {
+  String module = 'Calories',
+  String? body,
+}) async {
   final run = _Run();
   tester.view.physicalSize = const Size(390 * 3, kLayoutHeight * 3);
   tester.view.devicePixelRatio = 3;
@@ -46,6 +50,7 @@ Future<_Run> _open(WidgetTester tester, {String module = 'Calories'}) async {
           await showModuleOffAlert(
             context,
             moduleName: module,
+            body: body,
             onEnable: () async => run.enabled++,
           ),
         );
@@ -70,6 +75,20 @@ void main() {
     );
     expect(find.text('Not now'), findsOneWidget);
     expect(find.text('Turn on'), findsOneWidget);
+  });
+
+  testWidgets('body replaces the standard sentence', (tester) async {
+    await _open(tester, body: 'Shows what your shopping costs.');
+    expect(find.text('Shows what your shopping costs.'), findsOneWidget);
+    expect(find.textContaining('You can switch it off again'), findsNothing);
+    expect(find.text('Turn on'), findsOneWidget);
+  });
+
+  testWidgets('an empty body falls back to the standard sentence', (
+    tester,
+  ) async {
+    await _open(tester, body: '  ');
+    expect(find.textContaining('You can switch it off again'), findsOneWidget);
   });
 
   testWidgets('"Turn on" enables the module and resolves to true', (
@@ -134,6 +153,25 @@ void main() {
     );
     handle.dispose();
   });
+
+  layoutMatrix(
+    'showModuleOffAlert with its own body',
+    (context) => _AutoOpen(
+      (context) => showModuleOffAlert(
+        context,
+        moduleName: 'Laktosefreie Bio-Vollmilch-Kalorien',
+        body:
+            'Zeigt dir, was dein Wocheneinkauf in den Märkten in deiner '
+            'Nähe kostet, und wo du sparst.',
+        onEnable: () async {},
+      ),
+    ),
+    checkTapTargets: true,
+    afterPump: (tester) async {
+      await tester.pumpAndSettle();
+      expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+    },
+  );
 
   layoutMatrix(
     'showModuleOffAlert',

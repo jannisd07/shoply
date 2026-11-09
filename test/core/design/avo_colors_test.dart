@@ -37,16 +37,24 @@ void main() {
         }
         expect(contrast(c.destructive, c.surface), greaterThanOrEqualTo(4.5));
         expect(contrast(c.onTint, c.tintFill), greaterThanOrEqualTo(4.5));
+        expect(
+          contrast(c.onTint, c.destructiveFill),
+          greaterThanOrEqualTo(4.5),
+        );
         expect(contrast(c.tint, c.tintSoft), greaterThanOrEqualTo(4.5));
-        expect(contrast(c.onChipSelected, c.chipSelected),
-            greaterThanOrEqualTo(4.5));
+        expect(
+          contrast(c.onChipSelected, c.chipSelected),
+          greaterThanOrEqualTo(4.5),
+        );
         expect(contrast(c.tertiaryLabel, c.surface), greaterThanOrEqualTo(4.5));
       });
 
       test('glass fallback keeps text readable', () {
         expect(contrast(c.label, c.glassFallback), greaterThanOrEqualTo(7));
         expect(
-            contrast(c.tertiaryLabel, c.glassFallback), greaterThanOrEqualTo(4.5));
+          contrast(c.tertiaryLabel, c.glassFallback),
+          greaterThanOrEqualTo(4.5),
+        );
       });
     });
   });
@@ -72,17 +80,19 @@ void main() {
       'Material theme extension', (tester) async {
     late AvoColors seen;
     Future<void> pump(Brightness b, bool hc) => tester.pumpWidget(
-          MediaQuery(
-            data: MediaQueryData(highContrast: hc),
-            child: Theme(
-              data: ThemeData(brightness: b),
-              child: Builder(builder: (context) {
-                seen = context.colors;
-                return const SizedBox();
-              }),
-            ),
+      MediaQuery(
+        data: MediaQueryData(highContrast: hc),
+        child: Theme(
+          data: ThemeData(brightness: b),
+          child: Builder(
+            builder: (context) {
+              seen = context.colors;
+              return const SizedBox();
+            },
           ),
-        );
+        ),
+      ),
+    );
     await pump(Brightness.light, false);
     expect(seen, same(AvoColors.light));
     await pump(Brightness.dark, false);

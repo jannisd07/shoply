@@ -5,23 +5,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/presentation/screens/auth/steps/name_step.dart'
-    show nameInitials;
 import 'package:shoply/presentation/screens/profile/account/account_backend.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
-
-/// The profile avatar (Konzept 18 §3.2, §4.2: 64 pt; the shared `Avatar`
-/// stops at 32 pt, like in the A7 name step).
-const double kProfileAvatarSize = 64;
-
-/// Initials at 64 pt keep their size under Dynamic Type (A7 name step).
-const double _kInitialsSize = 26;
-
-/// The sync sign at the bottom corner of the avatar (Konzept 00 §12.7).
-const double _kSyncBadge = 22;
-const double _kSyncGlyph = 13;
-const double _kSyncRing = 2;
 
 /// Konzept 00 §12.20: unavailable controls at 40 %.
 const double kAccountDisabledOpacity = 0.4;
@@ -60,133 +46,13 @@ Future<T?> pushAccountPage<T>(
   return Navigator.of(context).push<T>(CupertinoPageRoute(builder: fallback));
 }
 
-/// The 64 pt profile photo: the new local photo, the stored one from the
-/// disk cache, or the initials on `fillStrong`. While a change is on its way
-/// the sync sign sits at the bottom corner. The photo fades over the
-/// initials (`fadeReduced`). Decorative for VoiceOver; the caller names it.
-class ProfilePhotoAvatar extends StatelessWidget {
-  const ProfilePhotoAvatar({
-    super.key,
-    required this.name,
-    this.photo,
-    this.url,
-    this.syncing = false,
-  });
-
-  /// For the initials.
-  final String name;
-
-  /// A photo that is not uploaded yet (wins over [url]).
-  final Uint8List? photo;
-
-  /// The stored photo.
-  final String? url;
-
-  /// Shows the sync sign.
-  final bool syncing;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final initials = nameInitials(name);
-    final Widget fallback = DecoratedBox(
-      decoration: ShapeDecoration(
-        color: colors.fillStrong,
-        shape: const CircleBorder(),
-      ),
-      child: Center(
-        child: initials.isEmpty
-            ? AvoIcon(
-                AvoIcons.person,
-                filled: true,
-                size: _kInitialsSize + AvoSpacing.xs,
-                color: colors.secondaryLabel,
-              )
-            : MediaQuery.withNoTextScaling(
-                child: Text(
-                  initials,
-                  maxLines: 1,
-                  style: context
-                      .text(AvoTextStyle.title2, weight: FontWeight.w600)
-                      .copyWith(fontSize: _kInitialsSize, height: 1.2),
-                ),
-              ),
-      ),
-    );
-    final bytes = photo;
-    final link = url;
-    final fade = AvoMotion.fadeReduced;
-    Widget image;
-    if (bytes != null) {
-      image = Image.memory(
-        bytes,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        frameBuilder: (context, child, frame, sync) =>
-            sync || frame != null ? child : fallback,
-        errorBuilder: (context, error, stack) => fallback,
-      );
-    } else if (link != null && link.isNotEmpty) {
-      image = CachedNetworkImage(
-        imageUrl: link,
-        fit: BoxFit.cover,
-        fadeInDuration: fade,
-        fadeOutDuration: Duration.zero,
-        placeholder: (context, _) => fallback,
-        errorWidget: (context, _, error) => fallback,
-      );
-    } else {
-      image = fallback;
-    }
-    final circle = SizedBox.square(
-      dimension: kProfileAvatarSize,
-      child: ClipOval(
-        // Every child fills the circle: a landscape photo with BoxFit.cover
-        // in the switcher's loose Stack was only 64 x 48 pt.
-        child: AnimatedSwitcher(
-          duration: fade,
-          layoutBuilder: (current, previous) =>
-              Stack(fit: StackFit.expand, children: [...previous, ?current]),
-          child: image,
-        ),
-      ),
-    );
-    return ExcludeSemantics(
-      child: syncing
-          ? Stack(
-              clipBehavior: Clip.none,
-              children: [
-                circle,
-                PositionedDirectional(
-                  end: -_kSyncRing,
-                  bottom: -_kSyncRing,
-                  child: SizedBox.square(
-                    dimension: _kSyncBadge,
-                    child: DecoratedBox(
-                      decoration: ShapeDecoration(
-                        color: colors.surface,
-                        shape: CircleBorder(
-                          side: BorderSide(
-                            color: colors.background,
-                            width: _kSyncRing,
-                          ),
-                        ),
-                      ),
-                      child: Center(
-                        child: AvoIcon(
-                          AvoIcons.sync,
-                          size: _kSyncGlyph,
-                          color: colors.secondaryLabel,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            )
-          : circle,
-    );
-  }
+/// The image of the profile avatar: the new local photo (wins), the stored
+/// one from the disk cache, or null for the initials. Pass it to
+/// `Avatar(size: AvatarSize.xl, image: …)`.
+ImageProvider? profileAvatarImage({Uint8List? photo, String? url}) {
+  if (photo != null) return MemoryImage(photo);
+  if (url != null && url.isNotEmpty) return CachedNetworkImageProvider(url);
+  return null;
 }
 
 /// A centred destructive row ("Abmelden", "Konto löschen") that can show a

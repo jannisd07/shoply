@@ -571,6 +571,131 @@ abstract final class AvoIcons {
     AvoIconRect(6.5, 6.5, 11, 11, radius: 2.5, style: AvoIconStyle.fill),
   ]);
 
+  // AB1 (part "Menüs"): glyphs B's screens asked for. The ones with a D2
+  // source are copied from the artboards; the SF Symbol look-alikes follow
+  // the same grid, round caps and the 1.8 to 2 stroke.
+
+  /// SF Symbol `plus.bubble`: speech bubble with a plus (Avo suggestion
+  /// "new list", 20 pt, stroke 1.8).
+  static const plusBubble = AvoIconData([
+    AvoIconPath(
+      'M5.5 3.5h13A2.5 2.5 0 0 1 21 6v8.5a2.5 2.5 0 0 1-2.5 2.5h-6.2'
+      'l-4.1 3.5c-.5.4-1.2.1-1.2-.5V17H5.5A2.5 2.5 0 0 1 3 14.5V6'
+      'a2.5 2.5 0 0 1 2.5-2.5z',
+    ),
+    AvoIconPath('M12 7.3v6M9 10.3h6'),
+  ]);
+
+  /// SF Symbol `leaf`: a leaf with its stem (allergies, vegetarian, 18 pt,
+  /// stroke 1.8).
+  static const leaf = AvoIconData([
+    AvoIconPath(
+      'M20 4C10 4 5 9 5 15c0 1.6.4 3 1 4 1.5.6 3 .9 4.5.9C16.5 19.9 20 14 '
+      '20 4z',
+    ),
+    AvoIconPath('M4.5 20.5C7 15 10 11.5 14 9'),
+  ]);
+
+  /// SF Symbol `switch.2`: two toggles, one on and one off (modules, 18 pt,
+  /// stroke 1.8).
+  static const switch2 = AvoIconData([
+    AvoIconRect(3, 3.5, 18, 7, radius: 3.5),
+    AvoIconCircle(17.5, 7, 2, style: AvoIconStyle.fill),
+    AvoIconRect(3, 13.5, 18, 7, radius: 3.5),
+    AvoIconCircle(6.5, 17, 2, style: AvoIconStyle.fill),
+  ]);
+
+  /// SF Symbol `eurosign.circle`: euro sign in a circle (prices and savings,
+  /// 20 pt, stroke 1.8).
+  static const eurosignCircle = AvoIconData([
+    AvoIconCircle(12, 12, 9),
+    AvoIconPath('M14.9 9.3a3.4 3.4 0 1 0 0 5.4M7.6 10.7h5.2M7.6 13.3h5.2'),
+  ]);
+
+  /// SF Symbol `line.3.horizontal.decrease`: three shrinking lines, the
+  /// plain filter sign (toolbar 20 pt, stroke 2).
+  static const filter = AvoIconData([
+    AvoIconPath('M4 7h16M7 12h10M10 17h4'),
+  ], strokeWidth: 2);
+
+  /// SF Symbol `line.3.horizontal.decrease.circle`: the filter lines in a
+  /// circle (20 pt, stroke 1.8). Use [filterCircleFill] for "filter is
+  /// active".
+  static const filterCircle = AvoIconData([
+    AvoIconCircle(12, 12, 9),
+    AvoIconPath('M7.5 9h9M9.5 12h5M11.3 15h1.4'),
+  ]);
+
+  /// SF Symbol `line.3.horizontal.decrease.circle.fill`: solid circle with
+  /// the three lines cut out (20 pt).
+  static const filterCircleFill = AvoIconData([
+    AvoIconPath(
+      'M12 2.5a9.5 9.5 0 1 0 0 19 9.5 9.5 0 1 0 0-19zM7.5 8.3h9v1.4h-9z'
+      'M9.5 11.3h5v1.4h-5zM11.2 14.3h1.6v1.4h-1.6z',
+      style: AvoIconStyle.fill,
+      evenOdd: true,
+    ),
+  ]);
+
+  /// SF Symbol `checkmark.circle`: the outline partner of
+  /// [checkmarkCircleFill] (20 pt, stroke 1.8).
+  static const checkmarkCircle = AvoIconData([
+    AvoIconCircle(12, 12, 9),
+    AvoIconPath('M8 12.4l2.7 2.7 5.3-5.6'),
+  ]);
+
+  /// SF Symbol `cart.badge.plus`: cart with a plus at its corner ("Zur Liste
+  /// hinzufügen", 20 pt, stroke 1.8).
+  static const cartBadgePlus = AvoIconData([
+    AvoIconPath(
+      'M2.6 3.8h2.3l2.2 10.8c.2.8.8 1.4 1.6 1.4h7.4c.8 0 1.4-.5 1.6-1.3'
+      'l.6-2.8',
+    ),
+    AvoIconPath('M5.6 7.3h8.4'),
+    AvoIconPath('M18 2.2v5.6M15.2 5h5.6'),
+    AvoIconCircle(9.3, 19.8, 1.5, style: AvoIconStyle.fill),
+    AvoIconCircle(15.8, 19.8, 1.5, style: AvoIconStyle.fill),
+  ]);
+
+  /// Shopping bag with a handle (D2-FuerDich "Dein November", 22 pt,
+  /// stroke 1.8).
+  static const bag = AvoIconData([
+    AvoIconPath(
+      'M5.2 8h13.6l-1 11.4c-.1 1-.9 1.6-1.8 1.6H8c-.9 0-1.7-.7-1.8-1.6z',
+    ),
+    AvoIconPath('M8.8 10.5V7a3.2 3.2 0 0 1 6.4 0v3.5'),
+  ]);
+
+  /// Three bars on a baseline (D2-FuerDich "Dein November" savings, 22 pt,
+  /// stroke 1.8).
+  static const chartBar = AvoIconData([
+    AvoIconPath('M4 20.5h16'),
+    AvoIconRect(5, 11, 3.4, 6.5, radius: 1),
+    AvoIconRect(10.3, 6.5, 3.4, 11, radius: 1),
+    AvoIconRect(15.6, 3.5, 3.4, 14, radius: 1),
+  ]);
+
+  /// SF Symbol `list.bullet`: three bullets with lines (18 to 20 pt,
+  /// stroke 2).
+  static const listBullet = AvoIconData([
+    AvoIconPath('M9.5 6.5h11M9.5 12h11M9.5 17.5h11'),
+    AvoIconCircle(4.5, 6.5, 1.2, style: AvoIconStyle.fill),
+    AvoIconCircle(4.5, 12, 1.2, style: AvoIconStyle.fill),
+    AvoIconCircle(4.5, 17.5, 1.2, style: AvoIconStyle.fill),
+  ], strokeWidth: 2);
+
+  /// Arrow down (D2-FuerDich price comparison "cheaper", 14 pt; the D2
+  /// source is on a 16 grid with stroke 2, here scaled to 24 with 3).
+  static const arrowDown = AvoIconData([
+    AvoIconPath('M12 3.75v16.5M5.25 13.5 12 20.25l6.75-6.75'),
+  ], strokeWidth: 3);
+
+  /// SF Symbol `chevron.up.chevron.down`: the picker sign of rows that open
+  /// a menu (14 to 16 pt, stroke 2.2).
+  static const chevronUpChevronDown = AvoIconData([
+    AvoIconPath('M7.5 9.2 12 4.7l4.5 4.5M7.5 14.8l4.5 4.5 4.5-4.5'),
+  ], strokeWidth: 2.2);
+
   /// Every icon by name, for the component gallery and tests.
   static const Map<String, AvoIconData> all = {
     'home': home,
@@ -620,6 +745,20 @@ abstract final class AvoIcons {
     'flame': flame,
     'sync': sync,
     'stopFill': stopFill,
+    'plusBubble': plusBubble,
+    'leaf': leaf,
+    'switch2': switch2,
+    'eurosignCircle': eurosignCircle,
+    'filter': filter,
+    'filterCircle': filterCircle,
+    'filterCircleFill': filterCircleFill,
+    'checkmarkCircle': checkmarkCircle,
+    'cartBadgePlus': cartBadgePlus,
+    'bag': bag,
+    'chartBar': chartBar,
+    'listBullet': listBullet,
+    'arrowDown': arrowDown,
+    'chevronUpChevronDown': chevronUpChevronDown,
   };
 }
 

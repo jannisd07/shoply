@@ -5,7 +5,8 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 ## Stand
 
 09.11.2026: **Eine Sitzung je Arbeitspaket** (Owner, Wochenlimit). Ablauf, offene Pakete und Start-Prompt für die
-nächste Sitzung: [`a-sitzungen.md`](a-sitzungen.md). Als Nächstes: AB1 (Anfragen von B: Komponenten und Daten).
+nächste Sitzung: [`a-sitzungen.md`](a-sitzungen.md). AB1 (Komponenten und Daten für B) ist fertig, neue API in
+[`ab1-stand.md`](ab1-stand.md). Als Nächstes: AB2 (Listen, Router, Reste aus A5–A8).
 
 08.11.2026: Teil A läuft jetzt auf Jannis' Mac **im selben Ordner wie B** (`~/Apps/shoply-neu`, auf `main`, kein
 eigener Worktree wegen Speicher). Regeln für beide: kein `git stash`/`checkout`/`switch`/`reset`/`add -A`; nur eigene
@@ -51,6 +52,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A6 Rezepte | **gebaut** (Tab, Suche, Kategorien, Bibliothek, Detail mit Allergie-Hinweis, Zutaten auf die Liste, Kochmodus, Editor); offen in `a6-stand.md` | 08.11.2026 | `b435582`, `f2f0c0c`, `7ce2a24`, `f8d80d9` |
 | A7 Onboarding, Login, Tipps | **gebaut** (Ablauf mit Wiederaufnahme, Konto mit Apple/Google/E-Mail-Code, Passwort, Router mit gemerkten Links, Tipp-Zeilen statt Tutorial); Server-Entwurf und offen in `a7-stand.md` | 09.11.2026 | `870da50`, `de77f8a`, `f189222`, `git log --grep Onboarding` |
 | A8 Profil und Einstellungen | **gebaut** (Profil mit Suche, neun Einstellungsseiten, Profil bearbeiten, Konto, Abmelden, Konto löschen ohne Server); Server-Entwurf und offen in `a8-stand.md` | 09.11.2026 | `8f67ca8`, `28d2463`, `git log --grep "Einstellung\|Konto\|Profil"` |
+| AB1 Anfragen von B: Komponenten und Daten | **erledigt** (A-C1, A-C2, A-C3, A-C5, A-C7, A-C8, A-C9, A-D1, Composer, AppButton-Varianten, NavRow, Avatar xl, Suche mit Mikrofon, Toast mit Ziel, Symbole); API in `ab1-stand.md` | 09.11.2026 | `f259477`, `git log --grep AB1` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
@@ -180,7 +182,7 @@ Provider in `lib/presentation/widgets/slots/b_slots.dart`; Stufe 2: Home-Abschni
 | A-C10 Symbole | **erledigt**: location, storefront, eyeSlash, plusCircle, questionmarkCircle, exclamationmarkCircle, exclamationmarkTriangleFill, line3Horizontal, checkmarkCircleFill (dazu eye, circle, lightbulb, envelope, personBadgePlus, bookmarkSlash) | `54a2ee5` |
 | A-Q1 Layout-Tests | **erledigt**: `test/layout/screens/b/*` gehört B | `ac3fb9a` |
 | A-O1 Region im Onboarding | **festgelegt wie vorgeschlagen**: B zeichnet Inhalt und „Weiter“ und ruft `onDone`; A zeichnet Rahmen, Titel, Satz, Fortschritt, Zurück, „Überspringen“ (`OnboardingStepPage` ohne eigene Hauptaktion) | mit A7 |
-| A-C1, A-C2, A-C3, A-C5, A-C7, A-C8, A-C9, A-D1 | angenommen; Komponenten und `ItemRepository` | direkt nach A7 |
+| A-C1, A-C2, A-C3, A-C5, A-C7, A-C8, A-C9, A-D1 | **erledigt** (AB1), API in `ab1-stand.md`; dazu status-B 14 (Composer, AppButton gefüllt neutral/destruktiv + `destructiveFill`, Glyphen) | AB1, `git log --grep AB1` |
 | A-C4, A-L1–A-L4, Polsterung um `ListOfferSummary` | angenommen; Listen-Screens (A7-Teil „Tipps“ hat `list_detail_screen.dart` gerade in Arbeit, die Polsterung ist ihm mitgegeben) | nach A7 |
 | A-R1–A-R3 | angenommen; Router (A7-Teil „Ablauf“ hat `app_router.dart` gerade in Arbeit) | nach A7 |
 | A-P1 | angenommen; Profil | A8 |

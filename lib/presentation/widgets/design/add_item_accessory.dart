@@ -3,10 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart' show MaxLengthEnforcement;
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/glass_surface.dart';
 
 // D2 "Bottom-Accessory" (D2-Komponenten): glass capsule at least 52 high,
@@ -31,6 +33,11 @@ const double _cameraWidth = 32; // D2
 const double _cameraGlyph = 22; // D2
 const double _voiceCircle = 40; // D2
 const double _voiceGlyph = 20; // D2
+const double _stopGlyph = 18; // D2: stop.fill square, heavier than the waveform
+
+/// The character counter shows once this many characters are left: 5 % of
+/// the limit, at least 10 (4000 characters: from 3800, as in avo.md §2.11).
+int _counterThreshold(int maxLength) => math.max(10, maxLength ~/ 20);
 
 /// Text inset above and below one line: (52 - 22) / 2 at the default size.
 const double _textVertical = 15; // D2
@@ -64,10 +71,6 @@ const double _tintShadowAlpha = 0.30; // D2
 const double _disabledOpacity = 0.4; // Konzept 00 §12.20
 
 // D2 X-Avo glyphs that are not in [AvoIcons] yet.
-const AvoIconData _cameraIcon = AvoIconData([
-  AvoIconPath('M4 8h3l2-3h6l2 3h3v11H4z'),
-  AvoIconCircle(12, 13, 3.5),
-]); // D2 stroke 1.8
 const AvoIconData _waveformIcon = AvoIconData([
   AvoIconPath('M5 10v4M9 7v10M13 5v14M17 8v8M21 11v2'),
 ], strokeWidth: 2.2); // D2
@@ -299,6 +302,14 @@ class AddItemAccessory extends StatelessWidget {
 /// [maxLines] (two from AX3), Return sends ([onSubmitted] with the trimmed
 /// text), the field is not cleared by itself, no haptics. The switch between
 /// waveform and arrow is a quick spring (Reduce Motion: a short fade).
+///
+/// A third state, "Antwort anhalten": while [responding] is true and
+/// [onStop] is set, the round button shows a square and stops the answer,
+/// whatever the field holds. [enabled] false greys the whole capsule and
+/// makes it unfocusable. [maxLength] stops input at the limit and shows
+/// "Noch n Zeichen" above the capsule shortly before it. The camera button
+/// can open a pull-down menu ([photoMenuItems]) instead of calling
+/// [onCamera].
 class AvoComposerField extends StatelessWidget {
   /// Creates the Avo composer.
   const AvoComposerField({
@@ -318,7 +329,15 @@ class AvoComposerField extends StatelessWidget {
     this.maxLines = 3,
     this.autofocus = false,
     this.textInputAction = TextInputAction.send,
+    this.onStop,
+    this.responding = false,
+    this.stopLabel,
+    this.enabled = true,
+    this.maxLength,
+    this.semanticLabel,
+    this.photoMenuItems,
   }) : assert(maxLines >= 1),
+       assert(maxLength == null || maxLength > 0),
        assert(
          onCamera == null || cameraLabel != null,
          'A camera button needs a cameraLabel.',
@@ -372,10 +391,43 @@ class AvoComposerField extends StatelessWidget {
   /// The keyboard's return key; "Senden" by default.
   final TextInputAction textInputAction;
 
+  /// Stops the running answer. Together with [responding] it turns the round
+  /// button into "Antwort anhalten" (a square), also while the field has
+  /// text. Null never shows the stop state.
+  final VoidCallback? onStop;
+
+  /// True while Avo is answering. Only has an effect with [onStop].
+  final bool responding;
+
+  /// VoiceOver label of the stop state; defaults to "Antwort anhalten"
+  /// (`common_stop_answer`; Avo's own `avo_stop_answer` text goes here).
+  final String? stopLabel;
+
+  /// False greys the capsule (40 %), keeps the keyboard away and ignores
+  /// every tap, also from VoiceOver.
+  final bool enabled;
+
+  /// Longest text; the field takes no more. A counter appears above the
+  /// capsule when 5 % (at least 10 characters) are left.
+  final int? maxLength;
+
+  /// VoiceOver label of the text field; defaults to [placeholder]. Use it
+  /// when the placeholder is not a good name ("Avo fragen").
+  final String? semanticLabel;
+
+  /// Rows of a pull-down menu that the camera button opens (for example
+  /// "Foto aufnehmen" with [AvoIcons.camera], "Foto auswählen" with
+  /// [AvoIcons.photo]). It shows the camera button without [onCamera]; when
+  /// both are set the menu wins. Label: [cameraLabel], else "Foto
+  /// hinzufügen" (`common_add_photo`).
+  final List<AvoMenuEntry>? photoMenuItems;
+
   @override
   Widget build(BuildContext context) {
     final scale = _iconScale(context);
-    final hasCamera = onCamera != null;
+    final menu = photoMenuItems;
+    final hasMenu = menu != null && menu.any((e) => e is AvoMenuItem);
+    final hasCamera = hasMenu || onCamera != null;
     final cameraOverlap = (AvoSizes.hitTarget - _cameraWidth) / 2;
     final voiceOverlap = (AvoSizes.hitTarget - _voiceCircle) / 2;
     final short = shortPlaceholder;
@@ -383,12 +435,18 @@ class AvoComposerField extends StatelessWidget {
         ? short
         : placeholder;
 
+    final stopping = responding && onStop != null;
+
     return _GlassInput(
       placeholder: text,
-      semanticLabel: placeholder,
+      semanticLabel: semanticLabel ?? placeholder,
+      enabled: enabled,
+      maxLength: maxLength,
       controller: controller,
       focusNode: focusNode,
-      onSubmitted: onSubmitted,
+      // While "Antwort anhalten" is offered, Return must not start a
+      // second request.
+      onSubmitted: stopping ? null : onSubmitted,
       onChanged: onChanged,
       maxLines: maxLines,
       autofocus: autofocus,
@@ -400,12 +458,31 @@ class AvoComposerField extends StatelessWidget {
       above: above,
       leadingBuilder: (context, input) => [
         if (hasCamera) ...[
-          _GlyphButton(
-            icon: _cameraIcon,
-            size: _cameraGlyph * scale,
-            label: cameraLabel!,
-            onPressed: onCamera,
-          ),
+          if (hasMenu)
+            Builder(
+              builder: (buttonContext) {
+                final label = cameraLabel ?? context.tr('common_add_photo');
+                return _GlyphButton(
+                  icon: AvoIcons.camera,
+                  size: _cameraGlyph * scale,
+                  label: label,
+                  onPressed: enabled
+                      ? () => showAvoMenu(
+                          buttonContext,
+                          items: menu,
+                          semanticLabel: label,
+                        )
+                      : null,
+                );
+              },
+            )
+          else
+            _GlyphButton(
+              icon: AvoIcons.camera,
+              size: _cameraGlyph * scale,
+              label: cameraLabel!,
+              onPressed: enabled ? onCamera : null,
+            ),
           const SizedBox(
             width: _avoGap - (AvoSizes.hitTarget - _cameraWidth) / 2,
           ),
@@ -415,10 +492,15 @@ class AvoComposerField extends StatelessWidget {
         SizedBox(width: _avoGap - voiceOverlap),
         _VoiceSendButton(
           hasText: input.canSubmit,
+          stopping: stopping,
           sendLabel: sendLabel,
           voiceLabel: voiceLabel,
-          onSend: input.submit,
-          onVoice: onVoice,
+          stopLabel: stopLabel ?? context.tr('common_stop_answer'),
+          // The capsule already dims everything when it is disabled.
+          dimSelf: enabled,
+          onSend: enabled ? input.submit : null,
+          onVoice: enabled ? onVoice : null,
+          onStop: enabled ? onStop : null,
         ),
       ],
     );
@@ -512,8 +594,12 @@ class _GlassInput extends StatefulWidget {
     required this.trailingBuilder,
     this.above,
     this.below,
+    this.enabled = true,
+    this.maxLength,
   });
 
+  final bool enabled;
+  final int? maxLength;
   final String placeholder;
   final String? semanticLabel;
   final String? semanticHint;
@@ -540,6 +626,10 @@ class _GlassInputState extends State<_GlassInput> {
   FocusNode? _ownFocus;
   bool _empty = true;
   bool _canSubmit = false;
+
+  /// Characters in the field, tracked only near [_GlassInput.maxLength].
+  int _length = 0;
+  bool _nearLimit = false;
 
   TextEditingController get _controller =>
       widget.controller ?? (_ownController ??= TextEditingController());
@@ -586,14 +676,29 @@ class _GlassInputState extends State<_GlassInput> {
     final text = _controller.text;
     _empty = text.isEmpty;
     _canSubmit = text.trim().isNotEmpty;
+    _readLength(text);
+  }
+
+  /// Returns true when the counter's number or visibility changed.
+  bool _readLength(String text) {
+    final max = widget.maxLength;
+    if (max == null) return false;
+    final length = text.characters.length;
+    final near = max - length <= _counterThreshold(max);
+    final changed = near != _nearLimit || (near && length != _length);
+    _length = length;
+    _nearLimit = near;
+    return changed;
   }
 
   void _onText() {
     final text = _controller.text;
     final empty = text.isEmpty;
     final canSubmit = text.trim().isNotEmpty;
-    // Rebuild only when the placeholder or the buttons change, not per key.
-    if (empty != _empty || canSubmit != _canSubmit) {
+    final counter = _readLength(text);
+    // Rebuild only when the placeholder, the buttons or the counter change,
+    // not per key.
+    if (empty != _empty || canSubmit != _canSubmit || counter) {
       setState(() {
         _empty = empty;
         _canSubmit = canSubmit;
@@ -603,12 +708,14 @@ class _GlassInputState extends State<_GlassInput> {
 
   /// Hands the trimmed text to the caller; keeps text and focus.
   void submit() {
+    if (!widget.enabled) return;
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     widget.onSubmitted?.call(text);
   }
 
   void _focusField() {
+    if (!widget.enabled) return;
     if (!_focus.hasFocus) _focus.requestFocus();
   }
 
@@ -639,7 +746,10 @@ class _GlassInputState extends State<_GlassInput> {
           child: CupertinoTextField(
             controller: _controller,
             focusNode: _focus,
-            autofocus: widget.autofocus,
+            autofocus: widget.autofocus && widget.enabled,
+            enabled: widget.enabled,
+            maxLength: widget.maxLength,
+            maxLengthEnforcement: MaxLengthEnforcement.enforced,
             style: context.text(AvoTextStyle.body),
             cursorColor: colors.tint,
             decoration: null,
@@ -688,6 +798,9 @@ class _GlassInputState extends State<_GlassInput> {
         SizedBox(width: widget.endInset),
       ],
     );
+    if (!widget.enabled) {
+      content = Opacity(opacity: _disabledOpacity, child: content);
+    }
     final below = widget.below;
     if (below != null) {
       content = Column(
@@ -734,15 +847,56 @@ class _GlassInputState extends State<_GlassInput> {
     );
 
     final above = widget.above;
-    if (above == null) return capsule;
+    final max = widget.maxLength;
+    final counter = max != null && _nearLimit
+        ? _CharCounter(left: math.max(0, max - _length))
+        : null;
+    if (above == null && counter == null) return capsule;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        above,
+        ?above,
+        if (above != null && counter != null)
+          const SizedBox(height: AvoSpacing.xs),
+        ?counter,
         const SizedBox(height: _dockGap),
         capsule,
       ],
+    );
+  }
+}
+
+/// "Noch 12 Zeichen" above the capsule, announced politely when it changes.
+class _CharCounter extends StatelessWidget {
+  const _CharCounter({required this.left});
+
+  final int left;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = left == 1
+        ? context.tr('common_chars_left_one')
+        : context.tr('common_chars_left', params: {'n': '$left'});
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(end: AvoSpacing.s),
+        child: Semantics(
+          liveRegion: true,
+          child: Text(
+            text,
+            textAlign: TextAlign.end,
+            style: context.text(
+              AvoTextStyle.footnote,
+              color: left == 0
+                  ? context.colors.destructive
+                  : context.colors.secondaryLabel,
+              tabular: true,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -862,63 +1016,89 @@ class _GlyphButton extends StatelessWidget {
 }
 
 /// The tinted round button of the Avo composer: waveform while the field is
-/// empty, arrow ("Senden") once there is text.
+/// empty, arrow ("Senden") once there is text, square ("Antwort anhalten")
+/// while an answer runs and can be stopped.
 class _VoiceSendButton extends StatefulWidget {
   const _VoiceSendButton({
     required this.hasText,
+    required this.stopping,
     required this.sendLabel,
     required this.voiceLabel,
+    required this.stopLabel,
     required this.onSend,
     required this.onVoice,
+    required this.onStop,
+    required this.dimSelf,
   });
 
+  final bool dimSelf;
   final bool hasText;
+  final bool stopping;
   final String sendLabel;
   final String voiceLabel;
-  final VoidCallback onSend;
+  final String stopLabel;
+  final VoidCallback? onSend;
   final VoidCallback? onVoice;
+  final VoidCallback? onStop;
 
   @override
   State<_VoiceSendButton> createState() => _VoiceSendButtonState();
 }
 
+/// Which glyph the round button shows.
+enum _Face { voice, send, stop }
+
 class _VoiceSendButtonState extends State<_VoiceSendButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _send = AnimationController(
-    vsync: this,
-    value: widget.hasText ? 1 : 0,
-  );
+    with TickerProviderStateMixin {
+  /// One 0..1 weight per face; the current face animates to 1, the others
+  /// to 0, each on its own quick spring.
+  late final List<AnimationController> _weights = [
+    for (final face in _Face.values)
+      AnimationController(vsync: this, value: face == _faceOf(widget) ? 1 : 0),
+  ];
 
   /// Read in build: the text can change while the element is unmounting.
   bool _reduceMotion = false;
 
+  static _Face _faceOf(_VoiceSendButton w) => w.stopping
+      ? _Face.stop
+      : w.hasText
+      ? _Face.send
+      : _Face.voice;
+
   @override
   void didUpdateWidget(covariant _VoiceSendButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.hasText == widget.hasText) return;
-    final target = widget.hasText ? 1.0 : 0.0;
-    if (_reduceMotion) {
-      _send.animateTo(
-        target,
-        duration: AvoMotion.fadeReduced,
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _send.animateWith(
-        SpringSimulation(
-          AvoMotion.quick,
-          _send.value,
+    final face = _faceOf(widget);
+    if (_faceOf(oldWidget) == face) return;
+    for (final f in _Face.values) {
+      final c = _weights[f.index];
+      final target = f == face ? 1.0 : 0.0;
+      if (_reduceMotion) {
+        c.animateTo(
           target,
-          _send.velocity,
-          snapToEnd: true,
-        ),
-      );
+          duration: AvoMotion.fadeReduced,
+          curve: Curves.easeInOut,
+        );
+      } else {
+        c.animateWith(
+          SpringSimulation(
+            AvoMotion.quick,
+            c.value,
+            target,
+            c.velocity,
+            snapToEnd: true,
+          ),
+        );
+      }
     }
   }
 
   @override
   void dispose() {
-    _send.dispose();
+    for (final c in _weights) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -926,63 +1106,66 @@ class _VoiceSendButtonState extends State<_VoiceSendButton>
   Widget build(BuildContext context) {
     _reduceMotion = context.reduceMotion;
     final onTint = context.colors.onTint;
-    final hasText = widget.hasText;
-    final onTap = hasText ? widget.onSend : widget.onVoice;
+    final face = _faceOf(widget);
+    final onTap = switch (face) {
+      _Face.stop => widget.onStop,
+      _Face.send => widget.onSend,
+      _Face.voice => widget.onVoice,
+    };
     final enabled = onTap != null;
+    final label = switch (face) {
+      _Face.stop => widget.stopLabel,
+      _Face.send => widget.sendLabel,
+      _Face.voice => widget.voiceLabel,
+    };
 
-    Widget face = SizedBox.square(
+    Widget glyph(_Face f, AvoIconData icon, double size) {
+      final c = _weights[f.index];
+      return AnimatedBuilder(
+        animation: c,
+        builder: (context, _) {
+          final t = c.value.clamp(0.0, 1.0);
+          // The incoming glyph grows from 0.6 (Konzept 00 §10.2 morph).
+          final scale = _reduceMotion ? 1.0 : 0.6 + 0.4 * t;
+          return Opacity(
+            opacity: t,
+            child: Transform.scale(
+              scale: scale,
+              child: AvoIcon(icon, size: size, color: onTint),
+            ),
+          );
+        },
+      );
+    }
+
+    Widget button = SizedBox.square(
       dimension: AvoSizes.hitTarget,
       child: Center(
         child: _TintCircle(
           diameter: _voiceCircle,
-          child: AnimatedBuilder(
-            animation: _send,
-            builder: (context, _) {
-              final t = _send.value.clamp(0.0, 1.0);
-              // The incoming glyph grows from 0.6 (Konzept 00 §10.2 morph).
-              double grow(double v) => _reduceMotion ? 1 : 0.6 + 0.4 * v;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  Opacity(
-                    opacity: 1 - t,
-                    child: Transform.scale(
-                      scale: grow(1 - t),
-                      child: AvoIcon(
-                        _waveformIcon,
-                        size: _voiceGlyph,
-                        color: onTint,
-                      ),
-                    ),
-                  ),
-                  Opacity(
-                    opacity: t,
-                    child: Transform.scale(
-                      scale: grow(t),
-                      child: AvoIcon(
-                        _sendIcon,
-                        size: _voiceGlyph,
-                        color: onTint,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              glyph(_Face.voice, _waveformIcon, _voiceGlyph),
+              glyph(_Face.send, _sendIcon, _voiceGlyph),
+              glyph(_Face.stop, AvoIcons.stopFill, _stopGlyph),
+            ],
           ),
         ),
       ),
     );
-    if (!enabled) face = Opacity(opacity: _disabledOpacity, child: face);
+    if (!enabled && widget.dimSelf) {
+      button = Opacity(opacity: _disabledOpacity, child: button);
+    }
 
     return Semantics(
       container: true,
       button: true,
       enabled: enabled,
-      label: hasText ? widget.sendLabel : widget.voiceLabel,
+      label: label,
       onTap: onTap,
       excludeSemantics: true,
-      child: PressableScale(onPressed: onTap, child: face),
+      child: PressableScale(onPressed: onTap, child: button),
     );
   }
 }

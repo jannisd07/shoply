@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
@@ -377,6 +378,144 @@ void main() {
       tester.getRect(find.text('Widerrufen')).top,
       greaterThanOrEqualTo(tester.getRect(find.text(_deleted)).bottom),
     );
+  });
+
+  group('target', () {
+    const added = '3 Artikel auf Wocheneinkauf';
+
+    void show(BuildContext context, {List<String>? log}) => AvoToast.show(
+      context,
+      message: added,
+      actionLabel: 'Widerrufen',
+      onAction: () => log?.add('undo'),
+      targetLabel: 'Liste öffnen',
+      onTarget: () => log?.add('open'),
+    );
+
+    testWidgets('a tap on the text opens the target and hides the toast', (
+      tester,
+    ) async {
+      final log = <String>[];
+      final context = await _pump(tester);
+      show(context, log: log);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(added));
+      await tester.pumpAndSettle();
+      expect(log, ['open']);
+      expect(find.text(added), findsNothing);
+    });
+
+    testWidgets('the action stays "Widerrufen" and does not open', (
+      tester,
+    ) async {
+      final log = <String>[];
+      final context = await _pump(tester);
+      show(context, log: log);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Widerrufen'));
+      await tester.pumpAndSettle();
+      expect(log, ['undo']);
+    });
+
+    testWidgets('without onTarget the text is not a button', (tester) async {
+      final handle = tester.ensureSemantics();
+      final context = await _pump(tester);
+      AvoToast.show(context, message: added, targetLabel: 'Liste öffnen');
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSemantics(find.text(added)),
+        isSemantics(label: added, isButton: false),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('VoiceOver: a button with the "Liste öffnen" action', (
+      tester,
+    ) async {
+      final log = <String>[];
+      final handle = tester.ensureSemantics();
+      final context = await _pump(tester);
+      show(context, log: log);
+      await tester.pumpAndSettle();
+      final node = tester.getSemantics(find.text(added));
+      expect(
+        node,
+        isSemantics(
+          label: added,
+          hint: 'Liste öffnen',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+      final data = node.getSemanticsData();
+      expect(data.customSemanticsActionIds, isNotNull);
+      final action = CustomSemanticsAction.getAction(
+        data.customSemanticsActionIds!.single,
+      );
+      expect(action!.label, 'Liste öffnen');
+      node.owner!.performAction(
+        node.id,
+        SemanticsAction.customAction,
+        data.customSemanticsActionIds!.single,
+      );
+      await tester.pumpAndSettle();
+      expect(log, ['open']);
+      handle.dispose();
+    });
+
+    testWidgets('the text is at least 44 pt tall', (tester) async {
+      final context = await _pump(tester);
+      show(context);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(GestureDetector).last).height,
+        greaterThanOrEqualTo(44),
+      );
+    });
+  });
+
+  group('VoiceOver focus holds the timer', () {
+    Future<SemanticsNode> showAndFocus(WidgetTester tester) async {
+      final context = await _pump(tester, voiceOver: true);
+      AvoToast.show(
+        context,
+        message: _deleted,
+        actionLabel: 'Widerrufen',
+        onAction: () {},
+      );
+      await tester.pumpAndSettle();
+      return tester.getSemantics(find.text(_deleted));
+    }
+
+    testWidgets('no hiding while focus rests on the text; 10 s after', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final node = await showAndFocus(tester);
+      final owner = node.owner!;
+      await tester.pump(const Duration(seconds: 8));
+      owner.performAction(node.id, SemanticsAction.didGainAccessibilityFocus);
+      await tester.pump(const Duration(seconds: 30));
+      expect(find.text(_deleted), findsOneWidget);
+      owner.performAction(node.id, SemanticsAction.didLoseAccessibilityFocus);
+      await tester.pump(const Duration(seconds: 9));
+      expect(find.text(_deleted), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(find.text(_deleted), findsNothing);
+      handle.dispose();
+    });
+
+    testWidgets('focus on the action holds it as well', (tester) async {
+      final handle = tester.ensureSemantics();
+      final node = await showAndFocus(tester);
+      final owner = node.owner!;
+      final action = tester.getSemantics(find.bySemanticsLabel('Widerrufen'));
+      owner.performAction(action.id, SemanticsAction.didGainAccessibilityFocus);
+      await tester.pump(const Duration(seconds: 30));
+      expect(find.text(_deleted), findsOneWidget);
+      handle.dispose();
+    });
   });
 
   layoutMatrix(

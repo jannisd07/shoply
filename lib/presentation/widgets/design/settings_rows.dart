@@ -3,6 +3,7 @@ import 'package:flutter/physics.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/pro_badge.dart';
 
 /// Minimum row height (D2 X-Profil `.row` min-height 52).
@@ -19,6 +20,9 @@ const double _kChevronStroke = 2; // D2
 /// D2 draws the chevron in #C7C7CC. No token has that grey, so it is
 /// `secondaryLabel` at 60 % (adapts to dark mode and Increase Contrast).
 const double _kChevronAlpha = 0.6;
+
+/// Glyph before a value, next to 17 pt text.
+const double _kValueLeadingSize = 15; // D2
 
 /// Gap between the title and the [ProBadge].
 const double _kBadgeGap = AvoSpacing.s;
@@ -174,22 +178,38 @@ class _TitleBlock extends StatelessWidget {
 /// Lays out the title block and a value: side by side while both fit (the
 /// value wraps below when they do not), always stacked from AX1 on.
 class _TitleAndValue extends StatelessWidget {
-  const _TitleAndValue({required this.titleBlock, this.value});
+  const _TitleAndValue({
+    required this.titleBlock,
+    this.value,
+    this.valueLeading,
+  });
 
   final Widget titleBlock;
   final String? value;
+  final Widget? valueLeading;
 
   @override
   Widget build(BuildContext context) {
     final v = value;
     if (v == null) return titleBlock;
-    final valueText = Text(
+    final valueLabel = Text(
       v,
       style: context.text(
         AvoTextStyle.body,
         color: context.colors.secondaryLabel,
       ),
     );
+    final lead = valueLeading;
+    final Widget valueText = lead == null
+        ? valueLabel
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconStyleScope(size: _kValueLeadingSize, child: lead),
+              const SizedBox(width: AvoSpacing.xs),
+              Flexible(child: valueLabel),
+            ],
+          );
     if (context.isAccessibilityText) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,6 +299,7 @@ class NavRow extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.value,
+    this.valueLeading,
     this.leading,
     this.onTap,
     this.pro = false,
@@ -293,6 +314,12 @@ class NavRow extends StatelessWidget {
 
   /// Current value at the end ("Automatisch"), 17/22 `secondaryLabel`.
   final String? value;
+
+  /// A glyph before [value], for example a warning triangle
+  /// (`exclamationmarkTriangleFill` in `warning`, 15 pt) before "In iOS aus".
+  /// Decorative for VoiceOver: put what it means into [value]. Ignored
+  /// without a [value].
+  final Widget? valueLeading;
 
   /// Optional icon tile before the title (D2: 30 pt, radius 8).
   final Widget? leading;
@@ -325,6 +352,7 @@ class NavRow extends StatelessWidget {
         pro: pro,
       ),
       value: value,
+      valueLeading: valueLeading,
     );
     return Semantics(
       container: true,

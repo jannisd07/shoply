@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/pro_badge.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
@@ -54,6 +55,32 @@ double _highlightAlpha(WidgetTester tester, Finder row) {
 
 void main() {
   group('NavRow', () {
+    testWidgets('valueLeading sits before the value, not in the label', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      await _pump(
+        tester,
+        NavRow(
+          title: 'Mitteilungen',
+          value: 'In iOS aus',
+          valueLeading: const AvoIcon(
+            AvoIcons.exclamationmarkTriangleFill,
+            size: 15,
+            key: Key('warn'),
+          ),
+          onTap: () {},
+        ),
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const Key('warn'))).dx,
+        lessThan(tester.getTopLeft(find.text('In iOS aus')).dx),
+      );
+      final node = tester.getSemantics(find.bySemanticsLabel('Mitteilungen'));
+      expect(node.value, 'In iOS aus');
+      semantics.dispose();
+    });
+
     testWidgets('tapping runs onTap; height at least 52', (tester) async {
       var taps = 0;
       await _pump(tester, NavRow(title: 'Mitteilungen', onTap: () => taps++));
@@ -268,44 +295,39 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets(
-      'no haptic on iOS (switches are not in the table)',
-      (tester) async {
-        final calls = <MethodCall>[];
-        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    testWidgets('no haptic on iOS (switches are not in the table)', (
+      tester,
+    ) async {
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           SystemChannels.platform,
-          (call) async {
-            calls.add(call);
-            return null;
-          },
-        );
-        addTearDown(
-          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-            SystemChannels.platform,
-            null,
+          null,
+        ),
+      );
+      var value = false;
+      await _pump(
+        tester,
+        StatefulBuilder(
+          builder: (context, setState) => ToggleRow(
+            title: 'Angebote',
+            value: value,
+            onChanged: (v) => setState(() => value = v),
           ),
-        );
-        var value = false;
-        await _pump(
-          tester,
-          StatefulBuilder(
-            builder: (context, setState) => ToggleRow(
-              title: 'Angebote',
-              value: value,
-              onChanged: (v) => setState(() => value = v),
-            ),
-          ),
-        );
-        await tester.tap(find.byType(CupertinoSwitch));
-        await tester.pumpAndSettle();
-        expect(value, isTrue);
-        expect(
-          calls.where((c) => c.method == 'HapticFeedback.vibrate'),
-          isEmpty,
-        );
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
-    );
+        ),
+      );
+      await tester.tap(find.byType(CupertinoSwitch));
+      await tester.pumpAndSettle();
+      expect(value, isTrue);
+      expect(calls.where((c) => c.method == 'HapticFeedback.vibrate'), isEmpty);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
     testWidgets('from AX1 the switch moves below the title', (tester) async {
       await _pump(
@@ -383,6 +405,15 @@ void main() {
           subtitle: '14 Tage gratis testen, danach 29,99 € im Jahr',
           leading: const _Tile(),
           pro: true,
+          onTap: () {},
+        ),
+        NavRow(
+          title: 'Mitteilungen von Laktosefreie Bio-Vollmilch',
+          value: 'In iOS aus',
+          valueLeading: const AvoIcon(
+            AvoIcons.exclamationmarkTriangleFill,
+            size: 15,
+          ),
           onTap: () {},
         ),
         NavRow(title: 'Konto löschen', destructive: true, onTap: () {}),

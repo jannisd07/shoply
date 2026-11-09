@@ -13,6 +13,9 @@ enum CheckCircleSize {
 
   /// 36 pt circle in a 56 pt hit area (shopping mode, Konzept 00 §12.7).
   large,
+
+  /// 22 pt circle in a 44 pt hit area (compact rows, D2 `X-Avo`).
+  small,
 }
 
 /// Sync and ownership state of a [CheckCircle] beyond checked / unchecked.
@@ -39,6 +42,8 @@ const double _ringLarge = 2; // D2 X-Einkaufsmodus
 const double _hitLarge = 56; // Konzept 00 §12.7
 const double _markBoxRegular = 16; // D2
 const double _markBoxLarge = 18; // D2 X-Einkaufsmodus
+const double _ringSmall = 1.5; // D2 X-Avo
+const double _markBoxSmall = 14; // D2 X-Avo
 const double _markStroke = 3; // D2, in 24-unit icon space
 
 /// The check mark starts drawing once the fill has covered this share.
@@ -94,6 +99,20 @@ const _large = _Metrics(
   mark: [Offset(5, 12.5), Offset(9.5, 17), Offset(19, 7.5)], // D2
 );
 
+const _small = _Metrics(
+  diameter: CheckCircle.smallDiameter,
+  hit: AvoSizes.hitTarget,
+  ring: _ringSmall,
+  markBox: _markBoxSmall,
+  mark: [Offset(6, 12.6), Offset(10, 16.6), Offset(18, 8)], // as regular
+);
+
+_Metrics _metricsOf(CheckCircleSize size) => switch (size) {
+  CheckCircleSize.regular => _regular,
+  CheckCircleSize.large => _large,
+  CheckCircleSize.small => _small,
+};
+
 /// The D2 check circle of an item row (Konzept 00 §12.7).
 ///
 /// Checking fills the circle from its centre on the quick spring while the
@@ -102,6 +121,9 @@ const _large = _Metrics(
 /// frame. Under Reduce Motion it switches at once. VoiceOver reads
 /// "Milch abhaken" / "Milch wieder öffnen" with the checked state.
 class CheckCircle extends StatefulWidget {
+  /// Diameter of [CheckCircleSize.small]; also the glyph of `SelectCircle`.
+  static const double smallDiameter = 22;
+
   /// Creates a check circle.
   const CheckCircle({
     super.key,
@@ -123,7 +145,7 @@ class CheckCircle extends StatefulWidget {
   /// Called with `!checked` on tap; null disables the circle.
   final ValueChanged<bool>? onChanged;
 
-  /// Regular (lists) or large (shopping mode).
+  /// Regular (lists), large (shopping mode) or small (compact rows).
   final CheckCircleSize size;
 
   /// Extra state; defaults to [CheckState.done] / [CheckState.open] from
@@ -231,7 +253,7 @@ class _CheckCircleState extends State<CheckCircle>
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final m = widget.size == CheckCircleSize.large ? _large : _regular;
+    final m = _metricsOf(widget.size);
     final state = _stateOf(widget);
     final enabled = widget.onChanged != null;
     final badgeCenter = m.hit / 2 + m.diameter / 2 * math.sqrt1_2;

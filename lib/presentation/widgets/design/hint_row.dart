@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/physics.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
+import 'package:shoply/presentation/widgets/design/swipe_actions.dart';
 
 /// Card padding (D2 hint card: 12 top and bottom, 14 at the sides).
 const EdgeInsetsDirectional _kPadding = EdgeInsetsDirectional.fromSTEB(
@@ -35,7 +40,10 @@ const double _kPressedOpacity = 0.9;
 /// [actionLabel] is shown as a tinted link below the text; without [onTap]
 /// the label is not shown. [onDismiss] adds a close button with a 44 pt
 /// target in the top corner. From AX1 on the leading widget sits above the
-/// text. The card fills the width it gets (give it a bounded width, as a
+/// text. An optional bold [title] stands above [text] (the two-line savings
+/// card); [swipeActions] (swipe towards the end edge, "Ausblenden") and
+/// [contextMenuItems] (long press, [showAvoMenu] at the finger) are also
+/// VoiceOver custom actions. The card fills the width it gets (give it a bounded width, as a
 /// column or list does). Content (savings, store suggestion, Pro offer) comes
 /// from the caller; show at most two hints per screen.
 class HintRow extends StatelessWidget {
@@ -48,6 +56,9 @@ class HintRow extends StatelessWidget {
     this.onTap,
     this.onDismiss,
     this.dismissLabel,
+    this.title,
+    this.swipeActions = const [],
+    this.contextMenuItems = const [],
   });
 
   /// The hint in one or two sentences.
@@ -68,6 +79,17 @@ class HintRow extends StatelessWidget {
   /// VoiceOver label of the close button; defaults to `common_close`.
   final String? dismissLabel;
 
+  /// Bold first line above [text] ("Du sparst 2,40 €"); [text] then turns
+  /// secondary.
+  final String? title;
+
+  /// Swipe actions of the card ([SwipeActions]): swiping towards the start
+  /// edge shows them at the end edge; the first one runs on a full swipe.
+  final List<SwipeAction> swipeActions;
+
+  /// Entries of the menu a long press opens.
+  final List<AvoMenuEntry> contextMenuItems;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -75,12 +97,25 @@ class HintRow extends StatelessWidget {
     final dismiss = onDismiss;
     final action = tap != null ? actionLabel : null;
     final lead = leading;
+    final heading = title;
+    final hasTitle = heading != null && heading.isNotEmpty;
 
     final textBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(text, style: context.text(AvoTextStyle.subhead)),
+        if (hasTitle)
+          Text(
+            heading,
+            style: context.text(AvoTextStyle.subhead, weight: FontWeight.w700),
+          ),
+        Text(
+          text,
+          style: context.text(
+            AvoTextStyle.subhead,
+            color: hasTitle ? colors.secondaryLabel : null,
+          ),
+        ),
         if (action != null)
           Padding(
             padding: const EdgeInsets.only(top: AvoSpacing.xs),
@@ -144,45 +179,85 @@ class HintRow extends StatelessWidget {
       ),
     );
 
+    if (contextMenuItems.isNotEmpty) {
+      final pressable = card;
+      card = Builder(
+        builder: (menuContext) => GestureDetector(
+          excludeFromSemantics: true,
+          onLongPressStart: (details) => unawaited(
+            showAvoMenu(
+              menuContext,
+              items: contextMenuItems,
+              anchorRect: Rect.fromCenter(
+                center: details.globalPosition,
+                width: 1,
+                height: 1,
+              ),
+            ),
+          ),
+          child: pressable,
+        ),
+      );
+    }
+
+    final customActions = <CustomSemanticsAction, VoidCallback>{
+      for (final entry in contextMenuItems)
+        if (entry is AvoMenuItem && entry.enabled)
+          CustomSemanticsAction(label: entry.label): entry.onSelected,
+      ...SwipeActions.semanticActionsOf(swipeActions),
+    };
+
     card = Semantics(
       container: true,
       button: tap != null,
-      label: [text, ?action].join(', '),
+      label: [?(hasTitle ? heading : null), text, ?action].join(', '),
       onTap: tap,
+      customSemanticsActions: customActions.isEmpty ? null : customActions,
       child: ExcludeSemantics(
         child: tap == null ? card : _PressScale(onTap: tap, child: card),
       ),
     );
 
-    if (dismiss == null) return card;
-    return Stack(
-      children: [
-        card,
-        PositionedDirectional(
-          top: 0,
-          end: 0,
-          child: Semantics(
-            container: true,
-            button: true,
-            label: dismissLabel ?? context.tr('common_close'),
-            onTap: dismiss,
-            child: ExcludeSemantics(
-              child: _PressScale(
-                onTap: dismiss,
-                child: SizedBox.square(
-                  dimension: AvoSizes.hitTarget,
-                  child: Center(
-                    child: CustomPaint(
-                      size: const Size.square(_kCloseGlyph),
-                      painter: _ClosePainter(colors.secondaryLabel),
+    final Widget result;
+    if (dismiss == null) {
+      result = card;
+    } else {
+      result = Stack(
+        children: [
+          card,
+          PositionedDirectional(
+            top: 0,
+            end: 0,
+            child: Semantics(
+              container: true,
+              button: true,
+              label: dismissLabel ?? context.tr('common_close'),
+              onTap: dismiss,
+              child: ExcludeSemantics(
+                child: _PressScale(
+                  onTap: dismiss,
+                  child: SizedBox.square(
+                    dimension: AvoSizes.hitTarget,
+                    child: Center(
+                      child: CustomPaint(
+                        size: const Size.square(_kCloseGlyph),
+                        painter: _ClosePainter(colors.secondaryLabel),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    return SwipeActions(
+      trailingActions: swipeActions,
+      exposeSemantics: false,
+      borderRadius: BorderRadius.circular(AvoRadii.card),
+      child: result,
     );
   }
 }

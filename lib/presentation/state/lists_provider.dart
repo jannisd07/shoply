@@ -268,3 +268,33 @@ final listsNotifierProvider =
         ref.watch(authUserIdProvider),
       );
     });
+
+/// A running shopping mode: which list and since when (A-C3, "Einkaufsmodus
+/// aktiv"). Value equality on both fields.
+@immutable
+class ShoppingModeSession {
+  /// Creates a session.
+  const ShoppingModeSession({required this.listId, required this.startedAt});
+
+  /// The list that is being shopped.
+  final String listId;
+
+  /// When the shopping mode was opened.
+  final DateTime startedAt;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ShoppingModeSession &&
+      other.listId == listId &&
+      other.startedAt == startedAt;
+
+  @override
+  int get hashCode => Object.hash(listId, startedAt);
+}
+
+/// The open shopping mode, or null. Set by `ShoppingModeScreen` when it
+/// opens and cleared when it closes; screens read it to show "Einkaufsmodus
+/// aktiv" for that list.
+final shoppingModeSessionProvider = StateProvider<ShoppingModeSession?>(
+  (ref) => null,
+);

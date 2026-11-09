@@ -357,6 +357,41 @@ void main() {
     });
   });
 
+  group('small', () {
+    testWidgets('22 pt circle in a 44 pt hit area, fills like the others', (
+      tester,
+    ) async {
+      var checked = false;
+      await _pump(
+        tester,
+        StatefulBuilder(
+          builder: (context, setState) => CheckCircle(
+            checked: checked,
+            itemName: _name,
+            size: CheckCircleSize.small,
+            onChanged: (v) => setState(() => checked = v),
+          ),
+        ),
+      );
+      expect(tester.getSize(find.byType(CheckCircle)), const Size(44, 44));
+      expect(
+        tester.getSize(
+          find
+              .descendant(
+                of: find.byType(CheckCircle),
+                matching: find.byType(CustomPaint),
+              )
+              .first,
+        ),
+        const Size(22, 22),
+      );
+      await tester.tap(find.byType(CheckCircle));
+      await tester.pumpAndSettle();
+      expect(checked, isTrue);
+      expect(_fill(tester), 1);
+    });
+  });
+
   layoutMatrix(
     'CheckCircle',
     (context) => Padding(
@@ -370,6 +405,8 @@ void main() {
             (false, CheckState.pending, CheckCircleSize.regular),
             (true, CheckState.failed, CheckCircleSize.regular),
             (false, CheckState.open, CheckCircleSize.large),
+            (false, CheckState.open, CheckCircleSize.small),
+            (true, CheckState.done, CheckCircleSize.small),
           ])
             Row(
               children: [

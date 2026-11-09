@@ -41,24 +41,37 @@ const double _kEnterDistance = AvoSizes.tabBarHeight;
 /// leaving use springs (Reduce Motion: cross-fade). Use it with an action
 /// for undo, and as a plain status only when the result is otherwise
 /// invisible ("Liste geteilt"). No haptics.
+///
+/// With a target ([show]'s `targetLabel` and `onTarget`) a tap on the text
+/// opens the result ("Auf Liste Wochenende" opens the list) while the action
+/// stays "Widerrufen". While VoiceOver focus rests on the toast its timer is
+/// paused (Konzept 13 E-16).
 abstract final class AvoToast {
   /// Shows [message] in the nearest [AvoToastHost]. Without a host (tests,
   /// isolated screens) it falls back to the root [Overlay].
   ///
   /// [actionLabel] and [onAction] add the tinted action; tapping it runs
   /// [onAction] and hides the toast. [duration] overrides the 4 s / 10 s.
+  ///
+  /// [targetLabel] and [onTarget] make the text itself tappable: it runs
+  /// [onTarget] and hides the toast. [targetLabel] ("Liste öffnen") is the
+  /// VoiceOver action and hint of the text; both must be given.
   static void show(
     BuildContext context, {
     required String message,
     String? actionLabel,
     VoidCallback? onAction,
     Duration? duration,
+    String? targetLabel,
+    VoidCallback? onTarget,
   }) {
     final request = _ToastRequest(
       message: message,
       actionLabel: actionLabel,
       onAction: onAction,
       duration: duration,
+      targetLabel: targetLabel,
+      onTarget: onTarget,
     );
     final scope = context.getInheritedWidgetOfExactType<_AvoToastScope>();
     final layer = scope?.layerKey.currentState;
@@ -123,14 +136,19 @@ class _ToastRequest {
     this.actionLabel,
     this.onAction,
     this.duration,
+    this.targetLabel,
+    this.onTarget,
   });
 
   final String message;
   final String? actionLabel;
   final VoidCallback? onAction;
   final Duration? duration;
+  final String? targetLabel;
+  final VoidCallback? onTarget;
 
   bool get hasAction => actionLabel != null && onAction != null;
+  bool get hasTarget => targetLabel != null && onTarget != null;
 }
 
 /// Without an [AvoToastHost]: one overlay entry at a time in the root
@@ -208,6 +226,10 @@ class _ToastLayerState extends State<_ToastLayer>
   bool _hiding = false;
   double _rawDrag = 0;
 
+  /// How many parts of the toast hold VoiceOver focus right now; the timer
+  /// runs only at zero.
+  int _focusHolders = 0;
+
   @override
   void initState() {
     super.initState();
@@ -238,6 +260,7 @@ class _ToastLayerState extends State<_ToastLayer>
     _reduceMotion = context.reduceMotion;
     _timer?.cancel();
     _hiding = false;
+    _focusHolders = 0;
     setState(() {
       _current = request;
       _serial++;
@@ -265,7 +288,7 @@ class _ToastLayerState extends State<_ToastLayer>
   void _startTimer() {
     _timer?.cancel();
     final current = _current;
-    if (current == null) return;
+    if (current == null || _focusHolders > 0) return;
     final duration =
         current.duration ?? (_voiceOver ? _kVisibleVoiceOver : _kVisible);
     _timer = Timer(duration, _hide);
@@ -353,6 +376,23 @@ class _ToastLayerState extends State<_ToastLayer>
     _hide();
   }
 
+  void _onTarget() {
+    _current?.onTarget?.call();
+    _hide();
+  }
+
+  /// VoiceOver focus reached a part of the toast: the time stops (E-16).
+  void _onFocusGained() {
+    _focusHolders++;
+    _timer?.cancel();
+  }
+
+  /// VoiceOver focus left a part of the toast: the time runs again.
+  void _onFocusLost() {
+    if (_focusHolders > 0) _focusHolders--;
+    if (_focusHolders == 0 && !_hiding) _startTimer();
+  }
+
   @override
   Widget build(BuildContext context) {
     final current = _current;
@@ -395,7 +435,10 @@ class _ToastLayerState extends State<_ToastLayer>
               key: ValueKey<int>(_serial),
               request: current,
               onAction: _onAction,
+              onTarget: _onTarget,
               onDismiss: _hide,
+              onFocusGained: _onFocusGained,
+              onFocusLost: _onFocusLost,
             ),
           ),
         ),
@@ -411,27 +454,54 @@ class _ToastCapsule extends StatelessWidget {
     super.key,
     required this.request,
     required this.onAction,
+    required this.onTarget,
     required this.onDismiss,
+    required this.onFocusGained,
+    required this.onFocusLost,
   });
 
   final _ToastRequest request;
   final VoidCallback onAction;
+  final VoidCallback onTarget;
   final VoidCallback onDismiss;
+  final VoidCallback onFocusGained;
+  final VoidCallback onFocusLost;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final ax = context.isAccessibilityText;
-    final message = Padding(
+    final targetLabel = request.targetLabel;
+    final text = Padding(
       padding: const EdgeInsets.symmetric(vertical: AvoSpacing.m),
       child: Text(
         request.message,
         style: context.text(AvoTextStyle.subhead, weight: FontWeight.w600),
       ),
     );
+    final Widget message = request.hasTarget && targetLabel != null
+        ? _ToastTarget(
+            message: request.message,
+            targetLabel: targetLabel,
+            onTap: onTarget,
+            onFocusGained: onFocusGained,
+            onFocusLost: onFocusLost,
+            child: text,
+          )
+        : Semantics(
+            container: true,
+            onDidGainAccessibilityFocus: onFocusGained,
+            onDidLoseAccessibilityFocus: onFocusLost,
+            child: text,
+          );
     final label = request.actionLabel;
     final action = request.hasAction && label != null
-        ? _ToastAction(label: label, onTap: onAction)
+        ? _ToastAction(
+            label: label,
+            onTap: onAction,
+            onFocusGained: onFocusGained,
+            onFocusLost: onFocusLost,
+          )
         : null;
 
     final Widget content;
@@ -493,12 +563,80 @@ class _ToastCapsule extends StatelessWidget {
   }
 }
 
+/// The text of a toast with a target: tapping it opens the result. Dims a
+/// little while touched; VoiceOver gets a button with the target's label as
+/// its custom action.
+class _ToastTarget extends StatefulWidget {
+  const _ToastTarget({
+    required this.message,
+    required this.targetLabel,
+    required this.onTap,
+    required this.onFocusGained,
+    required this.onFocusLost,
+    required this.child,
+  });
+
+  final String message;
+  final String targetLabel;
+  final VoidCallback onTap;
+  final VoidCallback onFocusGained;
+  final VoidCallback onFocusLost;
+  final Widget child;
+
+  @override
+  State<_ToastTarget> createState() => _ToastTargetState();
+}
+
+class _ToastTargetState extends State<_ToastTarget> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (mounted && _pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      button: true,
+      label: widget.message,
+      hint: widget.targetLabel,
+      onTap: widget.onTap,
+      customSemanticsActions: {
+        CustomSemanticsAction(label: widget.targetLabel): widget.onTap,
+      },
+      onDidGainAccessibilityFocus: widget.onFocusGained,
+      onDidLoseAccessibilityFocus: widget.onFocusLost,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onTapDown: (_) => _setPressed(true),
+        onTapUp: (_) => _setPressed(false),
+        onTapCancel: () => _setPressed(false),
+        onTap: widget.onTap,
+        child: Opacity(
+          opacity: _pressed ? _kPressedOpacity : 1,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
 /// Tinted text action with a 44 pt target that dims and shrinks on touch.
 class _ToastAction extends StatefulWidget {
-  const _ToastAction({required this.label, required this.onTap});
+  const _ToastAction({
+    required this.label,
+    required this.onTap,
+    required this.onFocusGained,
+    required this.onFocusLost,
+  });
 
   final String label;
   final VoidCallback onTap;
+  final VoidCallback onFocusGained;
+  final VoidCallback onFocusLost;
 
   @override
   State<_ToastAction> createState() => _ToastActionState();
@@ -547,6 +685,8 @@ class _ToastActionState extends State<_ToastAction>
       button: true,
       label: widget.label,
       onTap: widget.onTap,
+      onDidGainAccessibilityFocus: widget.onFocusGained,
+      onDidLoseAccessibilityFocus: widget.onFocusLost,
       child: ExcludeSemantics(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,

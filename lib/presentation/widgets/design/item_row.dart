@@ -7,7 +7,9 @@ import 'package:flutter/widgets.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/check_circle.dart';
+import 'package:shoply/presentation/widgets/design/swipe_actions.dart';
 
 // D2 item rows (D2-Komponenten "Artikelzeilen", D2-Liste, X-Einkaufsmodus).
 const double _minHeightRegular = 60; // D2 Komponenten (D2-Liste draws 64)
@@ -17,6 +19,14 @@ const double _paddingLarge = 10; // D2 X-Einkaufsmodus `.it`
 const double _gapRegular = AvoSpacing.m; // D2 gap 12
 const double _gapLarge = 14; // D2 X-Einkaufsmodus gap 14
 const double _hitLarge = 56; // CheckCircle large target (Konzept 00 §12.7)
+const double _minHeightCompact = 56; // avo.md §15, D2 X-Avo
+const double _paddingCompact = 6; // (56 - 44) / 2
+const double _gapCompact = 10; // D2 X-Avo
+const double _thumbCompact = 36; // D2 X-Avo
+const double _thumbRadiusCompact = 9; // D2 X-Avo
+
+/// Where the hairline of compact rows with an image starts (avo.md §15).
+const double _separatorCompact = 88;
 const double _doneThumbOpacity = 0.5; // D2 erledigt: image at .5
 
 /// Space between the text and the trailing widget when it moved below.
@@ -38,6 +48,11 @@ enum ItemRowSize {
   /// Shopping mode (D2 X-Einkaufsmodus): 36 pt circle in a 56 pt target,
   /// 52 pt image, 20/25 semibold name, at least 76 pt high.
   large,
+
+  /// Dense lists (Avo's result sections, D2 `X-Avo`): 22 pt circle in a 44 pt
+  /// target, 36 pt image with radius 9, 17/22 name, at least 56 pt high,
+  /// hairline from 88.
+  compact,
 }
 
 class _RowMetrics {
@@ -50,6 +65,7 @@ class _RowMetrics {
     required this.minHeight,
     required this.padding,
     required this.title,
+    required this.checkSize,
     this.titleWeight,
   });
 
@@ -62,17 +78,18 @@ class _RowMetrics {
   final double padding;
   final AvoTextStyle title;
   final FontWeight? titleWeight;
+  final CheckCircleSize checkSize;
 
   /// The leading area that checks the item off: row inset, circle, gap
   /// (Konzept 11 §1.4: "die vorderen 56 pt").
-  double get zone => AvoSpacing.l + circle + gap;
+  double get zone => math.max(
+    AvoSpacing.l + circle + gap,
+    // The check target (44 pt around a 22 pt circle) must fit in the zone.
+    AvoSpacing.l - (hit - circle) / 2 + hit,
+  );
 
   /// Where the text starts with an image.
   double get textEdge => zone + thumb + gap;
-
-  CheckCircleSize get checkSize => hit == AvoSizes.hitTarget
-      ? CheckCircleSize.regular
-      : CheckCircleSize.large;
 }
 
 const _regular = _RowMetrics(
@@ -84,6 +101,7 @@ const _regular = _RowMetrics(
   minHeight: _minHeightRegular,
   padding: _paddingRegular,
   title: AvoTextStyle.body,
+  checkSize: CheckCircleSize.regular,
 );
 
 const _large = _RowMetrics(
@@ -96,10 +114,26 @@ const _large = _RowMetrics(
   padding: _paddingLarge,
   title: AvoTextStyle.title3,
   titleWeight: FontWeight.w600,
+  checkSize: CheckCircleSize.large,
 );
 
-_RowMetrics _metricsOf(ItemRowSize size) =>
-    size == ItemRowSize.large ? _large : _regular;
+const _compact = _RowMetrics(
+  circle: CheckCircle.smallDiameter,
+  hit: AvoSizes.hitTarget,
+  thumb: _thumbCompact,
+  thumbRadius: _thumbRadiusCompact,
+  gap: _gapCompact,
+  minHeight: _minHeightCompact,
+  padding: _paddingCompact,
+  title: AvoTextStyle.body,
+  checkSize: CheckCircleSize.small,
+);
+
+_RowMetrics _metricsOf(ItemRowSize size) => switch (size) {
+  ItemRowSize.regular => _regular,
+  ItemRowSize.large => _large,
+  ItemRowSize.compact => _compact,
+};
 
 /// A D2 item row: check circle, image, name and quantity, an optional
 /// trailing widget such as the offer pill (Konzept 00 §12.8).
@@ -142,6 +176,11 @@ class ItemRow extends StatefulWidget {
     this.statusLabel,
     this.openLabel,
     this.semanticActions = const {},
+    this.trailingSemanticsLabel,
+    this.trailingActions = const {},
+    this.contextMenuItems = const [],
+    this.swipeActions = const [],
+    this.leadingSwipeActions = const [],
   });
 
   /// Hairline inset of regular rows with an image: the text edge, 110 pt
@@ -163,9 +202,15 @@ class ItemRow extends StatefulWidget {
       AvoSizes.thumbMedium +
       _gapLarge;
 
-  /// The text edge of rows of [size] for `InsetSection.separatorIndent`,
-  /// taking into account that the image is left out from AX1 on or when
-  /// rows have no [thumb] ([withThumb] false).
+  /// Hairline inset of compact rows with an image: 88 pt (avo.md §15), a
+  /// little before the text, which starts at 95 (the 44 pt check target
+  /// needs 49 pt before the image).
+  static const double separatorIndentCompact = _separatorCompact;
+
+  /// The hairline inset of rows of [size] for `InsetSection.separatorIndent`:
+  /// the text edge (compact rows: 88, before it), taking into account
+  /// that the image is left out from AX1 on or when rows have no [thumb]
+  /// ([withThumb] false).
   static double separatorIndentOf(
     BuildContext context, {
     ItemRowSize size = ItemRowSize.regular,
@@ -173,6 +218,7 @@ class ItemRow extends StatefulWidget {
   }) {
     final m = _metricsOf(size);
     if (!withThumb || context.isAccessibilityText) return m.zone;
+    if (size == ItemRowSize.compact) return separatorIndentCompact;
     return m.textEdge;
   }
 
@@ -183,14 +229,16 @@ class ItemRow extends StatefulWidget {
   /// quantity and note ("2 L", "500 g · für Lasagne", "gerade von Lena").
   final String? subtitle;
 
-  /// The image, laid out at 44 pt (52 pt large) and clipped to radius 10
-  /// (12): an [ItemThumb] or Teil B's `ArticleImage`. Decorative for
+  /// The image, laid out at 44 pt (52 pt large, 36 pt compact) and clipped
+  /// to radius 10 (12, 9: give compact rows `ItemThumb(radius: 9)`): an [ItemThumb] or Teil B's `ArticleImage`. Decorative for
   /// VoiceOver.
   final Widget? thumb;
 
   /// At the end, centred on the text (Teil B's offer pill). Below the text
-  /// from AX1 or when the row is narrow. A widget of zero size takes no
-  /// space. Its semantics label joins the row's.
+  /// when the row is narrow; from AX1 under the name, beside the quantity
+  /// (it wraps below when there is no room). A widget of zero size takes no
+  /// space. A tap on it reaches the slot, not [onTap]. Its semantics label
+  /// joins the row's, unless [trailingSemanticsLabel] is set.
   final Widget? trailing;
 
   /// Whether the item is done.
@@ -203,7 +251,8 @@ class ItemRow extends StatefulWidget {
   /// off as well.
   final VoidCallback? onTap;
 
-  /// [ItemRowSize.regular] or [ItemRowSize.large] (shopping mode).
+  /// [ItemRowSize.regular], [ItemRowSize.large] (shopping mode) or
+  /// [ItemRowSize.compact].
   final ItemRowSize size;
 
   /// Sync and ownership state of the circle; defaults from [checked].
@@ -224,6 +273,31 @@ class ItemRow extends StatefulWidget {
   /// More VoiceOver custom actions by label (the swipe and menu actions:
   /// "Menge ändern", "Verschieben", "Löschen").
   final Map<String, VoidCallback> semanticActions;
+
+  /// What the [trailing] slot says to VoiceOver ("Angebot 1,29 € bei Lidl").
+  /// It joins the row's label after the quantity ("Milch, 2 Liter, Angebot
+  /// 1,29 € bei Lidl") and the slot's own semantics are hidden, so the slot
+  /// cannot be a second stop. Give the slot's actions through
+  /// [trailingActions] then, or VoiceOver cannot reach them. Null: the
+  /// slot's own semantics stay.
+  final String? trailingSemanticsLabel;
+
+  /// The slot's own actions by label ("Angebot ansehen"), offered as custom
+  /// actions of the row, since the slot itself is not a VoiceOver stop when
+  /// [trailingSemanticsLabel] is set.
+  final Map<String, VoidCallback> trailingActions;
+
+  /// Entries of the menu a long press on the row opens (at the finger,
+  /// [showAvoMenu]); in every size. Enabled [AvoMenuItem]s are also custom
+  /// actions of the row.
+  final List<AvoMenuEntry> contextMenuItems;
+
+  /// Actions revealed by swiping towards the end edge ([SwipeActions]); the
+  /// first one also runs on a full swipe. Also VoiceOver custom actions.
+  final List<SwipeAction> swipeActions;
+
+  /// Actions revealed by swiping towards the start edge.
+  final List<SwipeAction> leadingSwipeActions;
 
   @override
   State<ItemRow> createState() => _ItemRowState();
@@ -278,7 +352,24 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
   String _label() => [
     widget.title.trim(),
     if (widget.subtitle?.trim().isNotEmpty ?? false) widget.subtitle!.trim(),
+    if (widget.trailingSemanticsLabel?.trim().isNotEmpty ?? false)
+      widget.trailingSemanticsLabel!.trim(),
   ].join(', ');
+
+  void _openMenu(Offset globalPosition) {
+    if (widget.contextMenuItems.isEmpty) return;
+    unawaited(
+      showAvoMenu(
+        context,
+        items: widget.contextMenuItems,
+        anchorRect: Rect.fromCenter(
+          center: globalPosition,
+          width: 1,
+          height: 1,
+        ),
+      ),
+    );
+  }
 
   String _value(BuildContext context) {
     final failed = _state == CheckState.failed;
@@ -318,26 +409,52 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
       );
     }
     final subtitle = widget.subtitle;
+    final hasSubtitle = subtitle != null && subtitle.isNotEmpty;
+    final slot = widget.trailingSemanticsLabel == null
+        ? widget.trailing
+        : (widget.trailing == null
+              ? null
+              : ExcludeSemantics(child: widget.trailing));
+    // From AX1 the slot sits under the name, beside the quantity, and wraps
+    // below it when there is no room.
+    final slotUnderName = ax && slot != null;
+    final subtitleText = hasSubtitle
+        ? ExcludeSemantics(
+            child: Text(
+              subtitle,
+              style: context.text(
+                AvoTextStyle.subhead,
+                color: colors.secondaryLabel,
+                tabular: true,
+              ),
+            ),
+          )
+        : null;
     final text = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(widget.title, style: titleStyle),
-        if (subtitle != null && subtitle.isNotEmpty)
-          Text(
-            subtitle,
-            style: context.text(
-              AvoTextStyle.subhead,
-              color: colors.secondaryLabel,
-              tabular: true,
+        ExcludeSemantics(child: Text(widget.title, style: titleStyle)),
+        if (slotUnderName)
+          Padding(
+            padding: const EdgeInsets.only(top: _trailingRunGap),
+            child: Wrap(
+              spacing: m.gap,
+              runSpacing: _trailingRunGap,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [?subtitleText, slot],
             ),
-          ),
+          )
+        else
+          ?subtitleText,
         if (failed)
-          Text(
-            widget.statusLabel ?? context.tr('common_not_saved'),
-            style: context.text(
-              AvoTextStyle.subhead,
-              color: colors.destructive,
+          ExcludeSemantics(
+            child: Text(
+              widget.statusLabel ?? context.tr('common_not_saved'),
+              style: context.text(
+                AvoTextStyle.subhead,
+                color: colors.destructive,
+              ),
             ),
           ),
       ],
@@ -382,8 +499,8 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
               child: AdaptiveTrailing(
                 gap: m.gap,
                 stacked: ax,
-                trailing: widget.trailing,
-                child: ExcludeSemantics(child: text),
+                trailing: slotUnderName ? null : slot,
+                child: text,
               ),
             ),
           ],
@@ -409,6 +526,9 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
       behavior: HitTestBehavior.opaque,
       excludeFromSemantics: true,
       onTap: zoneAction,
+      onLongPressStart: widget.contextMenuItems.isEmpty
+          ? null
+          : (details) => _openMenu(details.globalPosition),
       child: Align(
         alignment: ax
             ? AlignmentDirectional.topStart
@@ -434,6 +554,9 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
           onTapUp: opens ? (_) => _release() : null,
           onTapCancel: opens ? _release : null,
           onTap: bodyAction,
+          onLongPressStart: widget.contextMenuItems.isEmpty
+              ? null
+              : (details) => _openMenu(details.globalPosition),
           child: body,
         ),
         PositionedDirectional(
@@ -465,6 +588,13 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
         CustomSemanticsAction(label: widget.openLabel!): widget.onTap!,
       for (final entry in widget.semanticActions.entries)
         CustomSemanticsAction(label: entry.key): entry.value,
+      for (final entry in widget.trailingActions.entries)
+        CustomSemanticsAction(label: entry.key): entry.value,
+      for (final entry in widget.contextMenuItems)
+        if (entry is AvoMenuItem && entry.enabled)
+          CustomSemanticsAction(label: entry.label): entry.onSelected,
+      ...SwipeActions.semanticActionsOf(widget.swipeActions),
+      ...SwipeActions.semanticActionsOf(widget.leadingSwipeActions),
     };
 
     return RepaintBoundary(
@@ -477,7 +607,12 @@ class _ItemRowState extends State<ItemRow> with SingleTickerProviderStateMixin {
         value: _value(context),
         onTap: canToggle ? _toggle : widget.onTap,
         customSemanticsActions: actions.isEmpty ? null : actions,
-        child: highlighted,
+        child: SwipeActions(
+          trailingActions: widget.swipeActions,
+          leadingActions: widget.leadingSwipeActions,
+          exposeSemantics: false,
+          child: highlighted,
+        ),
       ),
     );
   }

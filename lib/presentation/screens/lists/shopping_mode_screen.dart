@@ -93,6 +93,9 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
     with WidgetsBindingObserver {
   late final ShoppingKeepAwake _keepAwake;
   late final StateController<AvoScreenContext?> _avoContext;
+  late final StateController<ShoppingModeSession?> _session;
+  late final ShoppingModeSession _ownSession;
+  ShoppingModeSession? _previousSession;
   AvoScreenContext? _previousContext;
   AvoScreenContext? _ownContext;
   bool _awake = false;
@@ -104,6 +107,16 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
     _keepAwake = ref.read(shoppingKeepAwakeProvider);
     _avoContext = ref.read(avoScreenContextProvider.notifier);
     _previousContext = _avoContext.state;
+    _session = ref.read(shoppingModeSessionProvider.notifier);
+    _previousSession = _session.state;
+    _ownSession = ShoppingModeSession(
+      listId: widget.listId,
+      startedAt: DateTime.now(),
+    );
+    // Providers may not change while the tree builds: set after the frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _session.state = _ownSession;
+    });
     _setAwake(true);
     // Tip T2 is done however the shopping mode was opened.
     ref.read(tipServiceProvider).note(TipEvent.shoppingStarted);
@@ -118,6 +131,16 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _setAwake(false);
+    // Hand back the session of a shopping mode below (stacked), else clear
+    // it, unless another shopping mode replaced ours.
+    final session = _session;
+    final ownSession = _ownSession;
+    final previousSession = _previousSession;
+    scheduleMicrotask(() {
+      if (session.mounted && session.state == ownSession) {
+        session.state = previousSession;
+      }
+    });
     // Hand Avo back the screen below, unless someone set a newer context.
     final own = _ownContext;
     final previous = _previousContext;

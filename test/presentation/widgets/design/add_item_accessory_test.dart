@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/common/liquid_glass_container.dart';
 import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/glass_surface.dart';
 
 import '../../../layout/layout_matrix.dart';
@@ -750,6 +752,250 @@ void main() {
     ),
   );
 
+  group('AvoComposerField AB1', () {
+    Widget composer({
+      TextEditingController? controller,
+      ValueChanged<String>? onSubmitted,
+      VoidCallback? onVoice,
+      VoidCallback? onStop,
+      bool responding = false,
+      bool enabled = true,
+      int? maxLength,
+      List<AvoMenuEntry>? photoMenuItems,
+      VoidCallback? onCamera,
+      String? semanticLabel,
+    }) => AvoComposerField(
+      placeholder: 'Frag Avo …',
+      semanticLabel: semanticLabel,
+      sendLabel: 'Senden',
+      voiceLabel: 'Sprachmodus starten',
+      stopLabel: 'Antwort anhalten',
+      cameraLabel: 'Foto hinzufügen',
+      controller: controller,
+      onSubmitted: onSubmitted,
+      onVoice: onVoice,
+      onStop: onStop,
+      responding: responding,
+      enabled: enabled,
+      maxLength: maxLength,
+      photoMenuItems: photoMenuItems,
+      onCamera: onCamera,
+    );
+
+    testWidgets('stop state replaces voice and send while responding', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      var stops = 0;
+      var voice = 0;
+      final controller = TextEditingController(text: 'Noch eine Frage');
+      addTearDown(controller.dispose);
+      await _pump(
+        tester,
+        composer(
+          controller: controller,
+          responding: true,
+          onStop: () => stops++,
+          onVoice: () => voice++,
+          onSubmitted: (_) {},
+        ),
+      );
+      expect(find.bySemanticsLabel('Senden'), findsNothing);
+      expect(find.bySemanticsLabel('Sprachmodus starten'), findsNothing);
+      await tester.tap(find.bySemanticsLabel('Antwort anhalten'));
+      expect(stops, 1);
+      expect(voice, 0);
+      expect(tester.getSize(_tintCircles.first), const Size(40, 40));
+
+      // Answer over: back to "Senden", then to voice when empty.
+      await _pump(
+        tester,
+        composer(
+          controller: controller,
+          responding: false,
+          onStop: () => stops++,
+          onSubmitted: (_) {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Senden'), findsOneWidget);
+      expect(find.bySemanticsLabel('Antwort anhalten'), findsNothing);
+      handle.dispose();
+    });
+
+    testWidgets('Return does not send while "Antwort anhalten" is offered', (
+      tester,
+    ) async {
+      final sent = <String>[];
+      final controller = TextEditingController(text: 'Folgefrage');
+      addTearDown(controller.dispose);
+      Widget build(bool responding) => composer(
+        controller: controller,
+        responding: responding,
+        onStop: () {},
+        onSubmitted: sent.add,
+      );
+      await _pump(tester, build(true));
+      await tester.tap(_field);
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pump();
+      expect(sent, isEmpty);
+
+      await _pump(tester, build(false));
+      await tester.tap(_field);
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pump();
+      expect(sent, ['Folgefrage']);
+    });
+
+    testWidgets('disabled: the round button is dimmed once, not twice', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        AvoComposerField(
+          placeholder: 'Frag Avo …',
+          sendLabel: 'Senden',
+          voiceLabel: 'Sprachmodus starten',
+          enabled: false,
+          onVoice: () {},
+        ),
+      );
+      final dims = find.ancestor(
+        of: _tintCircles.first,
+        matching: find.byWidgetPredicate(
+          (w) => w is Opacity && w.opacity == 0.4,
+        ),
+      );
+      expect(dims, findsNWidgets(1));
+    });
+
+    testWidgets('no stop state without onStop', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pump(tester, composer(responding: true, onVoice: () {}));
+      expect(find.bySemanticsLabel('Antwort anhalten'), findsNothing);
+      expect(find.bySemanticsLabel('Sprachmodus starten'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('disabled: no focus, no taps, dimmed', (tester) async {
+      final handle = tester.ensureSemantics();
+      var voice = 0;
+      var photos = 0;
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await _pump(
+        tester,
+        AvoComposerField(
+          placeholder: 'Frag Avo …',
+          sendLabel: 'Senden',
+          voiceLabel: 'Sprachmodus starten',
+          cameraLabel: 'Foto hinzufügen',
+          focusNode: focus,
+          enabled: false,
+          onVoice: () => voice++,
+          onCamera: () => photos++,
+        ),
+      );
+      await tester.tap(_field, warnIfMissed: false);
+      await tester.pump();
+      expect(focus.hasFocus, isFalse);
+      await tester.tap(find.bySemanticsLabel('Sprachmodus starten'));
+      await tester.tap(find.bySemanticsLabel('Foto hinzufügen'));
+      expect(voice, 0);
+      expect(photos, 0);
+      expect(tester.widget<CupertinoTextField>(_field).enabled, isFalse);
+      handle.dispose();
+    });
+
+    testWidgets('maxLength: counter shows near the limit, input stops', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await _pump(tester, composer(controller: controller, maxLength: 200));
+      expect(find.textContaining('characters left'), findsNothing);
+      await tester.enterText(_field, 'a' * 185);
+      await tester.pump();
+      expect(find.textContaining('characters left'), findsNothing);
+      await tester.enterText(_field, 'a' * 195);
+      await tester.pump();
+      expect(find.text('5 characters left'), findsOneWidget);
+      await tester.enterText(_field, 'a' * 199);
+      await tester.pump();
+      expect(find.text('1 character left'), findsOneWidget);
+      await tester.enterText(_field, 'a' * 230);
+      await tester.pump();
+      expect(controller.text.length, 200);
+      expect(find.text('0 characters left'), findsOneWidget);
+      await tester.enterText(_field, 'a' * 20);
+      await tester.pump();
+      expect(find.textContaining('characters left'), findsNothing);
+    });
+
+    testWidgets('own semanticLabel names the field', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pump(tester, composer(semanticLabel: 'Avo fragen'));
+      expect(find.bySemanticsLabel('Avo fragen'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('photoMenuItems: the camera button opens a pull-down', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      var photos = 0;
+      var taken = 0;
+      await _pump(
+        tester,
+        composer(
+          onCamera: () => photos++,
+          photoMenuItems: [
+            AvoMenuItem(
+              label: 'Foto aufnehmen',
+              icon: AvoIcons.camera,
+              onSelected: () => taken++,
+            ),
+            AvoMenuItem(
+              label: 'Foto auswählen',
+              icon: AvoIcons.photo,
+              onSelected: () {},
+            ),
+          ],
+        ),
+      );
+      expect(
+        tester.getSize(find.bySemanticsLabel('Foto hinzufügen')),
+        const Size(44, 44),
+      );
+      await tester.tap(find.bySemanticsLabel('Foto hinzufügen'));
+      await tester.pumpAndSettle();
+      expect(photos, 0);
+      expect(find.text('Foto auswählen'), findsOneWidget);
+      await tester.tap(find.text('Foto aufnehmen'));
+      await tester.pumpAndSettle();
+      expect(taken, 1);
+      handle.dispose();
+    });
+
+    testWidgets('photoMenuItems alone show the camera button', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pump(
+        tester,
+        AvoComposerField(
+          placeholder: 'Frag Avo …',
+          sendLabel: 'Senden',
+          voiceLabel: 'Sprachmodus starten',
+          photoMenuItems: [
+            AvoMenuItem(label: 'Foto aufnehmen', onSelected: () {}),
+          ],
+        ),
+      );
+      expect(find.bySemanticsLabel('Add photo'), findsOneWidget);
+      handle.dispose();
+    });
+  });
+
   layoutMatrix(
     'AvoComposerField empty',
     (context) => Padding(
@@ -782,6 +1028,30 @@ void main() {
           text:
               'Setz die Zutaten für Ofengemüse mit Feta auf die Liste, '
               'für 4 Personen, und sag mir, was bei Lidl im Angebot ist.',
+        ),
+      ),
+    ),
+    checkTapTargets: true,
+  );
+
+  layoutMatrix(
+    'AvoComposerField stop, counter, menu',
+    (context) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
+      child: AvoComposerField(
+        placeholder: 'Frag Avo oder suche',
+        sendLabel: 'Senden',
+        voiceLabel: 'Sprachmodus starten',
+        stopLabel: 'Antwort anhalten',
+        cameraLabel: 'Foto hinzufügen',
+        photoMenuItems: [
+          AvoMenuItem(label: 'Foto aufnehmen', onSelected: () {}),
+        ],
+        responding: true,
+        onStop: () {},
+        maxLength: 60,
+        controller: TextEditingController(
+          text: 'Setz die Zutaten für Ofengemüse auf die Liste, bitte',
         ),
       ),
     ),

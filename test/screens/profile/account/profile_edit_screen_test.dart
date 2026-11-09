@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,7 @@ import 'package:shoply/presentation/screens/profile/account/account_widgets.dart
 import 'package:shoply/presentation/screens/profile/account/profile_edit_controller.dart';
 import 'package:shoply/presentation/screens/profile/account/profile_edit_screen.dart';
 
+import 'package:shoply/presentation/widgets/design/avatar.dart';
 import 'package:shoply/presentation/widgets/design/row_highlight.dart';
 
 import '../../../layout/layout_matrix.dart';
@@ -173,10 +175,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(world.opened, ['picker:library']);
       expect(world.editor.calls, ['upload:photo.jpg']);
-      final avatar = tester.widget<ProfilePhotoAvatar>(
-        find.byType(ProfilePhotoAvatar),
-      );
-      expect(avatar.photo, isNotNull);
+      final avatar = tester.widget<Avatar>(find.byType(Avatar));
+      expect(avatar.image, isA<MemoryImage>());
       expect(avatar.syncing, isFalse);
     });
 
@@ -191,12 +191,7 @@ void main() {
       await tester.tap(find.text('Choose photo'));
       await tester.pumpAndSettle();
       expect(find.text('Photo not uploaded.'), findsOneWidget);
-      expect(
-        tester
-            .widget<ProfilePhotoAvatar>(find.byType(ProfilePhotoAvatar))
-            .photo,
-        isNotNull,
-      );
+      expect(tester.widget<Avatar>(find.byType(Avatar)).image, isNotNull);
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
       expect(world.editor.calls, ['upload:photo.jpg', 'upload:photo.jpg']);
@@ -215,12 +210,7 @@ void main() {
       await tester.tap(find.text('Choose photo'));
       await tester.pumpAndSettle();
       expect(world.editor.calls, isEmpty);
-      expect(
-        tester
-            .widget<ProfilePhotoAvatar>(find.byType(ProfilePhotoAvatar))
-            .syncing,
-        isTrue,
-      );
+      expect(tester.widget<Avatar>(find.byType(Avatar)).syncing, isTrue);
       accountContainer(tester).read(testOfflineProvider.notifier).state = false;
       await tester.pumpAndSettle();
       expect(world.editor.calls, ['upload:photo.jpg']);
@@ -240,12 +230,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Remove photo'));
         await tester.pump();
-        expect(
-          tester
-              .widget<ProfilePhotoAvatar>(find.byType(ProfilePhotoAvatar))
-              .url,
-          isNull,
-        );
+        expect(tester.widget<Avatar>(find.byType(Avatar)).image, isNull);
         expect(find.text('Photo removed'), findsOneWidget);
         await tester.pump(const Duration(seconds: 3));
         expect(world.editor.calls, isEmpty);
@@ -275,8 +260,12 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
       expect(world.editor.calls, isEmpty);
       expect(
-        tester.widget<ProfilePhotoAvatar>(find.byType(ProfilePhotoAvatar)).url,
-        'https://example.test/a.jpg',
+        tester.widget<Avatar>(find.byType(Avatar)).image,
+        isA<CachedNetworkImageProvider>().having(
+          (p) => p.url,
+          'url',
+          'https://example.test/a.jpg',
+        ),
       );
     });
 

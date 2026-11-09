@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/avatar.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 import '../../../layout/layout_matrix.dart';
 
@@ -55,7 +59,116 @@ double _halo(WidgetTester tester) {
   return ((paint.painter as dynamic).halo as Animation<double>).value;
 }
 
+/// A 4 x 3 px landscape PNG.
+final _landscape = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAEElEQVR4nGP4z8AARww4OQD1MQv1NXv7ggAAAABJRU5ErkJggg==',
+);
+
 void main() {
+  group('Avatar xl and photo', () {
+    testWidgets('xl is 64 pt: grey circle, two initials in label colour', (
+      tester,
+    ) async {
+      late AvoColors colors;
+      await _pump(
+        tester,
+        Builder(
+          builder: (context) {
+            colors = context.colors;
+            return const Avatar(name: 'Lena Marie Berger', size: AvatarSize.xl);
+          },
+        ),
+      );
+      expect(tester.getSize(find.byType(Avatar)), const Size(64, 64));
+      expect(find.text('LB'), findsOneWidget);
+      expect(_circleWith(tester, 'LB').color, colors.fillStrong);
+      final style = tester.widget<Text>(find.text('LB')).style!;
+      expect(style.fontSize, 26);
+      expect(style.color, colors.label);
+    });
+
+    testWidgets('xl without a name shows the person glyph', (tester) async {
+      await _pump(tester, const Avatar(name: '', size: AvatarSize.xl));
+      expect(find.byType(Text), findsNothing);
+      expect(find.byType(AvoIcon), findsOneWidget);
+    });
+
+    testWidgets('xl initials keep their size under Dynamic Type', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const Avatar(name: 'Jannis', size: AvatarSize.xl),
+        layout: const LayoutCase(width: 390, scale: 3.1),
+      );
+      expect(tester.getSize(find.byType(Avatar)), const Size(64, 64));
+      expect(tester.widget<Text>(find.text('J')).style!.fontSize, 26);
+    });
+
+    testWidgets('A-V18 sizes 28 and 40', (tester) async {
+      await _pump(
+        tester,
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Avatar(name: 'Lena', size: AvatarSize.size28),
+            Avatar(name: 'Mia', size: AvatarSize.size40),
+          ],
+        ),
+      );
+      expect(tester.getSize(find.byType(Avatar).first), const Size(28, 28));
+      expect(tester.getSize(find.byType(Avatar).last), const Size(40, 40));
+    });
+
+    testWidgets('a landscape photo fills the whole circle', (tester) async {
+      await _pump(
+        tester,
+        Avatar(
+          name: 'Jannis',
+          size: AvatarSize.xl,
+          image: MemoryImage(_landscape),
+        ),
+      );
+      // Let the image decode, so the photo itself (not the initial) is laid out.
+      await tester.runAsync(() async {
+        await precacheImage(
+          MemoryImage(_landscape),
+          tester.element(find.byType(Avatar)),
+        );
+      });
+      await tester.pump();
+      expect(find.byType(RawImage), findsOneWidget);
+      expect(tester.getSize(find.byType(RawImage)), const Size(64, 64));
+      expect(tester.widget<RawImage>(find.byType(RawImage)).fit, BoxFit.cover);
+    });
+
+    testWidgets('a failing photo leaves the initial', (tester) async {
+      await _pump(
+        tester,
+        Avatar(
+          name: 'Jannis',
+          size: AvatarSize.xl,
+          image: MemoryImage(Uint8List.fromList([1, 2, 3])),
+        ),
+      );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      expect(find.text('J'), findsOneWidget);
+    });
+
+    testWidgets('syncing adds the sync sign at the corner', (tester) async {
+      await _pump(
+        tester,
+        const Avatar(name: 'Jannis', size: AvatarSize.xl, syncing: true),
+      );
+      expect(find.byType(AvoIcon), findsOneWidget);
+      await _pump(tester, const Avatar(name: 'Jannis', size: AvatarSize.xl));
+      expect(find.byType(AvoIcon), findsNothing);
+    });
+  });
+
   group('Avatar', () {
     testWidgets('D2 sizes 20 / 24 / 32, initial in tint on tintSoft', (
       tester,
@@ -402,6 +515,25 @@ void main() {
               Avatar(name: 'Lena'),
               Avatar(name: 'Lena', size: AvatarSize.large),
             ],
+          ),
+        ],
+      ),
+    ),
+  );
+
+  layoutMatrix(
+    'Avatar xl with name next to it',
+    (context) => Padding(
+      padding: const EdgeInsets.all(AvoSpacing.screen),
+      child: Row(
+        children: [
+          const Avatar(name: 'Lena Berger', size: AvatarSize.xl, syncing: true),
+          const SizedBox(width: AvoSpacing.m),
+          Expanded(
+            child: Text(
+              'Lena Berger, lena.berger@example.com',
+              style: context.text(AvoTextStyle.body),
+            ),
           ),
         ],
       ),

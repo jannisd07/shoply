@@ -185,6 +185,53 @@ void main() {
       expect(style.fontWeight, FontWeight.w400);
     });
 
+    testWidgets('filledNeutral and destructiveFilled: solid fills, no glass', (
+      tester,
+    ) async {
+      var taps = 0;
+      await tester.pumpWidget(
+        _harness(
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppButton.filledNeutral(
+                label: 'Abbrechen',
+                onPressed: () => taps++,
+              ),
+              AppButton.destructiveFilled(label: 'Löschen', onPressed: () {}),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.byType(ContentGlass), findsNothing);
+      expect(find.byType(GlassSurface), findsNothing);
+      expect(_labelColor(tester, 'Abbrechen'), AvoColors.light.label);
+      expect(_labelColor(tester, 'Löschen'), AvoColors.light.onTint);
+      Color? fillOf(String label) => tester
+          .widgetList<DecoratedBox>(
+            find.ancestor(
+              of: find.text(label),
+              matching: find.byType(DecoratedBox),
+            ),
+          )
+          .map((d) => d.decoration)
+          .whereType<BoxDecoration>()
+          .map((d) => d.color)
+          .firstWhere((c) => c != null, orElse: () => null);
+      expect(
+        fillOf('Abbrechen'),
+        Color.alphaBlend(AvoColors.light.fill, AvoColors.light.surface),
+      );
+      expect(fillOf('Löschen'), AvoColors.light.destructiveFill);
+      expect(
+        tester.getSize(find.byType(AppButton).first).height,
+        greaterThanOrEqualTo(44),
+      );
+      await tester.tap(find.text('Abbrechen'));
+      expect(taps, 1);
+    });
+
     testWidgets('icon is 18 pt in the label colour and scales with text', (
       tester,
     ) async {
@@ -550,6 +597,14 @@ void main() {
           AppButton.plain(label: 'Alle anzeigen', onPressed: () {}),
           AppButton.destructive(label: 'Liste löschen', onPressed: () {}),
           const AppButton.secondary(label: 'Vollkornbrot (nicht verfügbar)'),
+          AppButton.filledNeutral(label: 'Abbrechen', onPressed: () {}),
+          AppButton.destructiveFilled(
+            label: 'Artikel löschen',
+            icon: const Icon(CupertinoIcons.delete),
+            working: true,
+            workingLabel: 'In Bearbeitung',
+            onPressed: () {},
+          ),
           const SizedBox(height: AvoSpacing.s),
           AppButton.primary(
             label: 'Einkauf abschließen · 23,80 €',

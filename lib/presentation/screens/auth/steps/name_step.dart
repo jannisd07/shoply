@@ -10,14 +10,7 @@ import 'package:shoply/presentation/screens/auth/name_save.dart';
 import 'package:shoply/presentation/screens/auth/widgets/auth_field.dart';
 import 'package:shoply/presentation/screens/onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
-import 'package:shoply/presentation/widgets/design/avo_icons.dart';
-
-/// The avatar of the name step, 64 pt (Konzept 17 §3.8 `avatarXL`; the
-/// shared `Avatar` stops at 32 pt).
-const double _kAvatarSize = 64;
-
-/// Initials at 64 pt keep their size under Dynamic Type, like iOS avatars.
-const double _kInitialsSize = 26;
+import 'package:shoply/presentation/widgets/design/avatar.dart';
 
 /// Name (Konzept 17 §3.8): writes `users.display_name` (targeted update)
 /// and calls [onDone] at once; saving runs in the background
@@ -84,7 +77,11 @@ class _NameStepState extends ConsumerState<NameStep> {
         expand: true,
       ),
       children: [
-        Center(child: _InitialsAvatar(name: _controller.text)),
+        Center(
+          child: ExcludeSemantics(
+            child: Avatar(name: _controller.text, size: AvatarSize.xl),
+          ),
+        ),
         const SizedBox(height: AvoSpacing.l),
         AuthTextField(
           controller: _controller,
@@ -114,45 +111,4 @@ String nameInitials(String name) {
   final first = words.first.characters.first.toUpperCase();
   if (words.length == 1) return first;
   return first + words.last.characters.first.toUpperCase();
-}
-
-class _InitialsAvatar extends StatelessWidget {
-  const _InitialsAvatar({required this.name});
-
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final initials = nameInitials(name);
-    return ExcludeSemantics(
-      child: SizedBox.square(
-        dimension: _kAvatarSize,
-        child: DecoratedBox(
-          decoration: ShapeDecoration(
-            color: colors.fillStrong,
-            shape: const CircleBorder(),
-          ),
-          child: Center(
-            child: initials.isEmpty
-                ? AvoIcon(
-                    AvoIcons.person,
-                    filled: true,
-                    size: _kInitialsSize + AvoSpacing.xs,
-                    color: colors.secondaryLabel,
-                  )
-                : MediaQuery.withNoTextScaling(
-                    child: Text(
-                      initials,
-                      maxLines: 1,
-                      style: context
-                          .text(AvoTextStyle.title2, weight: FontWeight.w600)
-                          .copyWith(fontSize: _kInitialsSize, height: 1.2),
-                    ),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
 }

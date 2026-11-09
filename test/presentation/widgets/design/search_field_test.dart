@@ -41,6 +41,39 @@ Size _visibleField(WidgetTester tester) => tester.getSize(
 );
 
 void main() {
+  testWidgets('microphone shows while empty, clear takes over with text', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    var dictated = 0;
+    await _pump(tester, AvoSearchField(onDictate: () => dictated++));
+    expect(find.bySemanticsLabel('Dictate'), findsOneWidget);
+    expect(find.bySemanticsLabel('Clear'), findsNothing);
+    final box = tester.getSize(find.bySemanticsLabel('Dictate'));
+    expect(box.width, greaterThanOrEqualTo(44));
+    expect(box.height, greaterThanOrEqualTo(44));
+    await tester.tap(find.bySemanticsLabel('Dictate'));
+    expect(dictated, 1);
+
+    await tester.enterText(find.byType(CupertinoTextField), 'Hafer');
+    await tester.pump();
+    expect(find.bySemanticsLabel('Dictate'), findsNothing);
+    expect(find.bySemanticsLabel('Clear'), findsOneWidget);
+
+    await _pump(
+      tester,
+      AvoSearchField(
+        key: const ValueKey('b'),
+        onDictate: () {},
+        dictateLabel: 'Sprechen',
+      ),
+    );
+    expect(find.bySemanticsLabel('Sprechen'), findsOneWidget);
+    await _pump(tester, const AvoSearchField(key: ValueKey('c')));
+    expect(find.bySemanticsLabel('Dictate'), findsNothing);
+    semantics.dispose();
+  });
+
   testWidgets('placeholder defaults to "Search"', (tester) async {
     await _pump(tester, const AvoSearchField());
     expect(find.text('Search'), findsOneWidget);
@@ -201,6 +234,15 @@ void main() {
     (context) => const Padding(
       padding: EdgeInsets.all(AvoSpacing.screen),
       child: AvoSearchField(hint: 'Rezepte, Zutaten, Listen'),
+    ),
+    checkTapTargets: true,
+  );
+
+  layoutMatrix(
+    'AvoSearchField with microphone',
+    (context) => Padding(
+      padding: const EdgeInsets.all(AvoSpacing.screen),
+      child: AvoSearchField(hint: 'Lebensmittel suchen', onDictate: () {}),
     ),
     checkTapTargets: true,
   );

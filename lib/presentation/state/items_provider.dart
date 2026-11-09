@@ -363,6 +363,74 @@ class ItemsNotifier extends StateNotifier<AsyncValue<List<ShoppingItemModel>>> {
     );
   }
 
+  /// What each price token of [setPrice] and [clearPrice] must put back:
+  /// the item and its price columns before the change.
+  final Map<String, ({String itemId, Map<String, dynamic> columns})>
+  _priceUndo = {};
+
+  /// Attaches [price] to an item at once (the row shows it immediately) and
+  /// writes it. Returns the token for [undoPrice]. A failed write rolls the
+  /// row back and rethrows.
+  Future<String> setPrice(String itemId, ItemPrice price) =>
+      _changePrice(
+        itemId,
+        price.toColumns(),
+        (id) => _repository.setItemPrice(id, price),
+      );
+
+  /// Removes the price of an item at once and writes it. Returns the token
+  /// for [undoPrice].
+  Future<String> clearPrice(String itemId) => _changePrice(
+    itemId,
+    ItemPrice.clearedColumns,
+    _repository.clearItemPrice,
+  );
+
+  Future<String> _changePrice(
+    String itemId,
+    Map<String, dynamic> columns,
+    Future<PriceChangeResult> Function(String itemId) write,
+  ) async {
+    final before = state.valueOrNull?.where((i) => i.id == itemId);
+    final previous = before == null || before.isEmpty
+        ? null
+        : ItemPrice.columnsOf(before.first);
+    final result = await _mutate<PriceChangeResult>(
+      optimistic: (items) => [
+        for (final i in items) i.id == itemId ? _patched(i, columns) : i,
+      ],
+      write: () => write(itemId),
+      reconcile: (items, r) => _replace(items, r.item),
+    );
+    if (previous != null) {
+      _priceUndo[result.token] = (itemId: itemId, columns: previous);
+      while (_priceUndo.length > 10) {
+        _priceUndo.remove(_priceUndo.keys.first);
+      }
+    }
+    return result.token;
+  }
+
+  /// Takes back a [setPrice] or [clearPrice]: the old price shows at once.
+  /// The repository restores it only if the item still has the price that
+  /// change set; otherwise the list is reloaded and shows what is there.
+  Future<void> undoPrice(String token) async {
+    final undo = _priceUndo.remove(token);
+    await _mutate<bool>(
+      optimistic: (items) => undo == null
+          ? items
+          : [
+              for (final i in items)
+                i.id == undo.itemId ? _patched(i, undo.columns) : i,
+            ],
+      write: () => _repository.undoPriceChange(token),
+      reconcile: (items, restored) {
+        if (!restored) unawaited(loadItems());
+        return items;
+      },
+    );
+  }
+
   Future<void> deleteItem(String itemId) {
     return _mutate<void>(
       optimistic: (items) => items.where((i) => i.id != itemId).toList(),

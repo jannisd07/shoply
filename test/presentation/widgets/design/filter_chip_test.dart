@@ -62,6 +62,126 @@ const _labels = [
 ];
 
 void main() {
+  group('leading and secondaryLabel', () {
+    testWidgets('leading sits before the label; secondary text is quiet', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      late AvoColors colors;
+      await _pump(
+        tester,
+        Builder(
+          builder: (context) {
+            colors = context.colors;
+            return AppFilterChip(
+              label: 'Lidl',
+              secondaryLabel: '400 m',
+              leading: const SizedBox.square(key: Key('dot'), dimension: 8),
+              selected: false,
+              onSelected: (_) {},
+            );
+          },
+        ),
+      );
+      expect(find.byKey(const Key('dot')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('dot'))).dx,
+        lessThan(tester.getTopLeft(find.textContaining('Lidl')).dx),
+      );
+      final rich = tester.widget<Text>(find.textContaining('Lidl'));
+      final span = rich.textSpan! as TextSpan;
+      expect(span.children!.single.toPlainText(), ' · 400 m');
+      expect(
+        (span.children!.single as TextSpan).style!.color,
+        colors.secondaryLabel,
+      );
+      expect(find.bySemanticsLabel('Lidl, 400 m'), findsOneWidget);
+      semantics.dispose();
+    });
+
+    testWidgets('the leading slot grows with the text', (tester) async {
+      Future<double> slot(double scale) async {
+        await _pump(
+          tester,
+          AppFilterChip(
+            label: 'Lidl',
+            leading: const SizedBox.square(key: Key('dot'), dimension: 8),
+            selected: false,
+            onSelected: (_) {},
+          ),
+          layout: LayoutCase(width: 390, scale: scale),
+        );
+        return tester
+            .getSize(
+              find.ancestor(
+                of: find.byKey(const Key('dot')),
+                matching: find.byType(FittedBox),
+              ),
+            )
+            .width;
+      }
+
+      final small = await slot(1);
+      final large = await slot(2);
+      expect(large, greaterThan(small));
+    });
+  });
+
+  group('SingleChoiceChipRow', () {
+    testWidgets('one choice, radio semantics, deselect only when allowed', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      String? chosen = 'b';
+      Widget row({required bool allowDeselect}) => StatefulBuilder(
+        builder: (context, setState) => SingleChoiceChipRow<String>(
+          allowDeselect: allowDeselect,
+          value: chosen,
+          onChanged: (v) => setState(() => chosen = v),
+          choices: const [
+            ChipChoice(value: 'a', label: 'Alle'),
+            ChipChoice(value: 'b', label: 'Lidl', secondaryLabel: '400 m'),
+            ChipChoice(value: 'c', label: 'Rewe'),
+          ],
+        ),
+      );
+      await _pump(tester, row(allowDeselect: false));
+      final node = tester.getSemantics(find.bySemanticsLabel('Lidl, 400 m'));
+      expect(node.value, '2 of 3');
+      expect(node.flagsCollection.isSelected, isNotNull);
+
+      await tester.tap(find.textContaining('Rewe'));
+      await tester.pumpAndSettle();
+      expect(chosen, 'c');
+      await tester.tap(find.textContaining('Rewe'));
+      await tester.pumpAndSettle();
+      expect(chosen, 'c');
+
+      await _pump(tester, row(allowDeselect: true));
+      await tester.tap(find.textContaining('Rewe'));
+      await tester.pumpAndSettle();
+      expect(chosen, isNull);
+      semantics.dispose();
+    });
+
+    testWidgets('ChipRow(wrap: true) wraps instead of scrolling', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        ChipRow(
+          wrap: true,
+          chips: [
+            for (final l in _labels)
+              AppFilterChip(label: l, selected: false, onSelected: (_) {}),
+          ],
+        ),
+      );
+      expect(find.byType(Wrap), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsNothing);
+    });
+  });
+
   group('AppFilterChip', () {
     testWidgets('selected: dark capsule, light text; inactive: neutral fill', (
       tester,
@@ -259,6 +379,35 @@ void main() {
               selected: label == 'Für dich',
               onSelected: (_) {},
             ),
+        ],
+      ),
+    ),
+    checkTapTargets: true,
+  );
+
+  layoutMatrix(
+    'SingleChoiceChipRow with leading and secondary',
+    (context) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: AvoSpacing.l),
+      child: SingleChoiceChipRow<String>(
+        wrap: true,
+        value: 'lidl',
+        allowDeselect: true,
+        onChanged: (_) {},
+        choices: const [
+          ChipChoice(
+            value: 'lidl',
+            label: 'Lidl',
+            secondaryLabel: '400 m',
+            leading: SizedBox.square(dimension: 8),
+          ),
+          ChipChoice(
+            value: 'rewe',
+            label: 'Rewe Center Hamburg Mitte',
+            secondaryLabel: '1,2 km',
+            leading: SizedBox.square(dimension: 8),
+          ),
+          ChipChoice(value: 'all', label: 'Alle Märkte'),
         ],
       ),
     ),

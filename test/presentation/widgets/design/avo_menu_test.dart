@@ -7,6 +7,7 @@ import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/glass_surface.dart';
+import 'package:shoply/presentation/widgets/design/pro_badge.dart';
 
 import '../../../layout/layout_matrix.dart';
 
@@ -82,6 +83,8 @@ SemanticsNode _ancestorWith(SemanticsNode node, SemanticsAction action) {
   }
   return n!;
 }
+
+void _noop() {}
 
 void main() {
   group('showAvoMenu', () {
@@ -523,6 +526,159 @@ void main() {
     });
   });
 
+  group('title and trailing', () {
+    List<AvoMenuEntry> market({List<String>? log}) => [
+      const AvoMenuTitle('Markt'),
+      AvoMenuItem(
+        label: 'Lidl',
+        subtitle: '400 m',
+        checked: true,
+        onSelected: () => log?.add('lidl'),
+      ),
+      AvoMenuItem(
+        label: 'Rewe',
+        trailing: const ProBadge(),
+        trailingLabel: 'Pro-Funktion',
+        onSelected: () => log?.add('rewe'),
+      ),
+      const AvoMenuDivider(),
+      AvoMenuTitle('Anzeige'),
+      AvoMenuItem(label: 'Alle Märkte', onSelected: () => log?.add('all')),
+    ];
+
+    testWidgets('a title is a heading without action; rows follow', (
+      tester,
+    ) async {
+      final log = <String>[];
+      final handle = tester.ensureSemantics();
+      await _pump(tester, _screen(market(log: log)));
+      await _open(tester);
+      final title = tester.widget<Text>(find.text('Markt'));
+      expect(title.style!.fontSize, 13);
+      expect(title.style!.fontWeight, FontWeight.w600);
+      expect(title.style!.color, AvoColors.light.secondaryLabel);
+      expect(
+        tester.getSemantics(find.text('Markt')),
+        isSemantics(label: 'Markt', isHeader: true),
+      );
+      await tester.tap(find.text('Markt'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(log, isEmpty, reason: 'a title does nothing');
+      expect(find.text('Lidl'), findsOneWidget, reason: 'menu stays open');
+      expect(
+        tester.getRect(find.text('Markt')).bottom,
+        lessThan(tester.getRect(find.text('Lidl')).top),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('keyboard focus skips the title and starts at the first row', (
+      tester,
+    ) async {
+      final log = <String>[];
+      await _pump(tester, _screen(market(log: log)));
+      await _open(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(log, ['lidl']);
+    });
+
+    testWidgets('trailing widget sits before the end; read after the label', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(tester, _screen(market()));
+      await _open(tester);
+      expect(find.byType(ProBadge), findsOneWidget);
+      expect(
+        tester.getRect(find.byType(ProBadge)).left,
+        greaterThan(tester.getRect(find.text('Rewe')).right),
+      );
+      expect(find.bySemanticsLabel('Rewe, Pro-Funktion'), findsOneWidget);
+      expect(find.bySemanticsLabel('Lidl, 400 m'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('the whole row with a trailing widget is the tap target', (
+      tester,
+    ) async {
+      final log = <String>[];
+      await _pump(tester, _screen(market(log: log)));
+      await _open(tester);
+      await tester.tap(find.byType(ProBadge));
+      await tester.pumpAndSettle();
+      expect(log, ['rewe']);
+    });
+
+    testWidgets('leading column: reserved in every row, after the check', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(
+        tester,
+        _screen([
+          AvoMenuItem(
+            label: 'Lidl',
+            checked: true,
+            leading: const SizedBox.square(key: Key('mark'), dimension: 20),
+            onSelected: () {},
+          ),
+          AvoMenuItem(label: 'Alle Märkte', onSelected: () {}),
+        ]),
+      );
+      await _open(tester);
+      final mark = tester.getRect(find.byKey(const Key('mark')));
+      final check = tester.getRect(
+        find.byWidgetPredicate((w) => w is AvoIcon && w.icon == AvoIcons.check),
+      );
+      expect(mark.left, greaterThan(check.right));
+      expect(mark.right, lessThan(tester.getRect(find.text('Lidl')).left));
+      expect(
+        tester.getRect(find.text('Lidl')).left,
+        tester.getRect(find.text('Alle Märkte')).left,
+        reason: 'rows without a leading keep the column',
+      );
+      expect(find.bySemanticsLabel('Lidl'), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('no leading column when no row has one', (tester) async {
+      await _pump(tester, _screen(_items()));
+      await _open(tester);
+      expect(
+        tester.getRect(find.text(_rename)).left - _menuRect(tester).left,
+        lessThan(24),
+      );
+    });
+
+    testWidgets('a title without a row before the next divider is dropped', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen([
+          const AvoMenuTitle('Leer'),
+          const AvoMenuDivider(),
+          const AvoMenuTitle('Markt'),
+          AvoMenuItem(label: 'Lidl', onSelected: () {}),
+          const AvoMenuDivider(),
+          const AvoMenuTitle('Ende'),
+        ]),
+      );
+      await _open(tester);
+      expect(find.text('Leer'), findsNothing);
+      expect(find.text('Ende'), findsNothing);
+      expect(find.text('Markt'), findsOneWidget);
+    });
+
+    testWidgets('a title and only a title opens nothing', (tester) async {
+      await _pump(tester, _screen(const [AvoMenuTitle('Markt')]));
+      await tester.tap(find.byType(AvoMenuButton), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.text('Markt'), findsNothing);
+    });
+  });
+
   group('AvoMenuButton', () {
     testWidgets('a 44 pt glass "More" button', (tester) async {
       final handle = tester.ensureSemantics();
@@ -575,6 +731,54 @@ void main() {
       handle.dispose();
     });
   });
+
+  layoutMatrix(
+    'AvoMenu open with titles, checks and Pro badge',
+    (context) => _screen(const [
+      AvoMenuTitle('Auf welche Liste soll das Angebot, wenn du magst?'),
+      AvoMenuItem(
+        label: 'Wocheneinkauf für die ganze Familie',
+        subtitle: 'Lidl · 400 m',
+        checked: true,
+        onSelected: _noop,
+      ),
+      AvoMenuItem(
+        label: 'Wochenplan-Zutaten',
+        trailing: ProBadge(),
+        trailingLabel: 'Pro-Funktion',
+        icon: AvoIcons.cart,
+        onSelected: _noop,
+      ),
+      AvoMenuDivider(),
+      AvoMenuTitle('Anzeige'),
+      AvoMenuItem(label: 'Alle Märkte', onSelected: _noop),
+    ]),
+    afterPump: _open,
+    checkTapTargets: true,
+  );
+
+  layoutMatrix(
+    'AvoMenu open with leading marks and checks',
+    (context) => _screen([
+      AvoMenuItem(
+        label: 'Lidl Supermarkt in der Nähe mit sehr langem Namen',
+        subtitle: '400 m',
+        checked: true,
+        leading: const AvoIcon(AvoIcons.storefront),
+        onSelected: () {},
+      ),
+      AvoMenuItem(
+        label: 'Rewe',
+        leading: const AvoIcon(AvoIcons.storefront),
+        trailing: const ProBadge(),
+        trailingLabel: 'Pro-Funktion',
+        onSelected: () {},
+      ),
+      AvoMenuItem(label: 'Alle Märkte', onSelected: () {}),
+    ]),
+    afterPump: _open,
+    checkTapTargets: true,
+  );
 
   layoutMatrix(
     'AvoMenu open with long rows',

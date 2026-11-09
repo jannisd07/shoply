@@ -252,14 +252,20 @@ class ItemRepository {
 
     final changed = <ShoppingItemModel>[];
     final previousQuantities = <String, double>{};
+    final previousPrices = <String, Map<String, dynamic>>{};
     for (final entry in plan.merges.entries) {
       final item = existingItems.firstWhere((i) => i.id == entry.key);
       previousQuantities[item.id] = item.quantity;
+      final mergePrice = plan.mergePrices[item.id];
+      if (mergePrice != null) {
+        previousPrices[item.id] = ItemPrice.columnsOf(item);
+      }
       final updated = await _supabase
           .from('shopping_items')
           .update({
             'quantity': item.quantity + entry.value,
             'updated_at': DateTime.now().toIso8601String(),
+            if (mergePrice != null) ...mergePrice.toColumns(),
           })
           .eq('id', item.id)
           .select()
@@ -282,6 +288,7 @@ class ItemRepository {
             'language': LanguageDetectionService.detectLanguage(item.name),
             'notes': item.notes,
             'added_by': userId,
+            if (item.price != null) ...item.price!.toColumns(),
           },
       ]).select();
       for (final json in rows as List) {
@@ -294,7 +301,12 @@ class ItemRepository {
 
     final token =
         '${DateTime.now().microsecondsSinceEpoch}-${insertedIds.length}';
-    _batches[token] = _AddBatch(listId, insertedIds, previousQuantities);
+    _batches[token] = _AddBatch(
+      listId,
+      insertedIds,
+      previousQuantities,
+      previousPrices,
+    );
     while (_batches.length > _maxUndoBatches) {
       _batches.remove(_batches.keys.first);
     }
@@ -328,11 +340,82 @@ class ItemRepository {
           .update({
             'quantity': entry.value,
             'updated_at': DateTime.now().toIso8601String(),
+            ...?batch.previousPrices[entry.key],
           })
           .eq('id', entry.key);
     }
     await _touchList(batch.listId);
   }
+
+  /// Attaches [price] (an offer or a manual price) to the item [itemId],
+  /// replacing any price it has. One write through the same path as
+  /// [updateItem]; list members see it through Realtime. Keep the returned
+  /// token to offer "Widerrufen" ([undoPriceChange]).
+  Future<PriceChangeResult> setItemPrice(String itemId, ItemPrice price) =>
+      _changePrice(itemId, price.toColumns());
+
+  /// Removes the price from the item [itemId] (all six price columns become
+  /// null). Keep the returned token to offer "Widerrufen".
+  Future<PriceChangeResult> clearItemPrice(String itemId) =>
+      _changePrice(itemId, ItemPrice.clearedColumns);
+
+  /// Restores the price an item had before [setItemPrice] or
+  /// [clearItemPrice].
+  ///
+  /// Writes only while the item still carries the price that change set (or
+  /// still has none, after a clear): a later price change by this person or
+  /// another member is never overwritten. Returns whether the old price was
+  /// restored; false for an unknown or already used token, a deleted item or
+  /// a price that changed in between.
+  Future<bool> undoPriceChange(String token) async {
+    final change = _priceChanges.remove(token);
+    if (change == null) return false;
+    final current = await _supabase
+        .from('shopping_items')
+        .select()
+        .eq('id', change.itemId)
+        .maybeSingle();
+    if (current == null) return false;
+    if (!change.stillApplies(ShoppingItemModel.fromJson(current))) return false;
+    final restored = await _supabase
+        .from('shopping_items')
+        .update({
+          ...change.previous,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', change.itemId)
+        .select('list_id')
+        .maybeSingle();
+    if (restored == null) return false;
+    await _touchList(restored['list_id'] as String);
+    return true;
+  }
+
+  Future<PriceChangeResult> _changePrice(
+    String itemId,
+    Map<String, dynamic> columns,
+  ) async {
+    final before = await _supabase
+        .from('shopping_items')
+        .select()
+        .eq('id', itemId)
+        .single();
+    final previous = ItemPrice.columnsOf(ShoppingItemModel.fromJson(before));
+
+    final item = await updateItem(itemId, {
+      ...columns,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+
+    final token = '${DateTime.now().microsecondsSinceEpoch}-price-$itemId';
+    _priceChanges[token] = _PriceChange(itemId, previous, item);
+    while (_priceChanges.length > _maxUndoBatches) {
+      _priceChanges.remove(_priceChanges.keys.first);
+    }
+    return PriceChangeResult(token: token, item: item);
+  }
+
+  static final Map<String, _PriceChange> _priceChanges = {};
 
   static const _maxUndoBatches = 10;
   static final Map<String, _AddBatch> _batches = {};
@@ -582,9 +665,42 @@ class ItemRepository {
 }
 
 class _AddBatch {
-  _AddBatch(this.listId, this.insertedIds, this.previousQuantities);
+  _AddBatch(
+    this.listId,
+    this.insertedIds,
+    this.previousQuantities,
+    this.previousPrices,
+  );
 
   final String listId;
   final List<String> insertedIds;
   final Map<String, double> previousQuantities;
+
+  /// Price columns of merged items whose price the batch replaced.
+  final Map<String, Map<String, dynamic>> previousPrices;
+}
+
+class _PriceChange {
+  _PriceChange(this.itemId, this.previous, this.applied);
+
+  final String itemId;
+
+  /// The item as the change left it.
+  final ShoppingItemModel applied;
+
+  /// Whether [now] still has the price this change set.
+  bool stillApplies(ShoppingItemModel now) {
+    if (now.price != applied.price ||
+        now.priceRetailer != applied.priceRetailer ||
+        now.priceOldValue != applied.priceOldValue) {
+      return false;
+    }
+    final a = applied.priceUpdatedAt;
+    final b = now.priceUpdatedAt;
+    if (a == null || b == null) return a == b;
+    return a.isAtSameMomentAs(b);
+  }
+
+  /// The six price columns before the change (all null for "no price").
+  final Map<String, dynamic> previous;
 }

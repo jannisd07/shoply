@@ -1,12 +1,17 @@
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shoply/core/design/design.dart';
+import 'package:shoply/core/localization/localization_helper.dart';
 
 // D2 "Filter-Chips" (D2-Komponenten): visible 34 high inside a 44 hit
 // height, padding 0 14, capsule, 15 pt medium; gap 8.
 const double _chipHeight = 34; // D2
 const double _chipPadH = 14; // D2
 const double _chipGap = AvoSpacing.s; // D2
+const double _leadingSlot = 20; // D2: StoreMark 20 next to 15 pt text
+const double _leadingGap = AvoSpacing.xs + AvoSpacing.xxs; // 6
+/// The leading slot grows with the text up to about AX2.
+const double _leadingMaxGrowth = 2; // D2: grows to about AX2
 
 /// iOS dims unavailable controls to about half.
 const double _disabledOpacity = 0.45;
@@ -27,6 +32,10 @@ class AppFilterChip extends StatelessWidget {
     required this.label,
     required this.selected,
     this.onSelected,
+    this.leading,
+    this.secondaryLabel,
+    this.radioIndex,
+    this.radioCount,
   });
 
   /// The visible (and VoiceOver) label. No emojis.
@@ -37,6 +46,26 @@ class AppFilterChip extends StatelessWidget {
 
   /// Called with the new selected state; null disables the chip.
   final ValueChanged<bool>? onSelected;
+
+  /// A glyph before the label: a store mark, an 8 pt dot. It is centred in a
+  /// 20 pt slot, scaled down to fit it, and the slot grows with the text up
+  /// to about AX2. Decorative for VoiceOver.
+  final Widget? leading;
+
+  /// Quiet text after the label, drawn as "· 400 m" in the secondary colour
+  /// (pass `400 m`, not the dot). VoiceOver reads it after the label. On a
+  /// selected chip it takes the chip's light text colour to stay readable.
+  final String? secondaryLabel;
+
+  /// Zero-based position of this chip in a single-choice group. With
+  /// [radioCount] it makes VoiceOver announce a radio button: "selected,
+  /// 1 of 4". [SingleChoiceChipRow] sets both.
+  final int? radioIndex;
+
+  /// Size of the single-choice group, see [radioIndex].
+  final int? radioCount;
+
+  bool get _radio => radioIndex != null && radioCount != null;
 
   @override
   Widget build(BuildContext context) {
@@ -61,14 +90,39 @@ class AppFilterChip extends StatelessWidget {
             horizontal: _chipPadH,
             vertical: vertical,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: context.text(
-              AvoTextStyle.subhead,
-              weight: FontWeight.w500,
-              color: selected ? colors.onChipSelected : colors.label,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (leading != null) ...[
+                _LeadingSlot(child: leading!),
+                const SizedBox(width: _leadingGap),
+              ],
+              Flexible(
+                child: Text.rich(
+                  TextSpan(
+                    text: label,
+                    children: [
+                      if (secondaryLabel != null)
+                        TextSpan(
+                          text: ' · $secondaryLabel',
+                          style: context.text(
+                            AvoTextStyle.subhead,
+                            color: selected
+                                ? colors.onChipSelected
+                                : colors.secondaryLabel,
+                          ),
+                        ),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
+                  style: context.text(
+                    AvoTextStyle.subhead,
+                    weight: FontWeight.w500,
+                    color: selected ? colors.onChipSelected : colors.label,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -79,8 +133,15 @@ class AppFilterChip extends StatelessWidget {
       container: true,
       button: true,
       selected: selected,
+      inMutuallyExclusiveGroup: _radio ? true : null,
       enabled: enabled,
-      label: label,
+      label: secondaryLabel == null ? label : '$label, $secondaryLabel',
+      value: _radio
+          ? context.tr(
+              'common_chip_position',
+              params: {'index': '${radioIndex! + 1}', 'count': '$radioCount'},
+            )
+          : null,
       onTap: enabled ? toggle : null,
       child: ExcludeSemantics(
         child: _Pressable(
@@ -107,6 +168,7 @@ class ChipRow extends StatelessWidget {
     super.key,
     required this.chips,
     this.padding = const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
+    this.wrap = false,
   });
 
   /// The chips, usually [AppFilterChip]s (a "Zurücksetzen" chip last).
@@ -115,9 +177,15 @@ class ChipRow extends StatelessWidget {
   /// Space around the chips; the scroll view scrolls under it.
   final EdgeInsetsGeometry padding;
 
+  /// True breaks the chips into several lines at every text size instead of
+  /// scrolling (a store list, all filters at a glance). False wraps only from
+  /// xxxLarge on.
+  final bool wrap;
+
   @override
   Widget build(BuildContext context) {
     final wraps =
+        wrap ||
         context.typography.category.index >= ContentSizeCategory.xxxLarge.index;
     if (wraps) {
       return Padding(
@@ -136,6 +204,120 @@ class ChipRow extends StatelessWidget {
             chips[i],
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// One option of a [SingleChoiceChipRow].
+@immutable
+class ChipChoice<T> {
+  /// Creates an option.
+  const ChipChoice({
+    required this.value,
+    required this.label,
+    this.secondaryLabel,
+    this.leading,
+  });
+
+  /// What [SingleChoiceChipRow.onChanged] reports.
+  final T value;
+
+  /// Visible and VoiceOver label.
+  final String label;
+
+  /// See [AppFilterChip.secondaryLabel].
+  final String? secondaryLabel;
+
+  /// See [AppFilterChip.leading].
+  final Widget? leading;
+}
+
+/// A [ChipRow] where at most one chip is on (store, period, sort).
+///
+/// VoiceOver reads every chip as a radio button: "Lidl, selected, 1 of 4".
+/// Tapping the chosen chip again clears the choice when [allowDeselect] is
+/// true (then [onChanged] gets null), otherwise it does nothing. [onChanged]
+/// null disables all chips.
+class SingleChoiceChipRow<T> extends StatelessWidget {
+  /// Creates a single-choice chip row.
+  const SingleChoiceChipRow({
+    super.key,
+    required this.choices,
+    required this.value,
+    required this.onChanged,
+    this.allowDeselect = false,
+    this.wrap = false,
+    this.padding = const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
+  });
+
+  /// The options in display order.
+  final List<ChipChoice<T>> choices;
+
+  /// The chosen value, or null for none.
+  final T? value;
+
+  /// Called with the new choice; null when it was cleared.
+  final ValueChanged<T?>? onChanged;
+
+  /// Whether tapping the chosen chip clears the choice.
+  final bool allowDeselect;
+
+  /// See [ChipRow.wrap].
+  final bool wrap;
+
+  /// See [ChipRow.padding].
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChipRow(
+      padding: padding,
+      wrap: wrap,
+      chips: [
+        for (var i = 0; i < choices.length; i++)
+          AppFilterChip(
+            label: choices[i].label,
+            secondaryLabel: choices[i].secondaryLabel,
+            leading: choices[i].leading,
+            selected: choices[i].value == value,
+            radioIndex: i,
+            radioCount: choices.length,
+            onSelected: onChanged == null
+                ? null
+                : (on) {
+                    if (on) {
+                      onChanged!(choices[i].value);
+                    } else if (allowDeselect) {
+                      onChanged!(null);
+                    }
+                  },
+          ),
+      ],
+    );
+  }
+}
+
+class _LeadingSlot extends StatelessWidget {
+  const _LeadingSlot({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final growth =
+        (context.typography.sizeOf(AvoTextStyle.subhead) /
+                AvoTypography.forFactor(1).sizeOf(AvoTextStyle.subhead))
+            .clamp(1.0, _leadingMaxGrowth);
+    return ExcludeSemantics(
+      child: SizedBox.square(
+        dimension: _leadingSlot * growth,
+        child: FittedBox(
+          child: SizedBox.square(
+            dimension: _leadingSlot,
+            child: Center(child: child),
+          ),
+        ),
       ),
     );
   }

@@ -135,7 +135,14 @@ enum AppButtonSize {
   large,
 }
 
-enum _AppButtonVariant { primary, secondary, plain, destructive }
+enum _AppButtonVariant {
+  primary,
+  secondary,
+  plain,
+  destructive,
+  filledNeutral,
+  destructiveFilled,
+}
 
 /// The app's text buttons (Konzept 00 §12.20, D2 "Buttons").
 ///
@@ -143,6 +150,8 @@ enum _AppButtonVariant { primary, secondary, plain, destructive }
 /// - [AppButton.secondary]: white glass capsule.
 /// - [AppButton.plain]: tint text, 17/22 ("Alle anzeigen").
 /// - [AppButton.destructive]: red text, 17/22 ("Liste löschen").
+/// - [AppButton.filledNeutral]: grey fill, `label` text ("Abbrechen").
+/// - [AppButton.destructiveFilled]: red fill, white text ("Löschen").
 ///
 /// States: pressed (0.97 scale and 90 % opacity on touch down), disabled
 /// ([onPressed] null: 40 % opacity, VoiceOver "dimmed"), working (a small
@@ -210,6 +219,36 @@ class AppButton extends StatelessWidget {
   }) : floating = false,
        _variant = _AppButtonVariant.destructive;
 
+  /// Grey capsule ([AvoColors.fill]) with [AvoColors.label] text, same sizes
+  /// as [AppButton.primary]. Opaque (the grey is blended onto
+  /// [AvoColors.surface]), no glass ("Abbrechen").
+  const AppButton.filledNeutral({
+    super.key,
+    required this.label,
+    this.icon,
+    this.onPressed,
+    this.working = false,
+    this.size = AppButtonSize.regular,
+    this.expand = false,
+    this.workingLabel,
+  }) : floating = false,
+       _variant = _AppButtonVariant.filledNeutral;
+
+  /// Red capsule ([AvoColors.destructiveFill]) with white text, same sizes as
+  /// [AppButton.primary] ("Löschen"). Pair it with a confirmation only for
+  /// final actions.
+  const AppButton.destructiveFilled({
+    super.key,
+    required this.label,
+    this.icon,
+    this.onPressed,
+    this.working = false,
+    this.size = AppButtonSize.regular,
+    this.expand = false,
+    this.workingLabel,
+  }) : floating = false,
+       _variant = _AppButtonVariant.destructiveFilled;
+
   /// The visible text, also the VoiceOver label.
   final String label;
 
@@ -241,8 +280,8 @@ class AppButton extends StatelessWidget {
   final _AppButtonVariant _variant;
 
   bool get _filled =>
-      _variant == _AppButtonVariant.primary ||
-      _variant == _AppButtonVariant.secondary;
+      _variant != _AppButtonVariant.plain &&
+      _variant != _AppButtonVariant.destructive;
 
   @override
   Widget build(BuildContext context) {
@@ -256,6 +295,8 @@ class AppButton extends StatelessWidget {
       _AppButtonVariant.secondary => colors.label,
       _AppButtonVariant.plain => colors.tint,
       _AppButtonVariant.destructive => colors.destructive,
+      _AppButtonVariant.filledNeutral => colors.label,
+      _AppButtonVariant.destructiveFilled => colors.onTint,
     };
     final textKind = filled && !large
         ? AvoTextStyle.subhead
@@ -354,14 +395,32 @@ class AppButton extends StatelessWidget {
     if (filled) {
       final tinted = _variant == _AppButtonVariant.primary;
       final radius = _radius(context, large);
-      box = floating
-          ? GlassSurface(
-              shape: GlassShape.rounded,
-              radius: radius,
-              tinted: tinted,
-              child: box,
-            )
-          : ContentGlass(radius: radius, tinted: tinted, child: box);
+      final solid = switch (_variant) {
+        _AppButtonVariant.filledNeutral => Color.alphaBlend(
+          colors.fill,
+          colors.surface,
+        ),
+        _AppButtonVariant.destructiveFilled => colors.destructiveFill,
+        _ => null,
+      };
+      if (solid != null) {
+        box = DecoratedBox(
+          decoration: BoxDecoration(
+            color: solid,
+            borderRadius: BorderRadius.circular(radius),
+          ),
+          child: box,
+        );
+      } else {
+        box = floating
+            ? GlassSurface(
+                shape: GlassShape.rounded,
+                radius: radius,
+                tinted: tinted,
+                child: box,
+              )
+            : ContentGlass(radius: radius, tinted: tinted, child: box);
+      }
     }
 
     if (!enabled) box = Opacity(opacity: _disabledOpacity, child: box);

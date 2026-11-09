@@ -16,6 +16,7 @@ import 'package:shoply/presentation/screens/profile/settings_search_index.dart';
 import 'package:shoply/presentation/screens/profile/settings_search_results.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
+import 'package:shoply/presentation/widgets/design/avatar.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
@@ -34,7 +35,7 @@ const double _kTitleGap = AvoSpacing.s; // D2
 const double _kGroupGap = AvoSpacing.m; // D2
 
 /// Person row (Konzept 18 §3.2): at least 76 high, with Teil "Konto"'s
-/// 64 pt [ProfilePhotoAvatar].
+/// 64 pt [Avatar].
 const double _kHeaderMinHeight = 76;
 const double _kHeaderPadding = AvoSpacing.m;
 
@@ -296,6 +297,14 @@ class ProfileRootBody extends StatelessWidget {
       return NavRow(
         title: tr(page.titleKeyFor(killSwitch: kill)),
         value: value,
+        valueLeading:
+            id == ProfilePageId.notifications &&
+                data.notifications == NotificationRowState.blockedInIos
+            ? AvoIcon(
+                AvoIcons.exclamationmarkTriangleFill,
+                color: context.colors.warning,
+              )
+            : null,
         leading: ProfileRowTile.page(page, killSwitch: kill),
         onTap: () => onOpen(page.route),
       );
@@ -488,10 +497,13 @@ class _PersonHeader extends StatelessWidget {
           ),
       ],
     );
-    final avatar = ProfilePhotoAvatar(
+    final avatar = Avatar(
       name: name ?? '',
-      photo: identity.localPhoto,
-      url: identity.avatarUrl,
+      size: AvatarSize.xl,
+      image: profileAvatarImage(
+        photo: identity.localPhoto,
+        url: identity.avatarUrl,
+      ),
       syncing: identity.photoSyncing,
     );
     final chevron = AvoIcon(

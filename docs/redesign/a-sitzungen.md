@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026. Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (AB1 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -36,8 +36,8 @@ für die nächste Sitzung geben.
 | A6 Rezepte | erledigt | `a6-stand.md` |
 | A7 Onboarding, Login, Tipps | erledigt | `a7-stand.md`, `a7-server-entwurf.sql` |
 | A8 Profil und Einstellungen | erledigt | `a8-stand.md`, `a8-server-entwurf.sql` |
-| **AB1 Anfragen von B: Komponenten und Daten** | **Als Nächstes** | unten |
-| AB2 Anfragen von B: Listen, Router, Reste aus A5–A8 | offen | unten |
+| AB1 Anfragen von B: Komponenten und Daten | erledigt | `ab1-stand.md` |
+| **AB2 Anfragen von B: Listen, Router, Reste aus A5–A8** | **Als Nächstes** | unten |
 | A9 Pro und Paywall | wartet auf den Owner (Free/Pro: Varianten A/B/C in `pro-konzept.md`) | prompt §5 A9, Konzept 18 Kap. 8–9 |
 | A10 App-Icon und Maskottchen | wartet auf den Owner (Maskottchen F-17-11) | prompt §5 A10 |
 | A12 Aufräumen und Analysen | offen | prompt §5 A12, „Aufräumen“ in a5–a8-stand |
@@ -45,7 +45,7 @@ für die nächste Sitzung geben.
 | S6 Gegenprüfung von B | offen | prompt §5 A11 „Gegenprüfung“ |
 | S5 Bereiche fertig | offen | prompt §11 |
 
-Reihenfolge: AB1, AB2, dann A9 oder A10, sobald der Owner entschieden hat, sonst A12, A11, S6, S5. Fragt die Sitzung den
+Reihenfolge: AB2, dann A9 oder A10, sobald der Owner entschieden hat, sonst A12, A11, S6, S5. Fragt die Sitzung den
 Owner zu Beginn nach A9/A10, nur wenn eins davon „Als Nächstes“ ist.
 
 ### AB1 Anfragen von B: Komponenten und Daten
@@ -63,6 +63,9 @@ Pull-down), Einzelheiten in `b-screens/wochenplan.md` (nicht verwechseln mit A-P
 `status-A.md` („Anfragen von B aus den Angebots-Slots“) eintragen und B Bescheid geben.
 
 ### AB2 Anfragen von B: Listen, Router, Reste aus A5–A8
+
+Zuerst `status-B.md` „Anfragen an Teil A“ auf Neues seit AB1 prüfen und `ab1-stand.md` „Offen bei A“ lesen (die
+neuen Komponenten dort beim Listen-Umbau nutzen, z. B. `ItemRow(trailingSemanticsLabel:, contextMenuItems:)`).
 
 A-C4 (Accessory: B-Block, Fokus zurück), A-L1–A-L4 (Listenkopf mit `StoreChip`, Listen-Info „Markt“ und „Angebote
 anzeigen“, Listenkarte, „Neue Liste“ mit Markt, „Liste von heute“), A-R1–A-R3 (Angebots-Routen vor der Shell,

@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/physics.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 // D2 / iOS search field: neutral fill, radius 10, at least 36 visible inside
 // a 44 hit height; magnifier 8 from the leading edge.
@@ -35,6 +36,8 @@ class AvoSearchField extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.cancelLabel,
+    this.onDictate,
+    this.dictateLabel,
   });
 
   /// Text controller; one is created when null.
@@ -57,6 +60,14 @@ class AvoSearchField extends StatefulWidget {
 
   /// Label of the cancel button; defaults to "Abbrechen".
   final String? cancelLabel;
+
+  /// Shows a microphone at the end of the field while it is empty (kcal and
+  /// offer search); with text the clear button takes its place. The caller
+  /// starts dictation. Null hides the microphone.
+  final VoidCallback? onDictate;
+
+  /// VoiceOver label of the microphone; defaults to "Diktieren".
+  final String? dictateLabel;
 
   @override
   State<AvoSearchField> createState() => _AvoSearchFieldState();
@@ -255,6 +266,15 @@ class _AvoSearchFieldState extends State<AvoSearchField>
                   onTap: _clear,
                 ),
               )
+            else if (widget.onDictate != null)
+              TextFieldTapRegion(
+                child: _MicButton(
+                  label:
+                      widget.dictateLabel ?? context.tr('common_dictate_field'),
+                  size: bodySize,
+                  onTap: widget.onDictate!,
+                ),
+              )
             else
               const SizedBox(width: AvoSpacing.s),
           ],
@@ -326,6 +346,46 @@ class _ClearButton extends StatelessWidget {
             heightFactor: 1,
             child: Icon(
               CupertinoIcons.clear_circled_solid,
+              size: size,
+              color: context.colors.placeholder,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MicButton extends StatelessWidget {
+  const _MicButton({
+    required this.label,
+    required this.size,
+    required this.onTap,
+  });
+
+  final String label;
+  final double size;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      button: true,
+      label: label,
+      onTap: onTap,
+      child: _Pressable(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minWidth: AvoSizes.hitTarget,
+            minHeight: AvoSizes.hitTarget,
+          ),
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: AvoIcon(
+              AvoIcons.mic,
               size: size,
               color: context.colors.placeholder,
             ),

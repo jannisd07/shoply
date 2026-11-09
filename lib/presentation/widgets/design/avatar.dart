@@ -3,12 +3,23 @@ import 'package:flutter/widgets.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 // D2 avatars: "mit Lena" chip (20 pt, 11/20 bold), list header stack (24 pt,
 // 11 pt semibold, 2 pt ring, 6 pt overlap), X-Einkaufsmodus presence dot.
 const double _ringWidth = 2; // D2 `box-shadow: 0 0 0 2px`
 const double _overlapFactor = 0.25; // D2: 6 pt overlap at 24 pt
 const double _plusPadding = AvoSpacing.xs; // "+12" needs a little more room
+
+/// The xl avatar (Konzept 17 §3.8 `avatarXL`, Konzept 18 §3.2): initials stay
+/// at 26 pt under Dynamic Type; the person glyph stands in for an empty name.
+const double _xlInitialsSize = 26; // D2
+
+/// The sync sign at the bottom corner while a photo change is on its way
+/// (Konzept 00 §12.7).
+const double _syncBadge = 22; // D2
+const double _syncGlyph = 13; // D2
+const double _syncRing = 2; // D2
 
 /// The presence dot (D2 X-Einkaufsmodus: 9 pt, 2 pt ring, at -2 / -2 of the
 /// avatar's bottom corner).
@@ -30,7 +41,17 @@ enum AvatarSize {
   medium(24),
 
   /// 32 pt: larger rows.
-  large(32);
+  large(32),
+
+  /// 28 pt: rows of members and payers (A-V18).
+  size28(28),
+
+  /// 40 pt: larger member rows (A-V18).
+  size40(40),
+
+  /// 64 pt: profile and name step. Grey `fillStrong` circle, two initials
+  /// (first and last word) in `label`, or a photo.
+  xl(64);
 
   const AvatarSize(this.dimension);
 
@@ -52,11 +73,20 @@ TextStyle _initialStyle(BuildContext context, AvatarSize size, Color color) =>
         weight: FontWeight.w600,
         color: color,
       ), // D2 11 pt semibold
-      AvatarSize.large => context.text(
+      AvatarSize.large || AvatarSize.size28 => context.text(
         AvoTextStyle.subhead,
         weight: FontWeight.w600,
         color: color,
       ),
+      AvatarSize.size40 => context.text(
+        AvoTextStyle.body,
+        weight: FontWeight.w600,
+        color: color,
+      ),
+      AvatarSize.xl =>
+        context
+            .text(AvoTextStyle.title2, weight: FontWeight.w600, color: color)
+            .copyWith(fontSize: _xlInitialsSize, height: 1.2),
     };
 
 /// First letter of [name], upper case ("lena" → "L"); empty for an empty
@@ -65,6 +95,17 @@ String _initialOf(String name) {
   final trimmed = name.trim();
   if (trimmed.isEmpty) return '';
   return trimmed.characters.first.toUpperCase();
+}
+
+/// The xl avatar shows two letters: "L" for one word, "LB" for two or more
+/// (first and last word). Other sizes show [_initialOf].
+String _initialsFor(String name, AvatarSize size) {
+  if (size != AvatarSize.xl) return _initialOf(name);
+  final words = name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+  if (words.isEmpty) return '';
+  final first = words.first.characters.first.toUpperCase();
+  if (words.length == 1) return first;
+  return first + words.last.characters.first.toUpperCase();
 }
 
 /// A person as an initial in a circle (Konzept 00 §12.29, optics D2): the
@@ -84,12 +125,15 @@ class Avatar extends StatelessWidget {
     this.presence = false,
     this.ringColor,
     this.semanticLabel,
+    this.image,
+    this.syncing = false,
   });
 
-  /// The person's display name; the first letter is shown.
+  /// The person's display name; the first letter is shown (two at
+  /// [AvatarSize.xl]).
   final String name;
 
-  /// 20, 24 or 32 pt.
+  /// 20, 24, 28, 32, 40 or 64 pt.
   final AvatarSize size;
 
   /// Grey instead of green (D2-Liste: the current user "J").
@@ -107,6 +151,16 @@ class Avatar extends StatelessWidget {
   /// (`common_shopping_now`) with [presence].
   final String? semanticLabel;
 
+  /// A photo instead of the initial: a `MemoryImage` for a photo that is not
+  /// uploaded yet, a network image for the stored one. It fills the whole
+  /// circle (`BoxFit.cover`, a landscape photo is cropped to the middle) and
+  /// fades in over the initial; while it loads or if it fails the initial
+  /// shows. Null shows the initial.
+  final ImageProvider? image;
+
+  /// Shows the sync sign at the bottom corner: a photo change is on its way.
+  final bool syncing;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -116,21 +170,29 @@ class Avatar extends StatelessWidget {
             ? context.tr('common_shopping_now', params: {'name': name.trim()})
             : name.trim());
     final Widget circle = _AvatarCircle(
-      text: _initialOf(name),
+      text: _initialsFor(name, size),
       size: size,
       neutral: neutral,
       ringColor: ringColor,
+      image: image,
     );
-    final Widget visual = presence
+    final Widget visual = presence || syncing
         ? Stack(
             clipBehavior: Clip.none,
             children: [
               circle,
-              PositionedDirectional(
-                end: _dotOffset,
-                bottom: _dotOffset,
-                child: PresenceDot(ringColor: ringColor ?? colors.surface),
-              ),
+              if (presence)
+                PositionedDirectional(
+                  end: _dotOffset,
+                  bottom: _dotOffset,
+                  child: PresenceDot(ringColor: ringColor ?? colors.surface),
+                ),
+              if (syncing)
+                PositionedDirectional(
+                  end: -_syncRing,
+                  bottom: -_syncRing,
+                  child: const _SyncBadge(),
+                ),
             ],
           )
         : circle;
@@ -150,8 +212,10 @@ class _AvatarCircle extends StatelessWidget {
     required this.neutral,
     this.ringColor,
     this.capsule = false,
+    this.image,
   });
 
+  final ImageProvider? image;
   final String text;
   final AvatarSize size;
   final bool neutral;
@@ -165,10 +229,13 @@ class _AvatarCircle extends StatelessWidget {
     final colors = context.colors;
     // Opaque even in the neutral tone: stacked avatars must hide the one
     // below, and `fill` alone is translucent.
-    final background = neutral
+    final xl = size == AvatarSize.xl;
+    final background = xl
+        ? colors.fillStrong
+        : neutral
         ? Color.alphaBlend(colors.fill, colors.surface)
         : colors.tintSoft;
-    final foreground = neutral ? colors.label : colors.tint;
+    final foreground = neutral || xl ? colors.label : colors.tint;
     final ring = ringColor;
     final side = ring == null
         ? BorderSide.none
@@ -178,17 +245,24 @@ class _AvatarCircle extends StatelessWidget {
             strokeAlign: BorderSide.strokeAlignOutside,
           );
     final d = size.dimension;
-    final glyph = MediaQuery.withNoTextScaling(
-      child: Builder(
-        builder: (context) => Text(
-          text,
-          maxLines: 1,
-          softWrap: false,
-          textAlign: TextAlign.center,
-          style: _initialStyle(context, size, foreground),
-        ),
-      ),
-    );
+    final Widget glyph = text.isEmpty && xl
+        ? AvoIcon(
+            AvoIcons.person,
+            filled: true,
+            size: _xlInitialsSize + AvoSpacing.xs,
+            color: colors.secondaryLabel,
+          )
+        : MediaQuery.withNoTextScaling(
+            child: Builder(
+              builder: (context) => Text(
+                text,
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: _initialStyle(context, size, foreground),
+              ),
+            ),
+          );
     return DecoratedBox(
       decoration: ShapeDecoration(
         color: background,
@@ -201,13 +275,75 @@ class _AvatarCircle extends StatelessWidget {
           minHeight: d,
           maxHeight: d,
         ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: capsule ? _plusPadding : 0),
-          // Bold Text can make the glyph wider than the circle: shrink it
-          // rather than clip it.
-          child: Center(
-            widthFactor: 1,
-            child: FittedBox(fit: BoxFit.scaleDown, child: glyph),
+        child: _withPhoto(
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: capsule ? _plusPadding : 0,
+            ),
+            // Bold Text can make the glyph wider than the circle: shrink it
+            // rather than clip it.
+            child: Center(
+              widthFactor: 1,
+              child: FittedBox(fit: BoxFit.scaleDown, child: glyph),
+            ),
+          ),
+          context,
+        ),
+      ),
+    );
+  }
+
+  /// The photo fills the circle and fades in over [initial]; every layer is
+  /// tight to the circle, so a landscape photo cannot shrink to its aspect.
+  Widget _withPhoto(Widget initial, BuildContext context) {
+    final photo = image;
+    if (photo == null || capsule) return initial;
+    final fade = AvoMotion.fadeReduced;
+    return ClipOval(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          initial,
+          Image(
+            image: photo,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            frameBuilder: (context, child, frame, sync) => sync
+                ? child
+                : AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: fade,
+                    child: child,
+                  ),
+            errorBuilder: (context, error, stack) => const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The sync sign of an avatar whose photo is on its way.
+class _SyncBadge extends StatelessWidget {
+  const _SyncBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return SizedBox.square(
+      dimension: _syncBadge,
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: colors.surface,
+          shape: CircleBorder(
+            side: BorderSide(color: colors.background, width: _syncRing),
+          ),
+        ),
+        child: Center(
+          child: AvoIcon(
+            AvoIcons.sync,
+            size: _syncGlyph,
+            color: colors.secondaryLabel,
           ),
         ),
       ),
