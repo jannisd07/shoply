@@ -106,6 +106,15 @@ final List<RouteBase> offersRootRoutes = [
     builder: (context, state) {
       final query = state.uri.queryParameters;
       final from = query['from'];
+      // Mode `trip` (V2, verlauf-kosten.md): only returns the choice for one
+      // trip; `listId` fills "Deine Märkte", `selected` is checked.
+      if (query['mode'] == 'trip') {
+        return StorePickerScreen(
+          from: StorePickerOrigin.checkout,
+          tripListId: query['listId'],
+          selectedChainId: query['selected'],
+        );
+      }
       return StorePickerScreen(
         listId: query['list'],
         from:

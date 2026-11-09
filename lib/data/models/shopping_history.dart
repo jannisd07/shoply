@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import 'package:shoply/data/services/offer_savings.dart';
+import 'package:shoply/data/services/store_chain_directory.dart';
 
 class ShoppingHistory extends Equatable {
   final String id;
@@ -15,6 +16,23 @@ class ShoppingHistory extends Equatable {
   final String? paidByName;
   final List<ShoppingHistoryItem> items;
 
+  /// `StoreChainDirectory` id of the trip's market (`lidl`), or null. Read
+  /// from `store_chain`; older trips only kept OSM names in the items'
+  /// `price_retailer`, which are normalised through the chain directory
+  /// ([dominantChain]) when read.
+  final String? storeChainId;
+
+  /// Where [storeChainId] came from: `list`, `learned`, `location`, `user`.
+  final String? storeSource;
+
+  /// `user` when a person typed [totalCost]; null for older trips (whose
+  /// amount may stem from offer prices, Bug 7).
+  final String? totalCostSource;
+
+  /// Account id of the person who finished the trip (older trips: null,
+  /// [userId] is the same person).
+  final String? completedBy;
+
   const ShoppingHistory({
     required this.id,
     required this.userId,
@@ -27,9 +45,31 @@ class ShoppingHistory extends Equatable {
     this.paidByUserId,
     this.paidByName,
     this.items = const [],
+    this.storeChainId,
+    this.storeSource,
+    this.totalCostSource,
+    this.completedBy,
   });
 
+  /// The trip's amount in whole cents; null without one.
+  int? get totalCostCents =>
+      totalCost == null ? null : (totalCost! * 100).round();
+
   factory ShoppingHistory.fromJson(Map<String, dynamic> json) {
+    final items = json['items'] != null
+        ? (json['items'] as List)
+              .map(
+                (i) => ShoppingHistoryItem.fromJson(i as Map<String, dynamic>),
+              )
+              .toList()
+        : const <ShoppingHistoryItem>[];
+    final storedChain = json['store_chain'] as String?;
+    final chain = storedChain != null && StoreChainDirectory.byId(storedChain) != null
+        ? storedChain
+        : dominantChain([
+            for (final item in items)
+              if (item.priceRetailer case final r? when r.trim().isNotEmpty) r,
+          ]);
     return ShoppingHistory(
       id: json['id'] as String,
       userId: json['user_id'] as String,
@@ -41,13 +81,19 @@ class ShoppingHistory extends Equatable {
       totalCost: (json['total_cost'] as num?)?.toDouble(),
       paidByUserId: json['paid_by_user_id'] as String?,
       paidByName: json['paid_by_name'] as String?,
-      items: json['items'] != null
-          ? (json['items'] as List)
-              .map((i) => ShoppingHistoryItem.fromJson(i as Map<String, dynamic>))
-              .toList()
-          : [],
+      items: items,
+      storeChainId: chain,
+      storeSource: json['store_source'] as String?,
+      totalCostSource: json['total_cost_source'] as String?,
+      completedBy: json['completed_by'] as String?,
     );
   }
+
+  /// [toJson] plus the items, for the account's local history cache.
+  Map<String, dynamic> toCacheJson() => {
+    ...toJson(),
+    'items': [for (final item in items) item.toJson()],
+  };
 
   Map<String, dynamic> toJson() {
     return {
@@ -61,6 +107,10 @@ class ShoppingHistory extends Equatable {
       'total_cost': totalCost,
       'paid_by_user_id': paidByUserId,
       'paid_by_name': paidByName,
+      'store_chain': storeChainId,
+      'store_source': storeSource,
+      'total_cost_source': totalCostSource,
+      'completed_by': completedBy,
     };
   }
 
@@ -69,6 +119,8 @@ class ShoppingHistory extends Equatable {
     String? paidByUserId,
     String? paidByName,
     List<ShoppingHistoryItem>? items,
+    String? storeChainId,
+    String? totalCostSource,
   }) {
     return ShoppingHistory(
       id: id,
@@ -82,6 +134,10 @@ class ShoppingHistory extends Equatable {
       paidByUserId: paidByUserId ?? this.paidByUserId,
       paidByName: paidByName ?? this.paidByName,
       items: items ?? this.items,
+      storeChainId: storeChainId ?? this.storeChainId,
+      storeSource: storeSource,
+      totalCostSource: totalCostSource ?? this.totalCostSource,
+      completedBy: completedBy,
     );
   }
 
@@ -98,6 +154,10 @@ class ShoppingHistory extends Equatable {
         paidByUserId,
         paidByName,
         items,
+        storeChainId,
+        storeSource,
+        totalCostSource,
+        completedBy,
       ];
 }
 
@@ -186,15 +246,29 @@ class ShoppingHistoryItem extends Equatable {
 /// across every item in every trip in [trips], in euros and unrounded; the
 /// screen rounds with `roundedSavingsCents` ("ca. 3,20 € gespart, laut
 /// Händler"). Used for both the lifetime total and any narrower window.
+///
+/// Only offers of the trip's market count (L4, Kap. 12 rule 5): when a trip
+/// has a [ShoppingHistory.storeChainId], an item whose `priceRetailer` names
+/// another chain saves nothing there.
 double totalSavingsOf(Iterable<ShoppingHistory> trips) {
   var total = 0.0;
   for (final trip in trips) {
+    final chain = trip.storeChainId;
     for (final item in trip.items) {
+      if (chain != null && !_offerOfChain(item.priceRetailer, chain)) continue;
       final perUnit = item.savingsPerUnit;
       if (perUnit != null) total += perUnit * item.pricingQuantity;
     }
   }
   return total;
+}
+
+bool _offerOfChain(String? retailer, String chainId) {
+  if (retailer == null || retailer.trim().isEmpty) return true;
+  final named = StoreChainDirectory.byId(retailer.trim()) != null
+      ? retailer.trim()
+      : matchChain(retailer);
+  return named == null || named == chainId;
 }
 
 /// Trips completed in the given [year]/[month] (1-indexed).

@@ -392,15 +392,12 @@ void main() {
   });
 
   group('openCheckoutFlow', () {
-    testWidgets('pushes a full-screen route and closes it when cancelled', (
-      tester,
-    ) async {
-      final observer = _PushObserver();
+    testWidgets('hands the list to the checkout and returns false when '
+        'cancelled', (tester) async {
       final runs = <String>[];
       await _pumpLauncher(
         tester,
         (context) => openCheckoutFlow(context, listId),
-        observer: observer,
         overrides: [
           checkoutRunnerProvider.overrideWithValue((context, ref, id) async {
             runs.add(id);
@@ -410,16 +407,13 @@ void main() {
       );
 
       await tester.tap(find.text('open'));
-      await tester.pump();
-      _expectFullScreenPush(observer);
-
       await tester.pumpAndSettle();
       expect(runs, [listId]);
       expect(find.text('open'), findsOneWidget, reason: 'back on the list');
       expect(_LauncherResult.last, isFalse);
     });
 
-    testWidgets('closes with true right after the trip was saved', (
+    testWidgets('returns true once the whole chain saved the trip', (
       tester,
     ) async {
       await _pumpLauncher(
@@ -434,11 +428,6 @@ void main() {
 
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      expect(
-        find.text('open'),
-        findsOneWidget,
-        reason: 'no confirmation of its own',
-      );
       expect(_LauncherResult.last, isTrue);
     });
   });

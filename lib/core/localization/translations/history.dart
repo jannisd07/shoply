@@ -43,7 +43,67 @@ const Map<String, String> historyEn = {
   'purchased_items': 'Purchased Items',
   'delete_entry': 'Delete Entry',
   'delete_entry_confirm': 'Are you sure you want to delete this entry?',
-  // P0.3 checkout route (Teil B)
+  // B8 "Einkauf abschließen" (V1–V3, verlauf-kosten.md). Plural texts are
+  // split into `_one` and the other form.
+  'hist_checkout_title': 'Finish shopping',
+  'hist_checkout_in_cart_one': '1 item in the cart',
+  'hist_checkout_in_cart': '{n} items in the cart',
+  'hist_checkout_left_one': '1 stays on {list}: {names}',
+  'hist_checkout_left': '{n} stay on {list}: {names}',
+  'hist_names_more': '{names} and {n} more',
+  'hist_checkout_where': 'Where did you shop?',
+  'hist_checkout_other_store': 'Other store …',
+  'hist_checkout_other_store_hint': 'Opens store picker',
+  'hist_checkout_store_here': '{store} (here)',
+  'hist_checkout_store_here_a11y': '{store}, here',
+  'hist_checkout_source_list': "This list's store",
+  'hist_checkout_source_learned': 'Same as last time',
+  'hist_checkout_source_location': 'Found from your location',
+  'hist_checkout_location_hint':
+      'With your location, {app} can tell which store you\'re in.',
+  'hist_checkout_location_use': 'Use location',
+  'hist_checkout_location_settings': 'Allow in Settings',
+  'hist_checkout_amount': 'Amount',
+  'hist_checkout_amount_placeholder': 'optional',
+  'hist_checkout_amount_note': 'For your monthly review.',
+  'hist_checkout_amount_note_split': 'For your monthly review and for splitting.',
+  'hist_amount_invalid': 'Enter the amount as a number, for example 42.80.',
+  'hist_amount_check': 'Is this amount right? {amount}',
+  'hist_checkout_split': 'Split costs',
+  'hist_checkout_split_one': "With {a}. You'll set the shares next.",
+  'hist_checkout_split_two': "With {a} and {b}. You'll set the shares next.",
+  'hist_checkout_split_many':
+      "With {a}, {b} and {n} others. You'll set the shares next.",
+  'hist_savings_sentence':
+      'About {amount} saved through offers, according to the retailer',
+  'hist_checkout_save': 'Save trip',
+  'hist_checkout_empty_title': 'Nothing in the cart yet.',
+  'hist_checkout_empty_body':
+      'Check off what goes into your cart. Only then does a trip go into your history.',
+  'hist_back_to_list': 'Back to the list',
+  'hist_checkout_done_by_other': '{name} just finished this trip.',
+  'hist_to_history': 'Go to history',
+  'hist_checkout_list_gone': "This list doesn't exist anymore.",
+  'hist_to_lists': 'Go to lists',
+  'hist_member_unknown': 'A member',
+  'hist_store_pick_title': 'Store for this trip',
+  'hist_store_none': 'No store',
+  'hist_store_pick_note':
+      "Only changes this trip. Change the list's store in the list.",
+  'hist_saved_title': 'Trip saved.',
+  'hist_saved_sub_store_one': '1 item at {store}',
+  'hist_saved_sub_store': '{n} items at {store}',
+  'hist_saved_sub_one': '1 item',
+  'hist_saved_sub': '{n} items',
+  'hist_saved_sub_savings':
+      '{base} · about {amount} saved through offers, according to the retailer',
+  'hist_saved_toast': 'Trip saved',
+  'hist_saved_undone': 'Trip undone. The items are checked off again.',
+  'hist_undo_failed': "Couldn't undo. The trip stays in your history.",
+  'hist_location_title': 'Find your store by location?',
+  'hist_location_body':
+      '{app} checks your location once when you finish shopping and looks up nearby stores on OpenStreetMap. You can turn this off in Settings.',
+  'hist_location_continue': 'Continue',
 };
 
 const Map<String, String> historyDe = {
@@ -88,5 +148,66 @@ const Map<String, String> historyDe = {
   'purchased_items': 'Gekaufte Artikel',
   'delete_entry': 'Eintrag löschen',
   'delete_entry_confirm': 'Möchtest du diesen Eintrag wirklich löschen?',
-  // P0.3 checkout route (Teil B)
+  // B8 „Einkauf abschließen" (V1–V3, verlauf-kosten.md). Pluraltexte sind
+  // in `_one` und die andere Form geteilt.
+  'hist_checkout_title': 'Einkauf abschließen',
+  'hist_checkout_in_cart_one': '1 Artikel im Wagen',
+  'hist_checkout_in_cart': '{n} Artikel im Wagen',
+  'hist_checkout_left_one': '1 bleibt auf {list}: {names}',
+  'hist_checkout_left': '{n} bleiben auf {list}: {names}',
+  'hist_names_more': '{names} und {n} weitere',
+  'hist_checkout_where': 'Wo warst du?',
+  'hist_checkout_other_store': 'Anderer Markt …',
+  'hist_checkout_other_store_hint': 'Öffnet die Marktauswahl',
+  'hist_checkout_store_here': '{store} (hier)',
+  'hist_checkout_store_here_a11y': '{store}, hier',
+  'hist_checkout_source_list': 'Markt dieser Liste',
+  'hist_checkout_source_learned': 'Wie beim letzten Mal',
+  'hist_checkout_source_location': 'Erkannt über deinen Standort',
+  'hist_checkout_location_hint':
+      'Mit deinem Standort erkennt {app} den Markt selbst.',
+  'hist_checkout_location_use': 'Standort verwenden',
+  'hist_checkout_location_settings': 'In Einstellungen erlauben',
+  'hist_checkout_amount': 'Betrag',
+  'hist_checkout_amount_placeholder': 'optional',
+  'hist_checkout_amount_note': 'Für deinen Monatsrückblick.',
+  'hist_checkout_amount_note_split':
+      'Für deinen Monatsrückblick und zum Teilen.',
+  'hist_amount_invalid': 'Gib den Betrag als Zahl ein, zum Beispiel 42,80.',
+  'hist_amount_check': 'Stimmt der Betrag? {amount}',
+  'hist_checkout_split': 'Kosten teilen',
+  'hist_checkout_split_one': 'Mit {a}. Danach legst du die Anteile fest.',
+  'hist_checkout_split_two':
+      'Mit {a} und {b}. Danach legst du die Anteile fest.',
+  'hist_checkout_split_many':
+      'Mit {a}, {b} und {n} weiteren. Danach legst du die Anteile fest.',
+  'hist_savings_sentence': 'Ca. {amount} durch Angebote gespart, laut Händler',
+  'hist_checkout_save': 'Einkauf speichern',
+  'hist_checkout_empty_title': 'Noch nichts im Wagen.',
+  'hist_checkout_empty_body':
+      'Hake ab, was du in den Wagen legst. Erst dann kommt ein Einkauf in deinen Verlauf.',
+  'hist_back_to_list': 'Zurück zur Liste',
+  'hist_checkout_done_by_other': '{name} hat diesen Einkauf gerade abgeschlossen.',
+  'hist_to_history': 'Zum Verlauf',
+  'hist_checkout_list_gone': 'Diese Liste gibt es nicht mehr.',
+  'hist_to_lists': 'Zu den Listen',
+  'hist_member_unknown': 'Ein Mitglied',
+  'hist_store_pick_title': 'Markt für diesen Einkauf',
+  'hist_store_none': 'Ohne Markt',
+  'hist_store_pick_note':
+      'Ändert nur diesen Einkauf. Den Markt der Liste änderst du in der Liste.',
+  'hist_saved_title': 'Einkauf gespeichert.',
+  'hist_saved_sub_store_one': '1 Artikel bei {store}',
+  'hist_saved_sub_store': '{n} Artikel bei {store}',
+  'hist_saved_sub_one': '1 Artikel',
+  'hist_saved_sub': '{n} Artikel',
+  'hist_saved_sub_savings':
+      '{base} · ca. {amount} durch Angebote gespart, laut Händler',
+  'hist_saved_toast': 'Einkauf gespeichert',
+  'hist_saved_undone': 'Einkauf widerrufen. Die Artikel sind wieder abgehakt.',
+  'hist_undo_failed': 'Widerrufen hat nicht geklappt. Der Einkauf bleibt im Verlauf.',
+  'hist_location_title': 'Markt per Standort erkennen?',
+  'hist_location_body':
+      '{app} fragt beim Abschluss einmal deinen Standort ab und sucht Märkte in der Nähe über OpenStreetMap. Ausschalten kannst du das in den Einstellungen.',
+  'hist_location_continue': 'Weiter',
 };

@@ -3,6 +3,13 @@
 // Neue Schlüssel bekommen das Bereichs-Präfix, siehe docs/redesign/arbeitsteilung.md 3.6.
 
 const Map<String, String> notificationsEn = {
+  // B8 trips and splits (verlauf-kosten.md V14); `_one` is the singular.
+  'notif_trip_done_one': '{name} shopped at {store} (1 item).',
+  'notif_trip_done': '{name} shopped at {store} ({n} items).',
+  'notif_trip_done_no_store_one': '{name} went shopping (1 item).',
+  'notif_trip_done_no_store': '{name} went shopping ({n} items).',
+  'notif_split_paid': '{name} marked your share ({amount}) as paid.',
+  'notif_split_reopened': '{name} marked your share ({amount}) as open again.',
   'restock_notification_title': '🥑 Time to restock?',
   'restock_notification_body_one':
       '{item} is probably running low – you buy it about every {days} days.',
@@ -23,6 +30,14 @@ const Map<String, String> notificationsEn = {
 };
 
 const Map<String, String> notificationsDe = {
+  // B8 Einkäufe und Aufteilungen (verlauf-kosten.md V14); `_one` ist Einzahl.
+  'notif_trip_done_one': '{name} hat bei {store} eingekauft (1 Artikel).',
+  'notif_trip_done': '{name} hat bei {store} eingekauft ({n} Artikel).',
+  'notif_trip_done_no_store_one': '{name} hat eingekauft (1 Artikel).',
+  'notif_trip_done_no_store': '{name} hat eingekauft ({n} Artikel).',
+  'notif_split_paid': '{name} hat deinen Anteil ({amount}) als bezahlt markiert.',
+  'notif_split_reopened':
+      '{name} hat deinen Anteil ({amount}) wieder als offen markiert.',
   'restock_notification_title': '🥑 Zeit nachzukaufen?',
   'restock_notification_body_one':
       '{item} ist wahrscheinlich fast aufgebraucht – du kaufst es etwa alle {days} Tage.',

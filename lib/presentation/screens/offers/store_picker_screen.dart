@@ -46,10 +46,21 @@ class StorePickerScreen extends ConsumerStatefulWidget {
     super.key,
     this.listId,
     this.from = StorePickerOrigin.chip,
+    this.tripListId,
+    this.selectedChainId,
   });
 
   final String? listId;
   final StorePickerOrigin from;
+
+  /// Mode `trip` (V2 "Markt für diesen Einkauf"): the list whose markets
+  /// fill "Deine Märkte"; the choice is only returned, never saved.
+  final String? tripListId;
+
+  /// The market chosen for the trip so far (check mark), mode `trip`.
+  final String? selectedChainId;
+
+  bool get _trip => from == StorePickerOrigin.checkout;
 
   @override
   ConsumerState<StorePickerScreen> createState() => _StorePickerScreenState();
@@ -78,12 +89,16 @@ class _StorePickerScreenState extends ConsumerState<StorePickerScreen> {
     final colors = context.colors;
     final listId = widget.listId;
     final lang = offerLanguageOf(context);
-    final current = listId == null
+    final trip = widget._trip;
+    final historyListId = trip ? widget.tripListId : listId;
+    final current = trip
+        ? widget.selectedChainId
+        : listId == null
         ? null
         : ref.watch(storeForListProvider(listId))?.id;
-    final history = listId == null
+    final history = historyListId == null
         ? const <String>[]
-        : ref.watch(listStoreHistoryProvider(listId)).valueOrNull ??
+        : ref.watch(listStoreHistoryProvider(historyListId)).valueOrNull ??
               const <String>[];
     final nearby =
         ref.watch(nearbyStoreOptionsProvider).valueOrNull ?? const [];
@@ -121,6 +136,7 @@ class _StorePickerScreenState extends ConsumerState<StorePickerScreen> {
       if (yours.isNotEmpty)
         InsetSection(
           header: context.tr('offer_pick_yours'),
+          footer: trip ? context.tr('hist_store_pick_note') : null,
           separatorIndent: markIndent + _kCheck + AvoSpacing.s,
           children: [
             for (final id in yours)
@@ -170,7 +186,8 @@ class _StorePickerScreenState extends ConsumerState<StorePickerScreen> {
                 context.tr('offer_pick_no_result', params: {'query': query}),
                 style: context.text(AvoTextStyle.body),
               ),
-              if (listId == null)
+              // A trip stores chains only so far (no market of one's own).
+              if (listId == null && !widget._trip)
                 AppButton.plain(
                   label: context.tr(
                     'offer_pick_use_custom',
@@ -187,7 +204,7 @@ class _StorePickerScreenState extends ConsumerState<StorePickerScreen> {
           child: InsetSection(
             children: [
               _StoreRow(
-                title: context.tr('offer_store_none'),
+                title: context.tr(trip ? 'hist_store_none' : 'offer_store_none'),
                 onTap: () => _pick(const NoStoreChoice()),
               ),
             ],
@@ -225,12 +242,19 @@ class _StorePickerScreenState extends ConsumerState<StorePickerScreen> {
             left: 0,
             right: 0,
             child: GlassToolbar(
+              // Mode `trip` is a follow-up step of V1/V5: back, not close.
               leading: GlassIconButton(
-                icon: const AvoIcon(AvoIcons.xmark),
-                semanticLabel: context.tr('common_close'),
+                icon: AvoIcon(
+                  widget._trip ? AvoIcons.chevronBack : AvoIcons.xmark,
+                ),
+                semanticLabel: context.tr(
+                  widget._trip ? 'back' : 'common_close',
+                ),
                 onPressed: () => context.pop(),
               ),
-              title: context.tr('offer_pick_title'),
+              title: context.tr(
+                trip ? 'hist_store_pick_title' : 'offer_pick_title',
+              ),
             ),
           ),
         ],

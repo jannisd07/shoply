@@ -1,137 +1,207 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 
-import 'package:shoply/core/constants/app_colors.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/data/models/shopping_item_model.dart';
-import 'package:shoply/presentation/screens/lists/shopping_trip_completion.dart';
+import 'package:shoply/data/models/trip_checkout.dart';
+import 'package:shoply/data/services/store_chain_directory.dart';
+import 'package:shoply/data/services/trip_money_format.dart';
+import 'package:shoply/presentation/screens/history/checkout/checkout_screen.dart';
+import 'package:shoply/presentation/screens/history/history_paths.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
-import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/state/trip_history_provider.dart';
+import 'package:shoply/presentation/widgets/design/success_moment.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 
 /// Runs the checkout of [listId] on [context]. True when the trip was saved,
-/// false when it was cancelled, failed or had nothing checked.
+/// false when it was cancelled or had nothing checked. [ref] reads the
+/// providers of [context]'s scope.
 typedef CheckoutRunner =
     Future<bool> Function(BuildContext context, WidgetRef ref, String listId);
 
-/// The checkout behind [openCheckoutFlow]: for now the existing flow of the
-/// list screen ([completeShoppingTrip]); B8 replaces it with the full-screen
-/// steps. Override in tests.
+/// The checkout behind [openCheckoutFlow]: the full-screen chain V1 → V3 →
+/// (V7). Override in tests that only need the result.
 final checkoutRunnerProvider = Provider<CheckoutRunner>(
-  (ref) => _runExistingCheckout,
+  (ref) => runCheckoutChain,
 );
 
-/// "Einkauf abschließen" for [listId] on its own full-screen route, pushed
-/// like any screen (contract `b_slots.dart`). True when the trip was saved,
-/// false when it was cancelled, failed or had nothing checked. Shows no
-/// confirmation of its own: the host shows the success moment.
-Future<bool> openCheckoutFlow(BuildContext context, String listId) async {
-  final saved = await Navigator.of(context).push<bool>(
-    MaterialPageRoute(builder: (_) => CheckoutFlowScreen(listId: listId)),
-  );
-  return saved ?? false;
+/// "Einkauf abschließen" for [listId] (contract `b_slots.dart`): pushes
+/// `/checkout/:listId` (V1). The future ends only when the whole chain is
+/// over (V1, the success moment V3, an optional split V7) and is true when
+/// a trip was saved; then the host ends the shopping mode. The undo toast
+/// "Einkauf gespeichert · Widerrufen" follows right after.
+Future<bool> openCheckoutFlow(BuildContext context, String listId) {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final runner = container.read(checkoutRunnerProvider);
+  final ref = context is WidgetRef
+      ? context as WidgetRef
+      : _ContainerRef(container, context);
+  return runner(context, ref, listId);
 }
 
-/// Stub of the checkout screen until B8: runs the checkout right away and
-/// closes with its result.
-class CheckoutFlowScreen extends ConsumerStatefulWidget {
-  const CheckoutFlowScreen({super.key, required this.listId});
-
-  final String listId;
-
-  @override
-  ConsumerState<CheckoutFlowScreen> createState() => _CheckoutFlowScreenState();
-}
-
-class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
-  bool _running = true;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _run());
-  }
-
-  Future<void> _run() async {
-    var saved = false;
-    try {
-      saved = await ref.read(checkoutRunnerProvider)(
-        context,
-        ref,
-        widget.listId,
-      );
-    } catch (e) {
-      debugPrint('❌ [CHECKOUT] Checkout failed: $e');
-    }
-    if (!mounted) return;
-    setState(() => _running = false);
-    Navigator.of(context).pop(saved);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      // Leaving mid-checkout would skip the rest of it (push to the members).
-      canPop: !_running,
-      child: Scaffold(
-        backgroundColor: AppColors.background(context),
-        appBar: AppBar(
-          backgroundColor: AppColors.background(context),
-          elevation: 0,
-          automaticallyImplyLeading: !_running,
-          title: Text(
-            context.tr('complete_shopping'),
-            style: TextStyle(
-              color: AppColors.textPrimary(context),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        body: const SafeArea(
-          child: Center(child: CircularProgressIndicator.adaptive()),
-        ),
-      ),
-    );
-  }
-}
-
-/// [completeShoppingTrip] only starts a reload of the list, so the items are
-/// reloaded here to tell a saved trip (checked items gone) from a cancelled
-/// one.
-Future<bool> _runExistingCheckout(
+/// The default [CheckoutRunner].
+Future<bool> runCheckoutChain(
   BuildContext context,
   WidgetRef ref,
   String listId,
 ) async {
-  final items =
-      ref.read(itemsNotifierProvider(listId)).valueOrNull ??
-      const <ShoppingItemModel>[];
-  final checkedIds = {
-    for (final item in items)
-      if (item.isChecked) item.id,
-  };
-  final listName = await _listName(ref, listId);
-  if (!context.mounted) return false;
-
-  await completeShoppingTrip(
-    context,
-    ref,
-    listId: listId,
-    listName: listName,
-    items: items,
+  final router = GoRouter.of(context);
+  final controller = ref.read(tripHistoryProvider.notifier);
+  final items = ref.read(itemsNotifierProvider(listId).notifier);
+  final outcome = await router.push<Object?>(
+    checkoutLocation(listId),
   );
-  if (checkedIds.isEmpty || !context.mounted) return false;
+  if (outcome is! CheckoutOutcome) return false;
+  if (!context.mounted) return true;
 
-  await ref.read(itemsNotifierProvider(listId).notifier).loadItems();
-  if (!context.mounted) return false;
-  final left =
-      ref.read(itemsNotifierProvider(listId)).valueOrNull ??
-      const <ShoppingItemModel>[];
-  return !left.any((item) => checkedIds.contains(item.id));
+  // V3: only after V1 has closed, over the list (or shopping mode).
+  await showSuccessMoment(
+    context,
+    title: context.tr('hist_saved_title'),
+    subtitle: checkoutSuccessSubtitle(context, outcome),
+  );
+
+  final tripId = outcome.tripId;
+  final saved = outcome.result is CheckoutSaved;
+  if (outcome.request.splitPlanned && saved && context.mounted) {
+    await router.push<Object?>(
+      historySplitLocation(
+        tripId,
+        amountCents: outcome.request.totalCostCents,
+        fromCheckout: true,
+      ),
+    );
+  }
+  if (context.mounted) {
+    showCheckoutUndoToast(
+      context,
+      controller: controller,
+      tripId: tripId,
+      reloadItems: items.loadItems,
+    );
+  }
+  return true;
 }
 
-Future<String> _listName(WidgetRef ref, String listId) async {
-  final lists = ref.read(listsNotifierProvider).valueOrNull;
-  final known = lists?.where((list) => list.id == listId).firstOrNull;
-  if (known != null) return known.name;
-  return await ref.read(itemRepositoryProvider).getListName(listId) ?? '';
+/// The V3 subtitle: "9 Artikel bei Lidl · ca. 3,20 € durch Angebote
+/// gespart, laut Händler", "9 Artikel bei Lidl" or "9 Artikel".
+String checkoutSuccessSubtitle(BuildContext context, CheckoutOutcome outcome) {
+  final n = outcome.itemCount;
+  final chainId = outcome.request.chainId;
+  final store = chainId == null
+      ? null
+      : StoreChainDirectory.byId(chainId)?.displayName;
+  final base = store == null
+      ? (n == 1
+            ? context.tr('hist_saved_sub_one')
+            : context.tr('hist_saved_sub', params: {'n': '$n'}))
+      : (n == 1
+            ? context.tr('hist_saved_sub_store_one', params: {'store': store})
+            : context.tr(
+                'hist_saved_sub_store',
+                params: {'n': '$n', 'store': store},
+              ));
+  final savings = outcome.savingsCents;
+  if (savings == null || store == null) return base;
+  return context.tr(
+    'hist_saved_sub_savings',
+    params: {
+      'base': base,
+      'amount': formatEuroCents(
+        savings,
+        Localizations.localeOf(context).languageCode,
+      ),
+    },
+  );
+}
+
+/// "Einkauf gespeichert · Widerrufen" (V3, 4 s, 10 s with VoiceOver).
+/// "Widerrufen" takes the trip back with a split from this chain and its
+/// pushes; when the toast is gone the pushes are released.
+void showCheckoutUndoToast(
+  BuildContext context, {
+  required TripHistoryController controller,
+  required String tripId,
+  required Future<void> Function() reloadItems,
+}) {
+  var undone = false;
+  final undoneText = context.tr('hist_saved_undone');
+  final failedText = context.tr('hist_undo_failed');
+  final voiceOver = MediaQuery.accessibleNavigationOf(context);
+  AvoToast.show(
+    context,
+    message: context.tr('hist_saved_toast'),
+    actionLabel: context.tr('common_undo'),
+    onAction: () {
+      undone = true;
+      unawaited(() async {
+        final result = await controller.undo(tripId);
+        if (result == UndoTripResult.undone) {
+          await reloadItems();
+          if (context.mounted) AvoToast.show(context, message: undoneText);
+        } else {
+          unawaited(AvoHaptics.error());
+          if (context.mounted) AvoToast.show(context, message: failedText);
+          controller.release(tripId);
+        }
+      }());
+    },
+  );
+  // The toast stays 4 s (10 s with VoiceOver); then the pushes may go.
+  Timer(Duration(seconds: voiceOver ? 11 : 5), () {
+    if (!undone) controller.release(tripId);
+  });
+}
+
+/// A [WidgetRef] over the provider container of a plain [BuildContext], so
+/// [openCheckoutFlow] keeps its `(context, listId)` contract for hosts whose
+/// context is no consumer. Watching is reading here: the runner never
+/// rebuilds anything.
+class _ContainerRef implements WidgetRef {
+  _ContainerRef(this._container, this.context);
+
+  final ProviderContainer _container;
+
+  @override
+  final BuildContext context;
+
+  @override
+  T read<T>(ProviderListenable<T> provider) => _container.read(provider);
+
+  @override
+  T watch<T>(ProviderListenable<T> provider) => _container.read(provider);
+
+  @override
+  bool exists(ProviderBase<Object?> provider) => _container.exists(provider);
+
+  @override
+  void invalidate(ProviderOrFamily provider) =>
+      _container.invalidate(provider);
+
+  @override
+  R refresh<R>(Refreshable<R> provider) =>
+      _container.refresh(provider);
+
+  @override
+  void listen<T>(
+    ProviderListenable<T> provider,
+    void Function(T? previous, T next) listener, {
+    void Function(Object error, StackTrace stackTrace)? onError,
+  }) => throw UnsupportedError('listen inside the checkout runner');
+
+  @override
+  ProviderSubscription<T> listenManual<T>(
+    ProviderListenable<T> provider,
+    void Function(T? previous, T next) listener, {
+    void Function(Object error, StackTrace stackTrace)? onError,
+    bool fireImmediately = false,
+  }) => _container.listen(
+    provider,
+    listener,
+    onError: onError,
+    fireImmediately: fireImmediately,
+  );
 }
