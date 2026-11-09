@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,9 +18,8 @@ import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.
 import 'package:shoply/presentation/screens/offers/offer_actions.dart';
 import 'package:shoply/presentation/screens/offers/offer_paths.dart';
 import 'package:shoply/presentation/screens/offers/offer_text.dart';
-import 'package:shoply/presentation/screens/offers/widgets/offer_icons.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_row.dart';
-import 'package:shoply/presentation/screens/profile/settings/personal_info_screen.dart';
+import 'package:shoply/presentation/screens/offers/widgets/postcode_hint.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/routes/app_destinations.dart';
@@ -193,9 +194,8 @@ class AvoOfferSetupSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!_offersShown(ref)) return const SizedBox.shrink();
     if (card.needsRegion) {
-      void open() => Navigator.of(context).push(
-        CupertinoPageRoute<void>(builder: (_) => const PersonalInfoScreen()),
-      );
+      void open() =>
+          unawaited(openRegionFromList(context, from: RegionOrigin.avo));
       return AvoResultSection(
         title: context.tr('avo_offer_set_zip'),
         leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.location)),
@@ -209,7 +209,7 @@ class AvoOfferSetupSection extends ConsumerWidget {
         'avo_offer_no_store',
         params: {'list': card.listName ?? ''},
       ),
-      leading: const AvoSymbolTile(icon: AvoIcon(OfferIcons.storefront)),
+      leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.storefront)),
       onOpen: choose,
       actions: [
         AvoCardAction(label: context.tr('offer_store_choose'), onPressed: choose),
