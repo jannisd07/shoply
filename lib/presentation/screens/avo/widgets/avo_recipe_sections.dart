@@ -70,7 +70,9 @@ class AvoRecipeRow extends ConsumerWidget {
                   ItemThumb(
                     size: _recipeImage,
                     radius: AvoRadii.imageSmall,
-                    image: url == null || url.isEmpty ? null : NetworkImage(url),
+                    image: url == null || url.isEmpty
+                        ? null
+                        : NetworkImage(url),
                   ),
                   const SizedBox(width: AvoSpacing.m),
                 ],
@@ -163,7 +165,10 @@ class AvoRecipesSection extends ConsumerWidget {
       ],
       footnote: hidden,
       actions: [
-        AvoCardAction(label: context.tr('avo_card_more_recipes'), onPressed: more),
+        AvoCardAction(
+          label: context.tr('avo_card_more_recipes'),
+          onPressed: more,
+        ),
       ],
     );
   }
@@ -216,7 +221,8 @@ String avoNutritionSentence(
     context.tr('avo_nutr_protein', params: {'n': avoInt(context, protein)}),
   if (carbs != null)
     context.tr('avo_nutr_carbs', params: {'n': avoInt(context, carbs)}),
-  if (fat != null) context.tr('avo_nutr_fat', params: {'n': avoInt(context, fat)}),
+  if (fat != null)
+    context.tr('avo_nutr_fat', params: {'n': avoInt(context, fat)}),
 ].join(', ');
 
 /// Calories and the three macros side by side, two by two when narrow or

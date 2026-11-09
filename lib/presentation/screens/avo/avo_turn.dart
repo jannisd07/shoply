@@ -107,7 +107,9 @@ AvoWorkStep avoWorkStepFor(
     case 'search_offers':
     case 'get_personalized_deals':
       final id = input['list_id'];
-      final store = storeName?.call(id is String && id.isNotEmpty ? id : null)?.trim();
+      final store = storeName
+          ?.call(id is String && id.isNotEmpty ? id : null)
+          ?.trim();
       return store == null || store.isEmpty
           ? AvoWorkStep.thinking
           : AvoWorkStep('avo_status_offers', {'store': store});

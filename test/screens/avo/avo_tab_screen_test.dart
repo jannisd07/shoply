@@ -53,6 +53,9 @@ Future<void> _pump(
 
 Future<void> _ask(WidgetTester tester, String text) async {
   await tester.enterText(find.byType(EditableText), text);
+  // A frame between typing and Return, as on a device: with text the round
+  // button leaves "Stop answer" and Return sends again.
+  await tester.pump();
   await tester.testTextInput.receiveAction(TextInputAction.send);
   await settle(tester);
 }
@@ -184,7 +187,9 @@ void main() {
       ]);
       await _pump(tester, backend);
       await _ask(tester, 'Plan die Woche');
-      await tester.tap(find.text('Stop'));
+      // The first words replaced the status line: the composer's round
+      // button is "Stop answer" while the field is empty.
+      await tester.tap(find.bySemanticsLabel('Stop answer'));
       await settle(tester);
       expect(backend.stops, 1);
       expect(find.text('Stopped.'), findsOneWidget);

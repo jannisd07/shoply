@@ -69,7 +69,9 @@ class AvoConfirmSection extends ConsumerWidget {
         confirm = context.tr('avo_confirm_plan_action');
         done = context.tr('avo_deleted_plan', params: {'recipe': name});
       case AvoDeleteTarget.historyTrip:
-        final date = pending.date == null ? name : avoDay(context, pending.date!);
+        final date = pending.date == null
+            ? name
+            : avoDay(context, pending.date!);
         title = context.tr('avo_confirm_trip_title', params: {'date': date});
         body = context.tr('avo_confirm_trip_body');
         done = context.tr('avo_deleted_trip', params: {'date': date});

@@ -84,8 +84,9 @@ mixin _AvoPhotoTurns on ChangeNotifier {
     turn.phase = AvoTurnPhase.done;
     if (result.card is AvoPhotoErrorCard) {
       unawaited(AvoHaptics.error());
-    } else if (result.card case AvoEstimateCard(:final allergens)
-        when allergens.isNotEmpty) {
+    } else if (result.card case AvoEstimateCard(
+      :final allergens,
+    ) when allergens.isNotEmpty) {
       // Once, for the allergen (Kap. 7.4, 12.4).
       unawaited(AvoHaptics.warning());
     }
@@ -113,9 +114,7 @@ mixin _AvoPhotoTurns on ChangeNotifier {
         ),
       );
     } on MealPhotoException catch (e) {
-      return AvoWidgetPayload.card(
-        AvoPhotoErrorCard(code: e.code, meal: true),
-      );
+      return AvoWidgetPayload.card(AvoPhotoErrorCard(code: e.code, meal: true));
     } catch (e) {
       debugPrint('❌ [AVO_TAB] Meal photo failed: $e');
       return AvoWidgetPayload.card(

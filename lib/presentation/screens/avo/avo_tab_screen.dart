@@ -94,7 +94,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
   final _statusKey = GlobalKey(debugLabel: 'avo-status');
   String? _announcedStatus;
 
-  /// The composer, to place the photo menu at its camera button.
+  /// The composer, to place the card's photo menu at its camera button.
   final _composerKey = GlobalKey(debugLabel: 'avo-composer');
 
   /// The camera is off in Settings (Kap. 7.4): the status row says so
@@ -209,9 +209,10 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
 
   // ---------------------------------------------------------------- photos
 
-  /// "Foto hinzufügen": the pull-down "Foto aufnehmen / Foto auswählen"
-  /// from the camera button of the composer (Kap. 2.11, 7.1).
-  void _photoMenu() {
+  /// "Neues Foto" on a photo Avo could not read: the photo pull-down at the
+  /// composer's camera button (the composer's own button opens
+  /// [_photoItems] itself).
+  void _photoMenuFromCard() {
     final box = _composerKey.currentContext?.findRenderObject() as RenderBox?;
     Rect? anchor;
     if (box != null && box.hasSize) {
@@ -223,24 +224,22 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
         AvoSizes.accessoryHeight,
       );
     }
-    showAvoMenu(
-      context,
-      anchorRect: anchor,
-      items: [
-        AvoMenuItem(
-          label: context.tr('avo_photo_take'),
-          onSelected: () => unawaited(_takePhoto()),
-        ),
-        AvoMenuItem(
-          label: context.tr('avo_photo_choose'),
-          onSelected: () => unawaited(_choosePhoto()),
-        ),
-      ],
-    );
+    showAvoMenu(context, anchorRect: anchor, items: _photoItems());
   }
 
-  /// "Neues Foto" on a photo Avo could not read.
-  void _photoMenuFromCard() => _photoMenu();
+  /// "Foto aufnehmen / Foto auswählen" (Kap. 2.11, 7.1).
+  List<AvoMenuEntry> _photoItems() => [
+    AvoMenuItem(
+      label: context.tr('avo_photo_take'),
+      icon: AvoIcons.camera,
+      onSelected: () => unawaited(_takePhoto()),
+    ),
+    AvoMenuItem(
+      label: context.tr('avo_photo_choose'),
+      icon: AvoIcons.photo,
+      onSelected: () => unawaited(_choosePhoto()),
+    ),
+  ];
 
   /// The camera: once per install the app's own explanation first (dialog
   /// 11.3, before the system asks for the first time), then the system
@@ -462,7 +461,10 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
         case AvoListImportCard(:final items):
           return items.length == 1
               ? context.tr('avo_import_found_one')
-              : context.tr('avo_import_found', params: {'n': '${items.length}'});
+              : context.tr(
+                  'avo_import_found',
+                  params: {'n': '${items.length}'},
+                );
         case AvoPhotoChoiceCard():
           return context.tr('avo_photo_question');
         case AvoPhotoErrorCard():
@@ -783,7 +785,9 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
                 controller: _controller,
                 focusNode: _focus,
                 enabled: aiOn,
-                onPhoto: _photoMenu,
+                photoMenuItems: _photoItems(),
+                responding: chat.isWorking,
+                onStop: chat.stop,
                 onSend: (text) => _send(text, typed: true),
                 above: showChip
                     ? AvoContextChip(

@@ -57,7 +57,10 @@ AvoResultSection _planSection(
   final today = oneDay && avoIsToday(card.from, now) && card.lines.length == 1;
   return AvoResultSection(
     title: today
-        ? context.tr('avo_plan_today', params: {'recipe': card.lines.first.name})
+        ? context.tr(
+            'avo_plan_today',
+            params: {'recipe': card.lines.first.name},
+          )
         : context.tr('avo_plan_title'),
     leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.calendar)),
     detailIndent: context.isAccessibilityText
@@ -128,7 +131,9 @@ class AvoPlanChoice extends StatelessWidget {
       children: [
         AvoQuestionText(
           text: context.tr(
-            card.plannedNames.length > 1 ? 'avo_plan_taken_many' : 'avo_plan_taken',
+            card.plannedNames.length > 1
+                ? 'avo_plan_taken_many'
+                : 'avo_plan_taken',
             params: {
               'day': avoWeekday(context, card.day),
               'recipe': avoAnd(context, card.plannedNames),

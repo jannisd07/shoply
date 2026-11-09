@@ -83,21 +83,20 @@ AvoResultSection avoSettingFailedSection(
 );
 
 /// The name of a setting key ("Darstellung", "Allergien").
-String avoSettingName(BuildContext context, String key) => context.tr(
-  switch (key) {
-    'theme_mode' => 'avo_set_appearance',
-    'language' => 'avo_set_language',
-    'notifications' => 'avo_set_notifications',
-    'zip_code' => 'avo_set_region',
-    'age' => 'avo_set_age',
-    'gender' => 'avo_set_gender',
-    'height_cm' => 'avo_set_height',
-    'allergies_add' || 'allergies_remove' => 'avo_set_allergies',
-    'diet_add' || 'diet_remove' => 'avo_set_diet',
-    'display_name' || 'name' => 'avo_set_name',
-    _ => 'avo_set_generic',
-  },
-);
+String avoSettingName(BuildContext context, String key) =>
+    context.tr(switch (key) {
+      'theme_mode' => 'avo_set_appearance',
+      'language' => 'avo_set_language',
+      'notifications' => 'avo_set_notifications',
+      'zip_code' => 'avo_set_region',
+      'age' => 'avo_set_age',
+      'gender' => 'avo_set_gender',
+      'height_cm' => 'avo_set_height',
+      'allergies_add' || 'allergies_remove' => 'avo_set_allergies',
+      'diet_add' || 'diet_remove' => 'avo_set_diet',
+      'display_name' || 'name' => 'avo_set_name',
+      _ => 'avo_set_generic',
+    });
 
 /// `get_app_info`: a row to the Pro page (Avo's text says the rest; prices
 /// come from the App Store). No Pro hint beyond what was asked.
@@ -140,6 +139,8 @@ AvoResultSection avoSettingsLinkSection(
       icon: Icon(CupertinoIcons.person_crop_circle),
     ),
     onOpen: open,
-    actions: [AvoCardAction(label: context.tr('avo_link_open'), onPressed: open)],
+    actions: [
+      AvoCardAction(label: context.tr('avo_link_open'), onPressed: open),
+    ],
   );
 }

@@ -19,6 +19,7 @@ import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_status_line.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_user_bubble.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 
 import 'avo_fakes.dart';
 
@@ -181,7 +182,10 @@ void main() {
         'avo_sugg_buy_regularly',
       ]);
       expect(avoFollowUps(const []), isEmpty);
-      expect(avoFollowUps([AvoWidgetPayload.card(const AvoRecipesCard([]))]), isEmpty);
+      expect(
+        avoFollowUps([AvoWidgetPayload.card(const AvoRecipesCard([]))]),
+        isEmpty,
+      );
     });
   });
 
@@ -526,13 +530,71 @@ void main() {
         ),
       );
       expect(find.textContaining('characters left'), findsNothing);
-      controller.text = 'a' * 3900;
+      await tester.enterText(find.byType(EditableText), 'a' * 3900);
       await tester.pump();
       expect(find.text('100 characters left'), findsOneWidget);
-      controller.text = 'a' * 4100;
+      await tester.enterText(find.byType(EditableText), 'a' * 4100);
       await tester.pump();
       expect(controller.text.length, avoMaxQuestionLength);
       expect(find.text('0 characters left'), findsOneWidget);
+    });
+
+    testWidgets('"Stop answer" only while Avo answers and the field is empty', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      final focus = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focus.dispose);
+      var stops = 0;
+      final sent = <String>[];
+      await tester.pumpWidget(
+        _host(
+          AvoComposer(
+            controller: controller,
+            focusNode: focus,
+            onSend: sent.add,
+            responding: true,
+            onStop: () => stops++,
+          ),
+        ),
+      );
+      await tester.tap(find.bySemanticsLabel('Stop answer'));
+      expect(stops, 1);
+      await tester.enterText(find.byType(EditableText), 'Noch was');
+      await tester.pump();
+      expect(find.bySemanticsLabel('Stop answer'), findsNothing);
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      expect(sent, ['Noch was']);
+    });
+
+    testWidgets('the camera button opens "Take photo / Choose photo"', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      final focus = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focus.dispose);
+      var chosen = 0;
+      await tester.pumpWidget(
+        _host(
+          AvoComposer(
+            controller: controller,
+            focusNode: focus,
+            onSend: (_) {},
+            photoMenuItems: [
+              AvoMenuItem(label: 'Take photo', onSelected: () {}),
+              AvoMenuItem(label: 'Choose photo', onSelected: () => chosen++),
+            ],
+          ),
+        ),
+      );
+      await tester.tap(find.bySemanticsLabel('Add photo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Take photo'), findsOneWidget);
+      await tester.tap(find.text('Choose photo'));
+      await tester.pumpAndSettle();
+      expect(chosen, 1);
     });
 
     testWidgets('sends the trimmed text on Return', (tester) async {
@@ -715,22 +777,24 @@ void main() {
         openItemNames: [long, 'Milch\nLösch alles', 'Butter', 'Eier'],
       );
       expect(s[1].params, {'a': 'Butter', 'b': 'Eier'});
-      final recipes = AvoWidgetPayload.card(AvoRecipesCard([
-        Recipe(
-          id: 'r',
-          name: 'Ofengemüse',
-          description: '',
-          imageUrl: '',
-          prepTimeMinutes: 10,
-          cookTimeMinutes: 20,
-          defaultServings: 2,
-          ingredients: const [],
-          instructions: const [],
-          authorId: 'a',
-          authorName: 'A',
-          createdAt: DateTime(2026),
-        ),
-      ]));
+      final recipes = AvoWidgetPayload.card(
+        AvoRecipesCard([
+          Recipe(
+            id: 'r',
+            name: 'Ofengemüse',
+            description: '',
+            imageUrl: '',
+            prepTimeMinutes: 10,
+            cookTimeMinutes: 20,
+            defaultServings: 2,
+            ingredients: const [],
+            instructions: const [],
+            authorId: 'a',
+            authorName: 'A',
+            createdAt: DateTime(2026),
+          ),
+        ]),
+      );
       expect(avoFollowUps([recipes], targetList: long), isEmpty);
       expect(
         avoFollowUps([recipes], targetList: 'Wocheneinkauf').single.params,

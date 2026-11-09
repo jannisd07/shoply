@@ -108,7 +108,9 @@ class AvoListImport extends ConsumerWidget {
     final found = AvoResultSection(
       title: avoTrCount(context, 'avo_import_found', card.items.length),
       subtitle: listName,
-      leading: const AvoSymbolTile(icon: Icon(CupertinoIcons.doc_text_viewfinder)),
+      leading: const AvoSymbolTile(
+        icon: Icon(CupertinoIcons.doc_text_viewfinder),
+      ),
       maxCollapsed: card.items.length,
       maxExpanded: card.items.length,
       detailIndent: AvoSpacing.l + AvoSizes.hitTarget + AvoSpacing.xs,
@@ -116,7 +118,11 @@ class AvoListImport extends ConsumerWidget {
         for (var i = 0; i < card.items.length; i++)
           _ImportRow(
             name: card.items[i].name,
-            amount: _amount(context, card.items[i].quantity, card.items[i].unit),
+            amount: _amount(
+              context,
+              card.items[i].quantity,
+              card.items[i].unit,
+            ),
             selected: !off.contains(i),
             onToggle: () => chat.toggleImportRow(payload, i),
           ),
@@ -125,8 +131,7 @@ class AvoListImport extends ConsumerWidget {
         AvoCardAction(
           label: context.tr('avo_import_add', params: {'n': '$chosen'}),
           working: working,
-          onPressed:
-              listId == null || chosen == 0 || working || scope.offline
+          onPressed: listId == null || chosen == 0 || working || scope.offline
               ? null
               : () => chat.addImport(payload),
         ),
@@ -139,10 +144,7 @@ class AvoListImport extends ConsumerWidget {
             titleColor: colors.secondaryLabel,
             leading: AvoSymbolTile(
               neutral: true,
-              icon: Icon(
-                CupertinoIcons.question,
-                color: colors.secondaryLabel,
-              ),
+              icon: Icon(CupertinoIcons.question, color: colors.secondaryLabel),
             ),
             details: [
               Padding(
@@ -275,59 +277,57 @@ AvoResultSection avoPhotoErrorSection(
 }) {
   final colors = context.colors;
   void manual() => openAppDestination(context, AppDestinations.calories);
-  final (String text, String? actionLabel, VoidCallback? action, bool error) =
-      switch (card.code) {
-        'no_food_detected' => (
-          context.tr('avo_photo_no_food'),
-          context.tr('avo_photo_manual'),
-          manual,
-          false,
-        ),
-        'no_items_found' => (
-          context.tr('avo_photo_no_items'),
-          context.tr('avo_photo_new'),
-          onNewPhoto,
-          false,
-        ),
-        'unreadable_image' => (
-          context.tr('avo_photo_unreadable'),
-          context.tr('avo_photo_new'),
-          onNewPhoto,
-          false,
-        ),
-        'quota_exceeded' || 'rate_limited' when card.meal => (
-          context.tr('avo_photo_limit_meal'),
-          context.tr('avo_photo_manual'),
-          manual,
-          false,
-        ),
-        'quota_exceeded' || 'rate_limited' => (
-          context.tr('avo_photo_limit_list'),
-          null,
-          null,
-          false,
-        ),
-        'network_error' || 'timeout' => (
-          context.tr('avo_err_unreachable'),
-          context.tr('avo_retry'),
-          () => s.chat.retry(s.turn, offline: s.offline),
-          true,
-        ),
-        _ => (
-          context.tr('avo_err_title'),
-          context.tr('avo_retry'),
-          () => s.chat.retry(s.turn, offline: s.offline),
-          true,
-        ),
-      };
+  final (
+    String text,
+    String? actionLabel,
+    VoidCallback? action,
+    bool error,
+  ) = switch (card.code) {
+    'no_food_detected' => (
+      context.tr('avo_photo_no_food'),
+      context.tr('avo_photo_manual'),
+      manual,
+      false,
+    ),
+    'no_items_found' => (
+      context.tr('avo_photo_no_items'),
+      context.tr('avo_photo_new'),
+      onNewPhoto,
+      false,
+    ),
+    'unreadable_image' => (
+      context.tr('avo_photo_unreadable'),
+      context.tr('avo_photo_new'),
+      onNewPhoto,
+      false,
+    ),
+    'quota_exceeded' || 'rate_limited' when card.meal => (
+      context.tr('avo_photo_limit_meal'),
+      context.tr('avo_photo_manual'),
+      manual,
+      false,
+    ),
+    'quota_exceeded' ||
+    'rate_limited' => (context.tr('avo_photo_limit_list'), null, null, false),
+    'network_error' || 'timeout' => (
+      context.tr('avo_err_unreachable'),
+      context.tr('avo_retry'),
+      () => s.chat.retry(s.turn, offline: s.offline),
+      true,
+    ),
+    _ => (
+      context.tr('avo_err_title'),
+      context.tr('avo_retry'),
+      () => s.chat.retry(s.turn, offline: s.offline),
+      true,
+    ),
+  };
   return AvoResultSection(
     title: text,
     leading: AvoSymbolTile(
       neutral: true,
       icon: Icon(
-        error
-            ? CupertinoIcons.exclamationmark_circle
-            : CupertinoIcons.camera,
+        error ? CupertinoIcons.exclamationmark_circle : CupertinoIcons.camera,
         color: error ? colors.destructive : colors.secondaryLabel,
       ),
     ),

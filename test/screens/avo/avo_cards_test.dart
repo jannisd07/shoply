@@ -85,7 +85,8 @@ Future<FakeAvoBackend> _pump(
       const SingleChildScrollView(child: AvoRounds()),
       avoCardOverrides(
         backend: backend,
-        modules: modules ??
+        modules:
+            modules ??
             const {
               AppModule.offers,
               AppModule.calories,
@@ -346,7 +347,9 @@ void main() {
           paidReset: const ['Lena'],
         ),
       );
-      final backend = FakeAvoBackend([AvoScript(payloads: [card])]);
+      final backend = FakeAvoBackend([
+        AvoScript(payloads: [card]),
+      ]);
       await tester.pumpWidget(
         avoHarness(
           const SingleChildScrollView(child: AvoRounds()),
@@ -373,27 +376,25 @@ void main() {
     testWidgets('a split card that is out of date says so and offers nothing', (
       tester,
     ) async {
-      final backend =
-          FakeAvoBackend([
-              AvoScript(
-                payloads: [
-                  AvoWidgetPayload.card(
-                    AvoSplitPreviewCard(
-                      historyId: 't1',
-                      tripDate: DateTime(2026, 10, 31),
-                      total: 30,
-                      totalFromTrip: false,
-                      yourUserId: 'u1',
-                      shares: const [
-                        (name: 'J', amount: 15, isYou: true),
-                        (name: 'Lena', amount: 15, isYou: false),
-                      ],
-                    ),
-                  ),
+      final backend = FakeAvoBackend([
+        AvoScript(
+          payloads: [
+            AvoWidgetPayload.card(
+              AvoSplitPreviewCard(
+                historyId: 't1',
+                tripDate: DateTime(2026, 10, 31),
+                total: 30,
+                totalFromTrip: false,
+                yourUserId: 'u1',
+                shares: const [
+                  (name: 'J', amount: 15, isYou: true),
+                  (name: 'Lena', amount: 15, isYou: false),
                 ],
               ),
-            ])
-            ..splitStale = true;
+            ),
+          ],
+        ),
+      ])..splitStale = true;
       await tester.pumpWidget(
         avoHarness(
           const SingleChildScrollView(child: AvoRounds()),
@@ -409,9 +410,7 @@ void main() {
     });
 
     testWidgets('no trips yet', (tester) async {
-      await _pump(tester, [
-        AvoWidgetPayload.card(const AvoTripsCard([])),
-      ]);
+      await _pump(tester, [AvoWidgetPayload.card(const AvoTripsCard([]))]);
       expect(find.text('No shopping trips saved yet.'), findsOneWidget);
     });
 
@@ -458,9 +457,7 @@ void main() {
         'the allergen note and "Mehr Rezepte"', (tester) async {
       final card = AvoWidgetPayload.card(
         AvoRecipesCard(
-          [
-            for (var i = 0; i < 4; i++) _recipe('r$i', 'Rezept $i', kcal: 520),
-          ],
+          [for (var i = 0; i < 4; i++) _recipe('r$i', 'Rezept $i', kcal: 520)],
           allergensHidden: true,
           query: 'Feta',
         ),
@@ -531,7 +528,9 @@ void main() {
             ],
           ),
         ),
-        AvoWidgetPayload.card(AvoPlanCard(from: today, days: 1, lines: const [])),
+        AvoWidgetPayload.card(
+          AvoPlanCard(from: today, days: 1, lines: const []),
+        ),
       ]);
       expect(find.text('Today: Ofengemüse mit Feta'), findsOneWidget);
       expect(find.text('Nothing planned for today.'), findsOneWidget);
@@ -634,10 +633,7 @@ void main() {
       await _pump(tester, [
         AvoWidgetPayload.card(const AvoOfferSetupCard.region()),
         AvoWidgetPayload.card(
-          const AvoOfferSetupCard.store(
-            listId: 'w',
-            listName: 'Wocheneinkauf',
-          ),
+          const AvoOfferSetupCard.store(listId: 'w', listName: 'Wocheneinkauf'),
         ),
       ]);
       expect(
@@ -667,11 +663,7 @@ void main() {
           ),
         ),
         AvoWidgetPayload.card(
-          AvoSavingsCard(
-            month: DateTime(2026, 11),
-            trips: 6,
-            savedCents: 1240,
-          ),
+          AvoSavingsCard(month: DateTime(2026, 11), trips: 6, savedCents: 1240),
         ),
         AvoWidgetPayload.card(
           AvoSavingsCard(month: DateTime(2026, 10), trips: 2),
@@ -686,10 +678,7 @@ void main() {
         find.text('November: about €12.40 saved through offers'),
         findsOneWidget,
       );
-      expect(
-        find.text('according to the retailer · 6 trips'),
-        findsOneWidget,
-      );
+      expect(find.text('according to the retailer · 6 trips'), findsOneWidget);
       expect(find.text('No savings recorded for October.'), findsOneWidget);
     });
   });
@@ -848,7 +837,10 @@ void main() {
       final stepper = find.byType(ValueStepper);
       tester.widget<ValueStepper>(stepper).onChanged(2);
       await settle(tester);
-      expect(find.text('about 1,300 kcal · estimated, fairly sure'), findsOneWidget);
+      expect(
+        find.text('about 1,300 kcal · estimated, fairly sure'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Log'));
       await settle(tester);
@@ -875,10 +867,7 @@ void main() {
         ),
       );
       await settle(tester);
-      expect(
-        find.text('Remove Erdnuss from your allergies?'),
-        findsOneWidget,
-      );
+      expect(find.text('Remove Erdnuss from your allergies?'), findsOneWidget);
       expect(
         find.text('Recipes with Erdnuss will no longer be flagged.'),
         findsOneWidget,
@@ -969,7 +958,10 @@ void main() {
   });
 
   group('after the answer (Kap. 2.13, 5.7)', () {
-    Future<void> ask(WidgetTester tester, List<AvoWidgetPayload> payloads) async {
+    Future<void> ask(
+      WidgetTester tester,
+      List<AvoWidgetPayload> payloads,
+    ) async {
       final backend = FakeAvoBackend([AvoScript(payloads: payloads)]);
       await tester.pumpWidget(
         avoHarness(const AvoTabScreen(), avoCardOverrides(backend: backend)),
@@ -998,8 +990,9 @@ void main() {
       expect(find.text('Undo'), findsOneWidget);
     });
 
-    testWidgets('the meal plan on a list: the figure celebrates for a while',
-        (tester) async {
+    testWidgets('the meal plan on a list: the figure celebrates for a while', (
+      tester,
+    ) async {
       await ask(tester, [
         AvoWidgetPayload.record(
           const AvoItemsRecord(

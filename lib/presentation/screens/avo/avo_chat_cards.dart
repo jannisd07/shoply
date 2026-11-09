@@ -111,7 +111,10 @@ mixin _AvoCardActions on ChangeNotifier {
 
   /// Runs a card's write once at a time for [key]; a failure gives the
   /// error haptic and leaves the card as it was.
-  Future<T?> _cardWrite<T>(Object key, Future<T> Function(WidgetRef ref) run) async {
+  Future<T?> _cardWrite<T>(
+    Object key,
+    Future<T> Function(WidgetRef ref) run,
+  ) async {
     final ref = _cardRef;
     if (ref == null || _working.contains(key)) return null;
     _working.add(key);
@@ -251,10 +254,10 @@ mixin _AvoCardActions on ChangeNotifier {
     }
     _confirm[p] = AvoConfirmPhase.working;
     notifyListeners();
-    final record = await _cardWrite(
-      (p, 'removal'),
-      (ref) => _cardBackend.removeEntry(ref, card),
-    );
+    final record = await _cardWrite((
+      p,
+      'removal',
+    ), (ref) => _cardBackend.removeEntry(ref, card));
     if (_cardsGone) return;
     if (record == null) {
       _confirm[p] = AvoConfirmPhase.failed;

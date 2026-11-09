@@ -195,7 +195,9 @@ List<AvoSuggestion> avoFollowUps(
 }) {
   final out = <AvoSuggestion>[];
   final hasRecipes = payloads.any(
-    (p) => p.card is AvoRecipesCard && (p.card! as AvoRecipesCard).recipes.isNotEmpty,
+    (p) =>
+        p.card is AvoRecipesCard &&
+        (p.card! as AvoRecipesCard).recipes.isNotEmpty,
   );
   final target = targetList == null ? null : avoSafeName(targetList);
   if (hasRecipes && target != null) {

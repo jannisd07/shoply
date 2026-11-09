@@ -39,7 +39,9 @@ String avoDoneNote(
     }
     if (record != null) {
       final list = avoSafeName(record.noteListName);
-      parts.add(list == null ? record.tool : '${record.tool} (${_quoted(list)})');
+      parts.add(
+        list == null ? record.tool : '${record.tool} (${_quoted(list)})',
+      );
       continue;
     }
     final tool = p.wroteTool;

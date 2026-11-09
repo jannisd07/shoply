@@ -129,7 +129,9 @@ class AvoUserBubble extends StatelessWidget {
               customSemanticsActions: text.isEmpty
                   ? null
                   : {
-                      CustomSemanticsAction(label: context.tr('avo_copy')): () =>
+                      CustomSemanticsAction(
+                        label: context.tr('avo_copy'),
+                      ): () =>
                           Clipboard.setData(ClipboardData(text: text)),
                       if (onEdit != null)
                         CustomSemanticsAction(

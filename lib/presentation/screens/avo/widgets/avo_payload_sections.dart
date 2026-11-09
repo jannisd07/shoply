@@ -41,7 +41,9 @@ List<Widget> _sectionsFor(
     case AvoPayloadKind.listItems:
       return [AvoListItemsSection(payload: p, scope: s)];
     case AvoPayloadKind.listChange:
-      return [if (p.listChange != null) AvoListChangeSection(payload: p, scope: s)];
+      return [
+        if (p.listChange != null) AvoListChangeSection(payload: p, scope: s),
+      ];
     case AvoPayloadKind.confirmDelete:
       return [
         if (p.pendingDelete != null) AvoConfirmSection(payload: p, scope: s),
@@ -98,9 +100,7 @@ List<Widget> _cardSections(
   AvoNutritionStatusCard() => [avoNutritionStatusSection(context, card)],
   AvoWeekCard() => [avoWeekSection(context, card)],
   AvoChallengesCard() => avoChallengeSections(context, card),
-  AvoEstimateCard() => [
-    AvoEstimateSection(payload: p, scope: s, card: card),
-  ],
+  AvoEstimateCard() => [AvoEstimateSection(payload: p, scope: s, card: card)],
   AvoGoalPreviewCard() => [
     AvoGoalPreviewSection(payload: p, scope: s, card: card),
   ],
@@ -111,8 +111,7 @@ List<Widget> _cardSections(
     avoPhotoErrorSection(context, s, card, onNewPhoto: onNewPhoto),
   ],
   // Standing on their own (choices).
-  AvoPlanTakenCard() || AvoListImportCard() || AvoPhotoChoiceCard() =>
-    const [],
+  AvoPlanTakenCard() || AvoListImportCard() || AvoPhotoChoiceCard() => const [],
 };
 
 /// The cards that ask the person to choose, each with the result of the

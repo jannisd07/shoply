@@ -46,7 +46,10 @@ bool _offersShown(WidgetRef ref) => ref.watch(offersAvailableProvider);
   final lines = [
     [?pack, ?formatUnitPrice(offer, lang)].join(' · '),
     if (regular != null)
-      context.tr('offer_was_price', params: {'price': formatEuro(regular, lang)}),
+      context.tr(
+        'offer_was_price',
+        params: {'price': formatEuro(regular, lang)},
+      ),
     if (offer.isBroadMatch) context.tr('offer_similar_product') else ?ends,
   ].where((l) => l.isNotEmpty).toList();
   final spoken = [
@@ -151,12 +154,8 @@ class _OfferLine extends StatelessWidget {
           button: true,
           label: add,
           excludeSemantics: true,
-          onTap: () => addOfferToList(
-            context,
-            listId: listId,
-            name: name,
-            offer: offer,
-          ),
+          onTap: () =>
+              addOfferToList(context, listId: listId, name: name, offer: offer),
           child: PressableScale(
             onPressed: () => addOfferToList(
               context,
@@ -212,7 +211,10 @@ class AvoOfferSetupSection extends ConsumerWidget {
       leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.storefront)),
       onOpen: choose,
       actions: [
-        AvoCardAction(label: context.tr('offer_store_choose'), onPressed: choose),
+        AvoCardAction(
+          label: context.tr('offer_store_choose'),
+          onPressed: choose,
+        ),
       ],
     );
   }
@@ -243,12 +245,19 @@ class AvoDealsSection extends ConsumerWidget {
         for (final d in card.offers)
           OfferRow(
             title: d.item,
-            lines: [offerProductTitle(d.offer), ..._offerText(context, d.offer).lines],
+            lines: [
+              offerProductTitle(d.offer),
+              ..._offerText(context, d.offer).lines,
+            ],
             price: formatEuro(d.offer.price, lang),
             uncertain: d.offer.isBroadMatch,
             semanticLabel: '${d.item}, ${_offerText(context, d.offer).spoken}',
             onTap: () => context.push(
-              offerDetailLocation(d.offer.id, listId: card.listId, name: d.item),
+              offerDetailLocation(
+                d.offer.id,
+                listId: card.listId,
+                name: d.item,
+              ),
             ),
           ),
       ],
@@ -272,7 +281,9 @@ class AvoSavingsSection extends ConsumerWidget {
     final month = avoMonth(context, card.month);
     final cents = card.savedCents;
     void open() => openAppDestination(context, AppDestinations.history);
-    final amount = cents == null ? null : formatEuroCents(cents, avoLang(context));
+    final amount = cents == null
+        ? null
+        : formatEuroCents(cents, avoLang(context));
     return AvoResultSection(
       title: amount == null
           ? context.tr('avo_savings_none', params: {'month': month})

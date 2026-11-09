@@ -1,31 +1,34 @@
 import 'package:flutter/widgets.dart';
 
-import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 
-/// Kap. 2.11: from 3,800 characters a note counts down; at 4,000 the field
-/// takes nothing more.
+/// Kap. 2.11: at 4,000 characters the field takes nothing more; Teil A's
+/// [AvoComposerField] counts down from 5 % left (3,800).
 const int avoMaxQuestionLength = 4000;
-const int _warnFrom = 3800;
-const double _disabledOpacity = 0.4; // Konzept 00 §12.20
 const int _maxLines = 5; // Kap. 2.11: grows to five lines, then scrolls
 
 /// The glass composer of the Avo tab (Kap. 2.11), on Teil A's
-/// [AvoComposerField]: "Frag Avo …", Return and the arrow send, the round
-/// button starts the voice mode while the field is empty.
+/// [AvoComposerField] with Avo's texts: "Frag Avo …" (VoiceOver "Avo
+/// fragen"), Return and the arrow send, the round button starts the voice
+/// mode while the field is empty and becomes "Antwort anhalten" while Avo
+/// answers and the field is empty ([responding] with [onStop]). The camera button opens
+/// [photoMenuItems] as a pull-down; the counter and the 4,000 limit are A's.
 ///
 /// [above] (the context capsule) sits 8 pt over the glass. With [enabled]
 /// false (AI switched off) the composer is dimmed and takes no input; the
 /// reason is the status row under the title.
-class AvoComposer extends StatefulWidget {
+class AvoComposer extends StatelessWidget {
   const AvoComposer({
     super.key,
     required this.controller,
     required this.focusNode,
     required this.onSend,
     this.onVoice,
-    this.onPhoto,
+    this.photoMenuItems,
+    this.onStop,
+    this.responding = false,
     this.above,
     this.enabled = true,
   });
@@ -35,118 +38,47 @@ class AvoComposer extends StatefulWidget {
   final ValueChanged<String> onSend;
   final VoidCallback? onVoice;
 
-  /// "Foto hinzufügen" (Kap. 2.11): opens the pull-down "Foto aufnehmen /
-  /// Foto auswählen".
-  final VoidCallback? onPhoto;
+  /// "Foto hinzufügen" (Kap. 2.11): "Foto aufnehmen / Foto auswählen".
+  final List<AvoMenuEntry>? photoMenuItems;
+
+  /// Stops Avo's running answer.
+  final VoidCallback? onStop;
+
+  /// True while Avo answers.
+  final bool responding;
   final Widget? above;
   final bool enabled;
 
   @override
-  State<AvoComposer> createState() => _AvoComposerState();
-}
-
-class _AvoComposerState extends State<AvoComposer> {
-  int _length = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _length = widget.controller.text.length;
-    widget.controller.addListener(_onText);
-  }
-
-  @override
-  void didUpdateWidget(covariant AvoComposer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_onText);
-      widget.controller.addListener(_onText);
-      _length = widget.controller.text.length;
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onText);
-    super.dispose();
-  }
-
-  void _onText() {
-    final value = widget.controller.value;
-    if (value.text.length > avoMaxQuestionLength) {
-      final text = value.text.substring(0, avoMaxQuestionLength);
-      widget.controller.value = TextEditingValue(
-        text: text,
-        selection: TextSelection.collapsed(offset: text.length),
-      );
-      return;
-    }
-    final length = value.text.length;
-    final warnBefore = _length >= _warnFrom;
-    final warnNow = length >= _warnFrom;
-    if (warnBefore != warnNow || (warnNow && length != _length)) {
-      setState(() => _length = length);
-    } else {
-      _length = length;
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final left = avoMaxQuestionLength - _length;
-    final count = _length >= _warnFrom
-        ? Padding(
-            padding: const EdgeInsetsDirectional.only(start: AvoSpacing.l),
-            child: Semantics(
-              liveRegion: true,
-              child: Text(
-                left == 1
-                    ? context.tr('avo_chars_left_one')
-                    : context.tr('avo_chars_left', params: {'n': '$left'}),
-                style: context.text(
-                  AvoTextStyle.footnote,
-                  color: context.colors.secondaryLabel,
-                  tabular: true,
-                ),
-              ),
-            ),
-          )
-        : null;
-    final above = widget.above;
-    final panel = above == null && count == null
-        ? null
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ?above,
-              if (above != null && count != null)
-                const SizedBox(height: AvoSpacing.xs),
-              ?count,
-            ],
-          );
+    // Kap. 2.11 / 3: "Antwort anhalten" only while the field is empty; with
+    // text the button sends, and the question waits for the answer
+    // ("Wird nach dieser Antwort gesendet").
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) =>
+          _field(context, stopping: responding && value.text.isEmpty),
+    );
+  }
 
-    Widget field = AvoComposerField(
+  Widget _field(BuildContext context, {required bool stopping}) {
+    return AvoComposerField(
       placeholder: context.tr('avo_input_placeholder'),
+      semanticLabel: context.tr('avo_input_label'),
       sendLabel: context.tr('avo_send'),
       voiceLabel: context.tr('avo_voice_start'),
-      controller: widget.controller,
-      focusNode: widget.focusNode,
-      onSubmitted: widget.enabled ? widget.onSend : null,
-      onVoice: widget.enabled ? widget.onVoice : null,
-      onCamera: widget.enabled ? widget.onPhoto : null,
       cameraLabel: context.tr('avo_photo_add'),
-      above: panel,
+      controller: controller,
+      focusNode: focusNode,
+      enabled: enabled,
+      onSubmitted: onSend,
+      onVoice: onVoice,
+      onStop: onStop,
+      responding: stopping,
+      photoMenuItems: photoMenuItems,
+      maxLength: avoMaxQuestionLength,
+      above: above,
       maxLines: _maxLines,
     );
-    if (!widget.enabled) {
-      field = Semantics(
-        enabled: false,
-        child: IgnorePointer(
-          child: Opacity(opacity: _disabledOpacity, child: field),
-        ),
-      );
-    }
-    return field;
   }
 }

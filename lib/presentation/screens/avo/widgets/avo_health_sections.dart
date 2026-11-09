@@ -213,7 +213,10 @@ class AvoGoalPreviewSection extends StatelessWidget {
     final working = chat.isCardWorking(payload);
     final changes = avoGoalChanges(context, card);
     return AvoResultSection(
-      title: context.tr('avo_goal_new', params: {'kcal': avoInt(context, kcal)}),
+      title: context.tr(
+        'avo_goal_new',
+        params: {'kcal': avoInt(context, kcal)},
+      ),
       subtitle: [
         if (was != null)
           context.tr('avo_goal_was', params: {'kcal': avoInt(context, was)}),
@@ -263,7 +266,10 @@ List<String> avoGoalChanges(BuildContext context, AvoGoalPreviewCard card) {
   String kg(double v) => '${avoDecimal(context, v)} kg';
   return [
     if (b == null || b.goalType != g.goalType)
-      field('avo_goal_field_type', context.tr('avo_goal_type_${g.goalType.dbValue}')),
+      field(
+        'avo_goal_field_type',
+        context.tr('avo_goal_type_${g.goalType.dbValue}'),
+      ),
     if (b == null || b.activityLevel != g.activityLevel)
       field(
         'avo_goal_field_activity',
@@ -276,7 +282,9 @@ List<String> avoGoalChanges(BuildContext context, AvoGoalPreviewCard card) {
     if (b?.targetWeightKg != g.targetWeightKg)
       field(
         'avo_goal_field_target',
-        g.targetWeightKg == null ? context.tr('avo_val_none') : kg(g.targetWeightKg!),
+        g.targetWeightKg == null
+            ? context.tr('avo_val_none')
+            : kg(g.targetWeightKg!),
       ),
     if (b?.timelineWeeks != g.timelineWeeks && g.timelineWeeks != null)
       field(
@@ -369,7 +377,10 @@ class AvoEstimateSection extends StatelessWidget {
     );
     final grams = card.grams;
     final amount = grams != null
-        ? context.tr('avo_est_grams', params: {'g': avoInt(context, grams * portions)})
+        ? context.tr(
+            'avo_est_grams',
+            params: {'g': avoInt(context, grams * portions)},
+          )
         : card.portion;
 
     Widget valueRow({
@@ -516,7 +527,10 @@ class AvoEstimateSection extends StatelessWidget {
                       'avo_photo_allergen',
                       params: {'allergen': allergen},
                     ),
-                    style: context.text(AvoTextStyle.subhead, color: colors.label),
+                    style: context.text(
+                      AvoTextStyle.subhead,
+                      color: colors.label,
+                    ),
                   ),
                 ),
               ],
@@ -544,7 +558,10 @@ class AvoEstimateSection extends StatelessWidget {
             AvoSpacing.l,
             AvoSpacing.m,
           ),
-          child: Align(alignment: AlignmentDirectional.centerStart, child: button),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: button,
+          ),
         ),
       ],
     );

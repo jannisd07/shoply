@@ -101,7 +101,11 @@ void main() {
     ) async {
       final lists = [
         for (var i = 0; i < 7; i++)
-          sampleList('l$i', name: 'Liste $i', updated: kNow.subtract(Duration(days: i))),
+          sampleList(
+            'l$i',
+            name: 'Liste $i',
+            updated: kNow.subtract(Duration(days: i)),
+          ),
       ];
       await tester.pumpWidget(
         avoHarness(
@@ -173,14 +177,20 @@ void main() {
       final card = tester.state(find.byType(AvoConfirmCard));
       container.read(_offline.notifier).state = true;
       await settle(tester);
-      expect(identical(tester.state(find.byType(AvoConfirmCard)), card), isTrue);
+      expect(
+        identical(tester.state(find.byType(AvoConfirmCard)), card),
+        isTrue,
+      );
       expect(
         find.text("You're offline. You can delete once you're connected."),
         findsOneWidget,
       );
       container.read(_offline.notifier).state = false;
       await settle(tester);
-      expect(identical(tester.state(find.byType(AvoConfirmCard)), card), isTrue);
+      expect(
+        identical(tester.state(find.byType(AvoConfirmCard)), card),
+        isTrue,
+      );
     });
   });
 }

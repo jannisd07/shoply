@@ -17,7 +17,6 @@ import 'package:shoply/presentation/screens/avo/widgets/avo_status_line.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_status_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_suggestion_views.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_user_bubble.dart';
-import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/routes/route_paths.dart';
 
 // D2 X-Avo spacing inside one round (Kap. 3.1).
@@ -190,22 +189,6 @@ class AvoTurnView extends ConsumerWidget {
     final choices = avoChoiceCards(context, scope);
     for (final c in choices) {
       add(c, _cardToText);
-    }
-
-    // Once the first card or word replaced the status line, "Stopp" stays
-    // reachable here until Teil A's composer has its "Antwort anhalten"
-    // state (Kap. 2.11).
-    if (turn.phase == AvoTurnPhase.working && !turn.showsStatus) {
-      add(
-        Align(
-          alignment: AlignmentDirectional.centerEnd,
-          child: AppButton.plain(
-            label: context.tr('avo_stop'),
-            onPressed: chat.stop,
-          ),
-        ),
-        AvoSpacing.xs,
-      );
     }
 
     if (turn.phase == AvoTurnPhase.stopped) {
