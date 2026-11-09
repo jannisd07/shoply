@@ -95,8 +95,10 @@ Zustände, Prüfmatrix, Barrierefreiheit), dann Funde beheben.
 
 ### A11b Qualität, Teil 2
 
-Quellen: „Offen bei A“ und „Braucht den Owner“ in `a11-stand.md`, `a11-pruefplan.md` §2. Vorher `status-B.md` auf neue
-Anfragen an A prüfen; die gehen vor. Zu Beginn fragen, ob der Owner im Simulator (iPhone 17) angemeldet ist; ohne
+Quellen: „Offen bei A“ und „Braucht den Owner“ in `a11-stand.md`, `a11-pruefplan.md` §2. **Zuerst die Anfragen von B**
+(sie blockieren B): status-B Nr. 18 (BAB2 `659ea0f`: `recipeOfferSummaryShowsProvider` in `_offerSummary`, unnötiger
+Import in `all_lists_new_list.dart`, `nudge_card.dart` und `recommendation_item.dart` löschen) und für B7 (Wochenplan)
+A-P1–A-P4 und A-K10 aus `b-screens/wochenplan.md`. Zu Beginn fragen, ob der Owner im Simulator (iPhone 17) angemeldet ist; ohne
 Anmeldung nur die Code-Punkte. Reihenfolge: Simulator-Rundgang (Screenshots nach `abnahme/a11/`, Funde beheben),
 Flows Hinzufügen und Teilen mit `idiotensicher-testen`, fehlende `AvoIcons`-Glyphen für die 30 `CupertinoIcons`-Stellen
 (`bash tool/design_check.sh A` zeigt sie), Fehlerzustand der Entwürfe. **Nie** `flutter test integration_test/…` mit
