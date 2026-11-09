@@ -93,9 +93,8 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
       `recipe_detail_screen.dart` bleibt als Lücke stehen, wenn die Karte nichts zeigt (bitte einklappend).
     - **Datenquellen:** S12 braucht eine Seite „Datenquellen“ unter Rechtliches als Route; heute ist sie ein
       Bottom-Sheet im Profil. Bis dahin fehlt die Zeile in S12.
-    - **A-C2, A-C5, A-C8, A-C9** sind weiter offen; B nutzt solange eigene Bausteine: `StoreFilterChip` (Chip mit
-      `StoreMark`), `PostcodeFieldRow`, sortierbare Zeilen mit Auswahl-Kreis in S13. Sobald A's Komponenten da sind,
-      stellt B um.
+    - **A-C2, A-C5, A-C9:** mit BAB1 umgestellt (`AppFilterChip`/`SingleChoiceChipRow`, `TextFieldRow`,
+      `ReorderableInsetSection` + `SelectCircle` in S13); `StoreFilterChip` und `PostcodeFieldRow` sind gelöscht.
     - **A-L3:** „Neue Liste …“ im Menü „Auf welche Liste?“ öffnet `openNewListEditor` und setzt den Markt danach
       selbst; ein vorausgewählter Markt im Editor wäre schöner.
     - **A-C4:** Nach der Rückkehr von `/stores/region` (Hinweis im Vorschlags-Panel) den Fokus wieder ins Eingabefeld.
@@ -223,3 +222,13 @@ Offen:
   Erlaubnis.
 - Illustrationen für Artikelbilder erzeugen (Bild-Prompts folgen in `docs/redesign/artikelbilder-prompts.md`).
 - Wann der alte Gemini-Key widerrufen wird (alte Builds rufen ihn noch auf).
+
+16. **Nach BAB1 (Umstellung auf AB1):**
+    - **A-C1 Angebotspille in `ItemRow`** (Liste und Einkaufsmodus, A's Dateien): `itemOfferRowExtras` aus `b_slots.dart`
+      in der Zeile aufrufen und durchreichen:
+      `final o = itemOfferRowExtras(context, ref, listId: listId, item: item, shoppingMode: shopping);` dann
+      `ItemRow(…, trailing: ItemOfferBadge(listId: listId, item: item, compact: shopping),
+      trailingSemanticsLabel: o?.semanticsLabel, trailingActions: o?.actions ?? const {},
+      contextMenuItems: [...eigeneEinträge, ...?o?.menuItems])`.
+    - **A-C7 Modul aus:** `ModuleGate` für `AppModule.offers` mit
+      `showModuleOffAlert(…, body: context.tr('offer_module_off_body'))`.

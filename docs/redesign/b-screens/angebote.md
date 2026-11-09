@@ -225,15 +225,15 @@ Aus A-Tokens und A-Komponenten gebaut, keine eigenen Farben, Größen oder Dauer
   Zeile. Trenner 0,5 ab Textkante (56 mit Symbol, 16 ohne).
 - **`OfferSummaryCard`**: Konfiguration von `HintRow` (A) für die Ersparnis-Zeile, mit zweizeiligem Text aus
   `OfferSummaryText` (Abschnitt 3.3). Variante „antippbar“ (Liste, mit Chevron) und „still“ (Einkaufsmodus).
-- **`StoreFilterChip`**: `AppFilterChip` mit führendem `StoreMark` 18 und optionaler Entfernung „· 400 m“ in 12/16
-  `secondaryLabel`. Einfachauswahl (S10, erneutes Tippen hebt auf) oder Mehrfachauswahl (S14, gewählt mit Häkchen).
-  Braucht von A einen `leading`-Platz am Chip (Anfrage A-C2).
+- **Markt-Chips** (seit BAB1 ohne eigenen Baustein): A's `AppFilterChip(leading: StoreMark…, secondaryLabel: "400 m")`;
+  Einfachauswahl (S10, erneutes Tippen hebt auf) als `SingleChoiceChipRow(allowDeselect: true)`, Mehrfachauswahl (S14)
+  als einzelne `AppFilterChip`s (gewählt dunkel, ohne Häkchen: A's Chip hat keins).
 - **`OffersSourceFootnote`**: die Quellen-Fußnote als ein Widget, damit der Pflicht-Wortlaut nie auseinanderläuft.
 - **`UseLocationRow`**: Zeile „Standort verwenden“ mit `location`-Symbol und Titel in `tint`, Unterzeile je Zustand,
   rechts kleiner Aktivitätsanzeiger während der Ortung (am Auslöser, kein Vollbild-Spinner).
-- **`PostcodeFieldRow`**: Beschriftung „Postleitzahl“ links, Ziffernfeld rechts (5 Stellen, Ziffernblock,
-  `AutofillHints.postalCode`), darunter Ortszeile bzw. Fehlerzeile. Auf dem Textfeld-Zeilen-Baustein von A aufgebaut
-  (Anfrage A-C5); ab AX1 Beschriftung über dem Feld.
+- **Postleitzahl-Zeile** (seit BAB1 ohne eigenen Baustein): A's `TextFieldRow` „Postleitzahl“ (Ziffernblock,
+  `AutofillHints.postalCode`, `postcodeInputFormatters` aus `region_rows.dart`), Fehler als `errorText`, Ort als
+  `hintText`, beide in der Zeile statt unter der Gruppe; ab AX1 Beschriftung über dem Feld.
 
 ---
 
@@ -1389,7 +1389,7 @@ wo man war (Kaltstart: Listen-Übersicht).
 | Schlüssel | Deutsch | English |
 |---|---|---|
 | `common_module_off_title` (A) | Preise & Angebote ist ausgeschaltet | Prices & offers is turned off |
-| `offer_module_off_body` (neu; bis A einen `body:`-Parameter hat, gilt `common_module_off_body`, Anfrage A-C7) | Schalte es ein, dann siehst du an deinen Listen, was bei deinem Markt im Angebot ist. | Turn it on to see what's on offer at your store, right on your lists. |
+| `offer_module_off_body` (B, seit BAB1 vorhanden; A's `ModuleGate` reicht ihn als `showModuleOffAlert(body:)` durch, Anfrage an A) | Schalte es ein, dann siehst du an deinen Listen, was bei deinem Markt im Angebot ist. | Turn it on to see what's on offer at your store, right on your lists. |
 | `common_not_now`, `common_module_turn_on` (A) | Nicht jetzt · Einschalten | Not now · Turn on |
 
 **Kill-Switch.** Kein Dialog. Routen unter `/offers` zeigen die Fehlerseite von A mit `common_route_error_title` „Diese
