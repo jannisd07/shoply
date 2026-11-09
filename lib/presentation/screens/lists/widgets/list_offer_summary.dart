@@ -11,6 +11,8 @@ import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart'
 import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
+import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_header.dart'
+    show ShoppingModeHeader;
 import 'package:shoply/presentation/screens/offers/offer_paths.dart';
 import 'package:shoply/presentation/screens/offers/offer_text.dart';
 import 'package:shoply/presentation/screens/offers/store_menu.dart';
@@ -36,7 +38,9 @@ const double _kHintIcon = 18; // D2 like the savings card's tag
 ///   instead, at most in one opening a week and not for 7 days after it
 ///   was closed; never while the market is still being worked out.
 /// - In shopping mode (Teil A's [shoppingModeSessionProvider] holds this
-///   list) the card is still: no close button, no gestures, no hint.
+///   list, or the card sits inside [ShoppingModeHeader], which covers the
+///   first frame before the session is set) the card is still: no close
+///   button, no gestures, no hint.
 ///
 /// Whether the card shows is decided when the list opens (`angebote.md`
 /// 3.2): offers found later appear the next time, so nothing jumps while
@@ -88,9 +92,14 @@ class _ListOfferSummaryState extends ConsumerState<ListOfferSummary> {
   @override
   Widget build(BuildContext context) {
     final listId = widget.listId;
-    final shopping = ref.watch(
-      shoppingModeSessionProvider.select((s) => s?.listId == listId),
-    );
+    // A's session is set after the shopping screen's first frame; the
+    // header ancestor covers that frame, so the card is still (and the
+    // weekly "no store" hint is not used up) from the start.
+    final shopping =
+        ref.watch(
+          shoppingModeSessionProvider.select((s) => s?.listId == listId),
+        ) ||
+        context.findAncestorWidgetOfExactType<ShoppingModeHeader>() != null;
     final visible = ref.watch(
       offerSurfaceVisibleProvider((
         surface: OfferSurface.listSavings,

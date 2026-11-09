@@ -86,8 +86,8 @@ class ItemOfferBadge extends ConsumerWidget {
 ///
 /// - [semanticsLabel]: the pill's sentence ("im Angebot 0,99 Euro laut
 ///   Händler"); with it the row hides the slot's own semantics.
-/// - [actions]: "Angebot ansehen" as a custom action of the row (normal list
-///   and shopping mode).
+/// - [actions]: "Angebot ansehen" as a custom action of the row (normal
+///   list; empty in shopping mode, where the menu entry is the action).
 /// - [menuItems]: "Angebot ansehen" for the row's long-press menu, only in
 ///   shopping mode, where the pill is not tappable on its own.
 @immutable
@@ -121,7 +121,9 @@ ItemOfferRowExtras? itemOfferRowExtras(
   void open() => _openOffer(context, offer, listId, item);
   return ItemOfferRowExtras(
     semanticsLabel: _spokenPill(context, offer),
-    actions: {view: open},
+    // In shopping mode the menu entry is the row's custom action too
+    // (ItemRow turns enabled menu items into actions), so no second one.
+    actions: shoppingMode ? const {} : {view: open},
     menuItems: shoppingMode
         ? [AvoMenuItem(label: view, icon: AvoIcons.tag, onSelected: open)]
         : const [],

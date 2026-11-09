@@ -22,6 +22,7 @@ import 'package:shoply/presentation/screens/lists/widgets/item_offer_card.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_offer_count_badge.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_offer_summary.dart';
 import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
+import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_header.dart';
 import 'package:shoply/presentation/screens/lists/widgets/store_chip.dart';
 import 'package:shoply/presentation/screens/offers/offer_detail_screen.dart';
 import 'package:shoply/presentation/screens/offers/store_picker_screen.dart';
@@ -579,6 +580,68 @@ void main() {
 
       // Next week it may ask once more.
       now = DateTime(2026, 11, 17, 9);
+      await pumpOffers(
+        tester,
+        const ListOfferSummary(listId: testListId),
+        overrides: overrides(),
+      );
+      expect(find.text(hint), findsOneWidget);
+    });
+
+    testWidgets('shopping mode before the session is set: still from frame 1, '
+        'the weekly hint is not used up', (tester) async {
+      final now = DateTime(2026, 11, 10, 9);
+      List<Override> overrides({String? chainId}) => [
+        ...offersOn(snapshot: snapshot, items: items, chainId: chainId),
+        offerClockProvider.overrideWithValue(() => now),
+      ];
+      void startSession() =>
+          ProviderScope.containerOf(
+                tester.element(find.byType(ListOfferSummary)),
+              ).read(shoppingModeSessionProvider.notifier).state =
+              ShoppingModeSession(listId: testListId, startedAt: now);
+      const header = ShoppingModeHeader(
+        listId: testListId,
+        title: 'Wocheneinkauf',
+        done: 0,
+        total: 11,
+      );
+      final close = find.byWidgetPredicate(
+        (w) => w is AvoIcon && w.icon == AvoIcons.xmark,
+      );
+
+      // With a market: the card is still before the session is set.
+      await pumpOffers(
+        tester,
+        header,
+        overrides: overrides(chainId: 'lidl'),
+        settle: false,
+      );
+      expect(close, findsNothing);
+      // The market guess resolves before A's session arrives.
+      await tester.pumpAndSettle();
+      expect(
+        find.text('1 von 11 Artikeln diese Woche bei Lidl im Angebot'),
+        findsOneWidget,
+      );
+      expect(close, findsNothing);
+      startSession();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('1 von 11 Artikeln diese Woche bei Lidl im Angebot'),
+        findsOneWidget,
+      );
+      expect(close, findsNothing);
+
+      // Without a market: no "Für welchen Markt …?" in shopping mode, and
+      // the list itself may still ask this week.
+      await pumpOffers(tester, header, overrides: overrides(), settle: false);
+      expect(find.text(hint), findsNothing);
+      await tester.pumpAndSettle();
+      expect(find.text(hint), findsNothing);
+      startSession();
+      await tester.pumpAndSettle();
+      expect(find.text(hint), findsNothing);
       await pumpOffers(
         tester,
         const ListOfferSummary(listId: testListId),
