@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (S5 erledigt, Abschlussbericht `abschlussbericht-A.md`). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (A9 erledigt mit Owner-Variante B, `a9-stand.md`). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -38,19 +38,20 @@ für die nächste Sitzung geben.
 | A8 Profil und Einstellungen | erledigt | `a8-stand.md`, `a8-server-entwurf.sql` |
 | AB1 Anfragen von B: Komponenten und Daten | erledigt | `ab1-stand.md` |
 | AB2 Anfragen von B: Listen, Router, Reste aus A5–A8 | erledigt | `ab2-stand.md` |
-| A9 Pro und Paywall | wartet auf den Owner (Free/Pro: Varianten A/B/C in `pro-konzept.md`) | prompt §5 A9, Konzept 18 Kap. 8–9 |
+| A9 Pro und Paywall | erledigt (Owner 09.11.2026: Variante B „KI + Komfort“) | `a9-stand.md` |
 | A10 App-Icon und Maskottchen | wartet auf den Owner (Maskottchen F-17-11) | prompt §5 A10 |
 | A12 Aufräumen und Analysen | erledigt | `a12-stand.md`, `feature-ideen.md` |
 | A11 Qualität, Teil 1 | erledigt | `a11-pruefplan.md`, `a11-stand.md` |
 | A11b Qualität, Teil 2 | erledigt | `a11b-stand.md` |
 | S6 Gegenprüfung von B | erledigt (B6b/B7/B8 folgen in S5) | `s6-stand.md` |
 | S5 Bereiche fertig | erledigt (A-V9 und Gegenprüfung B6b/B7/B8 folgen in S5b) | `s5-stand.md`, `abschlussbericht-A.md` |
-| **S5b Nachzug von B** | **Als Nächstes** (erst, wenn B8, B7 oder B6b auf `main` ist; sonst A9/A10) | unten, `s5-stand.md` |
+| **S5b Nachzug von B** | **Als Nächstes**, wenn B8, B7 oder B6b auf `main` ist | unten, `s5-stand.md` |
+| A9b Pro, Rest | Ersatz, wenn S5b noch nicht geht und A10 nicht entschieden ist | unten, `a9-stand.md` |
 
-Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst S5b. Die S5b-Sitzung fragt zu Beginn mit
-`AskUserQuestion`, ob der Owner A9 (Free/Pro) oder A10 (Maskottchen) entschieden hat; dann wird das Paket bearbeitet.
-Ist keins entschieden und nichts von B8/B7/B6b auf `main` (`git log origin/main --oneline | grep -E "B8|B7|B6b"`),
-sagt die Sitzung das dem Owner und endet ohne Änderungen.
+Reihenfolge: zu Beginn mit `git log origin/main --oneline | grep -E "B8|B7|B6b"` prüfen, ob B nachgezogen hat (dann
+S5b), und mit `AskUserQuestion` fragen, ob der Owner A10 (Maskottchen F-17-11: 3D-Figur behalten oder neu flach)
+entschieden hat (dann A10). Sonst A9b. Erklär dem Owner bei der Frage kurz, worum es geht (er hat am 09.11. „was ist
+das überhaupt“ gefragt).
 
 ### AB1 Anfragen von B: Komponenten und Daten
 
@@ -137,6 +138,15 @@ Simulator nach Absprache, vorher fragen, ob der Owner angemeldet ist), Funde an 
 per Nachricht. Dann den Abschlussbericht nachführen. Zeit übrig: Reste aus „Offen bei A“ im Abschlussbericht
 (`ListCard` ab AX1 ohne Cover, Galerie und gestrichelter Kreis im Simulator ansehen).
 
+### A9b Pro, Rest
+
+Quellen: `a9-stand.md` „Offen bei A“ und „Von Teil B“ (was B schon umgesetzt hat, in `status-B.md` nachsehen),
+Konzept 18 §8.2, §8.7, §9.3, §11.11. Inhalt: Zoom-Übergang der Paywall aus dem auslösenden Element (`springMorph`,
+Reduce Motion: Überblendung), kontextueller Pro-Hinweis auf der Startseite nach dem ersten Einkauf (`ProHintCounter`,
+höchstens einer pro Tag, „Nicht mehr zeigen“), Preis-Cache für die erste Öffnung, Paywall-Screenshots im Simulator
+hell/dunkel/AX3 (nach Absprache mit B, vorher Platte prüfen). Erinnerung an Tag 12 nur, wenn eine lokale Mitteilung
+dafür ohne B-Dateien geht; sonst als Wunsch an B.
+
 ### A12 Aufräumen und Analysen
 
 Quellen: prompt §5 A12, „Aufräumen“ und „Offen bei A“ in `a7-stand.md`, `a8-stand.md`, `ab1-stand.md`,
@@ -175,7 +185,8 @@ gehen vor.
 
 ## Offen beim Owner (gesammelt)
 
-- Free gegen Pro (A9): `pro-konzept.md`.
+- Pro-Sicherheit vor dem Start: Belegprüfung und `activate_subscription` absichern (`a9-stand.md`), Testphase in App
+  Store Connect einheitlich, Paywall-Foto.
 - Routine `claude/daily` pausieren (Owner-Entscheidung 09.11.2026, A12).
 - Ideen aus `feature-ideen.md` §5.
 - Server-Entwürfe freigeben: `a7-server-entwurf.sql` (Onboarding-RPC, Backfill; sonst `kOnboardingRedesignCutoff` auf

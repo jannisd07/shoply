@@ -4,6 +4,11 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
+09.11.2026 (A9): Pro und Paywall nach Owner-Variante B („KI + Komfort“): `ProFeatures.gated = {cook_mode,
+plan_suggestions, stats}`, Katalog `ProFeatures.all`, neue D2-Paywall (`paywall_screen.dart`), Kochmodus ab Schritt 2
+Pro (auch per Wischen). Wünsche an B (Wochenplan, Verlauf, Limit → Paywall, Avo-Wissen) in
+[`a9-stand.md`](a9-stand.md) „Von Teil B“. Als Nächstes: S5b, wenn B nachgezogen hat; sonst A10 (Owner) oder A9b.
+
 09.11.2026 (S6): Gegenprüfung von B's fertigen Screens (Angebote, Avo, Kalorien-Kern, B-Einstellungen): Matrix grün
 (2546 Fälle), keine Sheets/Slider, keine P1 im Code; im Simulator antwortet Avo nicht (P1 an B, evtl. Deploy `ai`).
 Wünsche an B in [`s6-stand.md`](s6-stand.md) „Von Teil B“. Als Nächstes: S5; A9/A10 warten auf den Owner.
@@ -36,8 +41,8 @@ analyze/Tests nur auf eigene Pfade.
 erscheinen, wenn Modul an und `…HasContentProvider` true. Die alten Home-Karten, der Angebote-Streifen und die
 Verlaufszeile sind weg. „Liste beitreten“ sitzt jetzt im Mehr-Menü des Listen-Tabs.
 
-**A9:** Analyse in [`pro-konzept.md`](pro-konzept.md); Free gegen Pro entscheidet der Owner. Bis dahin ist nichts
-gesperrt.
+**A9:** Owner-Entscheidung 09.11.2026 Variante B aus [`pro-konzept.md`](pro-konzept.md); gesperrt sind Kochmodus ab
+Schritt 2, Avo-Wochenvorschläge und Statistiken (`ProFeatures.gated`), dazu die KI-Limits des Servers.
 
 Plan: `docs/superpowers/plans/2026-11-07-teil-a.md`. Vorrang-Aufgaben für B: `docs/redesign/prompt-b-vorrang.md`.
 
@@ -70,6 +75,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A11b Qualität, Teil 2 | **erledigt**: status-B 18, A-P1–A-P4, A-K10 (`AvoSubmenu`, Vorschau), Simulator-Rundgang hell/dunkel/AX3 (Rezept „vegan“ mit Eigelb, Datum ohne Jahr behoben), Flows Hinzufügen/Teilen, alle `CupertinoIcons` → `AvoIcons`, Fehlerzustand Entwürfe | 09.11.2026 | `git log --grep A11b` |
 | S5 Bereiche fertig (A) | **erledigt**: Diät-Filter prüfen Zutaten (Owner), `SwipeActions` nur eine Zeile offen und Schließen beim Scrollen, `ItemRow(suggestion:)` in „Vielleicht auch“, Galerie vollständig, [`abschlussbericht-A.md`](abschlussbericht-A.md); A-V9 und Gegenprüfung B6b/B7/B8 folgen in S5b | 09.11.2026 | `git log --grep S5` |
 | S6 Gegenprüfung (A prüft B) | **erledigt** für B's fertige Screens (Angebote, Avo, Kalorien-Kern, B-Einstellungen); B6b/B7/B8 folgen, wenn sie auf `main` sind; Funde in `s6-stand.md` | 09.11.2026 | `git log --grep S6` |
+| A9 Pro und Paywall | **erledigt**: Owner-Variante B, `ProFeatures` mit Katalog, D2-Paywall mit allen Zuständen und Prüfmatrix, Kochmodus-Sperre ab Schritt 2; offen in `a9-stand.md` (→ A9b) | 09.11.2026 | `git log --grep A9` |
 
 ## Verträge aus S1 (für B verbindlich)
 

@@ -1,6 +1,6 @@
 # Avo Pro: Ist-Stand und Varianten (A9, Teil A)
 
-Stand 08.11.2026. Grundlage: Code-Analyse von `main` (Datei:Zeile unten). Entscheidung Free gegen Pro trifft der Owner;
+**Entschieden 09.11.2026: Variante B** (Umsetzung in `a9-stand.md`). Stand der Analyse 08.11.2026. Grundlage: Code-Analyse von `main` (Datei:Zeile unten). Entscheidung Free gegen Pro trifft der Owner;
 bis dahin ist in `ProFeatures.gated` (`lib/presentation/widgets/design/pro_gate.dart`) nichts gesperrt.
 Fest: **Angebote sind nie Pro** (Plan 8).
 

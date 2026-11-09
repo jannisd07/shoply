@@ -2,6 +2,14 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Avo Pro und neue Paywall (Teil A, A9)
+
+- Owner-Entscheidung Variante B: Pro = mehr KI pro Tag, Kochmodus ab Schritt 2, Avo-Wochenvorschläge, Statistiken.
+  Liste, Teilen, Rezepte, Angebote und Verlauf bleiben frei.
+- Neue D2-Paywall (`/pro?feature=`) mit Plänen, Testphase, Links zu Nutzungsbedingungen und Datenschutz und allen
+  Zuständen; die alte Paper-Paywall ist gelöscht.
+- Kochmodus: Zutaten und Schritt 1 frei als Vorschau, danach Paywall (auch beim Wischen).
+
 ## 2026-11-09: Bereiche fertig (Teil A, S5)
 
 - Diät-Filter „Vegan“/„Vegetarisch“ und „Passt zu mir“ prüfen die Zutaten wie das Rezeptdetail.

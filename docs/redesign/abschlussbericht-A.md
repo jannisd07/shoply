@@ -24,10 +24,10 @@ in `status-A.md` (Meilensteine mit Commits) und den `aN-stand.md` der Pakete.
 
 | Punkt | Stand |
 |---|---|
-| A1 bis A12 erledigt, Meilensteine in `status-A.md` | **ja, bis auf A9 und A10**: beide warten auf deine Entscheidung |
-| Alle A-Screens wie im Konzept, Prüfmatrix grün | **ja, bis auf die Paywall** (kommt mit A9); Matrix-Tests laufen in CI |
+| A1 bis A12 erledigt, Meilensteine in `status-A.md` | **ja, bis auf A10** (Maskottchen wartet auf dich); A9 erledigt am 09.11.2026 (`a9-stand.md`) |
+| Alle A-Screens wie im Konzept, Prüfmatrix grün | **ja**, die Paywall seit A9 eingeschlossen; Matrix-Tests laufen in CI |
 | Bug der Mutter nachweislich behoben | **im Test ja** (40 Fälle); die Geräte-Abnahme am iPhone 13 Pro mit „Größerer Text“ und AX3 steht aus (nur du) |
-| Kein Paper-Rest in A-Dateien | **ja, bis auf `subscription_screen.dart`** (Paywall, A9) |
+| Kein Paper-Rest in A-Dateien | **ja** (die Paper-Paywall ist mit A9 gelöscht) |
 | Anfragen von B erledigt, S6 abgeschlossen | **ja für alles auf `main`**; offen sind A-V9 (kommt mit B8) und die Gegenprüfung von B6b/B7/B8, sobald B sie auf `main` bringt |
 | Abschlussbericht | diese Datei |
 
@@ -44,7 +44,8 @@ in `status-A.md` (Meilensteine mit Commits) und den `aN-stand.md` der Pakete.
 
 ## Entscheidungen, die bei dir liegen
 
-1. **Free gegen Pro (A9):** Varianten A/B/C in [`pro-konzept.md`](pro-konzept.md). Danach baut A die Paywall.
+1. **Pro (A9):** entschieden (Variante B) und gebaut. Vor dem Start offen bei dir: Belegprüfung und
+   `activate_subscription` absichern, Testphase in App Store Connect, Paywall-Foto (`a9-stand.md`).
 2. **Maskottchen und App-Icon (A10):** neue Grafiken und das finale Motiv (F-17-11).
 3. **Server-Entwürfe freigeben:** [`a7-server-entwurf.sql`](a7-server-entwurf.sql) (Onboarding-RPC, Backfill; sonst
    `kOnboardingRedesignCutoff` auf den Release-Tag), [`a8-server-entwurf.sql`](a8-server-entwurf.sql) (Konto löschen
