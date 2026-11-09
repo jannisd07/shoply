@@ -219,6 +219,40 @@ class SupabaseService {
   Future<AuthResponse> verifyEmailCode(String email, String code) =>
       client.auth.verifyOTP(email: email, token: code, type: OtpType.email);
 
+  /// Starts an email change: Supabase sends a 6-digit code to [email] (the
+  /// template "Change Email Address" with `{{ .Token }}`). The account keeps
+  /// its address until [verifyEmailChange]. Errors are rethrown unchanged
+  /// ([AuthException] carries `code`, e.g. `email_exists`).
+  Future<UserResponse> requestEmailChange(String email) =>
+      client.auth.updateUser(UserAttributes(email: email));
+
+  /// Confirms the change with the code [requestEmailChange] sent; the
+  /// account has the new address afterwards. Auth errors are rethrown
+  /// unchanged. `users.email` follows here as long as there is no trigger
+  /// for it (A8 server draft); a failure there is only logged.
+  Future<AuthResponse> verifyEmailChange(String email, String code) async {
+    final response = await client.auth.verifyOTP(
+      email: email,
+      token: code,
+      type: OtpType.emailChange,
+    );
+    final userId = client.auth.currentUser?.id;
+    if (userId != null) {
+      try {
+        await client
+            .from('users')
+            .update({
+              'email': email,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', userId);
+      } catch (e) {
+        debugPrint('⚠️ [AUTH] users.email not updated: ${e.runtimeType}');
+      }
+    }
+    return response;
+  }
+
   // Update user
   Future<UserResponse> updateUser(UserAttributes attributes) async {
     return await client.auth.updateUser(attributes);

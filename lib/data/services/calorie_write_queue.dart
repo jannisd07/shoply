@@ -147,6 +147,14 @@ class QueuedWrite {
 typedef QueuedWriteExecutor = Future<void> Function(QueuedWrite write);
 typedef QueueTimerFactory = Timer Function(Duration delay, void Function() callback);
 
+/// SharedPreferences key of [userId]'s calorie write queue. Builds before
+/// the per-account queue used the plain [legacyCalorieWriteQueueKey].
+String calorieWriteQueueKey(String userId) =>
+    '${legacyCalorieWriteQueueKey}_$userId';
+
+/// The queue key without an account (old builds, tests).
+const String legacyCalorieWriteQueueKey = 'cal_write_queue_v1';
+
 /// Persistent, offline-safe write queue for the calories module (concept
 /// 15 2.1 "Optimistisch"). Writes run in order per row; network trouble is
 /// retried after 2, 4, 8, 16, 30 s and then every 60 s, a refusal by the
@@ -156,7 +164,7 @@ class CalorieWriteQueue {
   CalorieWriteQueue({
     required SharedPreferences prefs,
     required QueuedWriteExecutor executor,
-    this.storageKey = 'cal_write_queue_v1',
+    this.storageKey = legacyCalorieWriteQueueKey,
     DateTime Function()? now,
     QueueTimerFactory? timerFactory,
   })  : _prefs = prefs,

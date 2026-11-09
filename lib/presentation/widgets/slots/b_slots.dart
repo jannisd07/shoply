@@ -101,3 +101,15 @@ export 'package:shoply/presentation/state/calorie_tracking_provider.dart'
     show calorieTrackingEnabledProvider;
 export 'package:shoply/presentation/widgets/deals/offers_setup_step.dart'
     show OffersSetupStep;
+
+// Profil and account (A8): sign-out, "Konto löschen", the Pro row, presence.
+export 'package:shoply/presentation/providers/account_status_provider.dart'
+    show
+        ProSubscriptionDetails,
+        openSplitBalancesCountProvider,
+        pendingChangesCountProvider,
+        proSubscriptionDetailsProvider,
+        subscriptionFamilySharedProvider,
+        subscriptionRenewsOnProvider;
+export 'package:shoply/presentation/providers/presence_provider.dart'
+    show sharePresenceProvider;

@@ -148,7 +148,7 @@ final calorieBackendProvider = FutureProvider<CalorieBackend?>((ref) async {
   final queue = CalorieWriteQueue(
     prefs: prefs,
     executor: remote.execute,
-    storageKey: 'cal_write_queue_v1_$userId',
+    storageKey: calorieWriteQueueKey(userId),
   );
   final online = ref.watch(calorieOnlineStreamProvider).listen((isOnline) {
     if (isOnline) unawaited(queue.retryAll());
