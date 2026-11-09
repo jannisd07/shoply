@@ -14,13 +14,6 @@ import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
-import 'package:shoply/presentation/providers/offer_lookup_provider.dart'
-    show offerListNameProvider;
-import 'package:shoply/presentation/providers/recipe_offers_provider.dart'
-    show
-        recipeIngredientOffersProvider,
-        recipeOfferKey,
-        recipeOffersCachedProvider;
 import 'package:shoply/presentation/screens/profile/settings/data/profile_settings.dart'
     show recipeAutoAdaptProvider;
 import 'package:shoply/presentation/screens/recipes/cooking_mode_screen.dart'
@@ -887,24 +880,12 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
 
   /// Teil B's "3 Zutaten diese Woche bei Lidl im Angebot" for [listId], or
   /// null while it would show nothing (then "Zutaten" has no empty row).
-  /// Also hands the offers to the ingredient pills.
+  /// The summary hands its offers to the ingredient pills itself.
   Widget? _offerSummary(Recipe recipe, String listId) {
-    final key = recipeOfferKey(recipe.id, [
-      for (final i in recipe.ingredients) i.name,
-    ], listId);
-    ref.listen(recipeOffersCachedProvider(key), (_, next) {
-      final offers = next.valueOrNull;
-      if (offers != null) {
-        ref
-            .read(recipeIngredientOffersProvider.notifier)
-            .remember(listId, offers);
-      }
-    });
-    final offers = ref.watch(recipeOffersCachedProvider(key)).valueOrNull;
-    if (offers == null || offers.matches.isEmpty) return null;
-    final name = ref.watch(offerListNameProvider(listId));
-    if (name == null || name.isEmpty) return null;
-    return RecipeOfferSummary(recipe: recipe, listId: listId);
+    final shows = ref.watch(
+      recipeOfferSummaryShowsProvider(recipeOfferSummaryKey(recipe, listId)),
+    );
+    return shows ? RecipeOfferSummary(recipe: recipe, listId: listId) : null;
   }
 
   RecipeIngredientLine _line(

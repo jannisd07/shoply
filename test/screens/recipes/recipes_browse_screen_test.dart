@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
+import 'package:shoply/presentation/screens/recipes/recipes_screen.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_state.dart';
 import 'package:shoply/presentation/widgets/design/empty_state.dart';
 import 'package:shoply/presentation/widgets/design/filter_chip.dart';
@@ -268,6 +270,37 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byType(RecipeHeroCard), findsOneWidget);
   });
+
+  testWidgets(
+    'meal plan: grey ground, B\'s toolbar instead of Saved (A-P3/4)',
+    (tester) async {
+      await pumpBrowse(
+        tester,
+        _ready(planOn: true),
+        router: browseRouter(initial: '/recipes?segment=plan'),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      Color ground() => tester
+          .widget<ColoredBox>(
+            find
+                .descendant(
+                  of: find.byType(RecipesScreen),
+                  matching: find.byType(ColoredBox),
+                )
+                .first,
+          )
+          .color;
+      final colors = tester.element(find.byType(RecipesScreen)).colors;
+      expect(ground(), colors.background);
+      expect(find.bySemanticsLabel('Saved recipes'), findsNothing);
+
+      await tester.tap(find.text('Discover'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(ground(), colors.backgroundPlain);
+      expect(find.bySemanticsLabel('Saved recipes'), findsOneWidget);
+    },
+  );
 
   testWidgets('without the tip service: no tip and no older diet hint', (
     tester,

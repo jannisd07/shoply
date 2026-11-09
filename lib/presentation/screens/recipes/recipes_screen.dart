@@ -403,70 +403,89 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen>
       onShowAll: () => openAllRecipes(context),
     );
 
-    final background = context.colors.backgroundPlain;
-    return ColoredBox(
-      color: background,
-      child: Stack(
-        children: [
-          CustomScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            slivers: [
-              if (!searching)
-                CupertinoSliverRefreshControl(onRefresh: _refresh),
-              SliverPadding(
-                padding: EdgeInsets.only(
-                  top:
-                      GlassToolbar.topOffset(context) +
-                      AvoSizes.toolbarButton +
-                      kRecipesTitleGap,
-                  bottom: ShellInsets.bottom(context),
-                ),
-                sliver: content,
+    // A-P4: grey ground while the plan is shown, white for Entdecken,
+    // cross-faded. The query (`week`, `day`) stays, the segment is local.
+    final plan = segment == RecipesSegment.plan;
+    final planBar = plan ? buildPlanFloatingBar(context) : null;
+    final target = plan
+        ? context.colors.background
+        : context.colors.backgroundPlain;
+    return TweenAnimationBuilder<Color?>(
+      tween: ColorTween(end: target),
+      duration: AvoMotion.fadeReduced,
+      builder: (context, color, child) {
+        final background = color ?? target;
+        return ColoredBox(
+          color: background,
+          child: Stack(
+            children: [
+              child!,
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: ScrollEdgeFade(color: background),
               ),
+              Positioned(
+                top: GlassToolbar.topOffset(context),
+                left: 0,
+                right: 0,
+                child: GlassToolbar(
+                  trailing: plan
+                      ? buildPlanToolbarActions(context)
+                      : [_discoverActions(context)],
+                ),
+              ),
+              if (planBar != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: ShellInsets.aboveTabBar(context),
+                  child: planBar,
+                ),
             ],
           ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: ScrollEdgeFade(color: background),
-          ),
-          Positioned(
-            top: GlassToolbar.topOffset(context),
-            left: 0,
-            right: 0,
-            child: GlassToolbar(
-              trailing: [
-                GlassButtonGroup(
-                  items: [
-                    GlassGroupItem(
-                      icon: const AvoIcon(
-                        AvoIcons.bookmark,
-                        filled: true,
-                        size: _kBookmarkSize,
-                      ),
-                      semanticLabel: context.tr('recipe_browse_saved'),
-                      onPressed: () =>
-                          context.push('${RoutePaths.recipes}/saved'),
-                    ),
-                    GlassGroupItem(
-                      icon: KeyedSubtree(
-                        key: _moreKey,
-                        child: const AvoIcon(AvoIcons.more),
-                      ),
-                      semanticLabel: context.tr('common_more'),
-                      onPressed: _more,
-                    ),
-                  ],
-                ),
-              ],
+        );
+      },
+      child: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        slivers: [
+          if (!searching) CupertinoSliverRefreshControl(onRefresh: _refresh),
+          SliverPadding(
+            padding: EdgeInsets.only(
+              top:
+                  GlassToolbar.topOffset(context) +
+                  AvoSizes.toolbarButton +
+                  kRecipesTitleGap,
+              bottom: ShellInsets.bottom(context),
             ),
+            sliver: content,
           ),
         ],
       ),
     );
   }
+
+  /// "Gespeichert" and "Mehr" of the Entdecken segment.
+  Widget _discoverActions(BuildContext context) => GlassButtonGroup(
+    items: [
+      GlassGroupItem(
+        icon: const AvoIcon(
+          AvoIcons.bookmark,
+          filled: true,
+          size: _kBookmarkSize,
+        ),
+        semanticLabel: context.tr('recipe_browse_saved'),
+        onPressed: () => context.push('${RoutePaths.recipes}/saved'),
+      ),
+      GlassGroupItem(
+        icon: KeyedSubtree(key: _moreKey, child: const AvoIcon(AvoIcons.more)),
+        semanticLabel: context.tr('common_more'),
+        onPressed: _more,
+      ),
+    ],
+  );
 }

@@ -800,4 +800,110 @@ void main() {
     afterPump: _open,
     checkTapTargets: true,
   );
+
+  group('submenus and preview (A-K10)', () {
+    List<AvoMenuEntry> nested(List<String> log) => [
+      AvoMenuItem(label: 'Rezept ansehen', onSelected: () => log.add('view')),
+      AvoSubmenu(
+        label: 'Auf anderen Tag',
+        icon: AvoIcons.calendar,
+        items: [
+          AvoMenuItem(
+            label: 'Montag',
+            checked: true,
+            onSelected: () => log.add('mo'),
+          ),
+          AvoMenuItem(label: 'Dienstag', onSelected: () => log.add('di')),
+        ],
+      ),
+      const AvoSubmenu(label: 'Leer', items: [AvoMenuDivider()]),
+      const AvoMenuDivider(),
+      AvoMenuItem(
+        label: 'Entfernen',
+        destructive: true,
+        onSelected: () => log.add('remove'),
+      ),
+    ];
+
+    testWidgets('opens in place, goes back, chooses and closes', (
+      tester,
+    ) async {
+      final log = <String>[];
+      await _pump(tester, _screen(nested(log)));
+      await _open(tester);
+      expect(find.text('Leer'), findsNothing, reason: 'empty submenu dropped');
+
+      await tester.tap(find.text('Auf anderen Tag'));
+      await tester.pumpAndSettle();
+      expect(find.text('Dienstag'), findsOneWidget);
+      expect(find.text('Rezept ansehen'), findsNothing);
+      expect(log, isEmpty, reason: 'opening a submenu closes nothing');
+
+      // The title row goes back.
+      await tester.tap(find.text('Auf anderen Tag'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rezept ansehen'), findsOneWidget);
+
+      await tester.tap(find.text('Auf anderen Tag'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dienstag'));
+      await tester.pumpAndSettle();
+      expect(log, ['di']);
+      expect(find.text('Montag'), findsNothing);
+    });
+
+    testWidgets('a preview sits at the trigger, out of VoiceOver', (
+      tester,
+    ) async {
+      await loadLayoutFonts();
+      tester.view.physicalSize = const Size(390 * 3, kLayoutHeight * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final handle = tester.ensureSemantics();
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        layoutHarness(
+          const LayoutCase(width: 390, scale: 1),
+          Builder(
+            builder: (context) => Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 120),
+                child: SizedBox(key: key, width: 200, height: 60),
+              ),
+            ),
+          ),
+        ),
+      );
+      showAvoMenu(
+        key.currentContext!,
+        anchorKey: key,
+        preview: const SizedBox(
+          width: 200,
+          height: 60,
+          child: Text('Vorschau'),
+        ),
+        items: nested([]),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Vorschau')),
+        tester.getTopLeft(find.byKey(key)),
+      );
+      expect(find.bySemanticsLabel('Vorschau'), findsNothing);
+      expect(find.text('Rezept ansehen'), findsOneWidget);
+      handle.dispose();
+    });
+
+    layoutMatrix(
+      'AvoMenu with an open submenu',
+      (context) => _screen(nested([])),
+      afterPump: (tester) async {
+        await _open(tester);
+        await tester.tap(find.text('Auf anderen Tag'));
+        await tester.pumpAndSettle();
+      },
+      checkTapTargets: true,
+    );
+  });
 }

@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
-import 'package:shoply/presentation/providers/store_for_list_provider.dart'
-    show listStoreRepositoryProvider, storeInfoForChain;
 import 'package:shoply/presentation/screens/lists/widgets/all_lists_data.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_info_actions.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_info_colors.dart';

@@ -19,6 +19,7 @@ const double _rowRadius = _menuRadius - _menuInset; // concentric highlight
 const double _rowHorizontal = AvoSpacing.m;
 const double _rowVertical = 11; // (44 - 22) / 2 at the default size
 const double _iconSize = 20; // SF Symbol next to 17 pt text
+const double _chevronSize = 14; // submenu disclosure, as D2-Artikel
 const double _checkSize = 16; // checkmark column
 const double _checkGap = AvoSpacing.s;
 const double _leadingSlot = 28; // iOS: 20 pt glyph or store mark column
@@ -36,6 +37,12 @@ const double _startScale = 0.6;
 
 /// The screen behind dims only slightly; the menu is not a dialog.
 const double _barrierAlpha = 0.08;
+
+/// A context menu with a preview dims more, so the preview stands out.
+const double _previewBarrierAlpha = 0.25;
+
+/// Corner of a lifted preview (Konzept 00 §12.24 radiusCard).
+const double _previewRadius = AvoRadii.card;
 
 // D2 `.glass` shadow for the opaque surface: 0 0 0 .5px rgba(0,0,0,.05),
 // 0 6px 20px rgba(0,0,0,.10).
@@ -124,6 +131,49 @@ class AvoMenuDivider extends AvoMenuEntry {
   const AvoMenuDivider();
 }
 
+/// A row that opens a nested menu in the same place (iOS submenu, A-K10):
+/// the panel swaps to [items] with the submenu's title on top; tapping the
+/// title goes back. The row shows its [icon] and a chevron. [items] may hold
+/// rows, titles, dividers and further submenus; checkmarks, subtitles,
+/// destructive rows and a `ProBadge` in [AvoMenuItem.trailing] work as in
+/// the main menu.
+class AvoSubmenu extends AvoMenuEntry {
+  /// Creates a submenu row.
+  const AvoSubmenu({
+    required this.label,
+    required this.items,
+    this.icon,
+    this.subtitle,
+    this.enabled = true,
+    this.trailing,
+    this.trailingLabel,
+  });
+
+  /// The title of the row and of the opened submenu.
+  final String label;
+
+  /// What the submenu shows.
+  final List<AvoMenuEntry> items;
+
+  /// Glyph at the end of the row, before the chevron.
+  final AvoIconData? icon;
+
+  /// A second line in 15/20 secondary text ("Mittwoch").
+  final String? subtitle;
+
+  /// False dims the row (40 %) and ignores taps.
+  final bool enabled;
+
+  /// As [AvoMenuItem.trailing].
+  final Widget? trailing;
+
+  /// As [AvoMenuItem.trailingLabel].
+  final String? trailingLabel;
+
+  /// Whether the submenu has anything to choose.
+  bool get _hasRows => items.any((e) => e is AvoMenuItem || e is AvoSubmenu);
+}
+
 /// Opens an iOS pull-down menu that grows out of its trigger (Konzept 00
 /// §12.24; no bottom sheet, no action sheet). Entries are rows
 /// ([AvoMenuItem]), headings ([AvoMenuTitle]) and group separators
@@ -142,15 +192,21 @@ class AvoMenuDivider extends AvoMenuEntry {
 /// VoiceOver focus moves to the first row. Choosing a row closes the menu
 /// and then calls [AvoMenuItem.onSelected]. Opens on the root navigator, above
 /// the tab bar. The future completes when the menu is closed.
+///
+/// [AvoSubmenu] rows open their items in the same place. With [preview]
+/// (a context menu, A-K10) that widget is drawn lifted over the trigger's
+/// place, in the trigger's size, with the screen dimmed behind it, and the
+/// menu sits next to it; the preview is decorative for VoiceOver.
 Future<void> showAvoMenu(
   BuildContext context, {
   required List<AvoMenuEntry> items,
   Rect? anchorRect,
   GlobalKey? anchorKey,
   String? semanticLabel,
+  Widget? preview,
 }) async {
   final entries = _normalize(items);
-  if (!entries.any((e) => e is AvoMenuItem)) return;
+  if (!entries.any(_isRow)) return;
   final navigator = Navigator.of(context, rootNavigator: true);
   final anchor =
       anchorRect ??
@@ -161,7 +217,10 @@ Future<void> showAvoMenu(
       entries: entries,
       semanticLabel: semanticLabel,
       reduceMotion: context.reduceMotion,
-      barrierColor: context.colors.shadow.withValues(alpha: _barrierAlpha),
+      preview: preview,
+      barrierColor: context.colors.shadow.withValues(
+        alpha: preview == null ? _barrierAlpha : _previewBarrierAlpha,
+      ),
       barrierLabel: context.tr('common_close'),
     ),
   );
@@ -208,9 +267,13 @@ class AvoMenuButton extends StatelessWidget {
 }
 
 /// Drops leading, trailing and repeated dividers.
+bool _isRow(AvoMenuEntry e) =>
+    e is AvoMenuItem || (e is AvoSubmenu && e._hasRows);
+
 List<AvoMenuEntry> _normalize(List<AvoMenuEntry> items) {
   final out = <AvoMenuEntry>[];
   for (final e in items) {
+    if (e is AvoSubmenu && !e._hasRows) continue;
     if (e is AvoMenuDivider && (out.isEmpty || out.last is AvoMenuDivider)) {
       continue;
     }
@@ -225,7 +288,7 @@ List<AvoMenuEntry> _normalize(List<AvoMenuEntry> items) {
     if (out[i] is AvoMenuTitle) {
       var hasRow = false;
       for (var j = i + 1; j < out.length && out[j] is! AvoMenuDivider; j++) {
-        if (out[j] is AvoMenuItem) {
+        if (_isRow(out[j])) {
           hasRow = true;
           break;
         }
@@ -276,12 +339,14 @@ class _AvoMenuRoute extends PopupRoute<void> {
     required this.reduceMotion,
     required this.barrierColor,
     required this.barrierLabel,
+    this.preview,
   });
 
   final Rect anchor;
   final List<AvoMenuEntry> entries;
   final String? semanticLabel;
   final bool reduceMotion;
+  final Widget? preview;
 
   @override
   final Color barrierColor;
@@ -392,8 +457,24 @@ class _MenuLayer extends StatelessWidget {
       },
     );
 
+    final preview = route.preview;
     return Stack(
       children: [
+        if (preview != null)
+          Positioned.fromRect(
+            rect: anchor,
+            child: ExcludeSemantics(
+              child: IgnorePointer(
+                child: FadeTransition(
+                  opacity: curved,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(_previewRadius),
+                    child: preview,
+                  ),
+                ),
+              ),
+            ),
+          ),
         Positioned(
           left: left,
           width: width,
@@ -411,26 +492,76 @@ class _MenuLayer extends StatelessWidget {
   }
 }
 
-class _MenuPanel extends StatelessWidget {
+class _MenuPanel extends StatefulWidget {
   const _MenuPanel({required this.entries, required this.semanticLabel});
 
   final List<AvoMenuEntry> entries;
   final String? semanticLabel;
 
-  void _close(BuildContext context) => Navigator.of(context).maybePop();
+  @override
+  State<_MenuPanel> createState() => _MenuPanelState();
+}
+
+class _MenuPanelState extends State<_MenuPanel> {
+  /// The open submenus, innermost last.
+  final List<AvoSubmenu> _path = [];
+
+  void _close(BuildContext context) {
+    if (_path.isNotEmpty) {
+      _back();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  void _open(AvoSubmenu submenu) {
+    AvoHaptics.selection();
+    setState(() => _path.add(submenu));
+  }
+
+  void _back() => setState(_path.removeLast);
 
   @override
   Widget build(BuildContext context) {
+    final open = _path.isEmpty ? null : _path.last;
+    final entries = open == null ? widget.entries : _normalize(open.items);
     final reserveCheck = entries.any((e) => e is AvoMenuItem && e.checked);
     final reserveLeading = entries.any(
       (e) => e is AvoMenuItem && e.leading != null,
     );
-    final firstEnabled = entries.indexWhere(
-      (e) => e is AvoMenuItem && e.enabled,
-    );
-    final label = semanticLabel;
+    final firstEnabled = open != null
+        ? -1
+        : entries.indexWhere(
+            (e) =>
+                (e is AvoMenuItem && e.enabled) ||
+                (e is AvoSubmenu && e.enabled),
+          );
+    final label = open?.label ?? widget.semanticLabel;
 
     final rows = <Widget>[
+      if (open != null) ...[
+        _MenuRow(
+          item: AvoMenuItem(
+            label: open.label,
+            onSelected: _back,
+            icon: AvoIcons.chevronDown,
+          ),
+          reserveCheck: false,
+          reserveLeading: false,
+          autofocus: true,
+          header: true,
+          semanticsLabel: context.tr(
+            'common_back_to',
+            params: {
+              'title': _path.length > 1
+                  ? _path[_path.length - 2].label
+                  : (widget.semanticLabel ?? context.tr('common_more')),
+            },
+          ),
+          onActivate: _back,
+        ),
+        const _MenuDivider(),
+      ],
       for (var i = 0; i < entries.length; i++)
         switch (entries[i]) {
           final AvoMenuItem item => _MenuRow(
@@ -439,10 +570,32 @@ class _MenuPanel extends StatelessWidget {
             reserveLeading: reserveLeading,
             autofocus: i == firstEnabled,
           ),
+          final AvoSubmenu sub => _MenuRow(
+            item: AvoMenuItem(
+              label: sub.label,
+              onSelected: () {},
+              icon: sub.icon,
+              subtitle: sub.subtitle,
+              enabled: sub.enabled,
+              trailing: sub.trailing,
+              trailingLabel: sub.trailingLabel,
+            ),
+            reserveCheck: reserveCheck,
+            reserveLeading: reserveLeading,
+            autofocus: i == firstEnabled,
+            onActivate: () => _open(sub),
+          ),
           final AvoMenuTitle title => _MenuTitle(text: title.text),
           AvoMenuDivider() => const _MenuDivider(),
         },
     ];
+
+    final column = Column(
+      key: ValueKey(_path.length),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
+    );
 
     return Semantics(
       scopesRoute: true,
@@ -457,10 +610,23 @@ class _MenuPanel extends StatelessWidget {
           child: FocusTraversalGroup(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(_menuInset),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: rows,
+              child: AnimatedSize(
+                duration: context.reduceMotion
+                    ? Duration.zero
+                    : AvoMotion.fadeReduced,
+                alignment: Alignment.topCenter,
+                child: AnimatedSwitcher(
+                  duration: AvoMotion.fadeReduced,
+                  layoutBuilder: (current, previous) => Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      for (final p in previous)
+                        Positioned(top: 0, left: 0, right: 0, child: p),
+                      ?current,
+                    ],
+                  ),
+                  child: column,
+                ),
               ),
             ),
           ),
@@ -568,12 +734,25 @@ class _MenuRow extends StatefulWidget {
     required this.reserveCheck,
     required this.reserveLeading,
     required this.autofocus,
+    this.onActivate,
+    this.header = false,
+    this.semanticsLabel,
   });
 
   final AvoMenuItem item;
   final bool reserveCheck;
   final bool reserveLeading;
   final bool autofocus;
+
+  /// Set for a submenu row (opens it, shows a chevron) and the submenu's
+  /// title row (goes back); the menu stays open.
+  final VoidCallback? onActivate;
+
+  /// The title row of an open submenu: semibold.
+  final bool header;
+
+  /// Replaces what VoiceOver reads.
+  final String? semanticsLabel;
 
   @override
   State<_MenuRow> createState() => _MenuRowState();
@@ -588,6 +767,11 @@ class _MenuRowState extends State<_MenuRow> {
     // Ignore a second choice while the menu is already closing.
     final closing = !(ModalRoute.of(context)?.isCurrent ?? true);
     if (!item.enabled || closing) return;
+    final activate = widget.onActivate;
+    if (activate != null) {
+      activate();
+      return;
+    }
     Navigator.of(context).pop();
     item.onSelected();
   }
@@ -639,7 +823,11 @@ class _MenuRowState extends State<_MenuRow> {
             children: [
               Text(
                 item.label,
-                style: context.text(AvoTextStyle.body, color: foreground),
+                style: context.text(
+                  AvoTextStyle.body,
+                  color: foreground,
+                  weight: widget.header ? FontWeight.w600 : null,
+                ),
               ),
               if (subtitle != null)
                 Text(
@@ -659,6 +847,14 @@ class _MenuRowState extends State<_MenuRow> {
         if (icon != null) ...[
           const SizedBox(width: AvoSpacing.m),
           AvoIcon(icon, size: _iconSize * scale, color: foreground),
+        ],
+        if (widget.onActivate != null && !widget.header) ...[
+          const SizedBox(width: AvoSpacing.s),
+          AvoIcon(
+            AvoIcons.chevronRight,
+            size: _chevronSize * scale,
+            color: colors.tertiaryLabel,
+          ),
         ],
       ],
     );
@@ -685,11 +881,13 @@ class _MenuRowState extends State<_MenuRow> {
     );
     if (!enabled) row = Opacity(opacity: _disabledOpacity, child: row);
 
-    final label = [
-      item.label,
-      ?subtitle,
-      if (trailing != null) ?item.trailingLabel,
-    ].join(', ');
+    final label =
+        widget.semanticsLabel ??
+        [
+          item.label,
+          ?subtitle,
+          if (trailing != null) ?item.trailingLabel,
+        ].join(', ');
     return Semantics(
       container: true,
       button: true,

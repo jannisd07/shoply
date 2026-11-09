@@ -7,8 +7,23 @@ import 'package:shoply/routes/app_branch.dart';
 // control and shows [buildPlanSegment] below it, at RoutePaths.plan and
 // RoutePaths.recipesPlanSegment.
 
-/// Content of the Wochenplan segment in the Rezepte tab.
-Widget buildPlanSegment(BuildContext context) => const SizedBox.shrink();
+/// Content of the Wochenplan segment in the Rezepte tab, as slivers (one
+/// `SliverMainAxisGroup`). Teil A puts it into the tab's `CustomScrollView`
+/// below the segment control, only while "Wochenplan" is chosen, so the
+/// large title "Rezepte" scrolls with it (A-P1). Teil B fills it with B7.
+Widget buildPlanSegment(BuildContext context) => const SliverToBoxAdapter();
+
+/// The plan's main action and its undo hint, outside the scroll view. Teil A
+/// lays it over the content of the Rezepte tab, at the bottom just above the
+/// tab bar, only while "Wochenplan" is chosen (A-P2). Null shows nothing.
+/// Teil B fills it with B7.
+Widget? buildPlanFloatingBar(BuildContext context) => null;
+
+/// Toolbar buttons of the plan (previous week, next week, Mehr). Teil A shows
+/// them on the right of the Rezepte tab's `GlassToolbar` instead of
+/// "Gespeichert" and "Mehr", only while "Wochenplan" is chosen (A-P3).
+/// Teil B fills it with B7.
+List<Widget> buildPlanToolbarActions(BuildContext context) => const [];
 
 /// Children of a recipe, relative to `/recipes/:recipeId` (e.g. 'to-plan').
 final List<RouteBase> planRecipeRoutes = [];

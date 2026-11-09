@@ -141,7 +141,8 @@ class RecipesBrowseContent extends StatelessWidget {
   final RecipesSegment segment;
   final ValueChanged<RecipesSegment>? onSegment;
 
-  /// Teil B's Wochenplan (`buildPlanSegment`).
+  /// Teil B's Wochenplan (`buildPlanSegment`), a sliver placed below the
+  /// segment control.
   final Widget? planContent;
 
   final List<RecipeQuickFilter> filters;
@@ -184,9 +185,7 @@ class RecipesBrowseContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final slivers = <Widget>[SliverToBoxAdapter(child: _header(context))];
     if (_plan) {
-      slivers.add(
-        SliverToBoxAdapter(child: planContent ?? const SizedBox.shrink()),
-      );
+      slivers.add(planContent ?? const SliverToBoxAdapter());
     } else if (searching) {
       slivers.add(searchSliver ?? const SliverToBoxAdapter());
     } else if (loading) {
