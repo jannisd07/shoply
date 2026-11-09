@@ -106,8 +106,9 @@ void main() {
           noRegion ? findsNWidgets(2) : findsNothing,
         );
         if (noRegion) {
-          // The hint row in the suggestions panel carries the card shadow,
-          // so it stays visible on white list rows (A11b walkthrough).
+          // The hint row in the suggestions panel has a hairline, no shadow
+          // (D2: no shadow in content, S6-10), so it stays visible on white
+          // list rows (A11b walkthrough).
           final hint = find.descendant(
             of: find.byType(OfferSuggestionsBar),
             matching: find.text(
@@ -121,15 +122,9 @@ void main() {
                 )
                 .first,
           ];
-          expect(
-            boxes.any(
-              (b) =>
-                  b.decoration is BoxDecoration &&
-                  ((b.decoration as BoxDecoration).boxShadow?.isNotEmpty ??
-                      false),
-            ),
-            isTrue,
-          );
+          final decoration = boxes.single.decoration as BoxDecoration;
+          expect(decoration.boxShadow, isNull);
+          expect(decoration.border, isNotNull);
         }
         expect(find.textContaining('€'), findsNothing);
         expect(asked, 0, reason: 'no request to the offers source');
