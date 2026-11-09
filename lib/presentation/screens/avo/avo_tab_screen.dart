@@ -96,6 +96,9 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
   /// The composer, to place the card's photo menu at its camera button.
   final _composerKey = GlobalKey(debugLabel: 'avo-composer');
 
+  /// The large title, measured for the moment it has passed under the head.
+  final _largeTitleKey = GlobalKey(debugLabel: 'avo-large-title');
+
   /// The camera is off in Settings (Kap. 7.4): the status row says so
   /// until a photo or a question goes out.
   bool _cameraDenied = false;
@@ -389,8 +392,14 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    final threshold = context.typography.lineHeightOf(AvoTextStyle.largeTitle);
-    final collapsed = _scroll.offset > threshold;
+    // Like iOS (S6 P2): the small title comes only once the whole large
+    // title row (figure included) has passed under the head, and the large
+    // one is then hidden, so the two are never seen together.
+    final box = _largeTitleKey.currentContext?.findRenderObject();
+    final titleHeight = box is RenderBox && box.hasSize
+        ? box.size.height
+        : context.typography.lineHeightOf(AvoTextStyle.largeTitle);
+    final collapsed = _scroll.offset > _titleGap + titleHeight;
     if (collapsed == _collapsed.value) return;
     _collapsed.value = collapsed;
     // The status row may move between the conversation and the band.
@@ -614,7 +623,12 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
     final body = <Widget>[
       // VoiceOver reads the title from the head ([_TitleForVoiceOver]), so it
       // comes before "Neues Gespräch" (Kap. 3.6).
-      ExcludeSemantics(child: AvoLargeTitle(pose: pose)),
+      ExcludeSemantics(
+        child: Opacity(
+          opacity: _collapsed.value ? 0 : 1,
+          child: AvoLargeTitle(key: _largeTitleKey, pose: pose),
+        ),
+      ),
       // The slot is always there (empty without a status), so the rounds
       // below keep their places in the list and their state when the row
       // comes or goes (W1 re-review 3, Minor 2).
