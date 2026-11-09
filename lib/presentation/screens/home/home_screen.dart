@@ -2,13 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/core/utils/display_name_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
-import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/tip_service.dart';
 import 'package:shoply/data/services/widget_service.dart';
 import 'package:shoply/presentation/screens/home/home_layout.dart';
@@ -55,40 +53,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// The one-time tip of this visit (Konzept 17 §6.1), fixed at its first
   /// frame.
   final _tip = TipVisit(TipPlace.home);
-  String? _lastUserId;
-  StreamSubscription<AuthState>? _authSubscription;
 
+  // No auth listener of its own: the lists and the history rebuild per
+  // account (`authUserIdProvider`), and main.dart pushes the widget
+  // credentials on every sign-in and token refresh. A listener here only
+  // loaded both a second time after an account switch.
   @override
   void initState() {
     super.initState();
-    _lastUserId = SupabaseService.instance.currentUser?.id;
-
     // The lists notifier loads itself on creation.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncWidgetCredentials();
+      unawaited(WidgetService.syncCredentialsFromSession());
     });
-
-    // Reload account-scoped data when the signed-in user changes.
-    _authSubscription = SupabaseService.instance.client.auth.onAuthStateChange
-        .listen((data) {
-          final newUserId = data.session?.user.id;
-          if (_lastUserId != newUserId && mounted) {
-            _lastUserId = newUserId;
-            ref.read(listsNotifierProvider.notifier).loadLists();
-            ref.invalidate(recentHistoryProvider);
-            _syncWidgetCredentials();
-          }
-        });
-  }
-
-  @override
-  void dispose() {
-    _authSubscription?.cancel();
-    super.dispose();
-  }
-
-  void _syncWidgetCredentials() {
-    unawaited(WidgetService.syncCredentialsFromSession());
   }
 
   Future<void> _refresh() async {
