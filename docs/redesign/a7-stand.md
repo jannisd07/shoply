@@ -39,8 +39,8 @@ Ernährung, Ziel, Erste Liste, Ankunft; dazu echte Apple-/Google-Blätter, Schl�
 
 ## Von Teil B (angefragt)
 
-- `SupabaseService.signInWithApple()` → `AppleSignInResult?` mit Nonce und Name (B baut, nach „Auth-Dateien frei“).
-  `sendEmailCode`/`verifyEmailCode` sind da (`2022317`); das Gateway nutzt sie noch nicht.
+- Erledigt von B: Apple mit Nonce und Name (`52da1d1`), `sendEmailCode`/`verifyEmailCode` (`2022317`, das Gateway nutzt
+  sie seit `1341ec5`).
 - `b_slots`: `offersKillSwitchOffProvider` (bekannt und aus), `suggestStoreChain(listName)`,
   `StoreSuggestionChip(listName:, onChanged:)`, `favoriteStoreNamesProvider`, `setStoreForList(listId, chainId)` für die
   erste Liste; Vertrag `OffersSetupStep`: `onDone` in den ersten zwei Frames heißt „nichts zu zeigen“.
