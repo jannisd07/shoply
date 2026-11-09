@@ -181,7 +181,7 @@ class _OfferCard extends StatelessWidget {
                     // Caps for display only ("ANGEBOT"); the word has no ß.
                     context.tr('offer_card_kicker').toUpperCase(),
                     style: kicker.copyWith(
-                      letterSpacing:
+                      letterSpacing: // D2 kicker tracking
                           (kicker.letterSpacing ?? 0) + _kKickerTracking,
                     ),
                   ),

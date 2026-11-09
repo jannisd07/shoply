@@ -28,7 +28,7 @@ const Map<String, AvoIconData> articleCategorySymbols = {};
 /// product shots are taken on white. `AvoColors` has no colour that stays
 /// white in dark mode (`surface` turns dark); this literal goes once Teil A
 /// adds one.
-const Color offPhotoBackground = Color(0xFFFFFFFF);
+const Color offPhotoBackground = Color(0xFFFFFFFF); // D2 white behind photos
 
 /// Which pictures an item can have; overridden in tests.
 final articleImageResolverProvider = Provider<ArticleImageResolver>(

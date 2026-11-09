@@ -149,11 +149,11 @@ class StoreMark extends StatelessWidget {
               style: TextStyle(
                 inherit: false,
                 fontFamily: 'CupertinoSystemText',
-                fontSize: side * _kLetterRatio,
+                fontSize: side * _kLetterRatio, // D2 letters scale with the mark
                 height: 1,
                 fontWeight: FontWeight.w900,
                 color: ink,
-                letterSpacing: 0,
+                letterSpacing: 0, // D2
                 decoration: TextDecoration.none,
               ),
             ),

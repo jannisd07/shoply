@@ -346,7 +346,9 @@ class CalorieKicker extends StatelessWidget {
       excludeSemantics: true,
       child: Text(
         text.toUpperCase().replaceAll('ß', 'SS'),
-        style: style.copyWith(letterSpacing: (style.letterSpacing ?? 0) + _kKickerTracking),
+        style: style.copyWith(
+          letterSpacing: (style.letterSpacing ?? 0) + _kKickerTracking, // D2
+        ),
       ),
     );
   }
