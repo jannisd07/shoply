@@ -142,7 +142,14 @@ class ProfilePhotoAvatar extends StatelessWidget {
     final circle = SizedBox.square(
       dimension: kProfileAvatarSize,
       child: ClipOval(
-        child: AnimatedSwitcher(duration: fade, child: image),
+        // Every child fills the circle: a landscape photo with BoxFit.cover
+        // in the switcher's loose Stack was only 64 x 48 pt.
+        child: AnimatedSwitcher(
+          duration: fade,
+          layoutBuilder: (current, previous) =>
+              Stack(fit: StackFit.expand, children: [...previous, ?current]),
+          child: image,
+        ),
       ),
     );
     return ExcludeSemantics(
