@@ -97,6 +97,7 @@ dependencies:
   # Other
   equatable: ^2.0.5
   wakelock_plus: ^1.4.0
+  package_info_plus: ^9.0.0
 
 dev_dependencies:
   flutter_test:
