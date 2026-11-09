@@ -7,11 +7,14 @@ import 'package:shoply/data/services/notification_service.dart';
 void main() {
   final service = NotificationService.instance;
   late List<(int, String, String, DateTime)> planned;
+  late List<int> cancelled;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({'language': 'de'});
     planned = [];
+    cancelled = [];
     service.debugHasPermission = () async => true;
+    service.debugCancel = (id) async => cancelled.add(id);
     service.debugSchedule = (id, title, body, at) async =>
         planned.add((id, title, body, at));
   });
@@ -19,22 +22,41 @@ void main() {
   tearDown(() {
     service.debugHasPermission = null;
     service.debugSchedule = null;
+    service.debugCancel = null;
   });
 
-  test('the reminder comes two days before the trial ends', () {
-    final end = DateTime(2026, 11, 23, 9, 30);
-    expect(
-      NotificationService.proTrialReminderTime(end, DateTime(2026, 11, 9)),
-      DateTime(2026, 11, 21, 9, 30),
-    );
-  });
+  group('when', () {
+    DateTime? time(DateTime end, DateTime now) =>
+        NotificationService.proTrialReminderTime(end, now);
 
-  test('nothing when that day has passed', () {
-    final end = DateTime(2026, 11, 10, 9);
-    expect(
-      NotificationService.proTrialReminderTime(end, DateTime(2026, 11, 9)),
-      isNull,
-    );
+    test('10:00 local on the day 48 h before the end', () {
+      expect(
+        time(DateTime(2026, 11, 23, 9, 30), DateTime(2026, 11, 9)),
+        DateTime(2026, 11, 21, 10),
+      );
+    });
+
+    test('a trial ending at night still reminds at daytime', () {
+      expect(
+        time(DateTime(2026, 11, 23, 3, 15), DateTime(2026, 11, 9)),
+        DateTime(2026, 11, 21, 10),
+      );
+      expect(
+        time(DateTime(2026, 11, 23, 23, 50), DateTime(2026, 11, 9)),
+        DateTime(2026, 11, 21, 10),
+      );
+    });
+
+    test('10:00 of that day already passed: nothing', () {
+      expect(
+        time(DateTime(2026, 11, 23, 9, 30), DateTime(2026, 11, 21, 10, 1)),
+        isNull,
+      );
+    });
+
+    test('a trial ending tomorrow: nothing', () {
+      expect(time(DateTime(2026, 11, 10, 9), DateTime(2026, 11, 9, 8)), isNull);
+    });
   });
 
   test('the sentence in German and English with the price passed in', () {
@@ -67,7 +89,11 @@ void main() {
     expect(id, NotificationService.proTrialReminderId);
     expect(title, 'Avo Pro');
     expect(body, contains('29,99 €'));
-    expect(at, end.subtract(const Duration(days: 2)));
+    expect(at, NotificationService.proTrialReminderTime(end, DateTime.now()));
+    expect(at.hour, 10);
+    expect(cancelled, [
+      NotificationService.proTrialReminderId,
+    ], reason: 'an older reminder is replaced');
   });
 
   test('without permission: false and nothing planned', () async {
@@ -78,6 +104,7 @@ void main() {
     );
     expect(ok, isFalse);
     expect(planned, isEmpty);
+    expect(cancelled, [NotificationService.proTrialReminderId]);
   });
 
   test('notifications switched off in the app: false', () async {
@@ -88,6 +115,7 @@ void main() {
     );
     expect(ok, isFalse);
     expect(planned, isEmpty);
+    expect(cancelled, [NotificationService.proTrialReminderId]);
   });
 
   test('a trial ending tomorrow plans nothing', () async {
@@ -97,5 +125,6 @@ void main() {
     );
     expect(ok, isFalse);
     expect(planned, isEmpty);
+    expect(cancelled, [NotificationService.proTrialReminderId]);
   });
 }

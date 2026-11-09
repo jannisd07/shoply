@@ -296,15 +296,22 @@ class NotificationService {
   /// The one id of the trial reminder: a new trial replaces the old one.
   static const int proTrialReminderId = 700010;
 
-  /// How long before the trial ends the reminder comes (day 12 of 14).
-  static const Duration proTrialReminderLead = Duration(days: 2);
+  /// How long before the trial ends the reminder's day is (day 12 of 14).
+  static const Duration proTrialReminderLead = Duration(hours: 48);
 
-  /// When the reminder for a trial ending at [trialEndsAt] fires; null when
-  /// that moment is not after [now].
+  /// The local hour the reminder comes at: daytime, never at night.
+  static const int proTrialReminderHour = 10;
+
+  /// When the reminder for a trial ending at [trialEndsAt] fires: 10:00
+  /// local on the day 48 h before the end, so "übermorgen" stays true.
+  /// Null when that moment is not after [now] (or not before the end):
+  /// a later hour would make the sentence wrong, so nothing is planned.
   @visibleForTesting
   static DateTime? proTrialReminderTime(DateTime trialEndsAt, DateTime now) {
-    final at = trialEndsAt.subtract(proTrialReminderLead);
-    return at.isAfter(now) ? at : null;
+    final day = trialEndsAt.toLocal().subtract(proTrialReminderLead);
+    final at = DateTime(day.year, day.month, day.day, proTrialReminderHour);
+    if (!at.isAfter(now) || !at.isBefore(trialEndsAt)) return null;
+    return at;
   }
 
   /// The reminder's sentence in [language], with Avo Pro's yearly price as
@@ -330,18 +337,26 @@ class NotificationService {
   Future<void> Function(int id, String title, String body, DateTime at)?
       debugSchedule;
 
+  /// Replaces the plugin's cancel in tests.
+  @visibleForTesting
+  Future<void> Function(int id)? debugCancel;
+
   /// Plans "Deine Avo Pro-Testphase endet übermorgen. Danach {price} pro
-  /// Jahr." for two days before [trialEndsAt] (Teil A calls it after a
+  /// Jahr." for 10:00 local two days before [trialEndsAt] (A calls it after a
   /// purchase with a trial; B knows no prices, so A passes [yearlyPrice]).
   /// A tap opens the paywall.
   ///
   /// Returns `false` and plans nothing when notifications are not allowed
   /// (A then shows the hint in the app), when they are switched off in the
-  /// app, or when that day has passed; `true` once it is planned.
+  /// app, or when that moment has passed; `true` once it is planned. A
+  /// reminder planned earlier is removed first in every case.
   Future<bool> scheduleProTrialReminder(
     DateTime trialEndsAt, {
     required String yearlyPrice,
   }) async {
+    // A reminder of an earlier trial never stays when this one is not
+    // planned (every early return below), and a new one replaces it.
+    await cancelProTrialReminder();
     final at = proTrialReminderTime(trialEndsAt, DateTime.now());
     if (at == null) {
       debugPrint('⚠️ [NOTIFICATIONS] Trial reminder day has passed, skipping');
@@ -367,7 +382,6 @@ class NotificationService {
       if (schedule != null) {
         await schedule(proTrialReminderId, AppBrand.proName, body, at);
       } else {
-        await _notifications.cancel(proTrialReminderId);
         _ensureTimeZones();
         await _notifications.zonedSchedule(
           proTrialReminderId,
@@ -388,7 +402,12 @@ class NotificationService {
   }
 
   /// Removes the trial reminder (trial cancelled or ended early).
-  Future<void> cancelProTrialReminder() => cancel(proTrialReminderId);
+  Future<void> cancelProTrialReminder() async {
+    final debug = debugCancel;
+    if (debug != null) return debug(proTrialReminderId);
+    if (!_initialized) return;
+    await cancel(proTrialReminderId);
+  }
 
   /// The app language as `LanguageNotifier` resolves it: the saved choice,
   /// or the device locale for 'system' / unset (falling back to 'en').
