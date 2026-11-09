@@ -116,6 +116,7 @@ class SettingsSearchScope {
     required this.routes,
     required this.enabledModules,
     this.killSwitch = false,
+    this.languageCode = 'de',
   });
 
   /// Registered route patterns (`/settings/legal/:doc`), see
@@ -127,6 +128,9 @@ class SettingsSearchScope {
 
   /// The offers kill switch is on.
   final bool killSwitch;
+
+  /// The app language: its hits rank before hits in the other language.
+  final String languageCode;
 }
 
 /// One hit, with title and path resolved for the kill switch.
@@ -225,7 +229,13 @@ List<SettingsSearchHit> searchSettings(
     if (pathKeys.isEmpty && entry.rowId != null && page != null) {
       pathKeys = [page.titleKeyFor(killSwitch: scope.killSwitch)];
     }
-    final score = _score(tokens, titleKey, entry.keywordsKeys, pathKeys);
+    final score = _rankedScore(
+      tokens,
+      titleKey,
+      entry.keywordsKeys,
+      pathKeys,
+      scope.languageCode,
+    );
     if (score == 0) continue;
     final hit = SettingsSearchHit(
       entry: entry,
@@ -285,6 +295,21 @@ int _rootOrder(SettingsSearchHit hit) {
   return page == null ? profilePages.length : profilePages.indexOf(page);
 }
 
+/// [_score] in the app language first: any hit there (4 to 6) ranks before a
+/// hit that only the other language finds (1 to 3), so "nut" in English
+/// finds the allergies before the German "Nutzungsbedingungen".
+int _rankedScore(
+  List<String> tokens,
+  String titleKey,
+  List<String> keywordsKeys,
+  List<String> pathKeys,
+  String languageCode,
+) {
+  final own = _score(tokens, titleKey, keywordsKeys, pathKeys, [languageCode]);
+  if (own > 0) return own + 3;
+  return _score(tokens, titleKey, keywordsKeys, pathKeys, _kSearchLanguages);
+}
+
 /// 3: the title starts with the whole query; 2: every word starts a title
 /// word; 1: every word starts a word somewhere in the entry; 0: no hit.
 int _score(
@@ -292,10 +317,10 @@ int _score(
   String titleKey,
   List<String> keywordsKeys,
   List<String> pathKeys,
+  List<String> languages,
 ) {
   final titles = [
-    for (final l in _kSearchLanguages)
-      normalizeSettingsQuery(_text(titleKey, l)),
+    for (final l in languages) normalizeSettingsQuery(_text(titleKey, l)),
   ];
   final phrase = tokens.join(' ');
   if (titles.any((t) => t.startsWith(phrase))) return 3;
@@ -305,7 +330,7 @@ int _score(
   if (allIn(titleWords)) return 2;
   final words = <String>[
     ...titleWords,
-    for (final l in _kSearchLanguages) ...[
+    for (final l in languages) ...[
       for (final k in keywordsKeys)
         for (final term in _text(k, l).split(','))
           ...normalizeSettingsQuery(term).split(' '),
@@ -316,7 +341,7 @@ int _score(
   // A search word made of several words ("Bildschirm an") also matches as a
   // whole.
   final phrases = [
-    for (final l in _kSearchLanguages)
+    for (final l in languages)
       for (final k in keywordsKeys)
         for (final term in _text(k, l).split(',')) normalizeSettingsQuery(term),
   ];

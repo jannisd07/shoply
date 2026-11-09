@@ -168,6 +168,7 @@ class ProfileRootData {
     routes: routes,
     enabledModules: enabledModules,
     killSwitch: killSwitch,
+    languageCode: languageCode,
   );
 }
 

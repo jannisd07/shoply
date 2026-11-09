@@ -156,6 +156,27 @@ void main() {
       expect(titles.first, 'Konto');
     });
 
+    test('hits in the app language rank first ("nut" in English)', () {
+      final hits = searchSettings(
+        'nut',
+        SettingsSearchScope(
+          routes: _allRoutes,
+          enabledModules: AppModule.values.toSet(),
+          languageCode: 'en',
+        ),
+        entries: allSettingsSearchEntries(),
+      );
+      final routes = [for (final h in hits) h.entry.route];
+      // Allergies ("nuts") before the German "Nutzungsbedingungen".
+      expect(routes, contains(RoutePaths.settingsDiet));
+      expect(
+        routes.indexOf(RoutePaths.settingsDiet),
+        lessThan(
+          routes.indexWhere((r) => r.startsWith(RoutePaths.settingsLegal)),
+        ),
+      );
+    });
+
     test('unknown words find nothing', () {
       expect(_titles('Kontrast'), isEmpty);
       expect(_titles('   '), isEmpty);
