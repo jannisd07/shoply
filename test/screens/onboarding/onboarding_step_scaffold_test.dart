@@ -71,6 +71,36 @@ void main() {
     );
   });
 
+  testWidgets('scrolled to the end, the last line clears the bar fade', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      OnboardingStepPage(
+        title: 'Was soll Avo für dich tun?',
+        message: 'Listen und Rezepte sind immer dabei.',
+        onBack: () {},
+        primaryAction: AppButton.primary(
+          label: 'Weiter',
+          onPressed: () {},
+          expand: true,
+        ),
+        children: [
+          for (var i = 0; i < 8; i++)
+            ToggleRow(title: 'Modul $i', value: false, onChanged: (_) {}),
+          const Text('KI-Hinweis am Ende'),
+        ],
+      ),
+      const LayoutCase(width: 390, scale: 1),
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    final last = tester.getRect(find.text('KI-Hinweis am Ende'));
+    final button = tester.getRect(find.text('Weiter'));
+    // 40 pt fade above the bar, whose padding puts the button 16 pt lower.
+    expect(button.top - last.bottom, greaterThanOrEqualTo(40 + 16));
+  });
+
   testWidgets('progress glides and announces the step', (tester) async {
     final handle = tester.ensureSemantics();
     await _pump(tester, _page(step: 2), const LayoutCase(width: 390, scale: 1));

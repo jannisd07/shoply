@@ -333,8 +333,10 @@ class OnboardingStepPage extends StatelessWidget {
               0,
               AvoSpacing.l,
               0,
+              // Scrolled to the end, the last line clears the bar's fade
+              // (it lay half faded under it, e.g. the AI note in Module).
               pinned && hasActions
-                  ? AvoSpacing.l
+                  ? _kBarFade
                   : media.padding.bottom + AvoSpacing.l,
             ),
             children: [
