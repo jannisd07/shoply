@@ -8,6 +8,14 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 aktualisiert am Ende diese Datei und [`b-sitzungen.md`](b-sitzungen.md), pusht, erinnert den Owner an eine neue Sitzung
 und gibt ihm den Start-Prompt für die nächste. Pakete, Stand und „Als Nächstes“ stehen in `b-sitzungen.md`.
 
+2026-11-09 (BAB1): **B nutzt A's AB1-Komponenten** (Commit mit dieser Zeile): Markt-Chips auf `AppFilterChip`/
+`SingleChoiceChipRow`, Postleitzahl auf `TextFieldRow`, S13 auf `ReorderableInsetSection` + `SelectCircle`, Avo-Composer
+auf `AvoComposerField` (Anhalten, Zähler, Foto-Pull-down), Einkaufsmodus über `shoppingModeSessionProvider` (plus
+`ShoppingModeHeader` für den ersten Frame), Angebotspreise über `ItemsNotifier.setPrice`/`clearPrice`/`undoPrice`, neue
+`AvoIcons`; `StoreFilterChip`, `PostcodeFieldRow` und eigene Glyphen gelöscht. Neu in `b_slots.dart`:
+`itemOfferRowExtras` (Anfrage 17 an A). Punkte 13–15: was AB1 betraf, ist erledigt; offen bleibt der Rest dort.
+Als Nächstes: BAB2 (Wünsche von A aus AB2), dann B7 Wochenplan.
+
 2026-11-09 (BA8): **A8-Wünsche sind auf `main`** (Commit mit dieser Zeile): Einstellungsseiten Avo, Kalorien &
 Gesundheit, Siri, Widgets, eigene Suchliste mit Zeilen und Hervorhebung, `b_slots`-Schnittstellen für Konto und Abo,
 E-Mail ändern, Abmelden leert B's Zwischenspeicher, Avo-Werkzeug `show_settings_link`, neue `update_setting`-Schlüssel
@@ -62,7 +70,7 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
     `lists/<id>?focus=add`, `avo/voice`, `plan?day=`, `calories/water?ml=`.
 11. ~~Prio 4 – `ShoppingItemModel.barcode`~~ gibt es schon (laut A), erledigt.
 
-13. **Nach den Angebots-Slots (d5aff5a):** A-C1 `ItemRow` übernimmt eine Custom Action aus dem Trailing-Slot
+13. **Nach den Angebots-Slots (d5aff5a)** (A-C1, A-C3, A-C8, A-D1 mit AB1 erledigt, B umgestellt in BAB1; Rest offen): A-C1 `ItemRow` übernimmt eine Custom Action aus dem Trailing-Slot
     („Angebot ansehen“) in die Zeilen-Semantik, plus Kontextmenü im Einkaufsmodus; A-C3 `ListOfferSummary(listId:,
     shoppingMode:)` oder Provider „Einkaufsmodus aktiv“ + Session-Start (bis dahin erkennt B `ShoppingModeHeader` als
     Vorfahre); Listen-Screen: einklappende Polsterung um `ListOfferSummary` (heute 24 pt Lücke ohne Inhalt); A-C8
@@ -70,14 +78,14 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
     Text-Pillen; A-L1 Listen-Info „Markt“ → `openStorePicker(…, from: StorePickerOrigin.info)`; A-D1
     Preis-Schnittstelle in `ItemRepository`; A-Q1 `owner.sh`: `test/layout/screens/b/*` gehört B.
 
-14. **Nach dem Avo-Tab (a3a25e2):** `AvoComposerField` mit drittem Zustand „Antwort anhalten“ (`onStop`),
+14. **Nach dem Avo-Tab (a3a25e2)** (Composer, kompakte `ItemRow`, `AppButton`-Varianten, Glyphen mit AB1 erledigt, B umgestellt in BAB1; Rest offen): `AvoComposerField` mit drittem Zustand „Antwort anhalten“ (`onStop`),
     `enabled`, `maxLength`/Zähler, eigenem `semanticLabel`, Foto-Knopf mit Pull-down; kompakte `ItemRow` (56 hoch,
     Kreis 22, Bild 36/Radius 9); `AppButton` „gefüllt neutral“ und „gefüllt destruktiv“ + Token `destructiveFill`;
     Glyphen `plus.bubble`, `leaf`, `switch.2`, `checklist`; Neue-Liste-Editor mit vorbefülltem Namen;
     `ProFeatures`-Eintrag `avo_questions` (A9); Punkt am Avo-Tab bei neuer Antwort; `home_avo_card.dart` auf
     `openAvoWithQuestion` aus `b_slots.dart` umstellen (die eigene gleichnamige Funktion dort löschen).
 
-15. **Nach den Angebots-Screens (W4, S9–S16):**
+15. **Nach den Angebots-Screens (W4, S9–S16)** (von A mit AB2 erledigt, siehe `ab2-stand.md`):
     - **A-R2 `/offers`:** `app_router.dart` legt A's `ModuleGate` um `buildOffersRoot`. Wird das Modul ausgeschaltet,
       während „Angebote der Woche“ offen ist, fragt dieser Wächter mit dem Dialog; laut angebote.md 1.3 schließt der
       Screen still. B's `_OffersGate` in `buildOffersRoot` deckt Kill-Switch, Modul aus beim Öffnen und den stillen
@@ -107,7 +115,7 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
       „Region“ (S11, `/settings/offers/region`, Zeile „Region“ in „Preise & Angebote“); das Feld dort speichert ohne
       die Prüfung von S11 (`isKnownZip`, „Region entfernen“, Ortszeile).
 
-16. **Nach BA8 (B-Einstellungen):**
+16. **Nach BA8 (B-Einstellungen)** (von A mit AB2 erledigt, `466eec0`, `78b4c4b`; B zieht in BAB2 nach):
     - `DestructiveRow` mit `onTap: null` und `subtitle` (gedimmt, `Semantics(enabled: false)`) für „Gespräch löschen“
       ohne Gespräch (Avo §10.1). Bis dahin liest VoiceOver „gedimmt“, der Titel sieht aber aktiv aus.
     - `StatusRow`: die Aktion bricht nicht um und läuft bei 320 pt ×1,35 über; B nutzt kurze Aktionen.
@@ -123,6 +131,19 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
       Schlüssel pro Konto), eigene E-Mail-Änderung → `SupabaseService.requestEmailChange`/`verifyEmailChange`,
       `DeletionSummary.openBalances` → `openSplitBalancesCountProvider`, Pro-Zeile → `proSubscriptionDetailsProvider`,
       Präsenz → `sharePresenceProvider`, Abendessen-Kategorie setzt B's Sender schon über `notif_dinner_ideas` durch.
+
+17. **Nach BAB1 (Umstellung auf AB1):**
+    - **A-C1 Angebotspille in `ItemRow`** (Liste und Einkaufsmodus, A's Dateien): `itemOfferRowExtras` aus `b_slots.dart`
+      in der Zeile aufrufen und durchreichen:
+      `final o = itemOfferRowExtras(context, ref, listId: listId, item: item, shoppingMode: shopping);` dann
+      `ItemRow(…, trailing: ItemOfferBadge(listId: listId, item: item, compact: shopping),
+      trailingSemanticsLabel: o?.semanticsLabel, trailingActions: o?.actions ?? const {},
+      contextMenuItems: [...eigeneEinträge, ...?o?.menuItems])`.
+    - **A-D1 Doku:** `ItemPrice.retailer` (`item_batch.dart`) ist der Händlername in Verzeichnis-Schreibweise („Lidl“,
+      „Aldi Süd“), nicht die Ketten-ID; das lesen Kassenzettel-Verlauf, Markterkennung und `isOfferPriceTaken`. Bitte
+      den Doc-Kommentar so ändern.
+    - **A-C7 Modul aus:** `ModuleGate` für `AppModule.offers` mit
+      `showModuleOffAlert(…, body: context.tr('offer_module_off_body'))`.
 
 Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
 5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald
@@ -222,16 +243,3 @@ Offen:
   Erlaubnis.
 - Illustrationen für Artikelbilder erzeugen (Bild-Prompts folgen in `docs/redesign/artikelbilder-prompts.md`).
 - Wann der alte Gemini-Key widerrufen wird (alte Builds rufen ihn noch auf).
-
-16. **Nach BAB1 (Umstellung auf AB1):**
-    - **A-C1 Angebotspille in `ItemRow`** (Liste und Einkaufsmodus, A's Dateien): `itemOfferRowExtras` aus `b_slots.dart`
-      in der Zeile aufrufen und durchreichen:
-      `final o = itemOfferRowExtras(context, ref, listId: listId, item: item, shoppingMode: shopping);` dann
-      `ItemRow(…, trailing: ItemOfferBadge(listId: listId, item: item, compact: shopping),
-      trailingSemanticsLabel: o?.semanticsLabel, trailingActions: o?.actions ?? const {},
-      contextMenuItems: [...eigeneEinträge, ...?o?.menuItems])`.
-    - **A-D1 Doku:** `ItemPrice.retailer` (`item_batch.dart`) ist der Händlername in Verzeichnis-Schreibweise („Lidl“,
-      „Aldi Süd“), nicht die Ketten-ID; das lesen Kassenzettel-Verlauf, Markterkennung und `isOfferPriceTaken`. Bitte
-      den Doc-Kommentar so ändern.
-    - **A-C7 Modul aus:** `ModuleGate` für `AppModule.offers` mit
-      `showModuleOffAlert(…, body: context.tr('offer_module_off_body'))`.
