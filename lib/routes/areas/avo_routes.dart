@@ -5,8 +5,6 @@ import 'package:shoply/presentation/screens/avo/avo_hand_over.dart';
 import 'package:shoply/presentation/screens/avo/avo_settings_screen.dart';
 import 'package:shoply/presentation/screens/avo/avo_tab_screen.dart';
 import 'package:shoply/presentation/screens/system/b_settings_route.dart';
-import 'package:shoply/presentation/screens/system/siri_settings_screen.dart';
-import 'package:shoply/presentation/screens/system/widgets_settings_screen.dart';
 import 'package:shoply/routes/app_branch.dart';
 
 // Avo (Teil B). The contract for all Teil-B route files is the same: a root
@@ -41,19 +39,10 @@ final List<RouteBase> avoRootRoutes = [];
 
 /// Settings pages, with paths relative to RoutePaths.settings (e.g. 'avo').
 /// They open in the Profil tab; `?row=` highlights a row (settings search).
-///
-/// "Siri & Kurzbefehle" and "Widgets" (system, B9) are here too: Teil B has
-/// no system route file Teil A mounts yet. They are core pages, not behind
-/// the Avo module.
 final List<RouteBase> avoSettingsRoutes = [
   bSettingsRoute(
     'avo',
     (row) => AvoSettingsScreen(highlightRowId: row),
     module: AppModule.avo,
-  ),
-  bSettingsRoute('siri', (row) => SiriSettingsScreen(highlightRowId: row)),
-  bSettingsRoute(
-    'widgets',
-    (row) => WidgetsSettingsScreen(highlightRowId: row),
   ),
 ];

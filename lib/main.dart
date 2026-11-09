@@ -149,7 +149,7 @@ void _listenToAuthChanges(bool isMobile) {
     // Keep the widget's cached Supabase credentials fresh. The widget
     // process syncs toggles / quick-adds via direct REST calls with this
     // cached token, so it must follow every token refresh, not just app
-    // launch (home_screen only re-pushes on launch/user change).
+    // launch (home_screen only pushes them once when it opens).
     if (event == AuthChangeEvent.initialSession ||
         event == AuthChangeEvent.signedIn ||
         event == AuthChangeEvent.tokenRefreshed) {

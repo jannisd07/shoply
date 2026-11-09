@@ -8,6 +8,13 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 aktualisiert am Ende diese Datei und [`b-sitzungen.md`](b-sitzungen.md), pusht, erinnert den Owner an eine neue Sitzung
 und gibt ihm den Start-Prompt für die nächste. Pakete, Stand und „Als Nächstes“ stehen in `b-sitzungen.md`.
 
+2026-11-09 (BAB2): **A's Wünsche aus AB2 und A12 sind erledigt** (Commit mit dieser Zeile): Siri und Widgets in
+`systemSettingsRoutes`, Hinweis, wenn die Kurzbefehle-App nicht aufgeht; Angebots-Pfade aus `RoutePaths`;
+`offerTargetListsProvider` auf A's `listsTodayFirstProvider`, „Neue Liste …“ mit vorausgewähltem Markt; neue
+Mitteilungs-Kategorien für Push; `recipeOfferSummaryShowsProvider` und der Badge-Fehler von `RecipeOfferSummary`; tote
+Home-Karten und `ml_recommendation_service` gelöscht; Badge ohne eigenes Semantik-Label, `offer_module_off_body`
+gelöscht. Als Nächstes: B8 (B7 wartet auf A-P1–A-P4, A-K10).
+
 2026-11-09 (BAB1): **B nutzt A's AB1-Komponenten** (Commit mit dieser Zeile): Markt-Chips auf `AppFilterChip`/
 `SingleChoiceChipRow`, Postleitzahl auf `TextFieldRow`, S13 auf `ReorderableInsetSection` + `SelectCircle`, Avo-Composer
 auf `AvoComposerField` (Anhalten, Zähler, Foto-Pull-down), Einkaufsmodus über `shoppingModeSessionProvider` (plus
@@ -132,8 +139,9 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
       `DeletionSummary.openBalances` → `openSplitBalancesCountProvider`, Pro-Zeile → `proSubscriptionDetailsProvider`,
       Präsenz → `sharePresenceProvider`, Abendessen-Kategorie setzt B's Sender schon über `notif_dinner_ideas` durch.
 
-17. **Nach BAB1 (Umstellung auf AB1):**
-    - **A-C1 Angebotspille in `ItemRow`** (Liste und Einkaufsmodus, A's Dateien): `itemOfferRowExtras` aus `b_slots.dart`
+17. **Nach BAB1 (Umstellung auf AB1):** (1) von A erledigt (`004b3fd`), B hat das eigene Semantik-Label im Badge
+    in BAB2 entfernt; (3) entfällt, `offer_module_off_body` ist gelöscht; offen bleibt (2).
+    - ~~**A-C1 Angebotspille in `ItemRow`**~~ (Liste und Einkaufsmodus, A's Dateien): `itemOfferRowExtras` aus `b_slots.dart`
       in der Zeile aufrufen und durchreichen:
       `final o = itemOfferRowExtras(context, ref, listId: listId, item: item, shoppingMode: shopping);` dann
       `ItemRow(…, trailing: ItemOfferBadge(listId: listId, item: item, compact: shopping),
@@ -152,7 +160,29 @@ Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` u
 `categorizeLocal` gepusht ist). Danke auch für `addItems`/`undoAddItems` und `parseItemInput`: Der Wochenplan und Avo
 nutzen beide direkt.
 
+18. **Nach BAB2:**
+    - `recipe_detail_screen.dart` `_offerSummary` kann auf `recipeOfferSummaryShowsProvider(recipeOfferSummaryKey(recipe,
+      listId))` aus `b_slots.dart` umstellen und die eigenen Zeilen mit `recipeOffersCachedProvider`, `recipeOfferKey`,
+      `offerListNameProvider` und `remember` streichen; `RecipeOfferSummary` gibt die Angebote jetzt selbst an die
+      Zutaten-Pillen weiter.
+    - `all_lists_new_list.dart`: den direkten Import von `store_for_list_provider.dart` streichen (Info-Lint
+      `unnecessary_import`, beides kommt jetzt aus `b_slots.dart`).
+    - Ohne Nutzer, also löschbar: `screens/home/widgets/nudge_card.dart`, `data/models/recommendation_item.dart`.
+
 ## Erledigte Anfragen von Teil A
+
+- **AB2 und A12 „Von Teil B“** (Commit mit dieser Zeile): `/settings/siri` und `/settings/widgets` liegen in
+  `systemSettingsRoutes`; Siri zeigt einen Hinweis, wenn `openUrl` `false` meldet; Kommentar über `offersRootRoutes`
+  korrigiert, `offer_paths.dart` nimmt die Muster aus `RoutePaths`. `b_slots.dart` exportiert zusätzlich
+  `listStoreRepositoryProvider`, `storeInfoForChain`, `recipeOfferSummaryKey`, `recipeOfferSummaryShowsProvider`
+  (A's `todayListProvider`/`listsTodayFirstProvider` bleiben A's Exporte; B liest sie direkt). `offerTargetListsProvider`
+  folgt `listsTodayFirstProvider`; „Neue Liste …“ öffnet `openNewListEditor(storeChainId:)`, sucht man im Editor einen
+  anderen Markt aus, kommt nur der Artikel ohne Angebot auf die Liste. `notificationCategoryForPushType`:
+  `shopping_started` → „Jemand kauft ein“, `expense_split`/`split_reminder` → „Offene Beträge“ (der Wochenplan-Sender
+  kommt mit B7). `RecipeOfferSummary` meldet Angebote auch beim Einhängen mit schon geladenen Daten an die Pillen (Test).
+  Gelöscht: `avo_nudge_card`, `price_comparison_nudge_card`, `pending_splits_banner`, `calorie_recipe_nudge_card`,
+  `personal_flyer_card`, `split_trip_nudge_card`, `ml_recommendation_service` mit Test, `offer_module_off_body`. Die
+  Paper-Shims hängen nur noch an Kalorien- und Verlaufs-Screens, die B6b und B8 ohnehin neu bauen.
 
 - **A8 „Von Teil B“** (Commit mit dieser Zeile): Routen `/settings/health`, `/settings/avo`, `/settings/siri`,
   `/settings/widgets` (`/settings/plan` kommt mit B7); eigene Suchliste `bSettingsSearchEntries` mit Seiten und Zeilen,

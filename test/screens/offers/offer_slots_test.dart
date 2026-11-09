@@ -112,7 +112,7 @@ void main() {
   });
 
   group('S3 ItemOfferBadge', () {
-    testWidgets('shows the price and adds its sentence to the row', (
+    testWidgets('shows the price; the sentence is the row\'s, not its own', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
@@ -127,8 +127,9 @@ void main() {
       );
       expect(find.text('0,99 €'), findsOneWidget);
       expect(
-        find.bySemanticsLabel(RegExp('im Angebot 0,99 Euro laut Händler')),
-        findsOneWidget,
+        find.bySemanticsLabel(RegExp('laut Händler')),
+        findsNothing,
+        reason: 'itemOfferRowExtras carries it (row extras below)',
       );
       handle.dispose();
     });
@@ -261,23 +262,26 @@ void main() {
     testWidgets('a similar product carries the question mark sentence', (
       tester,
     ) async {
-      final handle = tester.ensureSemantics();
+      ItemOfferRowExtras? seen;
       await pumpOffers(
         tester,
-        Semantics(
-          container: true,
-          child: ItemOfferBadge(listId: testListId, item: milk),
+        Consumer(
+          builder: (context, ref, _) {
+            seen = itemOfferRowExtras(
+              context,
+              ref,
+              listId: testListId,
+              item: milk,
+            );
+            return ItemOfferBadge(listId: testListId, item: milk);
+          },
         ),
         overrides: offersOn(
           snapshot: testSnapshot({'Milch': testOffer(broad: true)}),
           items: [milk],
         ),
       );
-      expect(
-        find.bySemanticsLabel(RegExp('ähnliches Produkt im Angebot')),
-        findsOneWidget,
-      );
-      handle.dispose();
+      expect(seen?.semanticsLabel, contains('ähnliches Produkt im Angebot'));
     });
 
     testWidgets('nothing without a region, for a checked item, or when off', (

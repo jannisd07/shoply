@@ -26,8 +26,9 @@ const double _kTargetInset = AvoSpacing.xs; // D2 target = pill + 8 (3.9)
 ///
 /// In a normal list a tap on the pill (44-pt target) opens the offer to take
 /// its price; [compact] (shopping mode) is not tappable on its own, there the
-/// row checks the item off. The pill adds its sentence to the row's
-/// VoiceOver label ("im Angebot 0,99 Euro laut Händler").
+/// row checks the item off. Its sentence for VoiceOver ("im Angebot 0,99
+/// Euro laut Händler") comes with [itemOfferRowExtras], which the host row
+/// passes as `trailingSemanticsLabel`; the pill itself adds none.
 ///
 /// Renders nothing, and asks the offers source nothing, while offers are off
 /// (module, kill switch), hidden on [listId], without a real region, with
@@ -52,12 +53,9 @@ class ItemOfferBadge extends ConsumerWidget {
     if (offer == null) return const SizedBox.shrink();
 
     final lang = offerLanguageOf(context);
-    Widget pill = Semantics(
-      label: _spokenPill(context, offer),
-      child: OfferPriceTag(
-        price: formatEuro(offer.price, lang),
-        uncertain: offer.isBroadMatch,
-      ),
+    Widget pill = OfferPriceTag(
+      price: formatEuro(offer.price, lang),
+      uncertain: offer.isBroadMatch,
     );
     if (!compact) {
       pill = GestureDetector(

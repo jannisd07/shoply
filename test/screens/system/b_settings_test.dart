@@ -249,6 +249,27 @@ void main() {
       await tester.tap(find.text('Open the Shortcuts app'));
       await settle(tester);
       expect(actions.urls, [kShortcutsAppUrl]);
+      expect(find.textContaining("didn't open"), findsNothing);
+    });
+
+    testWidgets('says so when the Shortcuts app does not open', (tester) async {
+      final actions = FakeExternalActions()..urlOpens = false;
+      await pumpSettings(
+        tester,
+        const SiriSettingsScreen(),
+        overrides: settingsOverrides(actions: actions),
+        height: 1400,
+      );
+      await tester.tap(find.text('Open the Shortcuts app'));
+      await tester.pump();
+      expect(
+        find.text(
+          "The Shortcuts app didn't open. You can get it again from the App Store.",
+        ),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 5));
+      await settle(tester);
     });
 
     test('every sentence names the app and exists in both languages', () {

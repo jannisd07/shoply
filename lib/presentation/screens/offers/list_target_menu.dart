@@ -15,12 +15,12 @@ import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
+import 'package:shoply/presentation/screens/lists/widgets/all_lists_data.dart'
+    show listsTodayFirstProvider;
 import 'package:shoply/presentation/screens/lists/widgets/all_lists_new_list.dart';
 import 'package:shoply/presentation/screens/offers/offer_actions.dart';
 import 'package:shoply/presentation/screens/offers/offer_text.dart';
 import 'package:shoply/presentation/screens/offers/store_menu.dart';
-import 'package:shoply/presentation/state/last_list_provider.dart';
-import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 
@@ -33,31 +33,28 @@ class OfferTargetList {
   final String name;
 }
 
-/// The person's lists for the menu: the list of today (opened last) first,
-/// then by last change. Override in tests.
-final offerTargetListsProvider = Provider.autoDispose<List<OfferTargetList>>((
-  ref,
-) {
-  final lists = [...?ref.watch(listsNotifierProvider).valueOrNull]
-    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  String? today;
-  try {
-    today = ref.watch(lastAccessedListProvider).valueOrNull;
-  } catch (_) {
-    today = null;
-  }
-  final first = lists.where((l) => l.id == today).toList();
-  return [
-    for (final l in [...first, ...lists.where((l) => l.id != today)])
+/// The person's lists for the menu in A's order of list pickers
+/// ([listsTodayFirstProvider]): the list of today (pinned, else opened
+/// last, else changed last) first, then by last change. Override in tests.
+final offerTargetListsProvider = Provider.autoDispose<List<OfferTargetList>>(
+  (ref) => [
+    for (final l in ref.watch(listsTodayFirstProvider))
       OfferTargetList(id: l.id, name: l.name.trim()),
-  ];
-});
+  ],
+);
+
+/// A's editor for a new list with a preselected market, which the editor
+/// saves itself.
+typedef NewListOpener =
+    Future<ShoppingListModel?> Function(
+      BuildContext context, {
+      String? storeChainId,
+    });
 
 /// A's editor for a new list ("Neue Liste …"); override in tests.
-final newListOpenerProvider =
-    Provider<Future<ShoppingListModel?> Function(BuildContext context)>(
-      (ref) => openNewListEditor,
-    );
+final newListOpenerProvider = Provider<NewListOpener>(
+  (ref) => openNewListEditor,
+);
 
 /// Opens "Auf welche Liste?" out of [anchor] for [offer], put on as [name]
 /// ("Haferflocken", not the product name) with [quantity]. [onPicked] runs
@@ -139,11 +136,12 @@ Future<void> showListTargetMenu(
   );
 }
 
-/// "Neue Liste …": A's editor for a new list; the new list gets the offer's
-/// market (quietly, the add says what happened) and then the item, with
-/// the undo toast. The add runs from the root navigator and the app's
-/// providers, so it finishes even when the screen that asked closes
-/// ([onCreated], S5).
+/// "Neue Liste …": A's editor for a new list with the offer's market
+/// preselected (the editor saves it), then the item, with the undo toast.
+/// When the person picks another market in the editor, only the item goes
+/// on, as for any list of another market. The add runs from the root
+/// navigator and the app's providers, so it finishes even when the screen
+/// that asked closes ([onCreated], S5).
 Future<void> _toNewList(
   BuildContext anchor, {
   required StoreOffer offer,
@@ -153,30 +151,39 @@ Future<void> _toNewList(
 }) async {
   final container = ProviderScope.containerOf(anchor, listen: false);
   final root = Navigator.of(anchor, rootNavigator: true).context;
-  final list = await container.read(newListOpenerProvider)(anchor);
-  if (list == null || !root.mounted) return;
   final chain = offerChainId(offer);
-  final added = Future<void>(() async {
-    if (chain != null) {
-      try {
-        await container
-            .read(listStoreRepositoryProvider)
-            .setExplicit(list.id, chain);
-      } catch (e) {
-        debugPrint('⚠️ [OFFERS] Market of the new list not saved: $e');
-      }
-    }
-    if (!root.mounted) return;
-    await addOfferToList(
-      root,
-      listId: list.id,
-      name: name,
-      offer: offer,
-      quantity: quantity,
-      listName: list.name.trim(),
-      otherList: true,
-    );
-  });
+  final list = await container.read(newListOpenerProvider)(
+    anchor,
+    storeChainId: chain,
+  );
+  if (list == null || !root.mounted) return;
+  final market = container
+      .read(listStoreRepositoryProvider)
+      .cachedGuess(list.id);
+  final applies =
+      chain == null ||
+      market == null ||
+      !market.confirmed ||
+      market.chainId == chain;
+  final listName = list.name.trim();
+  final added = applies
+      ? addOfferToList(
+          root,
+          listId: list.id,
+          name: name,
+          offer: offer,
+          quantity: quantity,
+          listName: listName,
+          otherList: true,
+        )
+      : addWithoutOffer(
+          root,
+          listId: list.id,
+          listName: listName,
+          name: name,
+          offer: offer,
+          quantity: quantity,
+        );
   onCreated?.call();
   await added;
 }

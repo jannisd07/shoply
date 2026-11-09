@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:shoply/data/services/store_detection_service.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/item_purchase_stats.dart';
 import 'package:shoply/data/models/recipe.dart';
@@ -91,9 +92,16 @@ class _CountingSource extends Fake implements OfferPriceService {
 class _FakeStoreRepo extends Fake implements ListStoreRepository {
   final explicit = <(String, String)>[];
 
+  final saved = <String, StoreGuess>{};
+
   @override
-  Future<void> setExplicit(String listId, String chainId) async =>
-      explicit.add((listId, chainId));
+  Future<void> setExplicit(String listId, String chainId) async {
+    explicit.add((listId, chainId));
+    saved[listId] = StoreGuess(chainId, StoreSource.user, confirmed: true);
+  }
+
+  @override
+  StoreGuess? cachedGuess(String listId) => saved[listId];
 }
 
 void main() {
@@ -262,15 +270,22 @@ void main() {
           ),
           offerTargetListsProvider.overrideWith((ref) => const []),
           listStoreRepositoryProvider.overrideWithValue(repo),
-          newListOpenerProvider.overrideWithValue(
-            (context) async => ShoppingListModel(
+          // A's editor saves the preselected market itself.
+          newListOpenerProvider.overrideWithValue((
+            context, {
+            storeChainId,
+          }) async {
+            if (storeChainId != null) {
+              await repo.setExplicit('new-list', storeChainId);
+            }
+            return ShoppingListModel(
               id: 'new-list',
               name: 'Vorrat',
               ownerId: 'me',
               createdAt: DateTime(2026, 11, 9),
               updatedAt: DateTime(2026, 11, 9),
-            ),
-          ),
+            );
+          }),
         ],
       );
       router.push(offerDetailLocation(offer.id, name: 'Haferflocken'));

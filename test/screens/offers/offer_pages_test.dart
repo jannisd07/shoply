@@ -665,6 +665,48 @@ void main() {
       expect(find.textContaining('Quelle: Händlerprospekte'), findsOneWidget);
     });
 
+    testWidgets('mounted after the offers loaded: the pills still get them', (
+      tester,
+    ) async {
+      final source = _Source(cached: _result(recipe, [paprika]));
+      final show = ValueNotifier(false);
+      addTearDown(show.dispose);
+      final key = recipeOfferSummaryKey(recipe, testListId);
+      await pumpOfferScreen(
+        tester,
+        Scaffold(
+          body: Consumer(
+            builder: (context, ref, _) {
+              // The host decides with the public provider, as A's detail does.
+              final shows = ref.watch(recipeOfferSummaryShowsProvider(key));
+              return ValueListenableBuilder<bool>(
+                valueListenable: show,
+                builder: (context, mounted, _) => Column(
+                  children: [
+                    Text('shows: $shows'),
+                    if (mounted && shows)
+                      RecipeOfferSummary(recipe: recipe, listId: testListId),
+                    IngredientOfferBadge(
+                      listId: testListId,
+                      ingredient: recipe.ingredients.first,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        overrides: on(source),
+      );
+      expect(find.text('shows: true'), findsOneWidget);
+      expect(find.text('0,99 €'), findsNothing, reason: 'no row yet');
+
+      show.value = true;
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 Zutat diese Woche'), findsOneWidget);
+      expect(find.text('0,99 €'), findsOneWidget, reason: 'ingredient pill');
+    });
+
     testWidgets('nothing cached: no row now, looked up for next time', (
       tester,
     ) async {

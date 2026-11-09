@@ -11,6 +11,7 @@ import 'package:shoply/presentation/screens/system/widgets/settings_info_row.dar
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/row_highlight.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 
 /// The Shortcuts app (opens it on iOS).
 final Uri kShortcutsAppUrl = Uri.parse('shortcuts://');
@@ -63,11 +64,7 @@ class SiriSettingsScreen extends ConsumerWidget {
               id: 'siri.shortcuts',
               child: NavRow(
                 title: context.tr('sys_siri_open_shortcuts'),
-                onTap: () => unawaited(
-                  ref.read(settingsExternalActionsProvider).openUrl(
-                    kShortcutsAppUrl,
-                  ),
-                ),
+                onTap: () => unawaited(_openShortcuts(context, ref)),
               ),
             ),
           ],
@@ -75,4 +72,14 @@ class SiriSettingsScreen extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// Opens the Shortcuts app; says so when it didn't open (deleted from the
+/// iPhone, or iOS refused), instead of a tap that does nothing.
+Future<void> _openShortcuts(BuildContext context, WidgetRef ref) async {
+  final opened = await ref
+      .read(settingsExternalActionsProvider)
+      .openUrl(kShortcutsAppUrl);
+  if (opened || !context.mounted) return;
+  AvoToast.show(context, message: context.tr('sys_siri_shortcuts_missing'));
 }

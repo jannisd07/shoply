@@ -5,7 +5,7 @@ library;
 import 'package:shoply/routes/route_paths.dart';
 
 /// "Markt wählen" (S2), full screen above the tab bar.
-const String storePickerPath = '${RoutePaths.stores}/pick';
+const String storePickerPath = RoutePaths.storesPick;
 
 /// Where "Markt wählen" was opened from (`from=`).
 enum StorePickerOrigin { chip, checkout, newList, info }
@@ -21,7 +21,7 @@ String storePickerLocation({
 ).toString();
 
 /// The offer detail (S5) pattern, full screen above the tab bar.
-const String offerDetailPattern = '${RoutePaths.offers}/offer/:offerId';
+const String offerDetailPattern = RoutePaths.offersOfferPattern;
 
 /// What the main action of the offer detail does (`mode=`).
 enum OfferDetailMode {
@@ -69,7 +69,7 @@ String offerListLocation(String listId) =>
     '${RoutePaths.offers}/list/${Uri.encodeComponent(listId)}';
 
 /// "Angebote für {Rezept}" (S15), full screen above the tab bar.
-const String offerRecipePattern = '${RoutePaths.offers}/recipe/:recipeId';
+const String offerRecipePattern = RoutePaths.offersRecipePattern;
 
 /// `/offers/recipe/:recipeId?list=…&servings=…`.
 String offerRecipeLocation(
@@ -85,7 +85,7 @@ String offerRecipeLocation(
 ).toString();
 
 /// Region (S11) full screen above the tab bar (core).
-const String storeRegionPath = '${RoutePaths.stores}/region';
+const String storeRegionPath = RoutePaths.storesRegion;
 
 /// Where the region screen was opened from (`from=`).
 enum RegionOrigin { list, offers, panel, avo }
@@ -95,10 +95,10 @@ String storeRegionLocation({RegionOrigin from = RegionOrigin.list}) =>
     '$storeRegionPath?from=${from.name}';
 
 /// "Preise & Angebote" (S12) in the Profil tab.
-const String offersSettingsPath = '${RoutePaths.settings}/offers';
+const String offersSettingsPath = RoutePaths.settingsOffers;
 
 /// Region (S11) inside the Profil tab.
-const String offersSettingsRegionPath = '$offersSettingsPath/region';
+const String offersSettingsRegionPath = RoutePaths.settingsOffersRegion;
 
 /// "Lieblingsmärkte" (S13) inside the Profil tab.
-const String offersSettingsMarketsPath = '$offersSettingsPath/markets';
+const String offersSettingsMarketsPath = RoutePaths.settingsOffersMarkets;

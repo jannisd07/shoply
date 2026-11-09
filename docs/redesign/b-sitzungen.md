@@ -1,6 +1,6 @@
 # Teil B: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (nach BAB1). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (nach BAB2). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (P0–P2 von B lief in einer Sitzung mit
 weit über einer Million Tokens). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -37,9 +37,9 @@ für die nächste Sitzung geben.
 | B6 Kalorien: Tagebuch, Essen eintragen, Foto, Barcode, Menge, Manuell, Ziele | erledigt (`639e04d`) | `b-screens/kalorien.md` |
 | BA8 Wünsche von A aus A8 (Einstellungsseiten, Bridge-Schlüssel, Schnittstellen) | erledigt (`c37182f`) | `status-B.md` „Erledigte Anfragen von Teil A“ |
 | BAB1 Auf A's AB1-Komponenten umstellen | erledigt (Commit mit dieser Zeile) | `reports/w9-bab1-report.md`, `w9-bab1-review.md` |
-| **BAB2 Wünsche von A aus AB2** | **Als Nächstes** | unten, `ab2-stand.md` „Von Teil B“ |
+| BAB2 Wünsche von A aus AB2 und A12 | erledigt (Commit mit dieser Zeile) | `status-B.md` „Erledigte Anfragen von Teil A“ |
 | B7 Wochenplan | angefangen (Zweig `feature/b7-plan`), wartet auf A-P1–A-P4, A-K10 (AB2 oder später) | unten, `b-screens/wochenplan.md` |
-| B8 Verlauf, Einkauf abschließen, Kosten teilen, Home-Abschnitte | offen | `b-screens/verlauf-kosten.md` |
+| **B8 Verlauf, Einkauf abschließen, Kosten teilen, Home-Abschnitte** | **Als Nächstes** (B7 wartet noch auf A) | unten, `b-screens/verlauf-kosten.md` |
 | B5b Avo: Sprachmodus, „So arbeitet Avo“, Avo-Einstellungen, Foto über `shoply/camera` | offen | `b-screens/avo.md` §8–§10 |
 | B6b Kalorien: Woche, Gewicht, Workouts, Challenges, Ideen, Apple Health, Fotos löschen | offen | `b-screens/kalorien.md` S11, S15–S24 |
 | B4 Artikelbilder | offen (Logik da, Bilder fehlen) | Plan B4 |
@@ -48,41 +48,26 @@ für die nächste Sitzung geben.
 | B10 Qualität, S6 Gegenprüfung von A, Simulator-Durchgang mit Screenshots | offen | Plan P3 B10 |
 | BR Umbenennung „Shoply“ → „Avo“ | ganz am Ende, wenn A und B ruhen | `status-B.md` „Entschieden am 08.11.2026“ |
 
-Reihenfolge: BAB2, B7 (sobald A-P1–A-P4 da sind, sonst B8 vorziehen), B8, B5b, B6b, B9, B4, B3b, B10, BR. A's Wünsche an B (status-A, `aN-stand.md` „Von Teil B“)
+Reihenfolge: B8 (vorgezogen, weil A-P1–A-P4 und A-K10 bei A noch offen sind), B7 (sobald sie da sind), B5b, B6b, B9, B4, B3b, B10, BR. A's Wünsche an B (status-A, `aN-stand.md` „Von Teil B“)
 dürfen vorgezogen werden, wenn A darauf wartet.
 
-### Reste aus BA8 und BAB1
+### Reste aus BA8, BAB1 und BAB2
 
 Offen: Deploy von `ai` (Owner, OPEN-ISSUES 2.), Deno-Tests danach; Owner-Frage zu „Bis zu 24 Stunden“ und „Kalorien
 übrig“. Bekannt, nicht behoben (klein): laufende Anfragen können nach dem Abmelden ihr Ergebnis in die gerade geleerten
 Zwischenspeicher schreiben (Generationszähler pro Dienst); „Widerrufen“ der Startliste sucht die Liste per Name statt
-id. Für B9: Siri-Sätze auf dem Gerät prüfen. Aus BAB1: Anfrage 17 an A (`itemOfferRowExtras` in A's `ItemRow`
-durchreichen, danach B's eigenes Semantik-Label im Badge entfernen; `ItemPrice.retailer`-Doku; `ModuleGate` mit
-`offer_module_off_body`, der Schlüssel ist schon da). Bewusst so gelassen (Review M1, M11, M12): „Antwort anhalten“
+id. Für B9: Siri-Sätze auf dem Gerät prüfen. Aus BAB1: Anfrage 17 (2) an A (`ItemPrice.retailer`-Doku). Aus BAB2:
+Wochenplan-Erinnerung muss beim Planen `NotificationCategory.planReminder` übergeben (B7, es gibt noch keinen Sender);
+die Push-Typen `shopping_started` und `split_reminder` sind in der App zugeordnet, aber der Server sendet sie noch nicht
+(B8). `AppColors`/`PaperColors`/`design_system.dart` hängen nur noch an Kalorien (`challenges`, `weekly_summary`,
+`weight_tracking`, `what_can_i_eat`, `macro_bar`, `weight_chart`, also B6b) und Verlauf (`checkout_flow`,
+`shopping_history_screen`, `split_cost_sheet`, `checkout_store_sheet`, also B8): dort mit auf D2 umstellen, dann A
+Bescheid geben (A löscht die Shims). Aus A11 (`a11-stand.md` „Von Teil B“): `bash tool/design_check.sh B` listet
+B's D2-Regel-Funde (Farbe, Schriftgröße, Dauer, Icon, Haptik, 2 Sheets `checkout_store_sheet`/`split_cost_sheet`), mit
+den Umbauten B6b/B8 abbauen; `integration_test/perf` nie mit gebootetem Simulator laufen lassen (ersetzt die App).
+Bewusst so gelassen (Review M1, M11, M12): „Antwort anhalten“
 nur bei leerem Feld (Kap. 2.11); S14-Chips ohne Häkchen, VoiceOver „Lidl, 400 m“, Ziehen in S13 nur am Griff (A's
 Komponenten). Nicht umgestellt: alte Material-Screens mit `Icons.*` (eigene Pakete) und Symbole ohne `AvoIcons`-Gegenstück.
-
-### BAB2 Wünsche von A aus AB2 (Als Nächstes)
-
-A hat AB2 auf `main` (`466eec0`, `78b4c4b`), API in `ab2-stand.md`, Wünsche dort unter „Von Teil B“ (ganz lesen):
-Siri/Widgets aus `avoSettingsRoutes` nach `systemSettingsRoutes` (`lib/routes/areas/system_routes.dart`, gehört B,
-schon unter `/settings` eingehängt); in `siri_settings_screen.dart` bei `openUrl` == `false` einen Hinweis zeigen
-(`openUrl` gibt jetzt `Future<bool>`); veralteten Kommentar über `offersRootRoutes` korrigieren, `offer_paths.dart`
-evtl. aus den neuen `RoutePaths` ableiten; `todayListProvider`/`listsTodayFirstProvider`, `listStoreRepositoryProvider`
-und `storeInfoForChain` in `b_slots.dart` exportieren, `offerTargetListsProvider` darauf umstellen, `_toNewList` mit
-`storeChainId:`; `FCMService._categoryForType` für „Jemand kauft ein“ und „Offene Beträge“, Wochenplan-Sender mit
-`planReminder`; öffentlicher Provider „Zeile sichtbar?“ für `RecipeOfferSummary`; Fehler: `RecipeOfferSummary` meldet
-Angebote nur bei Änderung an die Badges (beim Einhängen mit schon geladenen Daten bleiben sie leer). Klein und
-zusammenhängend: selbst bauen oder ein Implementierer, danach Review.
-
-Dazu aus A12 (`09c6ee5`, `a12-stand.md` „Von Teil B“): tote Home-Karten löschen (`avo_nudge_card`,
-`price_comparison_nudge_card`, `pending_splits_banner`, `calorie_recipe_nudge_card`, `personal_flyer_card`,
-`split_trip_nudge_card`), `ml_recommendation_service` hat keinen Nutzer mehr, `AppColors`/`PaperColors`/
-`design_system.dart` hängen nur noch an B-Kalorien/Verlauf (umstellen auf D2-Tokens oder vormerken für B6b/B8);
-`offer_module_off_body` löschen (status-B 17 (3) entfällt). Der GitHub-Workflow „Analyze and test“ ist aus (Owner):
-lokal prüfen.
-A hat status-B 17 (1) erledigt (`004b3fd`, `itemOfferRowExtras` in Liste und Einkaufsmodus): jetzt B's eigenes
-Semantik-Label im Angebots-Badge entfernen und 17 in `status-B.md` abhaken (17 (2) stand schon so).
 
 ### B7 Wochenplan
 
@@ -99,13 +84,16 @@ den grauen Grund des Plans (A-P1–A-P4); A's Menüs haben keine Untermenüs (A-
 freigegebene Module immer die Fehlerseite, auch mit Debug-Freischaltung, also braucht der Plan einen kleinen B-Wächter.
 Bericht mit „Stand bei Abbruch“: `reports/w8-plan-report.md`.
 
-### B8 Verlauf, Einkauf abschließen, Kosten teilen
+### B8 Verlauf, Einkauf abschließen, Kosten teilen (Als Nächstes)
 
 Spec `b-screens/verlauf-kosten.md`. `openCheckoutFlow` ist heute ein Stub ohne eigene Bestätigung (Host zeigt den
 Erfolgsmoment); B8 baut den Abschluss im Vollbild (atomar `complete_shopping_trip` als Server-Entwurf, Owner wendet an),
 Monatsrückblick, Kosten teilen gleich/individuell mit Erinnern, offene Beträge, Home-Abschnitte `HomeMonthCard`,
 `HomeSpendingComparison`, `HomeRecentTrips`, `HomeSavingsHint`/`HomeSavingsGoal`. Alte Sheets löschen
 (`split_cost_sheet.dart`, `checkout_store_sheet.dart`). „Kosten teilen“ hat bei Avo kein Widerrufen (Owner-Frage).
+Dabei die Verlaufs-Screens von `AppColors`/`PaperColors`/`design_system.dart` auf D2-Tokens umstellen (A12-Wunsch).
+Push-Typen: `expense_split` und `split_reminder` landen schon auf `NotificationCategory.costSplitOpen`
+(`notificationCategoryForPushType` in `fcm_service.dart`); ein Erinnern-Sender nimmt `split_reminder`.
 
 ### B5b, B6b, B9, B4, B3b, B10, BR
 

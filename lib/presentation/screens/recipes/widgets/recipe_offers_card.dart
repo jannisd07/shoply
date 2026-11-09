@@ -75,11 +75,41 @@ class _SummaryVisibility extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final offers = summary._offers(ref);
-    if (offers == null) return const SizedBox.shrink();
-    return builder(summary);
+    final shows = ref.watch(
+      recipeOfferSummaryShowsProvider(
+        recipeOfferSummaryKey(summary.recipe, summary.listId),
+      ),
+    );
+    return shows ? builder(summary) : const SizedBox.shrink();
   }
 }
+
+/// The key of [RecipeOfferSummary] for [recipe] on [listId], for
+/// [recipeOfferSummaryShowsProvider].
+RecipeOfferKey recipeOfferSummaryKey(Recipe recipe, String listId) =>
+    recipeOfferKey(recipe.id, [
+      for (final i in recipe.ingredients) i.name,
+    ], listId);
+
+/// What the summary row of [RecipeOfferKey] shows, or null when it renders
+/// nothing.
+final _summaryOffersProvider = Provider.autoDispose
+    .family<RecipeListOffers?, RecipeOfferKey>((ref, key) {
+      final offers = ref.watch(recipeOffersCachedProvider(key)).valueOrNull;
+      if (offers == null || offers.matches.isEmpty) return null;
+      final name = ref.watch(offerListNameProvider(key.listId));
+      if (name == null || name.isEmpty) return null;
+      return offers;
+    });
+
+/// Whether `RecipeOfferSummary(recipe:, listId:)` shows its row (key:
+/// [recipeOfferSummaryKey]). Hosts pass the row only while this is true, so
+/// a group has no empty last row. Reading it asks nothing new: it follows
+/// what the device has.
+final recipeOfferSummaryShowsProvider = Provider.autoDispose
+    .family<bool, RecipeOfferKey>(
+      (ref, key) => ref.watch(_summaryOffersProvider(key)) != null,
+    );
 
 /// The last row of the group "Zutaten" in the recipe detail (S15, slot
 /// `RecipeOfferSummary(recipe:, listId:)`): `tag`, "3 Zutaten diese Woche
@@ -94,7 +124,7 @@ class _SummaryVisibility extends ConsumerWidget {
 /// no real region, "Angebote an Artikeln" off), when the list has no market
 /// (no "Markt wählen" here; that belongs to the list) or nothing is on
 /// offer. Never Pro.
-class RecipeOfferSummary extends ConsumerWidget {
+class RecipeOfferSummary extends ConsumerStatefulWidget {
   const RecipeOfferSummary({
     super.key,
     required this.recipe,
@@ -104,30 +134,53 @@ class RecipeOfferSummary extends ConsumerWidget {
   final Recipe recipe;
   final String listId;
 
-  RecipeOfferKey get _key => recipeOfferKey(recipe.id, [
-    for (final i in recipe.ingredients) i.name,
-  ], listId);
+  @override
+  ConsumerState<RecipeOfferSummary> createState() => _RecipeOfferSummaryState();
+}
 
-  /// What the row shows, or null when it renders nothing.
-  RecipeListOffers? _offers(WidgetRef ref) {
-    final offers = ref.watch(recipeOffersCachedProvider(_key)).valueOrNull;
-    if (offers == null || offers.matches.isEmpty) return null;
-    final name = ref.watch(offerListNameProvider(listId));
-    if (name == null || name.isEmpty) return null;
-    return offers;
+class _RecipeOfferSummaryState extends ConsumerState<RecipeOfferSummary> {
+  ProviderSubscription<AsyncValue<RecipeListOffers?>>? _handover;
+
+  RecipeOfferKey get _key =>
+      recipeOfferSummaryKey(widget.recipe, widget.listId);
+
+  @override
+  void initState() {
+    super.initState();
+    _handOver();
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.listen(recipeOffersCachedProvider(_key), (_, next) {
+  void didUpdateWidget(RecipeOfferSummary old) {
+    super.didUpdateWidget(old);
+    if (recipeOfferSummaryKey(old.recipe, old.listId) != _key) {
+      _handover?.close();
+      _handOver();
+    }
+  }
+
+  /// Hands the offers to the ingredient pills ([IngredientOfferBadge]), the
+  /// ones already on the device too (the row may mount after they loaded).
+  /// Never while the tree builds: the pills above watch the same state.
+  void _handOver() {
+    final listId = widget.listId;
+    _handover = ref.listenManual(recipeOffersCachedProvider(_key), (_, next) {
       final offers = next.valueOrNull;
-      if (offers != null) {
+      if (offers == null) return;
+      Future.microtask(() {
+        if (!mounted) return;
         ref
             .read(recipeIngredientOffersProvider.notifier)
             .remember(listId, offers);
-      }
-    });
-    final offers = _offers(ref);
+      });
+    }, fireImmediately: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recipe = widget.recipe;
+    final listId = widget.listId;
+    final offers = ref.watch(_summaryOffersProvider(_key));
     if (offers == null) return const SizedBox.shrink();
     final listName = ref.watch(offerListNameProvider(listId))!;
     final colors = context.colors;

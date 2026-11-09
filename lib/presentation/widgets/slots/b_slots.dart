@@ -21,7 +21,7 @@ export 'package:shoply/presentation/providers/offer_display_prefs_provider.dart'
 export 'package:shoply/presentation/providers/store_choice_provider.dart'
     show ChainStoreChoice, CustomStoreChoice, NoStoreChoice, StoreChoice;
 export 'package:shoply/presentation/providers/store_for_list_provider.dart'
-    show storeForListProvider;
+    show listStoreRepositoryProvider, storeForListProvider, storeInfoForChain;
 export 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart'
     show openCheckoutFlow;
 export 'package:shoply/presentation/screens/lists/widgets/item_offer_badge.dart'
@@ -58,7 +58,12 @@ export 'package:shoply/presentation/widgets/article_image.dart'
 export 'package:shoply/presentation/screens/calories/calories_recipe_screen.dart'
     show openLogRecipe;
 export 'package:shoply/presentation/screens/recipes/widgets/recipe_offers_card.dart'
-    show IngredientOfferBadge, RecipeOfferSummary, RecipeOffersCard;
+    show
+        IngredientOfferBadge,
+        RecipeOfferSummary,
+        RecipeOffersCard,
+        recipeOfferSummaryKey,
+        recipeOfferSummaryShowsProvider;
 
 // Home "Für dich" sections (Stufe 2).
 export 'package:shoply/presentation/widgets/home_sections/home_sections.dart'

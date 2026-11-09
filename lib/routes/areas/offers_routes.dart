@@ -55,11 +55,11 @@ final Map<AppBranch, List<RouteBase>> offersBranchRoutes = {};
 
 /// Full-screen roots above the tab bar, with absolute paths (`angebote.md`
 /// 1.2, type V): they open over whichever tab or full screen asked and come
-/// back there. `/offers/offer/:offerId` still matches here although the
-/// shell owns `/offers`: GoRouter tries the next top-level route when no
-/// child of `/offers` takes the rest of the path. Unnamed, so A's route
-/// snapshot (`test/routes/app_routes_test.dart`) stays as it is; open them
-/// with the helpers in `offer_paths.dart`.
+/// back there. Teil A mounts them ahead of the shell (`bRootRoutes()`), so
+/// `/offers/offer/:offerId` matches here first although the shell owns
+/// `/offers`. Unnamed, so A's route snapshot
+/// (`test/routes/app_routes_test.dart`) stays as it is; open them with the
+/// helpers in `offer_paths.dart`, whose patterns come from `RoutePaths`.
 final List<RouteBase> offersRootRoutes = [
   GoRoute(
     path: offerDetailPattern,

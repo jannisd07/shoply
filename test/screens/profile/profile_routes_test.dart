@@ -22,6 +22,7 @@ import 'package:shoply/routes/areas/history_routes.dart';
 import 'package:shoply/routes/areas/offers_routes.dart';
 import 'package:shoply/routes/areas/plan_routes.dart';
 import 'package:shoply/routes/areas/profile_routes.dart';
+import 'package:shoply/routes/areas/system_routes.dart';
 import 'package:shoply/routes/route_error_screen.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -92,7 +93,8 @@ void main() {
           avoSettingsRoutes.length +
           planSettingsRoutes.length +
           caloriesSettingsRoutes.length +
-          historySettingsRoutes.length,
+          historySettingsRoutes.length +
+          systemSettingsRoutes.length,
     );
   });
 

@@ -65,8 +65,6 @@ const Map<String, String> offersEn = {
   'offer_pick_no_result': 'No store called “{query}”.',
   'offer_pick_use_custom': 'Use “{query}” as your own store',
   // S3 Angebots-Pille.
-  'offer_module_off_body':
-      "Turn it on to see what's on offer at your store, right on your lists.",
   'offer_badge_a11y': 'on offer, {price} as stated by the retailer',
   'offer_badge_similar_a11y':
       'similar product on offer, {price} as stated by the retailer',
@@ -328,8 +326,6 @@ const Map<String, String> offersDe = {
   'offer_pick_no_result': 'Kein Markt mit „{query}“ gefunden.',
   'offer_pick_use_custom': '„{query}“ als eigenen Markt verwenden',
   // S3 Angebots-Pille.
-  'offer_module_off_body':
-      'Schalte es ein, dann siehst du an deinen Listen, was bei deinem Markt im Angebot ist.',
   'offer_badge_a11y': 'im Angebot {price} laut Händler',
   'offer_badge_similar_a11y':
       'ähnliches Produkt im Angebot, {price} laut Händler',

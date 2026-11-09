@@ -14,7 +14,9 @@ import 'package:shoply/data/services/navigation_service.dart';
 Future<void> _handleBackgroundMessage(RemoteMessage message) async {
   try {
     // Don't do heavy processing here - just log
-    debugPrint('🔔 [FCM] Background message received (${message.data['type']})');
+    debugPrint(
+      '🔔 [FCM] Background message received (${message.data['type']})',
+    );
   } catch (e) {
     debugPrint('❌ [FCM] Background message error: $e');
   }
@@ -240,7 +242,9 @@ class FCMService {
 
   /// Handle foreground messages - show local notification
   void _handleForegroundMessage(RemoteMessage message) {
-    debugPrint('🔔 [FCM] Foreground message received (${message.data['type']})');
+    debugPrint(
+      '🔔 [FCM] Foreground message received (${message.data['type']})',
+    );
 
     if (message.notification != null) {
       // Show local notification when app is in foreground.
@@ -250,33 +254,10 @@ class FCMService {
         title: message.notification!.title ?? 'Avo',
         body: message.notification!.body ?? '',
         payload: jsonEncode(message.data),
-        category: _categoryForType(message.data['type'] as String?),
+        category: notificationCategoryForPushType(
+          message.data['type'] as String?,
+        ),
       );
-    }
-  }
-
-  /// Map a push payload `type` to the user's settings toggle it belongs to.
-  /// Unknown types fall back to the master switch only.
-  NotificationCategory? _categoryForType(String? type) {
-    switch (type) {
-      case 'list_activity':
-      case 'category_change':
-      case 'list_update':
-        return NotificationCategory.listActivity;
-      case 'list_invitation':
-        return NotificationCategory.listInvitations;
-      case 'shopping_complete':
-        return NotificationCategory.shoppingCompleted;
-      case 'recipe_rating':
-      case 'recipe_like':
-        return NotificationCategory.recipeLikes;
-      case 'recipe_comment':
-        return NotificationCategory.recipeComments;
-      case 'new_recipe':
-      case 'recipe_of_the_day':
-        return NotificationCategory.newRecipes;
-      default:
-        return null;
     }
   }
 
@@ -340,14 +321,48 @@ class FCMService {
       final userId = SupabaseService.instance.currentUser?.id;
       if (userId == null) return;
 
-      await SupabaseService.instance.client.from('users').update({
-        'fcm_token': null,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', userId);
+      await SupabaseService.instance.client
+          .from('users')
+          .update({
+            'fcm_token': null,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', userId);
 
       debugPrint('🔕 [FCM] Token removed from database');
     } catch (e) {
       debugPrint('❌ [FCM] Failed to remove token: $e');
     }
+  }
+}
+
+/// The settings toggle a push payload `type` belongs to; null (only the
+/// master switch) for unknown types. The Wochenplan reminder is local and
+/// passes [NotificationCategory.planReminder] itself.
+NotificationCategory? notificationCategoryForPushType(String? type) {
+  switch (type) {
+    case 'list_activity':
+    case 'category_change':
+    case 'list_update':
+      return NotificationCategory.listActivity;
+    case 'list_invitation':
+      return NotificationCategory.listInvitations;
+    case 'shopping_started':
+      return NotificationCategory.shoppingStarted;
+    case 'shopping_complete':
+      return NotificationCategory.shoppingCompleted;
+    case 'expense_split':
+    case 'split_reminder':
+      return NotificationCategory.costSplitOpen;
+    case 'recipe_rating':
+    case 'recipe_like':
+      return NotificationCategory.recipeLikes;
+    case 'recipe_comment':
+      return NotificationCategory.recipeComments;
+    case 'new_recipe':
+    case 'recipe_of_the_day':
+      return NotificationCategory.newRecipes;
+    default:
+      return null;
   }
 }
