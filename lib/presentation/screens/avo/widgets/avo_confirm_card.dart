@@ -193,16 +193,10 @@ class _AvoConfirmCardState extends State<AvoConfirmCard> {
         : null;
     final canConfirm = !expired && !working && !widget.offline;
 
-    // The light text red as a fill keeps white text at 5.4:1 in dark mode
-    // too (the dark text red is too light for white text). Requested from
-    // Teil A as a `destructiveFill` token.
-    final destructiveFill = MediaQuery.highContrastOf(context)
-        ? AvoColors.lightHighContrast.destructive
-        : AvoColors.light.destructive;
     final destructive = _CardButton(
       label: failed ? context.tr('avo_retry') : widget.confirmLabel,
       hint: widget.confirmHint,
-      fill: destructiveFill,
+      fill: colors.destructiveFill,
       foreground: colors.onTint,
       working: working,
       onPressed: canConfirm ? widget.onConfirm : null,
