@@ -55,6 +55,7 @@ final class MealCameraChannel: NativeMethodHandler {
       self?.finish(outcome)
     }
     presenter.present(camera, animated: true)
+    answerIfIgnored(camera)
   }
 
   private func pickPhoto(_ result: @escaping NativeResult) {
@@ -71,6 +72,17 @@ final class MealCameraChannel: NativeMethodHandler {
     }
     self.picker = picker
     presenter.present(picker.controller, animated: true)
+    if picker.controller.presentingViewController == nil { self.picker = nil }
+    answerIfIgnored(picker.controller)
+  }
+
+  /// UIKit ignores a presentation while another one still runs (a closing
+  /// camera, a dismissing alert). The controller then never appears and
+  /// never answers, so answer `failed` now instead of leaving every later
+  /// call `busy`.
+  private func answerIfIgnored(_ controller: UIViewController) {
+    guard controller.presentingViewController == nil else { return }
+    finish(.failed("The view could not be shown"))
   }
 
   private func finish(_ outcome: MealCameraOutcome) {

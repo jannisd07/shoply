@@ -155,6 +155,28 @@ void main() {
     expect(bucket.files, isEmpty);
   });
 
+  testWidgets('undone after the upload finished: the photo goes after the undo window', (tester) async {
+    final env = await CalorieTestEnv.create();
+    final bucket = FakeMealPhotoBucket()..uploadGate = Completer<void>();
+    await _pump(tester, env, result: photoEstimate(), bucket: bucket);
+    final container = _container(tester);
+
+    await tester.tap(find.text('Log'));
+    await settleFrames(tester, steps: 2);
+    bucket.uploadGate!.complete();
+    await settleFrames(tester, steps: 2);
+    expect(container.read(calorieDayProvider(kToday)).day!.entries.single.photoPath, '$kUser/photo1.jpg',
+        reason: 'attached while the toast still stands');
+
+    await tester.tap(find.text('Undo'));
+    await tester.pump();
+    expect(container.read(calorieDayProvider(kToday)).day!.entries, isEmpty);
+    expect(bucket.removed, isEmpty, reason: 'inside the undo window');
+    await settleFrames(tester);
+    expect(bucket.removed, ['$kUser/photo1.jpg']);
+    expect(bucket.files, isEmpty);
+  });
+
   testWidgets('"Keep photo" off: nothing is uploaded', (tester) async {
     final env = await CalorieTestEnv.create();
     final bucket = FakeMealPhotoBucket();

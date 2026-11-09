@@ -27,6 +27,10 @@ sind `weekly_deals_screen.dart`, `zip_code_sheet.dart`, die alte Rezept-Angebots
 - **Nachbesserung:** Das Essensfoto wird jetzt wirklich am Eintrag gespeichert (vorher ging der Pfad verloren, sobald
   der Screen zu war), und mit dem Eintrag gelöscht. Die Nummer unter dem Strichcode lässt sich mit „Suchen“ abschicken
   (der Ziffernblock hat keine Return-Taste). Eigene Lebensmittel halten die Grenzen der Datenbank ein.
+- **Zweite Nachbesserung:** „Widerrufen“ nach dem Hochladen löscht auch das Foto, liegengebliebene Foto-Löschungen
+  laufen beim Start, Avo löscht das Foto mit. Eine getippte Menge in „Eintrag bearbeiten“ rechnet die Kalorien richtig
+  (vorher rundete jede Ziffer weiter). „Als eigenes Lebensmittel merken“ sagt, wenn es nicht geht; bei den Zielen
+  erscheint „Bitte mindestens …“ erst beim Verlassen des Feldes.
 
 ## 2026-11-08: Avo-Tab im D2-Design (Teil B, B5 W1)
 

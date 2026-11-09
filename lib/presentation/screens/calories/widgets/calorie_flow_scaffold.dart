@@ -131,7 +131,9 @@ class CalorieFlowScaffold extends StatelessWidget {
   final bool canLeave;
 
   /// Runs before the screen is left (S9 saves here); false keeps it open.
-  /// While set, the swipe back waits for it too.
+  /// While set, the pop scope holds every pop (Escape, Android back) for
+  /// it; on iOS that also turns off the swipe back, so the back button
+  /// leaves.
   final Future<bool> Function()? beforeLeave;
 
   /// Leaves the screen: back to where it was opened, or Home when it was the

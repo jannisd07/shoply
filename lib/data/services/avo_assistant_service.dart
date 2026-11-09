@@ -2185,7 +2185,7 @@ class AvoAssistantService {
               .read(listsNotifierProvider.notifier)
               .deleteList(pending.targetId);
         case AvoDeleteTarget.foodLog:
-          await FoodLogService.instance.deleteEntry(pending.targetId);
+          await FoodLogService.instance.deleteEntryWithPhoto(pending.targetId);
           invalidateNutritionLog(ref);
         case AvoDeleteTarget.planEntry:
         case AvoDeleteTarget.historyTrip:

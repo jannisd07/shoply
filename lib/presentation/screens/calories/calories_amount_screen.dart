@@ -237,16 +237,14 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
             UserFood(
               id: '',
               userId: '',
-              name: food.name.trim().length > UserFood.maxNameLength
-                  ? food.name.trim().substring(0, UserFood.maxNameLength)
-                  : food.name.trim(),
+              name: UserFood.cutName(food.name),
               barcode: UserFood.validBarcode(code),
               kcal100: per100.kcal.toDouble(),
               protein100: per100.protein,
               carbs100: per100.carbs,
               fat100: per100.fat,
-              servingG: food.servingG,
-              packageG: food.packageG,
+              servingG: UserFood.sizeOrNull(food.servingG),
+              packageG: UserFood.sizeOrNull(food.packageG),
               createdAt: DateTime.now().toUtc(),
             ),
           ),

@@ -138,6 +138,9 @@ class CalorieBackend {
 final calorieBackendProvider = FutureProvider<CalorieBackend?>((ref) async {
   final userId = ref.watch(authUserIdProvider);
   if (userId == null) return null;
+  // Photo deletes left over from an earlier start (offline, app closed in
+  // the undo window) run as soon as the calorie data starts, per account.
+  ref.listen<MealPhotoCleanup?>(mealPhotoCleanupProvider, (_, __) {});
   final prefs = await ref.watch(calorieSharedPreferencesProvider.future);
   final remote = ref.watch(calorieRemoteProvider);
   final now = ref.watch(calorieClockProvider);
@@ -568,18 +571,44 @@ class CalorieDiary {
     return saved;
   }
 
-  /// Saves an edit; moving to another day moves the row between days.
+  /// Rows deleted in this session as they were last (a photo may have
+  /// arrived after the delete), so "Widerrufen" brings back the whole row.
+  final Map<String, FoodLogEntry> _deletedFood = {};
+  static const _keepDeleted = 20;
+
+  /// The day [updateFood] moved a row to, so a late photo or a delete
+  /// handed the row of before still finds it.
+  final Map<String, String> _movedFood = {};
+
+  /// Row [id] as the diary holds it now: callers keep copies that miss a
+  /// photo attached later. Null when the row is not in its day (deleted).
+  FoodLogEntry? _liveFood(String id, String dateKey) {
+    FoodLogEntry? inDay(String key) =>
+        _ref.read(calorieDayProvider(key)).day?.entries.where((e) => e.id == id).firstOrNull;
+    final moved = _movedFood[id];
+    if (moved != null && moved != dateKey) return inDay(moved) ?? inDay(dateKey);
+    return inDay(dateKey);
+  }
+
+  /// Saves an edit; moving to another day moves the row between days. A
+  /// photo attached after [previous] was taken stays, unless [changed]
+  /// changes the photo itself.
   Future<FoodLogEntry> updateFood(FoodLogEntry previous, FoodLogEntry changed) async {
     final b = await _backend();
-    final saved = changed.copyWith(updatedAt: DateTime.now().toUtc());
+    final live = _liveFood(previous.id, previous.dateKey);
+    var next = changed;
+    if (live != null && changed.photoPath == previous.photoPath) next = next.copyWith(photoPath: live.photoPath);
+    final saved = next.copyWith(updatedAt: DateTime.now().toUtc());
+    final fromKey = live?.dateKey ?? previous.dateKey;
     _enqueue(b, QueuedWrite.upsert(
       kind: CalorieWriteKinds.food,
       entityId: saved.id,
       dateKey: saved.dateKey,
       payload: saved.toJson(),
     ));
-    if (previous.dateKey != saved.dateKey) {
-      await _day(previous.dateKey).apply(
+    if (fromKey != saved.dateKey) {
+      _movedFood[saved.id] = saved.dateKey;
+      await _day(fromKey).apply(
         (d) => d.copyWith(entries: d.entries.where((e) => e.id != saved.id).toList()),
       );
       await _day(saved.dateKey).apply((d) => d.copyWith(entries: [...d.entries, saved]));
@@ -592,42 +621,59 @@ class CalorieDiary {
     return saved;
   }
 
+  /// Deletes the row with [entry]'s id as the diary holds it now and
+  /// returns that row for "Widerrufen".
   Future<FoodLogEntry> deleteFood(FoodLogEntry entry) async {
     final b = await _backend();
-    _enqueue(b, QueuedWrite.delete(kind: CalorieWriteKinds.food, entityId: entry.id, dateKey: entry.dateKey));
-    await _day(entry.dateKey).apply(
-      (d) => d.copyWith(entries: d.entries.where((e) => e.id != entry.id).toList()),
+    final row = _liveFood(entry.id, entry.dateKey) ?? entry;
+    _enqueue(b, QueuedWrite.delete(kind: CalorieWriteKinds.food, entityId: row.id, dateKey: row.dateKey));
+    await _day(row.dateKey).apply(
+      (d) => d.copyWith(entries: d.entries.where((e) => e.id != row.id).toList()),
     );
-    unawaited(_health?.scheduleDelete(HealthSyncIds.food(entry.id)));
+    _deletedFood.remove(row.id);
+    _deletedFood[row.id] = row;
+    if (_deletedFood.length > _keepDeleted) _deletedFood.remove(_deletedFood.keys.first);
+    unawaited(_health?.scheduleDelete(HealthSyncIds.food(row.id)));
     // The photo goes too, once "Widerrufen" is no longer possible.
-    final photo = MealPhotoStorageService.pathOf(entry.photoPath ?? entry.photoUrl);
+    final photo = MealPhotoStorageService.pathOf(row.photoPath ?? row.photoUrl);
     if (photo != null) unawaited(_ref.read(mealPhotoCleanupProvider)?.schedule(photo));
-    return entry;
+    return row;
   }
 
   /// Uploads [photo] for the just logged [saved] entry and adds its path,
-  /// in the background and independent of the screen that logged it. When
-  /// the entry is gone by then (undone), the uploaded photo is deleted.
-  /// Never throws; logging never waits for it.
+  /// in the background and independent of the screen that logged it (the
+  /// row may have been edited or moved to another day meanwhile). When the
+  /// row was deleted by then, the photo waits with it for "Widerrufen" and
+  /// is deleted after the undo window. Never throws; logging never waits
+  /// for it.
   Future<void> attachPhoto(FoodLogEntry saved, Uint8List photo) async {
     final storage = _ref.read(mealPhotoStorageProvider);
     try {
       final path = await storage.uploadPhoto(photo);
       if (path == null) return;
-      final current = _ref.read(calorieDayProvider(saved.dateKey)).day?.entries.where((e) => e.id == saved.id).firstOrNull;
-      if (current == null) {
-        await storage.deletePhoto(path);
+      final current = _liveFood(saved.id, saved.dateKey);
+      if (current != null) {
+        await updateFood(current, current.copyWith(photoPath: path));
         return;
       }
-      await updateFood(current, current.copyWith(photoPath: path));
+      final deleted = _deletedFood[saved.id];
+      final cleanup = _ref.read(mealPhotoCleanupProvider);
+      if (deleted != null && cleanup != null) {
+        _deletedFood[saved.id] = deleted.copyWith(photoPath: path);
+        await cleanup.schedule(path);
+      } else {
+        await storage.deletePhoto(path);
+      }
     } catch (e) {
       debugPrint('⚠️ [CalorieDiary] Attaching a photo failed: ${e is CalorieDataException ? e.code.name : e.runtimeType}');
     }
   }
 
-  /// "Widerrufen" after [deleteFood].
-  Future<void> restoreFood(FoodLogEntry entry) async {
+  /// "Widerrufen" after [deleteFood]: the row as it was deleted, with a
+  /// photo that arrived after the delete.
+  Future<void> restoreFood(FoodLogEntry removed) async {
     final b = await _backend();
+    final entry = _deletedFood.remove(removed.id) ?? removed;
     _enqueue(b, QueuedWrite.upsert(
       kind: CalorieWriteKinds.food,
       entityId: entry.id,

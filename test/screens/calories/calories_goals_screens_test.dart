@@ -95,11 +95,32 @@ void main() {
       await settleFrames(tester);
       await tester.enterText(find.byType(EditableText).first, '0');
       await settleFrames(tester);
+      expect(find.text('Enter at least 500 kcal.'), findsNothing, reason: 'not while typing');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settleFrames(tester);
       expect(find.text('Enter at least 500 kcal.'), findsOneWidget);
       await tester.tap(find.text('Calories'));
       await settleFrames(tester);
       expect(env.remote.goals, isEmpty);
       expect(find.text('2,000 kcal'), findsOneWidget);
+    });
+
+    testWidgets('typing 2500 digit by digit: no error on the way, 2,500 is saved', (tester) async {
+      final env = await CalorieTestEnv.create();
+      await pumpCalories(tester, const CaloriesGoalsScreen(), overrides: env.overrides(goalValue: _goal()));
+      await settleFrames(tester);
+
+      await tester.tap(find.text('Calories'));
+      await settleFrames(tester);
+      for (final text in ['2', '25', '250', '2500']) {
+        await tester.enterText(find.byType(EditableText).first, text);
+        await settleFrames(tester);
+        expect(find.text('Enter at least 500 kcal.'), findsNothing, reason: 'typed "$text"');
+        expect(find.text(text), findsOneWidget, reason: 'the field keeps "$text"');
+      }
+      await tester.tap(find.text('Calories'));
+      await settleFrames(tester);
+      expect(env.remote.goals.last['daily_calorie_target'], 2500);
     });
 
     testWidgets('under 1,200 kcal: the warning; macros that do not add up: the footnote', (tester) async {

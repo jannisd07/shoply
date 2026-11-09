@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'package:shoply/data/models/calorie_day.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/services/app_flags_service.dart';
+import 'package:shoply/data/services/meal_photo_storage_service.dart';
 
 /// CRUD for `food_log_entries` — the day-by-day food diary.
 ///
@@ -99,6 +100,28 @@ class FoodLogService {
   Future<void> deleteEntry(String id) => _guard('Deleting entry', () async {
         await _supabase.from(_table).delete().eq('user_id', _userId()).eq('id', id);
       });
+
+  /// Deletes the row and right after it its photo in `meal-photos`: for a
+  /// delete with no "Widerrufen" (Avo's confirmed card). The diary deletes
+  /// through `CalorieDiary.deleteFood`, which keeps the photo for the undo
+  /// window. A photo delete that fails leaves only the photo.
+  Future<void> deleteEntryWithPhoto(String id) async {
+    final rows = await _guard('Deleting entry', () async {
+      return await _supabase.from(_table).delete().eq('user_id', _userId()).eq('id', id).select();
+    });
+    for (final path in photoPathsOf(rows)) {
+      await MealPhotoStorageService.instance.deletePhoto(path);
+    }
+  }
+
+  /// The bucket paths of the photos of deleted [rows] (`photo_path`, or an
+  /// older `photo_url`).
+  @visibleForTesting
+  static List<String> photoPathsOf(Object rows) => [
+        for (final row in (rows as List).cast<Map<String, dynamic>>())
+          if (MealPhotoStorageService.pathOf((row['photo_path'] ?? row['photo_url']) as String?) case final path?)
+            path,
+      ];
 
   /// Per-day sums for [startKey]..[endKey] (inclusive), fetching only the
   /// number columns (Inv. 4.23). Days without entries are absent (unknown).

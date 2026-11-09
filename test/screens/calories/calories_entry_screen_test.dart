@@ -197,6 +197,68 @@ void main() {
     expect(saved.proteinG, 40);
   });
 
+  testWidgets('typing "120" key by key scales from the opened numbers, not from each rounded step', (tester) async {
+    final env = await _env();
+    final container = await _pump(tester, env, 'e1');
+    final amount = find.byType(EditableText).at(1);
+
+    for (final (typed, kcal) in [('1', '4'), ('12', '44'), ('120', '440')]) {
+      await tester.enterText(amount, typed);
+      await settleFrames(tester, steps: 1);
+      expect(find.text(kcal), findsOneWidget, reason: '220 kcal × $typed / 60');
+    }
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await settleFrames(tester);
+    final saved = container.read(calorieDayProvider(kToday)).day!.entries.firstWhere((e) => e.id == 'e1');
+    expect(saved.calories, 440);
+    expect(saved.proteinG, 40);
+  });
+
+  testWidgets('a food with few kcal does not fall to 0 on the way', (tester) async {
+    final env = await _env(day: CalorieDay(dateKey: kToday, entries: [
+      food('g1', 'Gurke', 8, quantity: 60, unit: 'g', protein: 0.4, carbs: 1.2, fat: 0.1),
+    ]));
+    await _pump(tester, env, 'g1');
+    final amount = find.byType(EditableText).at(1);
+
+    for (final typed in ['1', '12', '120']) {
+      await tester.enterText(amount, typed);
+      await settleFrames(tester, steps: 1);
+    }
+    expect(find.text('16'), findsOneWidget, reason: '8 kcal × 120 / 60');
+    expect(find.text('0.8'), findsOneWidget, reason: 'protein 0.4 g × 2');
+  });
+
+  testWidgets('a number typed by hand scales from itself after that', (tester) async {
+    final env = await _env();
+    await _pump(tester, env, 'e1');
+
+    await tester.enterText(find.byType(EditableText).at(2), '300');
+    await settleFrames(tester, steps: 1);
+    await tester.enterText(find.byType(EditableText).at(1), '120');
+    await settleFrames(tester, steps: 1);
+    expect(find.text('600'), findsOneWidget, reason: '300 kcal for 60 g, now 120 g');
+  });
+
+  testWidgets('"Save as your own food" says so when the values do not fit', (tester) async {
+    // 500 kcal in 50 g would be 1,000 kcal per 100 g.
+    final env = await _env(day: CalorieDay(dateKey: kToday, entries: [
+      food('d1', 'Nussmix', 500, quantity: 50, unit: 'g'),
+    ]));
+    final container = await _pump(tester, env, 'd1');
+
+    await tester.tap(find.bySemanticsLabel('More'));
+    await settleFrames(tester);
+    await tester.tap(find.text('Save as your own food'));
+    await settleFrames(tester);
+    expect(container.read(userFoodsProvider), isEmpty);
+    expect(
+      find.text('Not saved as your own food: per 100 g that would be over 900 kcal or over 100 g of a nutrient.'),
+      findsOneWidget,
+    );
+    expect(find.text('Saved as your own food'), findsNothing);
+  });
+
   testWidgets('saving fails: "Not saved." with retry, the screen stays open', (tester) async {
     final env = await _env();
     var fail = true;

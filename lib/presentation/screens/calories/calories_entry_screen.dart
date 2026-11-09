@@ -91,7 +91,14 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
     _original = e;
     _name.text = e.foodName;
     _quantity.text = context.amount(e.quantity);
-    _lastQuantity = e.quantity;
+    _amount = e.quantity;
+    _anchors.clear();
+    if (e.quantity > 0) {
+      _anchors[_kcal] = (amount: e.quantity, value: e.calories.toDouble());
+      for (final (c, v) in [(_protein, e.proteinG), (_carbs, e.carbsG), (_fat, e.fatG)]) {
+        if (v != null) _anchors[c] = (amount: e.quantity, value: v);
+      }
+    }
     _kcal.text = '${e.calories}';
     _protein.text = e.proteinG == null ? '' : context.amount(_round1(e.proteinG!));
     _carbs.text = e.carbsG == null ? '' : context.amount(_round1(e.carbsG!));
@@ -209,20 +216,33 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
     if (await _saveBeforeLeave() && mounted) CalorieFlowScaffold.leave(context);
   }
 
-  /// The amount the numbers last matched; typed or stepped amounts scale
-  /// the numbers from here.
-  double? _lastQuantity;
+  /// The last valid amount: the one the numbers on screen belong to.
+  double? _amount;
+
+  /// Per number the exact value and the amount it belongs to: as opened, or
+  /// as last typed by hand. A new amount always scales from here, never
+  /// from the rounded number on screen (typing "120" goes through "1" and
+  /// "12").
+  final Map<TextEditingController, ({double amount, double value})> _anchors = {};
 
   void _scaleTo(double next) {
-    final previous = _lastQuantity;
-    if (previous == null || previous <= 0 || next <= 0 || next == previous) return;
-    _lastQuantity = next;
-    final f = next / previous;
-    final kcal = _kcalInput.value;
-    if (kcal != null) _kcal.text = '${(kcal * f).round()}';
-    for (final c in [_protein, _carbs, _fat]) {
-      final v = _grams(c).value;
-      if (v != null) c.text = context.amount(_round1(v * f));
+    if (next <= 0) return;
+    _amount = next;
+    for (final MapEntry(key: c, value: a) in _anchors.entries) {
+      final v = a.value * next / a.amount;
+      c.text = identical(c, _kcal) ? '${v.round()}' : context.amount(_round1(v));
+    }
+  }
+
+  /// A number typed by hand scales from itself from now on; an emptied one
+  /// stays empty.
+  void _anchor(TextEditingController c) {
+    final amount = _amount;
+    final v = identical(c, _kcal) ? _kcalInput.value : _grams(c).value;
+    if (amount == null || amount <= 0 || v == null) {
+      _anchors.remove(c);
+    } else {
+      _anchors[c] = (amount: amount, value: v.toDouble());
     }
   }
 
@@ -233,8 +253,11 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
     final diary = ref.read(calorieDiaryProvider);
     final message = context.tr('cal_deleted', params: {'name': o.foodName});
     final undo = context.tr('common_undo');
+    final FoodLogEntry removed;
     try {
-      await diary.deleteFood(o);
+      // The row as the diary holds it, with a photo attached after this
+      // screen opened.
+      removed = await diary.deleteFood(o);
     } catch (e) {
       debugPrint('❌ [CalorieEntry] Deleting failed: ${calorieErrorKind(e)}');
       _gone = false;
@@ -242,30 +265,43 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
       return;
     }
     if (!mounted) return;
-    AvoToast.show(context, message: message, actionLabel: undo, onAction: () => diary.restoreFood(o));
+    AvoToast.show(context, message: message, actionLabel: undo, onAction: () => diary.restoreFood(removed));
     CalorieFlowScaffold.leave(context);
   }
 
   void _openMore(BuildContext anchor) {
     final o = _original;
     if (o == null) return;
-    final ownable = ref.read(calorieSchemaV2Provider) && UserFood.fromEntry(o, id: '') != null;
+    // Only for g/ml entries (an own food is per 100 g); whether the values
+    // fit is checked on the tap, with the numbers as they are then.
+    final unit = (_edited ?? o).unit?.toLowerCase();
+    final ownable = ref.read(calorieSchemaV2Provider) && (unit == 'g' || unit == 'ml');
     showAvoMenu(anchor, items: [
       AvoMenuItem(
         label: context.tr('cal_menu_again'),
         onSelected: () => logFoodAgain(context, ref, _edited ?? o, dateKey: null, meal: _meal),
       ),
-      if (ownable)
-        AvoMenuItem(
-          label: context.tr('cal_save_as_own'),
-          onSelected: () async {
-            final own = UserFood.fromEntry(_edited ?? o, id: '');
-            if (own == null) return;
-            await ref.read(userFoodsProvider.notifier).save(own);
-            if (mounted) AvoToast.show(context, message: context.tr('cal_saved_as_own'));
-          },
-        ),
+      if (ownable) AvoMenuItem(label: context.tr('cal_save_as_own'), onSelected: () => _saveAsOwn(o)),
     ]);
+  }
+
+  /// "Als eigenes Lebensmittel merken" says either way whether it worked.
+  Future<void> _saveAsOwn(FoodLogEntry o) async {
+    final own = UserFood.fromEntry(_edited ?? o, id: '');
+    UserFood? saved;
+    if (own != null) {
+      try {
+        saved = await ref.read(userFoodsProvider.notifier).save(own);
+      } catch (e) {
+        debugPrint('⚠️ [CalorieEntry] Saving an own food failed: ${calorieErrorKind(e)}');
+      }
+    }
+    if (!mounted) return;
+    if (saved == null) unawaited(AvoHaptics.error());
+    final message = saved != null
+        ? 'cal_saved_as_own'
+        : (own == null ? 'cal_own_not_saved_limits' : 'cal_write_failed');
+    AvoToast.show(context, message: context.tr(message));
   }
 
   String _source(BuildContext context, FoodLogEntry e) {
@@ -340,7 +376,8 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
         c.text.trim().isNotEmpty && !input.isValid ? context.tr('cal_number_invalid') : null;
     final grams = o.unit?.toLowerCase() == 'g' || o.unit?.toLowerCase() == 'ml';
     final quantity = _quantityInput.value ?? 0;
-    final photoPath = MealPhotoStorageService.pathOf(o.photoPath ?? o.photoUrl);
+    // A photo attached after this screen opened shows too.
+    final photoPath = MealPhotoStorageService.pathOf(live?.photoPath ?? o.photoPath ?? o.photoUrl);
     final recipeId = o.sourceRecipeId;
 
     return CalorieFlowScaffold(
@@ -443,7 +480,10 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
               spokenUnit: context.tr('cal_kcal_spoken'),
               integer: true,
               error: _kcal.text.trim().isEmpty ? context.tr('cal_number_invalid') : err(_kcal, _kcalInput),
-              onChanged: (_) => setState(() => _nutrientsEdited = true),
+              onChanged: (_) => setState(() {
+                _nutrientsEdited = true;
+                _anchor(_kcal);
+              }),
             ),
             for (final (c, key) in [(_protein, 'cal_macro_protein'), (_carbs, 'cal_macro_carbs_long'), (_fat, 'cal_macro_fat')])
               CalorieFieldRow(
@@ -452,7 +492,10 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
                 unit: 'g',
                 spokenUnit: context.tr('cal_grams'),
                 error: err(c, _grams(c)),
-                onChanged: (_) => setState(() => _nutrientsEdited = true),
+                onChanged: (_) => setState(() {
+                  _nutrientsEdited = true;
+                  _anchor(c);
+                }),
               ),
             if (o.confidence case final confidence? when o.estimated)
               Padding(

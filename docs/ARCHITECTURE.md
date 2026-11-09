@@ -121,7 +121,7 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   Vollbild mit Überblendung, nie von unten; JPEG 1024 px, 80 %, nur im Speicher). Die Kamera-Erlaubnis fragt Dart
   über `shoply/scanner` erst nach dem eigenen Alert. Screens sprechen nur mit `calorieCameraProvider`
   (`CalorieCamera`), in Tests ein Fake.
-- **Produkte und eigene Lebensmittel** (`state/calorie_entry_provider.dart`): `lookupCalorieBarcode` fragt erst die
+- **Produkte und eigene Lebensmittel** (`state/calorie_food_provider.dart`): `lookupCalorieBarcode` fragt erst die
   eigenen Lebensmittel (`userFoodsProvider`, Tabelle `user_food`, lokal gespeichert, Schreiben über die
   Warteschlange), dann den Produkt-Cache auf dem Gerät (`calorieProductCacheProvider`, auch „Zuletzt gescannt“), dann
   Open Food Facts. `OpenFoodFactsService.search` und `lookupBarcode` werfen `OffRequestFailed` bei Netz- oder
@@ -132,11 +132,17 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   Einträge behalten `estimated` und `confidence`. `quota_exceeded` merkt sich den Tag (`caloriePhotoLimitReachedProvider`),
   S3 zeigt dann das Tageslimit (für `nutrition_estimate` ebenso, `calorieTextEstimateLimitReachedProvider`). Das Foto
   lädt `CalorieDiary.attachPhoto` nach dem Eintragen im Hintergrund in `meal-photos` hoch und trägt den Pfad nach; das
-  läuft im Provider, nicht im Screen, der da schon geschlossen ist. Ist der Eintrag inzwischen weg (Rückgängig), wird
-  das hochgeladene Foto gleich wieder gelöscht.
-- **Fotos löschen:** `CalorieDiary.deleteFood` plant das Löschen des Fotos nach dem Rückgängig-Fenster (10 s,
-  `MealPhotoCleanup`, auf dem Gerät gemerkt, beim nächsten Start nachgeholt); „Widerrufen“ hebt es auf. Gelöscht wird
-  nur im eigenen Ordner `<uid>/`. Ein „Alle Essensfotos löschen“ gibt es erst mit S23.
+  läuft im Provider, nicht im Screen, der da schon geschlossen ist. Es sucht den Eintrag per id (auch wenn S9 ihn auf
+  einen anderen Tag gelegt hat); ist er inzwischen gelöscht (Rückgängig), wartet das Foto mit ihm auf „Widerrufen“
+  und wird sonst nach dem Rückgängig-Fenster gelöscht.
+- **Fotos löschen:** `CalorieDiary.deleteFood` nimmt den Eintrag, wie das Tagebuch ihn gerade hat (per id, mit einem
+  später nachgetragenen Foto), und plant das Löschen des Fotos nach dem Rückgängig-Fenster (10 s, `MealPhotoCleanup`,
+  auf dem Gerät gemerkt); „Widerrufen“ stellt die ganze Zeile wieder her und hebt das Löschen auf. `updateFood` behält
+  ein später nachgetragenes Foto, wenn der Aufrufer das Foto nicht selbst ändert. Liegengebliebene Löschungen (offline,
+  App im Fenster geschlossen) laufen, sobald `calorieBackendProvider` startet (er hört auf `mealPhotoCleanupProvider`,
+  pro Konto), also mit der ersten Kalorien-Ansicht nach dem Start. Avo löscht nach seiner Bestätigungskarte über
+  `FoodLogService.deleteEntryWithPhoto`, Zeile und Foto sofort. Gelöscht wird nur im eigenen Ordner `<uid>/`. Ein
+  „Alle Essensfotos löschen“ gibt es erst mit S23.
 - **Eigene Lebensmittel und die DB-Prüfungen:** `UserFood.fitsServer` spiegelt die Checks von `user_food` (Name 1–200,
   kcal 0–900 und Makros 0–100 pro 100 g, Portion/Packung > 0, Strichcode 6–14 Ziffern). `UserFood.fromEntry` und
   `UserFoodsNotifier.save` legen nichts an, was der Server dauerhaft ablehnen würde; S8 sagt es vorher. Lokal gemerkte

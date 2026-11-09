@@ -3,6 +3,17 @@ import 'package:equatable/equatable.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/food_product.dart';
 
+/// [text] cut to at most [max] UTF-16 units, so also to at most [max]
+/// characters as Postgres counts them, never between the two halves of an
+/// emoji (a lone half is invalid text the server rejects).
+String cutTextSafely(String text, int max) {
+  if (text.length <= max) return text;
+  var end = max;
+  final last = text.codeUnitAt(end - 1);
+  if (last >= 0xD800 && last <= 0xDBFF) end--;
+  return text.substring(0, end);
+}
+
 /// An own food ("Eigene"): saved from a manual entry or typed in from the
 /// package when a barcode was unknown. Values per 100 g (`user_food`).
 class UserFood extends Equatable {
@@ -39,6 +50,13 @@ class UserFood extends Equatable {
   static const double maxMacro100 = 100;
   static final RegExp _barcode = RegExp(r'^[0-9]{6,14}$');
 
+  /// [name] trimmed and cut to [maxNameLength] characters.
+  static String cutName(String name) => cutTextSafely(name.trim(), maxNameLength).trimRight();
+
+  /// A serving or pack size the table takes (above 0), or null: Open Food
+  /// Facts sometimes says 0.
+  static double? sizeOrNull(double? grams) => grams != null && grams > 0 ? grams : null;
+
   /// A barcode the table takes, or null.
   static String? validBarcode(String? code) {
     final c = code?.trim();
@@ -51,7 +69,7 @@ class UserFood extends Equatable {
     final n = name.trim();
     bool macro(double? v) => v == null || (v >= 0 && v <= maxMacro100);
     return n.isNotEmpty &&
-        n.length <= maxNameLength &&
+        n.runes.length <= maxNameLength &&
         kcal100 >= 0 &&
         kcal100 <= maxKcal100 &&
         macro(protein100) &&
@@ -72,11 +90,10 @@ class UserFood extends Equatable {
     if ((unit != 'g' && unit != 'ml') || entry.quantity <= 0) return null;
     final factor = 100 / entry.quantity;
     double? per100(double? v) => v == null ? null : v * factor;
-    final name = entry.foodName.trim();
     final food = UserFood(
       id: id,
       userId: entry.userId,
-      name: name.length > maxNameLength ? name.substring(0, maxNameLength) : name,
+      name: cutName(entry.foodName),
       barcode: validBarcode(entry.barcode),
       kcal100: entry.calories * factor,
       protein100: per100(entry.proteinG),

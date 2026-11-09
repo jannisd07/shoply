@@ -419,34 +419,59 @@ class _GoalValueRow extends StatefulWidget {
 
 class _GoalValueRowState extends State<_GoalValueRow> {
   final _field = TextEditingController();
+  final _focus = FocusNode();
   bool _invalid = false;
   bool _low = false;
 
   String? get _error => _invalid ? context.tr('cal_number_invalid') : (_low ? widget.minError : null);
 
   @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus) _checkLow();
+    });
+  }
+
+  @override
   void didUpdateWidget(_GoalValueRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     final v = widget.value;
-    if (widget.open && (!oldWidget.open || parseCalorieNumber(_field.text).value?.round() != v?.round())) {
+    if (widget.open && !oldWidget.open) {
+      _invalid = false;
+      _low = false;
+      _field.text = v == null ? '' : '${v.round()}';
+    } else if (widget.open && oldWidget.value?.round() != v?.round() &&
+        parseCalorieNumber(_field.text).value?.round() != v?.round()) {
+      // Changed from outside (the stepper sets the text itself). Typing
+      // "2500" passes "250", which keeps the old value: never reset then.
       _field.text = v == null ? '' : '${v.round()}';
     }
   }
 
   @override
   void dispose() {
+    _focus.dispose();
     _field.dispose();
     super.dispose();
   }
 
+  /// While typing a value below the minimum is a step on the way ("2" for
+  /// 2500): it is only kept back, and named when the field is left.
   void _typed(String text) {
     final input = parseCalorieNumber(text, integer: true, required: true, max: widget.max);
     final low = input.isValid && input.value! < widget.min;
     setState(() {
       _invalid = !input.isValid;
-      _low = low;
+      if (!low) _low = false;
     });
     if (input.isValid && !low) widget.onChanged(input.value!);
+  }
+
+  void _checkLow() {
+    if (!mounted || !widget.open) return;
+    final input = parseCalorieNumber(_field.text, integer: true, required: true, max: widget.max);
+    setState(() => _low = input.isValid && input.value! < widget.min);
   }
 
   @override
@@ -499,6 +524,7 @@ class _GoalValueRowState extends State<_GoalValueRow> {
           constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
           child: CupertinoTextField(
             controller: _field,
+            focusNode: _focus,
             autofocus: true,
             keyboardType: TextInputType.number,
             inputFormatters: calorieNumberFormatters,
@@ -512,6 +538,7 @@ class _GoalValueRowState extends State<_GoalValueRow> {
               ),
             ),
             onChanged: _typed,
+            onSubmitted: (_) => _checkLow(),
           ),
         ),
       ),
@@ -525,6 +552,10 @@ class _GoalValueRowState extends State<_GoalValueRow> {
       spokenValue: widget.spoken,
       onChanged: (v) {
         _field.text = '${v.round()}';
+        setState(() {
+          _invalid = false;
+          _low = false;
+        });
         widget.onChanged(v);
       },
     );

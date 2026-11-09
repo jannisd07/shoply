@@ -234,6 +234,7 @@ class CalorieTestEnv {
     Map<String, FoodProduct> offProducts = const {},
     Object? offBarcodeError,
     List<UserFood> userFoods = const [],
+    Future<List<UserFood>>? userFoodsAnswer,
     Future<MealPhotoEstimate> Function(Uint8List photo)? analyzer,
     CalorieNutritionEstimator? estimator,
     UserModel? user,
@@ -257,7 +258,7 @@ class CalorieTestEnv {
         if (offBarcodeError != null) throw offBarcodeError;
         return offProducts[code];
       }),
-      userFoodsRemoteProvider.overrideWithValue(() async => userFoods),
+      userFoodsRemoteProvider.overrideWithValue(() => userFoodsAnswer ?? Future.value(userFoods)),
       mealPhotoAnalyzerProvider.overrideWithValue(analyzer ?? (_) => Completer<MealPhotoEstimate>().future),
       calorieNutritionEstimatorProvider.overrideWithValue(estimator ??
           (String text, {int? servings}) async =>

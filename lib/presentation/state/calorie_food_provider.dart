@@ -158,21 +158,30 @@ class UserFoodsNotifier extends StateNotifier<List<UserFood>> {
     }
   }
 
+  /// Foods saved while [_refresh] waits for the server: its answer is older
+  /// than them, even when their write has already left the queue.
+  Set<String>? _savedDuringRefresh;
+
   Future<void> _refresh() async {
+    final savedMeanwhile = _savedDuringRefresh = <String>{};
     try {
       final foods = await _ref.read(userFoodsRemoteProvider)();
       if (!mounted) return;
-      // Only foods still on their way to the server stay beside the
-      // server's list; others were deleted elsewhere.
-      final waiting = {
+      // Foods still on their way to the server, or saved since the request
+      // went out, win over the server's list; other local ones were deleted
+      // elsewhere.
+      final keep = {
+        ...savedMeanwhile,
         for (final w in _ref.read(calorieBackendProvider).valueOrNull?.queue.writes ?? const <QueuedWrite>[])
           if (w.kind == CalorieWriteKinds.userFood) w.entityId,
       };
-      final local = state.where((f) => waiting.contains(f.id) && !foods.any((s) => s.id == f.id));
-      _set([...local, ...foods]);
+      final local = state.where((f) => keep.contains(f.id)).toList();
+      final localIds = {for (final f in local) f.id};
+      _set([...local, ...foods.where((f) => !localIds.contains(f.id))]);
     } catch (e) {
       debugPrint('⚠️ [UserFoods] Refresh failed: ${e is CalorieDataException ? e.code.name : e.runtimeType}');
     } finally {
+      _savedDuringRefresh = null;
       if (!_ready.isCompleted) _ready.complete();
     }
   }
@@ -203,6 +212,7 @@ class UserFoodsNotifier extends StateNotifier<List<UserFood>> {
         ? food
         : UserFood.fromJson({...food.toJson(), 'id': existing.id, 'user_id': existing.userId});
     final saved = await _ref.read(calorieDiaryProvider).saveUserFood(toSave);
+    _savedDuringRefresh?.add(saved.id);
     if (mounted) _set([saved, ...state.where((f) => f.id != saved.id)]);
     return saved;
   }

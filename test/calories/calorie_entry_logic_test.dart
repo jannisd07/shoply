@@ -2,17 +2,20 @@
 // gescannt", the barcode lookup order (own food, this device, Open Food
 // Facts), amounts per 100 g or per portion, the goal form's checks and the
 // allergy match of a photo estimate.
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:shoply/data/models/calorie_day.dart';
 import 'package:shoply/data/models/dietary_preference.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/food_product.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/user_food.dart';
 import 'package:shoply/data/services/allergen_matcher.dart';
+import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/meal_photo_storage_service.dart';
 import 'package:shoply/data/services/open_food_facts_service.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_amount_food.dart';
@@ -115,6 +118,51 @@ void main() {
       expect(UserFood.validBarcode('12345'), isNull);
     });
 
+    test('a cut never splits an emoji; sizes of 0 are dropped', () {
+      // 199 letters, then an emoji of two UTF-16 units: the cut at 200 would
+      // leave half of it.
+      final name = '${'N' * 199}🍕 Pizza';
+      final cut = UserFood.cutName(name);
+      expect(cut, 'N' * 199);
+      expect(() => utf8.encode(cut), returnsNormally);
+      expect(cutTextSafely('ab🍕', 3), 'ab');
+      expect(cutTextSafely('ab🍕', 4), 'ab🍕');
+      expect(UserFood.sizeOrNull(0), isNull);
+      expect(UserFood.sizeOrNull(150), 150);
+      // Postgres counts characters, not UTF-16 units: 150 emoji fit.
+      expect(UserFood(id: '', userId: '', name: '🍕' * 150, kcal100: 1, createdAt: DateTime(2026)).fitsServer, isTrue);
+    });
+
+    test('a food saved while the first refresh runs stays, even when its write is through', () async {
+      final answer = Completer<List<UserFood>>();
+      final env = await CalorieTestEnv.create();
+      final c = ProviderContainer(overrides: env.overrides(userFoodsAnswer: answer.future));
+      addTearDown(c.dispose);
+      await c.read(calorieSharedPreferencesProvider.future);
+      await c.read(calorieBackendProvider.future);
+      c.read(userFoodsProvider);
+      final saved = await c.read(userFoodsProvider.notifier).save(
+            UserFood(id: '', userId: '', name: 'Hafer', kcal100: 370, createdAt: DateTime(2026)),
+          );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(env.remote.userFoods, hasLength(1), reason: 'the write has left the queue');
+      // The server answers with what it had before the save.
+      answer.complete([UserFood(id: 'old', userId: kUser, name: 'Skyr', kcal100: 63, createdAt: DateTime(2026))]);
+      await c.read(userFoodsProvider.notifier).ready;
+      expect(c.read(userFoodsProvider).map((f) => f.id), [saved!.id, 'old']);
+    });
+
+    test('Avo\'s delete finds the photo of the deleted row', () {
+      expect(
+        FoodLogService.photoPathsOf([
+          {'photo_path': '$kUser/a.jpg'},
+          {'photo_path': null, 'photo_url': null},
+          {'photo_url': 'https://x.supabase.co/storage/v1/object/sign/meal-photos/$kUser/b.jpg?token=t'},
+        ]),
+        ['$kUser/a.jpg', '$kUser/b.jpg'],
+      );
+    });
+
     test('save never queues a row the server rejects', () async {
       final env = await CalorieTestEnv.create();
       final c = ProviderContainer(overrides: env.overrides());
@@ -154,7 +202,7 @@ void main() {
       return (c, bucket);
     }
 
-    FoodLogEntry withPhoto() => FoodLogEntry(
+    FoodLogEntry withPhoto([String? path = '$kUser/p1.jpg']) => FoodLogEntry(
           id: '',
           userId: '',
           loggedDate: DateTime(2026, 11, 7),
@@ -162,7 +210,7 @@ void main() {
           origin: FoodEntryOrigin.photo,
           foodName: 'Dal',
           calories: 470,
-          photoPath: '$kUser/p1.jpg',
+          photoPath: path,
           createdAt: kNow,
         );
 
@@ -186,17 +234,63 @@ void main() {
       expect(bucket.removed, isEmpty);
     });
 
-    test('a delete that came due while the app was closed runs at the next start', () async {
+    test('a delete left from an earlier start runs as soon as the calorie data starts, without a new delete', () async {
       final env = await CalorieTestEnv.create(extraPrefs: {
         'cal_photo_pending_deletes_v1_$kUser': jsonEncode({'$kUser/old.jpg': DateTime(2026, 1, 1).toIso8601String()}),
       });
       final bucket = FakeMealPhotoBucket();
       final c = ProviderContainer(overrides: env.overrides(bucket: bucket));
       addTearDown(c.dispose);
-      await c.read(calorieSharedPreferencesProvider.future);
-      c.read(mealPhotoCleanupProvider);
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // What the Home card and the diary do first: open today.
+      c.read(calorieDayProvider(kToday));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(bucket.removed, ['$kUser/old.jpg']);
+    });
+
+    test('Undo with an older copy of the row: the photo attached later is deleted and restored with it', () async {
+      final (c, bucket) = await setUpDiary();
+      final diary = c.read(calorieDiaryProvider);
+      final saved = await diary.addFood(withPhoto(null));
+      expect(saved.photoPath, isNull);
+      await diary.attachPhoto(saved, kJpeg);
+      final stale = saved;
+
+      final removed = await diary.deleteFood(stale);
+      expect(removed.photoPath, '$kUser/photo1.jpg');
+      await diary.restoreFood(stale);
+      expect(c.read(calorieDayProvider(kToday)).day!.entries.single.photoPath, '$kUser/photo1.jpg');
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(bucket.removed, isEmpty, reason: 'restored');
+
+      await diary.deleteFood(stale);
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(bucket.removed, ['$kUser/photo1.jpg']);
+    });
+
+    test('a late photo survives an edit from an older copy and a move to another day', () async {
+      final env = await CalorieTestEnv.create();
+      final bucket = FakeMealPhotoBucket()..uploadGate = Completer<void>();
+      final c = ProviderContainer(overrides: env.overrides(bucket: bucket));
+      addTearDown(c.dispose);
+      await c.read(calorieBackendProvider.future);
+      final diary = c.read(calorieDiaryProvider);
+      final saved = await diary.addFood(withPhoto(null));
+      final upload = diary.attachPhoto(saved, kJpeg);
+
+      // S9 moves it to yesterday while the photo is still on its way.
+      final yesterday = shiftCalorieDayKey(saved.dateKey, -1);
+      await diary.updateFood(saved, saved.copyWith(loggedDate: parseCalorieDayKey(yesterday)));
+      bucket.uploadGate!.complete();
+      await upload;
+      expect(c.read(calorieDayProvider(yesterday)).day!.entries.single.photoPath, '$kUser/photo1.jpg');
+      expect(bucket.removed, isEmpty);
+
+      // An edit from the copy S9 opened with keeps the photo.
+      final moved = saved.copyWith(loggedDate: parseCalorieDayKey(yesterday));
+      await diary.updateFood(moved, moved.copyWith(foodName: 'Dal mit Reis'));
+      final row = c.read(calorieDayProvider(yesterday)).day!.entries.single;
+      expect(row.foodName, 'Dal mit Reis');
+      expect(row.photoPath, '$kUser/photo1.jpg');
     });
 
     test('never another person\'s folder', () async {

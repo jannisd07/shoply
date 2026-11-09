@@ -9,6 +9,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/calorie_day.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/data/models/user_food.dart';
 import 'package:shoply/data/services/claude_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
@@ -156,7 +157,7 @@ class _CaloriesRecipeScreenState extends ConsumerState<CaloriesRecipeScreen> {
       // Per serving even when the recipe names none; the server takes at most
       // 4.000 characters.
       final e = await ref.read(calorieNutritionEstimatorProvider)(
-        text.length > _kMaxEstimateText ? text.substring(0, _kMaxEstimateText) : text,
+        cutTextSafely(text, _kMaxEstimateText),
         servings: recipe.defaultServings > 0 ? recipe.defaultServings : 1,
       );
       if (!mounted) return;

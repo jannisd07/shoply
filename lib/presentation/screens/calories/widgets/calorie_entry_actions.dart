@@ -142,15 +142,16 @@ class CalorieEntryActions {
     final message = context.tr('cal_deleted', params: {'name': entry.foodName});
     final undo = context.tr('common_undo');
     final diary = ref.read(calorieDiaryProvider);
+    final FoodLogEntry removed;
     try {
-      await diary.deleteFood(entry);
+      removed = await diary.deleteFood(entry);
     } catch (e) {
       debugPrint('❌ [CalorieDiary] Deleting failed: ${calorieErrorKind(e)}');
       if (context.mounted) showCalorieWriteFailed(context);
       return false;
     }
     if (context.mounted) {
-      AvoToast.show(context, message: message, actionLabel: undo, onAction: () => diary.restoreFood(entry));
+      AvoToast.show(context, message: message, actionLabel: undo, onAction: () => diary.restoreFood(removed));
     }
     return true;
   }

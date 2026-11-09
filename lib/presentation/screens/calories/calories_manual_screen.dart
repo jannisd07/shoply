@@ -46,14 +46,12 @@ class CaloriesManualScreen extends ConsumerStatefulWidget {
 }
 
 class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
-  late final _name = TextEditingController(text: _cut(widget.name?.trim() ?? ''));
+  late final _name = TextEditingController(text: UserFood.cutName(widget.name ?? ''));
 
   /// A barcode from the route (`?barcode=`, Avo, deep links) only when it is
   /// a real EAN-8, EAN-13 or UPC-A; anything else is dropped.
   late final String? _barcode = BarcodeScannerChannel.normalizeGtin(widget.barcode ?? '');
 
-  static String _cut(String name) =>
-      name.length > kCalorieNameMaxLength ? name.substring(0, kCalorieNameMaxLength) : name;
   final _kcal = TextEditingController();
   final _protein = TextEditingController();
   final _carbs = TextEditingController();
