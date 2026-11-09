@@ -81,20 +81,29 @@ class WeeklyListSection {
 /// The two most recently changed lists with open items and a confirmed
 /// market, each with the offers of its market (the 6-h snapshots the list
 /// screen shares), in list order. Hidden lists and declined offers stay
-/// out. Lists without a market have no offers here (no market comparison;
-/// the favourites rule K12-03 is not built yet).
+/// out; until the hidden lists are known nothing is fetched at all (a cold
+/// deep link must not ask for a list whose offers are hidden). Lists
+/// without a market have no offers here (no market comparison; the
+/// favourites rule K12-03 is not built yet).
 final weeklyListSectionsProvider =
     FutureProvider.autoDispose<List<WeeklyListSection>>((ref) async {
       if (!_offersOpen(ref)) return const [];
+      // Not loaded yet means "unknown", never "nothing hidden".
+      final hidden = ref.watch(hiddenOfferListsProvider);
+      if (hidden == null) return const [];
       final region = ref.watch(regionProvider)!;
       final sync = ref.watch(listOfferSyncProvider);
       final markets = <String, String>{
         for (final listId in ref.watch(offerDealListIdsProvider))
-          if (ref.watch(storeForListProvider(listId))?.id case final chainId?)
-            listId: chainId,
+          if (!hidden.contains(listId))
+            if (ref.watch(storeForListProvider(listId))?.id case final chainId?)
+              listId: chainId,
       };
       if (markets.isEmpty) return const [];
-      final hidden = ref.watch(hiddenOfferListsProvider) ?? const <String>{};
+      final names = {
+        for (final listId in markets.keys)
+          listId: ref.watch(offerListNameProvider(listId)) ?? '',
+      };
       final prefs = ref.watch(offerDisplayPrefsProvider);
       final now = ref.watch(offerClockProvider)();
       final items = await ref.watch(
@@ -103,7 +112,9 @@ final weeklyListSectionsProvider =
 
       final sections = <WeeklyListSection>[];
       for (final MapEntry(key: listId, value: chainId) in markets.entries) {
-        if (hidden.contains(listId)) continue;
+        // Hidden meanwhile (another screen): no request for it.
+        final hiddenNow = ref.read(hiddenOfferListsProvider);
+        if (hiddenNow == null || hiddenNow.contains(listId)) continue;
         final open = [
           for (final item in items)
             if (item.listId == listId && !item.isChecked) item,
@@ -122,11 +133,10 @@ final weeklyListSectionsProvider =
                   !(prefs?.isDeclined(item.id, offer.id, now) ?? false))
                 ListOfferEntry(item: item, offer: offer),
         ];
-        final name = ref.watch(offerListNameProvider(listId)) ?? '';
         sections.add(
           WeeklyListSection(
             listId: listId,
-            listName: name,
+            listName: names[listId]!,
             chainId: chainId,
             entries: entries,
             complete: snapshot.complete,
@@ -225,12 +235,25 @@ const int regularOffersMaxLookups = 6;
 
 /// "Oft gekauft": items bought regularly that are not open on a list, each
 /// searched once at its usual market (or the first favourite), most due
-/// first. Hidden by "Nicht interessiert" until the offer ends. Empty, and
-/// nothing read or asked, while offers are closed or "Spar-Hinweise auf
-/// der Startseite" is off.
-final regularOffersProvider = FutureProvider.autoDispose<RegularOffers>((
-  ref,
-) async {
+/// first. Empty, and nothing read or asked, while offers are closed or
+/// "Spar-Hinweise auf der Startseite" is off.
+///
+/// "Nicht interessiert" is not applied here but where the rows are shown
+/// (S9, S10): hiding an offer must take its row away in the same frame, and
+/// must not search everything again.
+final regularOffersProvider = FutureProvider.autoDispose<RegularOffers>(
+  (ref) => _regularOffers(ref),
+);
+
+/// [regularOffersProvider] for one market (S9 "Diese Woche bei Lidl, oft
+/// gekauft"): only regulars bought there are looked up, so the section
+/// never spends its searches on other markets.
+final regularOffersAtProvider = FutureProvider.autoDispose
+    .family<RegularOffers, String>(
+      (ref, chainId) => _regularOffers(ref, onlyChain: chainId),
+    );
+
+Future<RegularOffers> _regularOffers(Ref ref, {String? onlyChain}) async {
   if (!_offersOpen(ref)) return RegularOffers.none;
   final on = ref.watch(
     offerDisplayPrefsProvider.select((p) => p?.isOn(OfferSurface.homeTips)),
@@ -239,8 +262,6 @@ final regularOffersProvider = FutureProvider.autoDispose<RegularOffers>((
   final region = ref.watch(regionProvider)!;
   final service = ref.watch(offerPriceServiceProvider);
   final favorites = ref.watch(favoriteStoresProvider);
-  final prefs = ref.watch(offerDisplayPrefsProvider);
-  final now = ref.watch(offerClockProvider)();
 
   final stats = await ref.watch(offerPurchaseStatsProvider.future);
   final regulars = [
@@ -253,9 +274,15 @@ final regularOffersProvider = FutureProvider.autoDispose<RegularOffers>((
   ];
   if (regulars.isEmpty) return RegularOffers.none;
   final open = await ref.watch(offerOpenItemNamesProvider.future);
+  String? marketOf(ItemPurchaseStats s) {
+    final usual = s.preferredRetailer;
+    return (usual == null ? null : matchChain(usual)) ?? favorites.firstOrNull;
+  }
+
   final candidates =
       regulars
           .where((s) => !open.contains(s.itemName.trim().toLowerCase()))
+          .where((s) => onlyChain == null || marketOf(s) == onlyChain)
           .toList()
         ..sort((a, b) {
           double due(ItemPurchaseStats s) =>
@@ -268,9 +295,7 @@ final regularOffersProvider = FutureProvider.autoDispose<RegularOffers>((
   var lookups = 0;
   for (final s in candidates) {
     if (lookups == regularOffersMaxLookups) break;
-    final usual = s.preferredRetailer;
-    final chainId =
-        (usual == null ? null : matchChain(usual)) ?? favorites.firstOrNull;
+    final chainId = marketOf(s);
     if (chainId == null) continue;
     lookups++;
     final offers = await service.trySearchOffers(
@@ -284,7 +309,6 @@ final regularOffersProvider = FutureProvider.autoDispose<RegularOffers>((
       chainId: chainId,
     );
     if (offer == null || !offer.isValidNow) continue;
-    if (prefs?.isNotInterested(offer.id, now) ?? false) continue;
     found.add(
       RegularOffer(
         name: _capitalized(s.itemName.trim()),
@@ -297,7 +321,17 @@ final regularOffersProvider = FutureProvider.autoDispose<RegularOffers>((
     );
   }
   return RegularOffers(hasStats: true, offers: found);
-});
+}
+
+/// [offers] without the ones hidden by "Nicht interessiert" at [now].
+List<RegularOffer> interestingRegulars(
+  List<RegularOffer> offers,
+  OfferDisplayPrefs? prefs,
+  DateTime now,
+) => [
+  for (final r in offers)
+    if (!(prefs?.isNotInterested(r.offer.id, now) ?? false)) r,
+];
 
 String _capitalized(String name) =>
     name.isEmpty ? name : '${name[0].toUpperCase()}${name.substring(1)}';

@@ -143,9 +143,25 @@ class UserLocationService implements RegionLookup {
   /// "Standort verwenden" waits at most this long for a fix (S11).
   static const _locateTimeLimit = Duration(seconds: 3);
 
+  /// Where coordinates used to be stored for a day. They are kept in memory
+  /// only now ("Gespeichert wird nur die Postleitzahl"); the old values are
+  /// deleted the next time the region is read.
   static const _latKey = 'offers_lat_v1';
   static const _lonKey = 'offers_lon_v1';
   static const _coordsTimeKey = 'offers_coords_fetched_at_v1';
+
+  /// The last fix, in memory only (nearby markets), never on the device.
+  UserCoordinates? _lastCoords;
+  DateTime? _lastCoordsAt;
+
+  /// Coordinates are reused for at most this long within a session.
+  static const _coordsMaxAge = Duration(minutes: 30);
+
+  Future<void> _forgetStoredCoordinates(SharedPreferences prefs) async {
+    for (final key in [_latKey, _lonKey, _coordsTimeKey]) {
+      if (prefs.containsKey(key)) await prefs.remove(key);
+    }
+  }
 
   /// After a failed GPS fix (no permission, timeout, outside Germany) don't
   /// try again for this long — every attempt can take up to 10 s.
@@ -166,6 +182,7 @@ class UserLocationService implements RegionLookup {
     bool forceRefresh = false,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    await _forgetStoredCoordinates(prefs);
 
     final manual = prefs.getString(_manualZipKey);
     if (manual != null && manual.isNotEmpty) {
@@ -319,8 +336,18 @@ class UserLocationService implements RegionLookup {
 
   @override
   Future<void> removeRegion() async {
+    _lastCoords = null;
+    _lastCoordsAt = null;
     final prefs = await SharedPreferences.getInstance();
-    for (final key in [_manualZipKey, _zipKey, _zipTimeKey, _cityKey]) {
+    for (final key in [
+      _manualZipKey,
+      _zipKey,
+      _zipTimeKey,
+      _cityKey,
+      _latKey,
+      _lonKey,
+      _coordsTimeKey,
+    ]) {
       await prefs.remove(key);
     }
     await prefs.setBool(_removedKey, true);
@@ -376,8 +403,9 @@ class UserLocationService implements RegionLookup {
     }
   }
 
-  /// Raw lat/lon for distance-based store lookups (e.g. "closest branch of
-  /// the cheapest chain"). Unlike the zip code there's no manual-entry
+  /// Raw lat/lon for distance-based store lookups (stores nearby), from
+  /// the last fix of this session (at most 30 min old, never stored on the
+  /// device). Unlike the zip code there's no manual-entry
   /// fallback — a zip alone can't place a store on a map — so this returns
   /// null whenever GPS isn't available, and callers must handle that by
   /// simply not showing distance info rather than guessing.
@@ -385,17 +413,13 @@ class UserLocationService implements RegionLookup {
     bool forceRefresh = false,
     bool allowPermissionPrompt = true,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-
     if (!forceRefresh) {
-      final lat = prefs.getDouble(_latKey);
-      final lon = prefs.getDouble(_lonKey);
-      final fetchedAt = DateTime.tryParse(prefs.getString(_coordsTimeKey) ?? '');
-      if (lat != null &&
-          lon != null &&
-          fetchedAt != null &&
-          DateTime.now().difference(fetchedAt) < _cacheMaxAge) {
-        return UserCoordinates(lat, lon);
+      final known = _lastCoords;
+      final at = _lastCoordsAt;
+      if (known != null &&
+          at != null &&
+          DateTime.now().difference(at) < _coordsMaxAge) {
+        return known;
       }
     }
 
@@ -409,7 +433,7 @@ class UserLocationService implements RegionLookup {
 
   /// Shared permission-check + fix, used by both the region resolver and
   /// [getCoordinates]. Concurrent callers share one fix; every successful
-  /// fix also refreshes the cached coordinates.
+  /// fix also refreshes the coordinates kept in memory.
   Future<Position?> _getPosition({
     required bool forceRefresh,
     required bool allowPermissionPrompt,
@@ -453,10 +477,9 @@ class UserLocationService implements RegionLookup {
       );
       _gpsFailedAt = null;
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_latKey, position.latitude);
-      await prefs.setDouble(_lonKey, position.longitude);
-      await prefs.setString(_coordsTimeKey, DateTime.now().toIso8601String());
+      // In memory only: the device keeps the postcode, not where one was.
+      _lastCoords = UserCoordinates(position.latitude, position.longitude);
+      _lastCoordsAt = DateTime.now();
       return position;
     } catch (e) {
       debugPrint('❌ [LOCATION] Failed to get position: $e');

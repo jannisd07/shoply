@@ -184,6 +184,17 @@ final offerListNameProvider = Provider.autoDispose.family<String?, String>(
   ),
 );
 
+/// Whether [listId] is one of the person's lists: null while the lists are
+/// loading, false for a deleted list or one the person left (S9 then shows
+/// A's error page). Override in tests.
+final offerListExistsProvider = Provider.autoDispose.family<bool?, String>(
+  (ref, listId) => ref.watch(
+    listsNotifierProvider.select(
+      (lists) => lists.valueOrNull?.any((l) => l.id == listId),
+    ),
+  ),
+);
+
 /// What [cachedMoreOffersProvider] is asked for: the list and the item name.
 typedef MoreOffersKey = ({String listId, String query});
 

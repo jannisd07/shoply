@@ -110,12 +110,11 @@ class RecipeOffersScreen extends ConsumerWidget {
         params: {'recipe': current.name.trim()},
       ),
       bottom: OffersPageBottom.safeArea,
-      onRefresh: () async => ref.invalidate(
-        recipeOffersProvider(
-          recipeOfferKey(current.id, [
-            for (final i in current.ingredients) i.name,
-          ], listId),
-        ),
+      onRefresh: () => refreshRecipeOffers(
+        ref,
+        recipeOfferKey(current.id, [
+          for (final i in current.ingredients) i.name,
+        ], listId),
       ),
       children: [_Body(recipe: current, listId: listId, servings: servings)],
     );
@@ -181,6 +180,11 @@ class _Body extends ConsumerWidget {
     final offers = result.valueOrNull;
     final store = storeNameOf(market);
 
+    // A search failed: "nicht geladen" (nothing to show) or "nicht
+    // aktualisiert" (some offers came); offline the offline row says it.
+    // Never "Gerade nichts im Angebot." for an answer that is not complete.
+    final incomplete = offers != null && !offers.complete;
+    void retry() => unawaited(refreshRecipeOffers(ref, key));
     final Widget status;
     if (offline) {
       status = Padding(
@@ -190,14 +194,18 @@ class _Body extends ConsumerWidget {
           text: context.tr('offer_status_offline_search'),
         ),
       );
-    } else if (result.hasError && offers == null) {
+    } else if ((result.hasError && offers == null) || incomplete) {
       status = Padding(
         padding: const EdgeInsets.only(top: AvoSpacing.m),
         child: StatusRow(
           kind: StatusKind.sectionError,
-          text: context.tr('offer_status_load_failed'),
+          text: context.tr(
+            offers != null && offers.matches.isNotEmpty
+                ? 'offer_status_refresh_failed'
+                : 'offer_status_load_failed',
+          ),
           actionLabel: context.tr('common_try_again'),
-          onAction: () => ref.invalidate(recipeOffersProvider(key)),
+          onAction: retry,
         ),
       );
     } else {
@@ -222,11 +230,12 @@ class _Body extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           status,
-          EmptyState(
-            icon: const AvoIcon(AvoIcons.tag),
-            title: context.tr('offer_list_empty_title'),
-            message: context.tr('offer_list_empty_body'),
-          ),
+          if (offers.complete)
+            EmptyState(
+              icon: const AvoIcon(AvoIcons.tag),
+              title: context.tr('offer_list_empty_title'),
+              message: context.tr('offer_list_empty_body'),
+            ),
         ],
       );
     }

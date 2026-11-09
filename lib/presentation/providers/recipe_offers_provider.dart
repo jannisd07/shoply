@@ -26,12 +26,13 @@ abstract interface class RecipeOfferSource {
     String? chainId,
   });
 
-  /// The offers, from the 6-h cache or the source.
+  /// The offers, from the 6-h cache or the source; [force] skips the cache.
   Future<RecipeOffersResult> getOffers({
     required String recipeId,
     required List<String> ingredientNames,
     required String zipCode,
     String? chainId,
+    bool force = false,
   });
 }
 
@@ -57,11 +58,13 @@ class _ServiceSource implements RecipeOfferSource {
     required List<String> ingredientNames,
     required String zipCode,
     String? chainId,
+    bool force = false,
   }) => RecipeOfferService.instance.getOffers(
     recipeId: recipeId,
     ingredientNames: ingredientNames,
     zipCode: zipCode,
     chainId: chainId,
+    force: force,
   );
 }
 
@@ -88,6 +91,7 @@ class RecipeListOffers {
     required this.chainId,
     required this.matches,
     required this.checked,
+    this.complete = true,
   });
 
   final String chainId;
@@ -98,6 +102,10 @@ class RecipeListOffers {
   /// How many ingredients were looked up ("von 9 Zutaten"): pantry staples
   /// and duplicates do not count.
   final int checked;
+
+  /// False when a search failed: an empty answer then means "konnten gerade
+  /// nicht geladen werden", never "nichts im Angebot".
+  final bool complete;
 }
 
 /// The market the offers of [listId] are for, once offers may show there
@@ -122,6 +130,7 @@ RecipeListOffers? _valid(RecipeOffersResult? result, String chainId) {
         if (m.isStillValid) m,
     ],
     checked: result.checkedIngredientCount,
+    complete: result.complete,
   );
 }
 
@@ -170,6 +179,7 @@ final recipeOffersProvider = FutureProvider.autoDispose
       final chainId = _gate(ref, key.listId);
       final region = ref.watch(regionProvider);
       if (chainId == null || region == null) return null;
+      final force = ref.watch(_recipeOffersRefreshProvider(key)) > 0;
       final names = key.names.isEmpty
           ? const <String>[]
           : key.names.split('\n');
@@ -180,6 +190,7 @@ final recipeOffersProvider = FutureProvider.autoDispose
             ingredientNames: names,
             zipCode: region.zip,
             chainId: chainId,
+            force: force,
           );
       return _valid(result, chainId);
     });
@@ -220,3 +231,20 @@ final recipeIngredientOfferProvider = Provider.autoDispose
       );
       return offer != null && offer.isStillValid ? offer : null;
     });
+
+/// Bumped by [refreshRecipeOffers]: the next lookup of that key skips the
+/// 6-h cache.
+final _recipeOffersRefreshProvider = StateProvider.autoDispose
+    .family<int, RecipeOfferKey>((ref, key) => 0);
+
+/// Looks the offers of [key] up again, past the 6-h cache (pull to refresh
+/// and "Erneut versuchen" in "Angebote für {Rezept}"), and waits for them.
+/// One request per ingredient, as on the first lookup.
+Future<void> refreshRecipeOffers(WidgetRef ref, RecipeOfferKey key) async {
+  ref.read(_recipeOffersRefreshProvider(key).notifier).state++;
+  try {
+    await ref.read(recipeOffersProvider(key).future);
+  } catch (_) {
+    // The screen shows the failure.
+  }
+}

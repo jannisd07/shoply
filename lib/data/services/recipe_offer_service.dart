@@ -58,21 +58,25 @@ class RecipeOfferService {
 
   /// Offers for [ingredientNames] around [zipCode], via the persistent cache
   /// when the exact recipe+zip+market+ingredients snapshot was checked within
-  /// [cacheTtl]. With [chainId] only that market's offers count. Never
-  /// throws — a failed search for one ingredient simply yields no match for
-  /// it, and such an incomplete result is not cached.
+  /// [cacheTtl]. With [chainId] only that market's offers count. [force]
+  /// skips the cache (pull to refresh, "Erneut versuchen"). Never throws —
+  /// a failed search for one ingredient yields no match for it and marks
+  /// the result incomplete (`complete: false`), which is not cached.
   Future<RecipeOffersResult> getOffers({
     required String recipeId,
     required List<String> ingredientNames,
     required String zipCode,
     String? chainId,
+    bool force = false,
   }) async {
     final names = eligibleIngredientNames(ingredientNames);
     final signature =
         '$recipeId|$zipCode|${chainId ?? ''}|${names.join(',')}';
 
-    final cached = await _loadCached(recipeId, signature);
-    if (cached != null) return cached;
+    if (!force) {
+      final cached = await _loadCached(recipeId, signature);
+      if (cached != null) return cached;
+    }
 
     final fetched =
         await matchOffers(names, zipCode: zipCode, chainId: chainId);
@@ -82,6 +86,7 @@ class RecipeOfferService {
       checkedIngredientCount: names.length,
       matches: fetched.matches,
       signature: signature,
+      complete: fetched.complete,
     );
     // Don't pin a transient API failure (empty result) for [cacheTtl].
     if (fetched.complete) await _saveCached(result);

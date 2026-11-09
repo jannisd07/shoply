@@ -31,6 +31,12 @@ final offersRemoteEnabledProvider = Provider<bool>(
   ),
 );
 
+/// Whether the remote flags are real values (cache or server): until then
+/// the offers kill switch reads "off" without being known to be off.
+final offersFlagsKnownProvider = Provider<bool>(
+  (ref) => ref.watch(appFlagsProvider.select((f) => f.isKnown)),
+);
+
 /// Remote kill switch for the Claude features (`app_flags.ai_enabled`). Off
 /// until the cache was read, then on unless the flag says off. All AI calls
 /// go through the `ai` edge function, which has to enforce the flag itself.

@@ -146,12 +146,17 @@ class RecipeOffersResult {
   /// cache entries are only reused for an identical signature.
   final String signature;
 
+  /// False when at least one search failed (offline, timeout): the answer
+  /// is "don't know", not "nothing on offer", and it is never cached.
+  final bool complete;
+
   const RecipeOffersResult({
     required this.recipeId,
     required this.zipCode,
     required this.checkedIngredientCount,
     required this.matches,
     required this.signature,
+    this.complete = true,
   });
 
   RecipeOffersResult copyWithMatches(List<RecipeIngredientOffer> newMatches) {
@@ -161,6 +166,7 @@ class RecipeOffersResult {
       checkedIngredientCount: checkedIngredientCount,
       matches: newMatches,
       signature: signature,
+      complete: complete,
     );
   }
 

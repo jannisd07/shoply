@@ -20,6 +20,10 @@ import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 
+/// How long the step waits for the remote flags on a first start before it
+/// moves on (A's frame shows its title meanwhile; "Überspringen" works).
+const Duration _kFlagsWait = Duration(seconds: 3);
+
 /// The chip of "Aldi" before the region decides between Nord and Süd.
 const String _kAldi = 'aldi';
 
@@ -49,7 +53,8 @@ const List<String> _kOrder = [
 ///
 /// Only with the offers module on and the kill switch known off; otherwise
 /// it renders nothing and calls [onDone] right after the first frame, so A
-/// skips the step without a trace. No figure, no network request without a
+/// skips the step without a trace. While the flags are not known yet (first
+/// start) it renders nothing and waits for them, at most 3 s. No figure, no network request without a
 /// region; Overpass only after "Standort verwenden".
 class OffersSetupStep extends ConsumerStatefulWidget {
   const OffersSetupStep({super.key, required this.onDone});
@@ -88,19 +93,31 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
 
   @override
   void dispose() {
+    _flagsWait?.cancel();
     _field.dispose();
     _focus.dispose();
     super.dispose();
   }
 
-  /// Kill switch known off and the module on ([offersAvailableProvider]).
-  bool get _available =>
-      ref.read(offersRemoteEnabledProvider) &&
-      ref.read(offersAvailableProvider);
+  /// Waiting for the remote flags gave up; then the step moves on.
+  Timer? _flagsWait;
+
+  /// Whether the step has content: the module on and the kill switch known
+  /// off. Null while the flags are not known yet (first start): then it
+  /// waits, up to [_kFlagsWait], instead of skipping a step the flags would
+  /// have shown.
+  bool? _availability() {
+    // The kill switch first: until it is known nothing else is read.
+    if (!ref.watch(offersRemoteEnabledProvider)) {
+      return ref.watch(offersFlagsKnownProvider) ? false : null;
+    }
+    return ref.watch(offersAvailableProvider);
+  }
 
   void _skip() {
     if (_skipped) return;
     _skipped = true;
+    _flagsWait?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onDone();
     });
@@ -139,6 +156,12 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
 
   Future<void> _next() async {
     if (_done) return;
+    final typed = _field.text;
+    if (typed.isNotEmpty && !isKnownZip(typed)) {
+      // Never drop a half-typed postcode silently: say what is missing.
+      setState(() => _left = true);
+      return;
+    }
     setState(() => _done = true);
     final region = _region;
     final zip = region?.zip ?? ref.read(regionProvider)?.zip;
@@ -163,10 +186,18 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
 
   @override
   Widget build(BuildContext context) {
-    if (_skipped || !_available) {
+    final available = _skipped ? false : _availability();
+    if (available == null) {
+      _flagsWait ??= Timer(_kFlagsWait, () {
+        if (mounted) setState(_skip);
+      });
+      return const SizedBox.shrink();
+    }
+    if (!available) {
       _skip();
       return const SizedBox.shrink();
     }
+    _flagsWait?.cancel();
     final lang = offerLanguageOf(context);
     final current = ref.watch(regionProvider);
     if (!_filled && ref.watch(regionLoadedProvider)) {

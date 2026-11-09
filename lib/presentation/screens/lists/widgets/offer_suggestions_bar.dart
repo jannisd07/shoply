@@ -310,7 +310,7 @@ class _PostcodeHintRowState extends ConsumerState<_PostcodeHintRow> {
                 children: [
                   AvoIcon(
                     AvoIcons.location,
-                    size: _kHintIcon,
+                    size: MediaQuery.textScalerOf(context).scale(_kHintIcon),
                     color: colors.secondaryLabel,
                   ),
                   const SizedBox(width: AvoSpacing.m),

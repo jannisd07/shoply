@@ -36,9 +36,13 @@ import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/skeleton.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/route_error_screen.dart';
 
 /// At most this many regulars in "Diese Woche bei Lidl, oft gekauft".
 const int _kRegularsMax = 3;
+
+const double _kTextRowMin = 52; // D2 text-button row
+const double _kTextRowIcon = 20; // D2 glyph before a text-button row
 
 /// "Angebote bei {Markt}" (S9, `/offers/list/:listId`, a child in the
 /// Listen tab): which items of this list are on offer at its market?
@@ -63,6 +67,10 @@ class ListOffersScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // A deleted list, or one the person left: A's error page.
+    if (ref.watch(offerListExistsProvider(listId)) == false) {
+      return const RouteErrorScreen();
+    }
     final listName = ref.watch(offerListNameProvider(listId)) ?? '';
     final guess = ref.watch(storeGuessForListProvider(listId));
     final market = ref.watch(storeForListProvider(listId))?.id;
@@ -192,7 +200,8 @@ class _Body extends ConsumerWidget {
           padding: const EdgeInsets.only(top: AvoSpacing.m),
           child: status,
         ),
-      if (entries.isEmpty &&
+      if (rowsOn &&
+          entries.isEmpty &&
           regulars.isEmpty &&
           known != null &&
           known.complete)
@@ -248,9 +257,11 @@ class _Body extends ConsumerWidget {
     List<ShoppingItemModel> items,
   ) {
     final on = items.map((i) => i.name.trim().toLowerCase()).toSet();
-    final all = ref.watch(regularOffersProvider).valueOrNull?.offers;
+    final all = ref.watch(regularOffersAtProvider(chain)).valueOrNull?.offers;
+    final prefs = ref.watch(offerDisplayPrefsProvider);
+    final now = ref.watch(offerClockProvider)();
     return [
-      for (final r in all ?? const <RegularOffer>[])
+      for (final r in interestingRegulars(all ?? const [], prefs, now))
         if (r.chainId == chain && !on.contains(r.name.trim().toLowerCase())) r,
     ].take(_kRegularsMax).toList();
   }
@@ -402,7 +413,7 @@ class OfferTextRow extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 52), // D2
+          constraints: const BoxConstraints(minHeight: _kTextRowMin),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AvoSpacing.l,
@@ -411,7 +422,11 @@ class OfferTextRow extends StatelessWidget {
             child: Row(
               children: [
                 if (glyph != null) ...[
-                  AvoIcon(glyph, size: 20, color: colors.tint), // D2
+                  AvoIcon(
+                    glyph,
+                    size: MediaQuery.textScalerOf(context).scale(_kTextRowIcon),
+                    color: colors.tint,
+                  ),
                   const SizedBox(width: AvoSpacing.m),
                 ],
                 Expanded(
