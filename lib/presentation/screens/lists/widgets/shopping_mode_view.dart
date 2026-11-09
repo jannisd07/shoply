@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -11,6 +12,7 @@ import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_aisles.d
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_bars.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_header.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/check_circle.dart';
 import 'package:shoply/presentation/widgets/design/empty_state.dart';
 import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
@@ -323,35 +325,63 @@ class _ShoppingModeViewState extends State<ShoppingModeView> {
     final hold = _held[item.id];
     final byOther = hold?.byOther ?? false;
     final edit = context.tr('common_edit_item');
-    return ShoppingRowMotion(
+    void onEdit() => widget.onEdit(item);
+    // With an offer the long press opens a menu ("Bearbeiten", "Angebot
+    // ansehen"), whose entries are also the row's custom actions (status-B
+    // 17, A-C1); without one it edits at once, as before.
+    return Consumer(
       key: ValueKey('shop-row-${item.id}'),
-      appear: appear,
-      leaving: hold?.leaving ?? false,
-      onLeft: () => _rowLeft(item.id),
-      child: GestureDetector(
-        // VoiceOver gets "Bearbeiten" as a custom action of the row.
-        excludeFromSemantics: true,
-        onLongPress: () => widget.onEdit(item),
-        child: ItemRow(
-          title: item.name,
-          subtitle: byOther
-              ? context.tr('list_shop_just_checked')
-              : shoppingItemSubtitle(context, item),
-          thumb: _thumb(item),
-          trailing: item.isChecked
-              ? null
-              : ItemOfferBadge(
-                  listId: widget.listId,
-                  item: item,
-                  compact: true,
-                ),
-          checked: item.isChecked,
-          onToggle: (checked) => _toggle(item, checked),
-          size: ItemRowSize.large,
-          checkState: byOther && item.isChecked ? CheckState.doneByOther : null,
-          semanticActions: {edit: () => widget.onEdit(item)},
-        ),
-      ),
+      builder: (context, ref, _) {
+        final offer = item.isChecked
+            ? null
+            : itemOfferRowExtras(
+                context,
+                ref,
+                listId: widget.listId,
+                item: item,
+                shoppingMode: true,
+              );
+        final menu = offer == null
+            ? const <AvoMenuEntry>[]
+            : [
+                AvoMenuItem(label: edit, onSelected: onEdit),
+                ...offer.menuItems,
+              ];
+        return ShoppingRowMotion(
+          appear: appear,
+          leaving: hold?.leaving ?? false,
+          onLeft: () => _rowLeft(item.id),
+          child: GestureDetector(
+            // VoiceOver gets "Bearbeiten" as a custom action of the row.
+            excludeFromSemantics: true,
+            onLongPress: menu.isEmpty ? onEdit : null,
+            child: ItemRow(
+              title: item.name,
+              subtitle: byOther
+                  ? context.tr('list_shop_just_checked')
+                  : shoppingItemSubtitle(context, item),
+              thumb: _thumb(item),
+              trailing: item.isChecked
+                  ? null
+                  : ItemOfferBadge(
+                      listId: widget.listId,
+                      item: item,
+                      compact: true,
+                    ),
+              checked: item.isChecked,
+              onToggle: (checked) => _toggle(item, checked),
+              size: ItemRowSize.large,
+              checkState: byOther && item.isChecked
+                  ? CheckState.doneByOther
+                  : null,
+              semanticActions: menu.isEmpty ? {edit: onEdit} : const {},
+              trailingSemanticsLabel: offer?.semanticsLabel,
+              trailingActions: offer?.actions ?? const {},
+              contextMenuItems: menu,
+            ),
+          ),
+        );
+      },
     );
   }
 

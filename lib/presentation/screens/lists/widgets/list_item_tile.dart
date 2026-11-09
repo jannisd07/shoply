@@ -149,6 +149,11 @@ class _ListItemTileState extends ConsumerState<ListItemTile> {
     final deleteLabel = context.tr('list_detail_delete_item');
     // Without pictures (setting off, AX sizes) the row leaves no gap.
     final images = listImagesShown(context, ref);
+    // The offer pill's sentence and "Angebot ansehen" belong to the row
+    // (status-B 17, A-C1); null while the pill shows nothing.
+    final offer = item.isChecked
+        ? null
+        : itemOfferRowExtras(context, ref, listId: widget.listId, item: item);
 
     final row = ItemRow(
       title: item.name,
@@ -168,6 +173,8 @@ class _ListItemTileState extends ConsumerState<ListItemTile> {
       onTap: widget.onOpen,
       openLabel: context.tr('common_edit_item'),
       semanticActions: {deleteLabel: widget.onDelete},
+      trailingSemanticsLabel: offer?.semanticsLabel,
+      trailingActions: offer?.actions ?? const {},
     );
 
     final dismissible = Dismissible(

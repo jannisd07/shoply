@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
+import 'package:shoply/data/models/store_offer.dart';
+import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
+import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_view.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
@@ -96,12 +99,14 @@ Future<_HostState> _pump(
   WidgetTester tester,
   _Host host, {
   bool reduceMotion = false,
+  List<Override> overrides = const [],
 }) async {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
+      overrides: overrides,
       child: layoutHarness(
         LayoutCase(width: 390, scale: 1, reduceMotion: reduceMotion),
         AvoToastHost(child: host),
@@ -315,6 +320,50 @@ void main() {
     );
     await tester.tap(find.text('Try again'));
     expect(host.retries, 1);
+  });
+
+  testWidgets('with an offer, long press opens a menu with "View offer"', (
+    tester,
+  ) async {
+    final offer = StoreOffer(
+      id: 1,
+      productName: 'Gurke',
+      brandName: null,
+      description: '',
+      price: 0.49,
+      oldPrice: null,
+      unitShortName: null,
+      retailerName: 'Lidl',
+      retailerUniqueName: 'lidl',
+      categoryName: null,
+      validFrom: _at,
+      validTo: _at.add(const Duration(days: 5)),
+    );
+    final host = await _pump(
+      tester,
+      _Host(items: _week),
+      overrides: [
+        offerSurfaceVisibleProvider.overrideWith((ref, key) => true),
+        itemOfferProvider.overrideWith(
+          (ref, key) => key.itemId == 'Gurken' ? offer : null,
+        ),
+      ],
+    );
+    final semantics = tester.ensureSemantics();
+    final row = tester.getSemantics(find.text('Gurken'));
+    expect(row.label, contains('on offer, 49 cents'));
+    semantics.dispose();
+
+    await tester.longPress(find.text('Gurken'));
+    await tester.pumpAndSettle();
+    expect(host.edits, isEmpty);
+    expect(find.text('View offer'), findsOneWidget);
+
+    // Without an offer the long press still edits at once.
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Bananen'));
+    expect(host.edits, ['Bananen']);
   });
 
   testWidgets('long press opens the item', (tester) async {
