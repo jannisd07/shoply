@@ -1,279 +1,276 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shoply/core/constants/app_colors.dart';
-import 'package:shoply/core/constants/app_dimensions.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/core/utils/validators.dart';
-import 'package:shoply/data/services/supabase_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/presentation/screens/auth/auth_errors.dart';
+import 'package:shoply/presentation/screens/auth/auth_gateway.dart';
+import 'package:shoply/presentation/screens/auth/widgets/auth_field.dart';
+import 'package:shoply/presentation/screens/auth/widgets/auth_status.dart';
+import 'package:shoply/presentation/screens/onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:shoply/presentation/widgets/design/app_button.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
+import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
+import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/route_paths.dart';
 
-class ResetPasswordScreen extends StatefulWidget {
-  const ResetPasswordScreen({super.key});
+/// Rule symbols next to 15 pt text at the default size (SF Symbols).
+const double _kRuleSymbol = 18;
+
+/// Subhead size at the default category, the reference for scaling the
+/// rule symbols with Dynamic Type.
+const double _kSubheadAtLarge = 15;
+
+/// Neues Passwort (Konzept 17 §4.4, `/reset-password`): after the reset
+/// code, or on the next start while [kPasswordResetPendingKey] is set.
+///
+/// One hidden field with "Passwort anzeigen" and iOS's strong-password
+/// suggestion, three rules that tick off while typing, "Passwort speichern"
+/// once all are met. Success keeps the session and opens Tab Liste with
+/// "Passwort geändert."; "Abbrechen" (top left, `xmark`) asks first and
+/// signs out. [onDone] and [onCancelled] override where it goes next.
+class ResetPasswordScreen extends ConsumerStatefulWidget {
+  const ResetPasswordScreen({super.key, this.onDone, this.onCancelled});
+
+  final VoidCallback? onDone;
+  final VoidCallback? onCancelled;
 
   @override
-  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
+  ConsumerState<ResetPasswordScreen> createState() =>
+      _ResetPasswordScreenState();
 }
 
-class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-
-  bool _isLoading = false;
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
+class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
+  final _controller = TextEditingController();
+  bool _obscure = true;
+  bool _saving = false;
+  AuthErrorKind? _status;
 
   @override
   void dispose() {
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _updatePassword() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      // 1. Update Password
-      await SupabaseService.instance.updateUser(
-        UserAttributes(password: _passwordController.text),
-      );
-
-      // 2. Sign Out (try-catch to ensure we navigate even if this fails)
-      try {
-        await SupabaseService.instance.signOut();
-      } catch (e) {
-        debugPrint('⚠️ [RESET_PASSWORD] Sign out failed (ignoring): $e');
-      }
-
-      if (mounted) {
-        // App-level messenger (this State's context sits above the screen's
-        // own ScaffoldMessenger), so the confirmation survives the route
-        // change and shows on /welcome. maybeOf: the iOS CupertinoApp root
-        // has no ScaffoldMessenger unless app.dart adds one.
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text(context.tr('password_updated_login')),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-        context.go('/welcome');
-      }
-    } catch (e) {
-      debugPrint('❌ [RESET_PASSWORD] Error: $e');
-      if (mounted) {
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text(context.tr('password_update_failed')),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+  Future<void> _save() async {
+    final password = _controller.text;
+    if (!passwordRulesMet(password) || _saving) return;
+    if (ref.read(isOfflineProvider)) {
+      setState(() => _status = AuthErrorKind.offline);
+      AvoHaptics.error();
+      return;
     }
+    final gateway = ref.read(authGatewayProvider);
+    final router = GoRouter.maybeOf(context);
+    setState(() {
+      _saving = true;
+      _status = null;
+    });
+    try {
+      await gateway.updatePassword(password);
+    } catch (e) {
+      debugPrint('[AUTH] saving the new password failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _status = classifyAuthError(e, attempt: AuthAttempt.newPassword);
+      });
+      AvoHaptics.error();
+      return;
+    }
+    await gateway.setPasswordResetPending(false);
+    // Lets iOS save the new password in the keychain.
+    TextInput.finishAutofillContext();
+    if (!mounted) return;
+    if (widget.onDone != null) {
+      widget.onDone!();
+      return;
+    }
+    AvoToast.show(context, message: context.tr('auth_password_changed'));
+    router?.go(RoutePaths.lists);
   }
 
-  /// Leaves the reset flow: the OTP left a recovery session behind, so sign
-  /// out before returning to the welcome screen.
   Future<void> _cancel() async {
+    if (_saving) return;
+    final gateway = ref.read(authGatewayProvider);
+    final router = GoRouter.maybeOf(context);
+    final confirmed = await showAvoConfirm(
+      context,
+      title: context.tr('auth_reset_cancel_title'),
+      message: context.tr('auth_reset_cancel_message'),
+      confirmLabel: context.tr('auth_sign_out'),
+      cancelLabel: context.tr('auth_reset_keep_going'),
+    );
+    if (!confirmed) return;
     try {
-      await SupabaseService.instance.signOut();
+      await gateway.signOut();
     } catch (e) {
-      debugPrint('⚠️ [RESET_PASSWORD] Sign out failed (ignoring): $e');
+      debugPrint('[AUTH] sign-out after cancelled reset failed: $e');
     }
-    if (mounted) context.go('/welcome');
+    await gateway.setPasswordResetPending(false);
+    if (!mounted) return;
+    if (widget.onCancelled != null) {
+      widget.onCancelled!();
+    } else {
+      router?.go(RoutePaths.login);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    const backgroundColor = Color(0xFF121212);
-    const inputFillColor = Color(0xFF2C2C2E);
-    const inputBorderColor = Color(0xFF3A3A3C);
+    final media = MediaQuery.of(context);
+    final offline = ref.watch(isOfflineProvider);
+    final password = _controller.text;
+    final status = _status ?? (offline ? AuthErrorKind.offline : null);
 
-    return ScaffoldMessenger(
-      key: _scaffoldMessengerKey,
-      child: Scaffold(
-        backgroundColor: backgroundColor,
-        appBar: AppBar(
-          backgroundColor: backgroundColor,
-          elevation: 0,
-          title: Text(context.tr('reset_password_title'), style: const TextStyle(color: Colors.white)),
-          centerTitle: true,
-          leading: IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: _isLoading ? null : _cancel,
+    final page = OnboardingStepPage(
+      title: context.tr('auth_new_password_title'),
+      primaryAction: AppButton.primary(
+        label: context.tr('auth_save_password'),
+        onPressed: passwordRulesMet(password) ? _save : null,
+        working: _saving,
+        workingLabel: context.tr('auth_saving'),
+        size: AppButtonSize.large,
+        expand: true,
+      ),
+      status: status == null
+          ? null
+          : AuthStatusLine.forError(
+              context,
+              status,
+              attempt: AuthAttempt.newPassword,
+              offlineText: context.tr('auth_offline_save'),
+              onAction: status == AuthErrorKind.unknown ? _save : null,
+            ),
+      children: [
+        AuthTextField(
+          controller: _controller,
+          label: context.tr('auth_new_password_title'),
+          obscureText: _obscure,
+          autofillHints: const [AutofillHints.newPassword],
+          textInputAction: TextInputAction.done,
+          autofocus: true,
+          onChanged: (_) => setState(() {
+            if (_status != AuthErrorKind.offline) _status = null;
+          }),
+          onSubmitted: (_) => _save(),
+          suffix: FieldSymbolButton(
+            icon: _obscure ? AvoIcons.eye : AvoIcons.eyeSlash,
+            semanticLabel: context.tr(
+              _obscure ? 'auth_show_password' : 'auth_hide_password',
+            ),
+            onPressed: () => setState(() => _obscure = !_obscure),
           ),
         ),
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimensions.screenHorizontalPadding,
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.lock_reset,
-                      size: 64,
-                      color: Colors.white,
-                    ),
+        const SizedBox(height: AvoSpacing.m),
+        for (final rule in PasswordRule.values)
+          _RuleRow(
+            text: context.tr(switch (rule) {
+              PasswordRule.length => 'auth_rule_length',
+              PasswordRule.upper => 'auth_rule_upper',
+              PasswordRule.digit => 'auth_rule_digit',
+            }),
+            met: passwordRuleMet(rule, password),
+          ),
+      ],
+    );
 
-                    const SizedBox(height: 32),
-
-                    Text(
-                      context.tr('reset_password_headline'),
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    Text(
-                      context.tr('reset_password_sub'),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[400],
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // Password Field
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: context.tr('new_password_label'),
-                        labelStyle: TextStyle(color: Colors.grey[400]),
-                        filled: true,
-                        fillColor: inputFillColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: inputBorderColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: inputBorderColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: Colors.white54),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                            color: Colors.grey,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
-                        ),
-                      ),
-                      // Same rules as sign-up.
-                      validator: Validators.validatePassword,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Confirm Password Field
-                    TextFormField(
-                      controller: _confirmPasswordController,
-                      obscureText: _obscureConfirmPassword,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: context.tr('confirm_password_label'),
-                        labelStyle: TextStyle(color: Colors.grey[400]),
-                        filled: true,
-                        fillColor: inputFillColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: inputBorderColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: inputBorderColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: Colors.white54),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureConfirmPassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                            color: Colors.grey,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _obscureConfirmPassword = !_obscureConfirmPassword;
-                            });
-                          },
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value != _passwordController.text) {
-                          return context.tr('passwords_do_not_match');
-                        }
-                        return null;
-                      },
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    // Save Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _updatePassword,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4A4A4A), // Grey button
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: _isLoading
-                            ? const CupertinoActivityIndicator(radius: 10, color: Colors.white)
-                            : Text(
-                                context.tr('reset_password_button'),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ],
-                ),
+    // "Abbrechen" sits where the back button of the step frame sits
+    // (Konzept 17 §4.4: `xmark` instead of back) and is read first.
+    return AutofillGroup(
+      child: Stack(
+        children: [
+          Semantics(
+            container: true,
+            sortKey: const OrdinalSortKey(1),
+            child: page,
+          ),
+          PositionedDirectional(
+            top: media.padding.top + AvoSpacing.xs,
+            start: AvoSpacing.screen,
+            child: Semantics(
+              container: true,
+              sortKey: const OrdinalSortKey(0),
+              child: GlassIconButton(
+                icon: const AvoIcon(AvoIcons.xmark),
+                semanticLabel: context.tr('cancel'),
+                onPressed: _saving ? null : _cancel,
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One rule: `circle` while open, `checkmark.circle.fill` when met; the
+/// shape changes, not only the colour (Konzept 17 §4.4).
+class _RuleRow extends StatelessWidget {
+  const _RuleRow({required this.text, required this.met});
+
+  final String text;
+  final bool met;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final typography = context.typography;
+    final line = typography.lineHeightOf(AvoTextStyle.subhead);
+    final size =
+        _kRuleSymbol * typography.sizeOf(AvoTextStyle.subhead) / _kSubheadAtLarge;
+    final symbol = met
+        ? AvoIcon(
+            AvoIcons.checkmarkCircleFill,
+            key: const ValueKey('met'),
+            size: size,
+            color: colors.tint,
+          )
+        : AvoIcon(
+            AvoIcons.circle,
+            key: const ValueKey('open'),
+            size: size,
+            color: colors.uncheckedRing,
+          );
+    final reduce = context.reduceMotion;
+    return Semantics(
+      container: true,
+      label: text,
+      value: context.tr(met ? 'auth_rule_met' : 'auth_rule_open'),
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AvoSpacing.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: line,
+              width: size,
+              child: Center(
+                child: AnimatedSwitcher(
+                  duration: AvoMotion.fadeReduced,
+                  transitionBuilder: (child, animation) => reduce
+                      ? FadeTransition(opacity: animation, child: child)
+                      : ScaleTransition(
+                          scale: animation,
+                          child: FadeTransition(
+                            opacity: animation,
+                            child: child,
+                          ),
+                        ),
+                  child: symbol,
+                ),
+              ),
+            ),
+            const SizedBox(width: AvoSpacing.s),
+            Expanded(
+              child: Text(text, style: context.text(AvoTextStyle.subhead)),
+            ),
+          ],
         ),
       ),
     );
