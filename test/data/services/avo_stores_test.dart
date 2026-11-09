@@ -303,16 +303,12 @@ void main() {
 }
 
 class _SplitStore implements AvoSplitStore {
-  _SplitStore({
-    this.paidByName,
-    this.paidByUserId,
-    this.total = 40,
-    List<ExpenseSplit>? current,
-  }) : current = current ?? [];
+  _SplitStore({this.paidByName, this.paidByUserId, List<ExpenseSplit>? current})
+    : current = current ?? [];
 
   final String? paidByName;
   final String? paidByUserId;
-  double total;
+  double total = 40;
 
   /// The split as it is stored now.
   final List<ExpenseSplit> current;

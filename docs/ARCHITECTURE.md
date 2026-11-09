@@ -110,7 +110,10 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   Entscheidungen sind reine Funktionen in `avo_tool_gates.dart` (getestet). Was Ziel- und Teilen-Tipp lesen und
   schreiben, liegt hinter `avoGoalStoreProvider` / `avoSplitStoreProvider` (`avo_stores.dart`): Der Tipp liest
   Ziel, Gewicht, Einkauf, Zahler und Aufteilung neu und schreibt nur, wenn alles noch wie auf der Karte ist; das
-  übernommene Ziel behält Felder, die die Karte nicht zeigt (Wasser, Training, Tempo). Avo schaltet sich selbst
+  übernommene Ziel behält Felder, die die Karte nicht zeigt (Wasser, Training, Tempo). Der Anteil des Zahlers
+  bekommt dessen Konto-ID, damit `createSplits` ihn wieder als bezahlt anlegt; die Fußnote rechnet mit derselben
+  Regel (`avoIsPayersShare`). Der Tipp auf „Entfernen“ (Allergie, Ernährung) schreibt über
+  `avoSettingUpdateProvider`. Avo schaltet sich selbst
   erst nach dem Ende der Antwort aus. Die Karten liegen
   nach Bereich in `screens/avo/widgets/avo_*_sections.dart`, die Werkzeuge nach Bereich in den Teil-Dateien
   `lib/data/services/avo_tools_*.dart` (Erweiterungen des Dienstes).

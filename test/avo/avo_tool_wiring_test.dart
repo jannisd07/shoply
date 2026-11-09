@@ -234,6 +234,8 @@ void main() {
   }) => [
     currentUserProvider.overrideWith((ref) async => profile?.user ?? _user),
     moduleEnabledProvider.overrideWith((ref, m) => on.contains(m)),
+    // Signed out for the calorie diary that a goal change refreshes.
+    authUserIdProvider.overrideWithValue(null),
     avoSplitStoreProvider.overrideWithValue(splitStore ?? splits),
     avoGoalStoreProvider.overrideWithValue(goalStore ?? goals),
     if (profile != null)

@@ -47,7 +47,6 @@ class _FakeBucket implements MealPhotoBucket {
   Future<void> remove(List<String> paths) async => removed.addAll(paths);
 
   final List<({String path, Duration expiresIn})> signs = [];
-  final List<String> removed = [];
   Object? uploadError;
   Object? signError;
   Completer<void>? signGate;
@@ -67,9 +66,6 @@ class _FakeBucket implements MealPhotoBucket {
     _n++;
     return 'https://project.test/storage/v1/object/sign/meal-photos/$path?token=t$_n';
   }
-
-  @override
-  Future<void> remove(String path) async => removed.add(path);
 }
 
 Uint8List _jpeg() => Uint8List.fromList(img.encodeJpg(img.Image(width: 8, height: 8)));

@@ -442,11 +442,8 @@ extension AvoHealthTools on AvoAssistantService {
           : goal!.dailyCalorieTarget! - totals.calories,
       undo: () async {
         try {
-          await FoodLogService.instance.deleteEntry(entry.id);
-          // The photo goes with its entry.
-          if (photoPath != null) {
-            await MealPhotoStorageService.instance.deletePhoto(photoPath);
-          }
+          // The photo goes with its entry (the live row's, B6).
+          await FoodLogService.instance.deleteEntryWithPhoto(entry.id);
           invalidateNutritionLog(ref);
           return AvoUndoResult.undone;
         } catch (e) {

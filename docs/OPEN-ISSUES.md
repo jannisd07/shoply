@@ -79,7 +79,7 @@ Stand: 2026-11-08.
 | Standort-Abfrage | Text in `Info.plist` (`NSLocationWhenInUseUsageDescription`) wie in angebote.md Owner-Frage 10 setzen: „Avo nutzt deinen Standort, um deine Postleitzahl für Angebote zu finden und den Markt vorzuschlagen, in dem du gerade bist.“ |
 | Essensfotos und Anthropic | S3/S4/S5 sagen „Das Foto wird nur für die Schätzung verwendet und privat gespeichert.“ Passt das zur Aufbewahrung bei der Claude-API (kalorien.md §7.3)? Sonst den Satz anpassen lassen. |
 | „Alle Essensfotos löschen“ | Fotos eines gelöschten Eintrags werden jetzt gelöscht. Ein Knopf für alle Essensfotos kommt erst mit S23 (Einstellungen „Kalorien & Gesundheit“); bis dahin verspricht kein Text diese Einstellung. |
-| Avo: Menge der Essens-Schätzung | Bis B6's Mengen-Eingabe (Vollbild) da ist, nur ganze Portionen (Stepper 1–10) in der Karte. So lassen oder auf B6 warten? |
+| Avo: Menge der Essens-Schätzung | Avos Schätzungskarte kennt nur ganze Portionen (Stepper 1–10). B6's Mengen-Eingabe (Vollbild) ist jetzt auf main. So lassen oder „Menge“ auf B6's Seite öffnen lassen? |
 | Avo: Rezept auf die Liste ohne Angebotspreise | Avo hängt beim Rezept auf die Liste keine Angebotspreise mehr an (vorher eine Suche über alle Märkte, Plan 8). Bestätigen? |
 | Avo schaltet sich selbst aus | „Schalte Avo aus“ wirkt nach dem Ende der Antwort, danach Toast „Avo ausgeschaltet · Widerrufen“. So gewollt? |
 | Avo: Kosten teilen ohne Widerrufen | „Teilen“ auf Avos Vorschau ersetzt eine frühere Aufteilung (die Karte sagt, wessen „bezahlt“ zurückgesetzt wird; der Zahler des Einkaufs bleibt); zurück geht es noch nicht. Rückweg bauen (`ExpenseSplitService` stellt alte Anteile wieder her) oder so lassen? |
