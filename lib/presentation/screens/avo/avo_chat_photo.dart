@@ -10,6 +10,9 @@ mixin _AvoPhotoTurns on ChangeNotifier {
   AvoScreenContext? _readContext();
   DateTime _photoNow();
 
+  /// The week's one showing of the Pro row after a daily limit.
+  AvoProHintGate get _photoProHints;
+
   CancelToken? _photoCancel;
 
   /// Completes on "Stopp": the round ends at once, whatever the read does.
@@ -82,7 +85,12 @@ mixin _AvoPhotoTurns on ChangeNotifier {
     }
     turn.payloads.add(result);
     turn.phase = AvoTurnPhase.done;
-    if (result.card is AvoPhotoErrorCard) {
+    if (result.card case AvoPhotoErrorCard(code: 'quota_exceeded')) {
+      // The daily photo limit (A9-3): Free sees the Pro row, as after the
+      // question limit, at most once a week.
+      turn.proHint = turn.proHintAllowed && await _photoProHints.take();
+      if (_photoGone) return;
+    } else if (result.card is AvoPhotoErrorCard) {
       unawaited(AvoHaptics.error());
     } else if (result.card case AvoEstimateCard(
       :final allergens,
@@ -138,7 +146,10 @@ mixin _AvoPhotoTurns on ChangeNotifier {
       );
     } on ListImportException catch (e) {
       return AvoWidgetPayload.card(
-        AvoPhotoErrorCard(code: e.code, meal: false),
+        AvoPhotoErrorCard(
+          code: e.serverCode == 'quota_exceeded' ? 'quota_exceeded' : e.code,
+          meal: false,
+        ),
       );
     } catch (e) {
       debugPrint('❌ [AVO_TAB] Note photo failed: $e');

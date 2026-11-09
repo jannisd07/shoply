@@ -567,6 +567,7 @@ List<Override> avoCardOverrides({
   AvoChat? chat,
   List<ShoppingListModel>? lists,
   Override? offlineOverride,
+  bool subscribed = false,
 }) => [
   ...avoOverrides(
     backend: backend,
@@ -574,6 +575,7 @@ List<Override> avoCardOverrides({
     chat: chat,
     lists: lists,
     offlineOverride: offlineOverride,
+    subscribed: subscribed,
   ),
   moduleEnabledProvider.overrideWith((ref, m) => modules.contains(m)),
   offersAvailableProvider.overrideWithValue(offers),

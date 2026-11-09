@@ -286,6 +286,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       photo,
       text: _controller.text,
       offline: ref.read(isOfflineProvider),
+      proHintAllowed: _proHintAllowed,
     );
     if (turn == null) return;
     _controller.clear();

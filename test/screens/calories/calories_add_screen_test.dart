@@ -372,7 +372,7 @@ void main() {
         'cal_input_method_v1_$kUser': 'photo',
         'cal_photo_limit_v1_$kUser': kToday,
       });
-      await pumpCalories(tester, const CaloriesAddScreen(), overrides: env.overrides());
+      final visited = await pumpCalories(tester, const CaloriesAddScreen(), overrides: env.overrides());
       await settle(tester);
 
       expect(find.text('You\'ve used today\'s photo estimates. They\'re back tomorrow, or get up to 15 a day with Avo Pro.'),
@@ -380,6 +380,10 @@ void main() {
       expect(find.text('Enter manually'), findsOneWidget);
       expect(find.text('See Avo Pro'), findsOneWidget);
       expect(find.text('Take photo'), findsNothing);
+      // A9-3: the paywall for more AI a day, not a calories lock.
+      await tester.tap(find.text('See Avo Pro'));
+      await settle(tester);
+      expect(visited, ['/pro?feature=avo_questions']);
     });
 
     testWidgets('daily limit (Pro): no paywall link', (tester) async {

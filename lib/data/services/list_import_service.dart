@@ -78,7 +78,11 @@ class ListImportException implements Exception {
   /// One of [codes].
   final String code;
 
-  const ListImportException(this.code);
+  /// The `ai` code behind [code] when it came from the server (so
+  /// `quota_exceeded` stays apart from `rate_limited`); null otherwise.
+  final String? serverCode;
+
+  const ListImportException(this.code, {this.serverCode});
 
   /// Every code [ListImportService.importFromBytes] throws.
   static const Set<String> codes = {
@@ -200,7 +204,7 @@ class ListImportService {
         ),
       ]);
     } on ClaudeException catch (e) {
-      throw ListImportException(_codeFor(e.code));
+      throw ListImportException(_codeFor(e.code), serverCode: e.code);
     }
 
     final result = ListImportResult.fromJson(body);

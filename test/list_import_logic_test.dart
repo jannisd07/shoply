@@ -282,7 +282,9 @@ void main() {
 
         await expectLater(
           service.importFromBytes(_jpeg(), isPdf: false, cancelToken: CancelToken()),
-          throwsA(isA<ListImportException>().having((e) => e.code, 'code', expected)),
+          throwsA(isA<ListImportException>()
+              .having((e) => e.code, 'code', expected)
+              .having((e) => e.serverCode, 'serverCode', server)),
         );
         expect(_allCodes, contains(expected));
       });

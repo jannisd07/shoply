@@ -8,6 +8,7 @@ import 'package:shoply/data/services/app_flags_service.dart';
 import 'package:shoply/data/services/claude_service.dart';
 import 'package:shoply/data/services/meal_photo_analysis_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 
@@ -89,6 +90,13 @@ final caloriePhotoLimitReachedProvider = StateNotifierProvider.autoDispose<Calor
 /// up: the button gives way to the limit sentence until tomorrow.
 final calorieTextEstimateLimitReachedProvider = StateNotifierProvider.autoDispose<CaloriePhotoLimit, bool>(
   (ref) => _dailyLimit(ref, 'text_estimate'),
+);
+
+/// Whether the photo limit offers Avo Pro (Free). Calories themselves are
+/// not Pro (variant B, A9-5); only the daily photo limit differs, and the
+/// server sets it. This is the one place the calorie screens ask.
+final caloriePhotoLimitOffersProProvider = Provider<bool>(
+  (ref) => !ref.watch(isSubscribedProvider),
 );
 
 /// Photo estimates a day with Avo Pro (`app_flags.ai_limits`, 15 until the

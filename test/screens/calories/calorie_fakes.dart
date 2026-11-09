@@ -519,6 +519,13 @@ Future<List<String>> pumpCalories(
       GoRoute(path: '/screen', builder: (_, __) => child),
       GoRoute(path: '/home', builder: (_, __) => const SizedBox()),
       GoRoute(
+        path: '/pro',
+        builder: (_, state) {
+          visited.add(state.uri.toString());
+          return const SizedBox();
+        },
+      ),
+      GoRoute(
         path: '/calories',
         builder: (_, state) {
           visited.add(state.uri.toString());

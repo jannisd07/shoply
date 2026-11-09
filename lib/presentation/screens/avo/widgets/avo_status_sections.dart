@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:shoply/core/constants/app_brand.dart';
 import 'package:shoply/core/design/design.dart';
@@ -15,23 +14,54 @@ import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/pro_badge.dart';
-import 'package:shoply/routes/route_paths.dart';
+import 'package:shoply/presentation/widgets/design/pro_gate.dart';
 
 /// The Pro feature id of "more Avo questions a day" (`/pro?feature=`).
-const String avoQuestionsProFeature = 'avo_questions';
+const String avoQuestionsProFeature = ProFeatures.avoQuestions;
 
-/// Avo Pro's daily Avo questions from `app_flags.ai_limits` (`pro.avo_chat`);
-/// null while unknown. Never a number in a text.
-final avoProQuestionLimitProvider = Provider<int?>((ref) {
+/// Avo Pro's daily limit of an `ai` task from `app_flags.ai_limits`
+/// (`pro.<task>`); null while unknown.
+final avoProTaskLimitProvider = Provider.family<int?, String>((ref, task) {
   final limits = ref.watch(
     appFlagsProvider.select((f) => f.values[AppFlagKeys.aiLimits]),
   );
   if (limits is! Map) return null;
   final pro = limits['pro'];
   if (pro is! Map) return null;
-  final value = pro['avo_chat'];
+  final value = pro[task];
   return value is num ? value.toInt() : null;
 });
+
+/// Avo Pro's daily Avo questions (`pro.avo_chat`); null while unknown.
+final avoProQuestionLimitProvider = Provider<int?>(
+  (ref) => ref.watch(avoProTaskLimitProvider('avo_chat')),
+);
+
+/// The Pro row after the daily photo limit (A9-3): meal photos or shopping
+/// notes, with Avo Pro's limit of that task. Nothing while it is unknown.
+class AvoPhotoProRow extends ConsumerWidget {
+  const AvoPhotoProRow({super.key, required this.meal});
+
+  /// A meal photo (`meal_photo`), else a shopping note (`list_import`).
+  final bool meal;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final limit = ref.watch(
+      avoProTaskLimitProvider(meal ? 'meal_photo' : 'list_import'),
+    );
+    if (limit == null) return const SizedBox.shrink();
+    return AvoProRow(
+      title: context.tr('avo_pro_more_photos_title'),
+      subtitle: context.tr(
+        'avo_pro_more_photos_sub',
+        params: {'pro': AppBrand.proName, 'limit': '$limit'},
+      ),
+      feature: avoQuestionsProFeature,
+      icon: const AvoIcon(AvoIcons.camera),
+    );
+  }
+}
 
 /// The Pro row (Kap. 2.7): a section with the feature, the Pro badge, what
 /// Pro adds and "Ansehen" to the paywall. Here only for the daily limit.
@@ -60,7 +90,10 @@ class AvoProRow extends StatelessWidget {
       actions: [
         AvoCardAction(
           label: context.tr('avo_view'),
-          onPressed: () => context.push(RoutePaths.proFor(feature)),
+          // The paywall grows out of this row (A9b-2).
+          onPressed: () => unawaited(
+            ProGate.openPaywall(context, feature: feature, origin: context),
+          ),
         ),
       ],
     );

@@ -1,14 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:shoply/core/constants/app_brand.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
-import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_add_parts.dart';
 import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
@@ -31,21 +27,17 @@ class _CalorieAddPhotoState extends ConsumerState<CalorieAddPhoto> {
     final colors = context.colors;
     final offline = ref.watch(isOfflineProvider);
     final limit = ref.watch(caloriePhotoLimitReachedProvider);
-    final pro = ref.watch(isSubscribedProvider);
+    final offerPro = ref.watch(caloriePhotoLimitOffersProProvider);
     final Widget card;
     if (limit) {
       card = CalorieSegmentCard(
         glyph: const AvoIcon(AvoIcons.camera),
-        text: pro
+        text: !offerPro
             ? context.tr('cal_photo_limit_pro')
             : context.tr('cal_photo_limit_free', params: {'pro': AppBrand.proName, 'n': '${ref.watch(caloriePhotosPerDayProProvider)}'}),
         children: [
           AppButton.primary(label: context.tr('cal_manual_row'), onPressed: () => widget.actions.openManual()),
-          if (!pro)
-            AppButton.plain(
-              label: context.tr('cal_see_pro', params: {'pro': AppBrand.proName}),
-              onPressed: () => unawaited(context.push('/pro?feature=cal_photo')),
-            ),
+          if (offerPro) const CalorieSeeProButton(),
         ],
       );
     } else {

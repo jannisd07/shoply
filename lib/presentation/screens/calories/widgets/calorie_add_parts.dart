@@ -3,14 +3,17 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:shoply/core/constants/app_brand.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/food_product.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_amount_food.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart';
 import 'package:shoply/presentation/state/calorie_diary_provider.dart';
+import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/item_row.dart';
+import 'package:shoply/presentation/widgets/design/pro_gate.dart';
 
 // D2 X-Essen cards: 300 high (at least; they grow with large text), radius
 // 26, symbol 34; rows 60 with a 44 image.
@@ -59,6 +62,20 @@ String calorieProductLine(BuildContext context, FoodProduct p) {
   if (kcal == null) return brand ?? '';
   final per = context.tr(p.isLiquid ? 'cal_kcal_per_100ml' : 'cal_kcal_per_100g', params: {'kcal': context.kcal(kcal)});
   return brand == null || brand.isEmpty ? per : '$brand · $per';
+}
+
+/// "{pro} ansehen" under the daily photo limit (Free only, A9-3): the
+/// paywall for more AI a day, growing out of this button.
+class CalorieSeeProButton extends StatelessWidget {
+  const CalorieSeeProButton({super.key});
+
+  @override
+  Widget build(BuildContext context) => AppButton.plain(
+    label: context.tr('cal_see_pro', params: {'pro': AppBrand.proName}),
+    onPressed: () => unawaited(
+      ProGate.openPaywall(context, feature: ProFeatures.avoQuestions, origin: context),
+    ),
+  );
 }
 
 /// The photo and barcode cards (D2 X-Essen: at least 300 high, radius 26,

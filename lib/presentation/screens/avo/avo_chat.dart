@@ -116,6 +116,9 @@ class AvoChat extends ChangeNotifier with _AvoCardActions, _AvoPhotoTurns {
   @override
   DateTime _photoNow() => _now();
 
+  @override
+  AvoProHintGate get _photoProHints => _proHints;
+
   List<AvoTurn> get turns => List.unmodifiable(_turns);
   bool get isEmpty => _turns.isEmpty;
 
@@ -237,6 +240,7 @@ class AvoChat extends ChangeNotifier with _AvoCardActions, _AvoPhotoTurns {
     Uint8List photo, {
     String text = '',
     bool offline = false,
+    bool proHintAllowed = false,
   }) {
     if (_ref == null || photo.isEmpty) return null;
     expireIfStale();
@@ -251,6 +255,7 @@ class AvoChat extends ChangeNotifier with _AvoCardActions, _AvoPhotoTurns {
       _now(),
       photo: photo,
       photoIntent: _photoIntentFromContext(),
+      proHintAllowed: proHintAllowed,
     );
     _turns.add(turn);
     _lastActivity = _now();

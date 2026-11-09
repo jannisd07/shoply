@@ -1,5 +1,6 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
-import 'package:go_router/go_router.dart';
 
 import 'package:shoply/core/constants/app_brand.dart';
 import 'package:shoply/core/design/design.dart';
@@ -11,6 +12,7 @@ import 'package:shoply/presentation/screens/avo/widgets/avo_confirm_card.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_record_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/pro_gate.dart';
 import 'package:shoply/routes/app_destinations.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -101,7 +103,8 @@ String avoSettingName(BuildContext context, String key) =>
 /// `get_app_info`: a row to the Pro page (Avo's text says the rest; prices
 /// come from the App Store). No Pro hint beyond what was asked.
 AvoResultSection avoAppInfoSection(BuildContext context, AvoAppInfoCard card) {
-  void open() => context.push(RoutePaths.pro);
+  // The paywall grows out of this row (or the tap), A9b-2.
+  void open() => unawaited(ProGate.openPaywall(context));
   return AvoResultSection(
     title: AppBrand.proName,
     subtitle: card.isPro ? context.tr('avo_app_info_have') : null,

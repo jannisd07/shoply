@@ -15,7 +15,7 @@ import 'package:shoply/data/services/allergen_matcher.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/meal_photo_analysis_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
-import 'package:shoply/presentation/providers/subscription_provider.dart';
+import 'package:shoply/presentation/screens/calories/widgets/calorie_add_parts.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_colors.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_entry_actions.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_estimate_parts.dart';
@@ -517,7 +517,7 @@ class _CaloriesEstimateScreenState extends ConsumerState<CaloriesEstimateScreen>
 
   List<Widget> _problemContent(BuildContext context, _Problem problem) {
     final colors = context.colors;
-    final pro = ref.watch(isSubscribedProvider);
+    final offerPro = ref.watch(caloriePhotoLimitOffersProProvider);
     switch (problem) {
       case _Problem.failed:
       case _Problem.offline:
@@ -535,16 +535,12 @@ class _CaloriesEstimateScreenState extends ConsumerState<CaloriesEstimateScreen>
         return [
           _problemText(
             context,
-            pro
+            !offerPro
                 ? context.tr('cal_photo_limit_pro')
                 : context.tr('cal_photo_limit_free', params: {'pro': AppBrand.proName, 'n': '${ref.watch(caloriePhotosPerDayProProvider)}'}),
           ),
           _centredButton(AppButton.primary(label: context.tr('cal_manual_row'), onPressed: _manual)),
-          if (!pro)
-            _centredButton(AppButton.plain(
-              label: context.tr('cal_see_pro', params: {'pro': AppBrand.proName}),
-              onPressed: () => context.push('/pro?feature=cal_photo'),
-            )),
+          if (offerPro) _centredButton(const CalorieSeeProButton()),
         ];
       case _Problem.noFood:
       case _Problem.unreadable:
