@@ -47,7 +47,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A5 Listen | **gebaut** (Liste, Artikel, Einkaufsmodus, Übersicht, Teilen, Listen-Info); Daten-Lücken in `a5-stand.md` | 08.11.2026 | `0e1f753`, `c53e84f`, `5efc97f`, `5e943ba` |
 | A6 Rezepte | **gebaut** (Tab, Suche, Kategorien, Bibliothek, Detail mit Allergie-Hinweis, Zutaten auf die Liste, Kochmodus, Editor); offen in `a6-stand.md` | 08.11.2026 | `b435582`, `f2f0c0c`, `7ce2a24`, `f8d80d9` |
 | A7 Onboarding, Login, Tipps | **gebaut** (Ablauf mit Wiederaufnahme, Konto mit Apple/Google/E-Mail-Code, Passwort, Router mit gemerkten Links, Tipp-Zeilen statt Tutorial); Server-Entwurf und offen in `a7-stand.md` | 09.11.2026 | `870da50`, `de77f8a`, `f189222`, `git log --grep Onboarding` |
-| A8 Profil und Einstellungen | **in Arbeit**: Schnittstellen fertig, drei Teile (Wurzel, Seiten, Konto) laufen; Auftrag `a8-auftrag.md` | 09.11.2026 | `8f67ca8`, `28d2463` |
+| A8 Profil und Einstellungen | **gebaut** (Profil mit Suche, neun Einstellungsseiten, Profil bearbeiten, Konto, Abmelden, Konto löschen ohne Server); Server-Entwurf und offen in `a8-stand.md` | 09.11.2026 | `8f67ca8`, `28d2463`, `git log --grep "Einstellung\|Konto\|Profil"` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
