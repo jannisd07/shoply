@@ -75,6 +75,13 @@ und `storeInfoForChain` in `b_slots.dart` exportieren, `offerTargetListsProvider
 Angebote nur bei Änderung an die Badges (beim Einhängen mit schon geladenen Daten bleiben sie leer). Klein und
 zusammenhängend: selbst bauen oder ein Implementierer, danach Review.
 
+Dazu aus A12 (`09c6ee5`, `a12-stand.md` „Von Teil B“): tote Home-Karten löschen (`avo_nudge_card`,
+`price_comparison_nudge_card`, `pending_splits_banner`, `calorie_recipe_nudge_card`, `personal_flyer_card`,
+`split_trip_nudge_card`), `ml_recommendation_service` hat keinen Nutzer mehr, `AppColors`/`PaperColors`/
+`design_system.dart` hängen nur noch an B-Kalorien/Verlauf (umstellen auf D2-Tokens oder vormerken für B6b/B8);
+`offer_module_off_body` löschen (status-B 17 (3) entfällt). Der GitHub-Workflow „Analyze and test“ ist aus (Owner):
+lokal prüfen.
+
 ### B7 Wochenplan
 
 Spec `b-screens/wochenplan.md` S1–S13 (inkl. Einstellungen `/settings/plan`), Tabellen sind angewendet. A-Schnittstellen:
