@@ -24,6 +24,7 @@ import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.
 import 'package:shoply/presentation/screens/lists/widgets/store_chip.dart';
 import 'package:shoply/presentation/screens/offers/offer_detail_screen.dart';
 import 'package:shoply/presentation/screens/offers/store_picker_screen.dart';
+import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/hint_row.dart';
 
@@ -366,6 +367,34 @@ void main() {
       );
       handle.dispose();
     });
+
+    for (final shopped in [testListId, 'other-list']) {
+      testWidgets('shopping mode on $shopped: still card only for its list', (
+        tester,
+      ) async {
+        await pumpOffers(
+          tester,
+          const ListOfferSummary(listId: testListId),
+          overrides: [
+            ...offersOn(snapshot: snapshot, items: items),
+            shoppingModeSessionProvider.overrideWith(
+              (ref) => ShoppingModeSession(
+                listId: shopped,
+                startedAt: DateTime(2026, 11, 9),
+              ),
+            ),
+          ],
+        );
+        expect(
+          find.text('1 von 11 Artikeln diese Woche bei Lidl im Angebot'),
+          findsOneWidget,
+        );
+        final close = find.byWidgetPredicate(
+          (w) => w is AvoIcon && w.icon == AvoIcons.xmark,
+        );
+        expect(close, shopped == testListId ? findsNothing : findsOneWidget);
+      });
+    }
 
     testWidgets('savings from 0,50 € with "ca."', (tester) async {
       final sale = testSnapshot({
