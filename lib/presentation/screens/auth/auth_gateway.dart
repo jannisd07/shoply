@@ -104,23 +104,20 @@ class SupabaseAuthGateway implements AuthGateway {
 
   @override
   Future<void> sendSignInCode(String email) =>
-      // Until SupabaseService.sendEmailCode(email, createUser: true) exists.
-      _service.client.auth.signInWithOtp(email: email, shouldCreateUser: true);
+      _service.sendEmailCode(email, createUser: true);
 
   @override
   Future<void> verifySignInCode(String email, String code) =>
-      // verifyOTP with OtpType.email: covers new (signup) and existing
-      // accounts. The method name in SupabaseService says "reset", the call
-      // is the same.
-      _service.verifyPasswordResetOtp(email, code);
+      // OtpType.email covers new (signup) and existing accounts.
+      _service.verifyEmailCode(email, code);
 
   @override
   Future<void> sendPasswordResetCode(String email) =>
-      _service.resetPassword(email);
+      _service.sendEmailCode(email, createUser: false);
 
   @override
   Future<void> verifyPasswordResetCode(String email, String code) =>
-      _service.verifyPasswordResetOtp(email, code);
+      _service.verifyEmailCode(email, code);
 
   @override
   Future<void> signInWithPassword(String email, String password) =>
