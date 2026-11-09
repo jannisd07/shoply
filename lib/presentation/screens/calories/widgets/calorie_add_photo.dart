@@ -12,6 +12,7 @@ import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_add_parts.dart';
 import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 /// S3 "Foto": the card with "Foto aufnehmen" and "Aus Fotos wählen", offline
 /// off with the reason, the daily limit (Free with "Avo Pro ansehen").
@@ -34,7 +35,7 @@ class _CalorieAddPhotoState extends ConsumerState<CalorieAddPhoto> {
     final Widget card;
     if (limit) {
       card = CalorieSegmentCard(
-        glyph: CupertinoIcons.camera,
+        glyph: const AvoIcon(AvoIcons.camera),
         text: pro
             ? context.tr('cal_photo_limit_pro')
             : context.tr('cal_photo_limit_free', params: {'pro': AppBrand.proName, 'n': '${ref.watch(caloriePhotosPerDayProProvider)}'}),
@@ -49,7 +50,7 @@ class _CalorieAddPhotoState extends ConsumerState<CalorieAddPhoto> {
       );
     } else {
       card = CalorieSegmentCard(
-        glyph: CupertinoIcons.camera,
+        glyph: const AvoIcon(AvoIcons.camera),
         text: context.tr('cal_photo_prompt'),
         children: [
           Semantics(

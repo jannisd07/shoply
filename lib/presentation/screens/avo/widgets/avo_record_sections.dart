@@ -399,7 +399,7 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
     'language' => ('avo_set_language', const Icon(CupertinoIcons.globe)),
     'notifications' => (
       'avo_set_notifications',
-      const Icon(CupertinoIcons.bell),
+      const AvoIcon(AvoIcons.bell),
     ),
     'zip_code' => ('avo_set_region', const AvoIcon(AvoIcons.location)),
     'age' => ('avo_set_age', const AvoIcon(AvoIcons.person)),

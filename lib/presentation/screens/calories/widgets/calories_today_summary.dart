@@ -130,7 +130,7 @@ class _UnitLine extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (over) ...[
-          Icon(CupertinoIcons.exclamationmark_triangle_fill, size: _kOverGlyph, color: warning),
+          AvoIcon(AvoIcons.exclamationmarkTriangleFill, size: _kOverGlyph, color: warning),
           const SizedBox(width: AvoSpacing.xs),
         ],
         Flexible(child: Text(context.tr(numbers.unitKey()), style: context.text(style, color: color))),

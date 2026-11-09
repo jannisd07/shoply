@@ -27,6 +27,7 @@ import 'package:shoply/presentation/screens/calories/widgets/calorie_nutrition_r
 import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
@@ -315,7 +316,7 @@ class _CaloriesEstimateScreenState extends ConsumerState<CaloriesEstimateScreen>
                   child: CalorieGroupNote(
                     text: _allergyText(context, m),
                     color: colors.warning,
-                    icon: Icon(CupertinoIcons.exclamationmark_triangle_fill, color: colors.warning, size: _kHeart),
+                    icon: AvoIcon(AvoIcons.exclamationmarkTriangleFill, color: colors.warning, size: _kHeart),
                   ),
                 ),
             ],
@@ -558,7 +559,7 @@ class _CaloriesEstimateScreenState extends ConsumerState<CaloriesEstimateScreen>
         final newPhoto = problem == _Problem.noFood || problem == _Problem.unreadable;
         return [
           ExcludeSemantics(
-            child: Icon(CupertinoIcons.question_circle, size: _kProblemGlyph, color: colors.secondaryLabel),
+            child: AvoIcon(AvoIcons.questionmarkCircle, size: _kProblemGlyph, color: colors.secondaryLabel),
           ),
           const SizedBox(height: AvoSpacing.s),
           _problemText(context, context.tr(key)),
@@ -600,7 +601,9 @@ class _HealthLine extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(AvoSpacing.screen, AvoSpacing.l, AvoSpacing.screen, 0),
       child: Row(
         children: [
-          ExcludeSemantics(child: Icon(CupertinoIcons.heart_fill, size: _kHeart, color: CalorieColors.of(context).health)),
+          ExcludeSemantics(
+            child: AvoIcon(AvoIcons.heart, filled: true, size: _kHeart, color: CalorieColors.of(context).health),
+          ),
           const SizedBox(width: AvoSpacing.s + AvoSpacing.xxs),
           Expanded(child: Text(text, style: context.text(AvoTextStyle.subhead, color: colors.secondaryLabel))),
         ],

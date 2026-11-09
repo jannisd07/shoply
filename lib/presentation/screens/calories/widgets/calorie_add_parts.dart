@@ -66,7 +66,8 @@ String calorieProductLine(BuildContext context, FoodProduct p) {
 class CalorieSegmentCard extends StatelessWidget {
   const CalorieSegmentCard({super.key, required this.glyph, required this.text, required this.children});
 
-  final IconData glyph;
+  /// The symbol (34 pt, grey from the card).
+  final Widget glyph;
   final String text;
   final List<Widget> children;
 
@@ -85,7 +86,9 @@ class CalorieSegmentCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                ExcludeSemantics(child: Icon(glyph, size: _kCardGlyph, color: colors.secondaryLabel)),
+                ExcludeSemantics(
+                  child: IconStyleScope(size: _kCardGlyph, color: colors.secondaryLabel, child: glyph),
+                ),
                 const SizedBox(height: AvoSpacing.m),
                 Text(text, textAlign: TextAlign.center, style: context.text(AvoTextStyle.body)),
                 const SizedBox(height: AvoSpacing.l),

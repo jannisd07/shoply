@@ -171,8 +171,8 @@ class _LogGlyphState extends State<_LogGlyph> with SingleTickerProviderStateMixi
     final tint = context.colors.tint;
     return ScaleTransition(
       scale: _scale,
-      child: Icon(
-        widget.logged ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.plus_circle,
+      child: AvoIcon(
+        widget.logged ? AvoIcons.checkmarkCircleFill : AvoIcons.plusCircle,
         size: _kPlusGlyph,
         color: tint,
       ),

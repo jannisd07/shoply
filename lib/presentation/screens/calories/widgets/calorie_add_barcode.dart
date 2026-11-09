@@ -63,7 +63,7 @@ class _CalorieAddBarcodeState extends ConsumerState<CalorieAddBarcode> {
       children: [
       if (supported)
         CalorieSegmentCard(
-          glyph: CupertinoIcons.barcode_viewfinder,
+          glyph: const Icon(CupertinoIcons.barcode_viewfinder),
           text: context.tr('cal_barcode_prompt'),
           children: [
             AppButton.primary(

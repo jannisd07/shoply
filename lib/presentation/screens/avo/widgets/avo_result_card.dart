@@ -425,8 +425,8 @@ class _AvoResultSectionState extends State<AvoResultSection> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      CupertinoIcons.exclamationmark_circle,
+                    AvoIcon(
+                      AvoIcons.exclamationmarkCircle,
                       size: _syncGlyph + AvoSpacing.xs,
                       color: colors.destructive,
                     ),

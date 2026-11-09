@@ -75,8 +75,8 @@ AvoResultSection avoSettingFailedSection(
   ),
   leading: AvoSymbolTile(
     neutral: true,
-    icon: Icon(
-      CupertinoIcons.exclamationmark_circle,
+    icon: AvoIcon(
+      AvoIcons.exclamationmarkCircle,
       color: context.colors.destructive,
     ),
   ),

@@ -172,7 +172,7 @@ class FoodEntryRow extends StatelessWidget {
         ? Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(CupertinoIcons.exclamationmark_circle, size: _kFailedGlyph, color: colors.destructive),
+              AvoIcon(AvoIcons.exclamationmarkCircle, size: _kFailedGlyph, color: colors.destructive),
               const SizedBox(width: AvoSpacing.xs),
               Flexible(
                 child: Text(

@@ -313,7 +313,7 @@ class WaterRow extends ConsumerWidget {
             Flexible(child: _waterAmountText(context, ml: ml, goalMl: goalMl)),
             if (reached) ...[
               const SizedBox(width: AvoSpacing.xs),
-              Icon(CupertinoIcons.checkmark_circle_fill, size: _kRowDrop, color: colors.tint),
+              AvoIcon(AvoIcons.checkmarkCircleFill, size: _kRowDrop, color: colors.tint),
             ],
           ],
         ),

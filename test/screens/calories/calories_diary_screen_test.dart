@@ -1,5 +1,4 @@
 // S1, S1a, S2, S12 of docs/redesign/b-screens/kalorien.md: the diary.
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +9,7 @@ import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/presentation/screens/calories/calories_diary_screen.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_ring.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 import 'calorie_fakes.dart';
 
@@ -88,7 +88,10 @@ void main() {
 
     expect(find.text('kcal over'), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp(r'^Calories today: 120 over the goal of 1,240')), findsOneWidget);
-    expect(find.byIcon(CupertinoIcons.exclamationmark_triangle_fill), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((w) => w is AvoIcon && w.icon == AvoIcons.exclamationmarkTriangleFill),
+      findsOneWidget,
+    );
     semantics.dispose();
   });
 

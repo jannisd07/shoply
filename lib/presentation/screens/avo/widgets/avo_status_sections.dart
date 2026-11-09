@@ -145,8 +145,8 @@ class AvoErrorSection extends StatelessWidget {
     final colors = context.colors;
     final error = AvoSymbolTile(
       neutral: true,
-      icon: Icon(
-        CupertinoIcons.exclamationmark_circle,
+      icon: AvoIcon(
+        AvoIcons.exclamationmarkCircle,
         color: colors.destructive,
       ),
     );
