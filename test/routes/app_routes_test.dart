@@ -36,6 +36,8 @@ void main() {
       'signup': '/signup',
       'reset-password': '/reset-password',
       'name-prompt': '/name-prompt',
+      // New in A7: invitations by share code (Konzept 17 §5.1).
+      'join-code': '/join/:code',
       'home': '/home',
       'recipes': '/recipes',
       'add-recipe': '/recipes/add',
@@ -94,18 +96,24 @@ void main() {
     Iterable<String> paths(AppBranch b) =>
         shell.branches[b.index].routes.whereType<GoRoute>().map((r) => r.path);
     expect(paths(AppBranch.home), contains(RoutePaths.calories));
-    expect(paths(AppBranch.lists),
-        containsAll([RoutePaths.lists, RoutePaths.offers, RoutePaths.history]));
+    expect(
+      paths(AppBranch.lists),
+      containsAll([RoutePaths.lists, RoutePaths.offers, RoutePaths.history]),
+    );
     expect(paths(AppBranch.profile), contains(RoutePaths.settings));
     expect(paths(AppBranch.recipes), contains(RoutePaths.plan));
     final lists = shell.branches[AppBranch.lists.index].routes.first as GoRoute;
     expect((lists.routes.single as GoRoute).path, ':listId');
   });
 
-  test('RoutePaths.list builds the same link as the old shared-list target',
-      () {
-    expect(RoutePaths.list('abc', name: 'Shared List'),
-        '/lists/abc?name=Shared+List');
-    expect(RoutePaths.list('abc'), '/lists/abc');
-  });
+  test(
+    'RoutePaths.list builds the same link as the old shared-list target',
+    () {
+      expect(
+        RoutePaths.list('abc', name: 'Shared List'),
+        '/lists/abc?name=Shared+List',
+      );
+      expect(RoutePaths.list('abc'), '/lists/abc');
+    },
+  );
 }

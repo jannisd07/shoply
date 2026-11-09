@@ -13,6 +13,18 @@ abstract final class RoutePaths {
   static const resetPassword = '/reset-password';
   static const namePrompt = '/name-prompt';
 
+  /// `/login?method=password` (Konzept 17 §4.2) and `?method=reset` (§4.3).
+  static const loginPassword = '/login?method=password';
+  static const loginReset = '/login?method=reset';
+
+  /// A step of the first-start flow (`/onboarding?step=<id>`, Konzept 17).
+  static String onboardingStep(String stepId) =>
+      Uri(path: onboarding, queryParameters: {'step': stepId}).toString();
+
+  /// Invitation by share code (`/join/<code>`, Konzept 17 §5.1).
+  static const join = '/join';
+  static String joinCode(String code) => '$join/$code';
+
   /// Tab "Home".
   static const home = '/home';
 
@@ -25,6 +37,14 @@ abstract final class RoutePaths {
     path: '$lists/$listId',
     queryParameters: name == null ? null : {'name': name},
   ).toString();
+
+  /// One list as the end of the onboarding (Konzept 17 §3.12):
+  /// `arrival` is `new`, `joined` or `existing` (`OnboardingArrival`).
+  static String listArrival(String listId, String arrival, {String? name}) =>
+      Uri(
+        path: '$lists/$listId',
+        queryParameters: {if (name != null) 'name': name, 'arrival': arrival},
+      ).toString();
 
   /// Shopping mode of a list (full screen above the tab bar).
   static String shopping(String listId) => '$lists/$listId/shopping';

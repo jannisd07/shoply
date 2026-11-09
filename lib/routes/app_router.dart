@@ -9,8 +9,10 @@ import 'package:shoply/data/services/analytics_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/screens/main_scaffold.dart';
 import 'package:shoply/presentation/widgets/design/gallery/component_gallery.dart';
-import 'package:shoply/presentation/screens/onboarding/onboarding_screen.dart'
-    show hasCompletedOnboarding;
+import 'package:shoply/core/design/design.dart';
+import 'package:shoply/core/services/shared_preferences_provider.dart';
+import 'package:shoply/presentation/screens/onboarding/onboarding_prefs.dart';
+import 'package:shoply/presentation/screens/onboarding/onboarding_steps.dart';
 import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/areas/auth_routes.dart';
 import 'package:shoply/routes/areas/avo_routes.dart';
@@ -56,13 +58,119 @@ class _LazyAnalyticsObserver extends NavigatorObserver {
       _target?.didReplace(newRoute: newRoute, oldRoute: oldRoute);
 }
 
-/// Onboarding completion, memoized once it is true (the flag is never reset),
-/// so the redirect stops hitting SharedPreferences on every navigation.
-bool _onboardingDone = false;
+/// What the redirect knows about the person and the device (Konzept 17
+/// §1.3). Built from Supabase and [OnboardingPrefs]; tests pass fakes.
+@immutable
+class EntryState {
+  const EntryState({
+    required this.signedIn,
+    this.deviceOnboarded = false,
+    this.resumeStep,
+    this.flowActive = false,
+    this.passwordResetPending = false,
+    this.pendingLink,
+  });
 
-/// A shared-list link opened while logged out. It is resumed the first time
-/// the user reaches /home after signing in.
-String? _pendingListLink;
+  final bool signedIn;
+
+  /// `onboarding_complete_v1`: the device knows the onboarding.
+  final bool deviceOnboarded;
+
+  /// `onb_step`: a run is open (before the account, or a new account that
+  /// has not finished).
+  final OnboardingStep? resumeStep;
+
+  /// An [OnboardingFlow] is on screen and decides itself after a sign-in.
+  final bool flowActive;
+
+  /// The app was killed between the reset code and the new password.
+  final bool passwordResetPending;
+
+  /// A remembered private link (not expired).
+  final PendingLink? pendingLink;
+}
+
+/// Routes the flow itself shows.
+const Set<String> _entryRoutes = {
+  RoutePaths.onboarding,
+  RoutePaths.welcome,
+  RoutePaths.login,
+  RoutePaths.signup,
+  RoutePaths.namePrompt,
+};
+
+/// The entry redirect (Konzept 17 §1.3, §4.4, §5.1, §5.5) for the matched
+/// [location] of [uri]; null keeps it. [remember] gets a private link that
+/// was opened without a session, [consumeLink] is called when a remembered
+/// link is resumed.
+///
+/// - Rezept-Links (`/recipe/:id`) and `/reset-password` are always open.
+/// - Without a session: private links are remembered and lead to
+///   Willkommen (`/welcome` when the device knows the onboarding, else
+///   `/onboarding`); `/login`, `/signup` stay; every other route leads
+///   there too.
+/// - With a session: a pending reset goes to `/reset-password`; an open run
+///   goes back to `/onboarding`; the entry routes stay while the flow is on
+///   screen and otherwise lead to Home; a remembered link opens once Home
+///   or the lists tab is reached.
+String? entryRedirect(
+  Uri uri,
+  String location,
+  EntryState s, {
+  void Function(String path)? remember,
+  void Function()? consumeLink,
+}) {
+  if (location == RoutePaths.resetPassword) return null;
+  if (location.startsWith('/recipe/')) return null;
+
+  if (!s.signedIn) {
+    final start = s.deviceOnboarded && s.resumeStep == null
+        ? RoutePaths.welcome
+        : RoutePaths.onboarding;
+    if (isPrivateLink(location)) {
+      remember?.call(uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path);
+      return start;
+    }
+    switch (location) {
+      case RoutePaths.onboarding:
+        return start == RoutePaths.onboarding ? null : start;
+      case RoutePaths.welcome:
+        return s.resumeStep != null ? RoutePaths.onboarding : null;
+      case RoutePaths.login:
+      case RoutePaths.signup:
+        return null;
+      default:
+        return start;
+    }
+  }
+
+  if (s.passwordResetPending) return RoutePaths.resetPassword;
+  final isEntry = _entryRoutes.contains(location);
+  if (s.resumeStep != null) {
+    return isEntry ? null : RoutePaths.onboarding;
+  }
+  if (isEntry) return s.flowActive ? null : RoutePaths.home;
+  final link = s.pendingLink;
+  if (link != null &&
+      (location == RoutePaths.home || location == RoutePaths.lists)) {
+    consumeLink?.call();
+    return link.path;
+  }
+  return null;
+}
+
+/// The current [EntryState] (after [OnboardingPrefs.load]).
+EntryState currentEntryState() {
+  final prefs = OnboardingPrefs.instance;
+  return EntryState(
+    signedIn: SupabaseService.instance.currentUser != null,
+    deviceOnboarded: prefs.deviceOnboarded,
+    resumeStep: prefs.resumeStep,
+    flowActive: OnboardingFlowPresence.active,
+    passwordResetPending: prefs.passwordResetPending,
+    pendingLink: prefs.pendingLink(),
+  );
+}
 
 /// Helper class to refresh GoRouter when auth state changes. Only events
 /// that change whether a user is signed in re-run the redirect; the hourly
@@ -91,8 +199,22 @@ class GoRouterRefreshStream extends ChangeNotifier {
   }
 }
 
+/// Length of the arrival fade (close to `AvoMotion.morph`, 0.40 s).
+const Duration _kArrivalDuration = Duration(milliseconds: 400);
+
 final routerProvider = Provider<GoRouter>((ref) {
   final supabase = SupabaseService.instance;
+  // main loads SharedPreferences before runApp: the first frame already
+  // knows whether to show Willkommen or the app (Konzept 17 §3.1).
+  final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+  if (prefs != null) OnboardingPrefs.instance.attach(prefs);
+  final signedIn = supabase.currentUser != null;
+  final resume = OnboardingPrefs.instance.resumeStep;
+  final initialLocation = signedIn
+      ? (resume != null ? RoutePaths.onboarding : RoutePaths.home)
+      : (OnboardingPrefs.instance.deviceOnboarded && resume == null
+            ? RoutePaths.welcome
+            : RoutePaths.onboarding);
 
   // Analytics screen tracking (iOS/Android only)
   final observers = <NavigatorObserver>[
@@ -101,91 +223,23 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: supabase.currentUser != null ? '/home' : '/onboarding',
+    initialLocation: initialLocation,
     refreshListenable: GoRouterRefreshStream(supabase.authStateChanges),
     errorBuilder: (context, state) => const RouteErrorScreen(),
     observers: observers,
     routes: buildAppRoutes(),
     redirect: (context, state) async {
-      final isLoggedIn = SupabaseService.instance.currentUser != null;
       final uri = state.uri;
-
       // Translate shoply:// links in one place (lib/routes/deep_links.dart).
       if (uri.scheme == 'shoply') return mapCustomSchemeLink(uri);
-
-      final location = state.matchedLocation;
-      final isSharedListLink =
-          location.startsWith('/list/') || location.startsWith('/invite/');
-
-      // Public routes that don't require authentication
-      final isPublicRoute =
-          location == '/onboarding' ||
-          location == '/welcome' ||
-          location == '/login' ||
-          location == '/signup' ||
-          location == '/reset-password' ||
-          location.startsWith('/recipe/');
-
-      final isNamePrompt = location == '/name-prompt';
-      final isNewNamePrompt = isNamePrompt && uri.queryParameters['new'] == '1';
-      final isOnboarding = location == '/onboarding';
-
-      // A shared list needs an account (RLS returns nothing otherwise):
-      // remember the link and resume it after sign-in.
-      if (!isLoggedIn && isSharedListLink) {
-        _pendingListLink = sharedListTarget(state);
-      }
-
-      if (!_onboardingDone) _onboardingDone = await hasCompletedOnboarding();
-      final onboardingDone = _onboardingDone;
-
-      // First-time user: show onboarding unless on a public deep link
-      if (!onboardingDone && !isOnboarding && !isLoggedIn) {
-        // Allow deep links and auth sub-routes through
-        if (location.startsWith('/recipe/') ||
-            location == '/login' ||
-            location == '/signup' ||
-            location == '/reset-password') {
-          return null;
-        }
-        return '/onboarding';
-      }
-
-      // Onboarding done but not logged in: show welcome (not onboarding again)
-      if (onboardingDone && isOnboarding && !isLoggedIn) {
-        return '/welcome';
-      }
-
-      // Not logged in - redirect to welcome screen only if trying to access private route
-      if (!isLoggedIn && !isPublicRoute) {
-        return '/welcome';
-      }
-
-      // Allow access to reset password page
-      if (location == '/reset-password') {
-        return null;
-      }
-
-      if (isNamePrompt && !isNewNamePrompt) {
-        return isLoggedIn ? '/home' : '/welcome';
-      }
-
-      if (isLoggedIn) {
-        // Resume a shared-list link that was opened while logged out.
-        final pending = _pendingListLink;
-        if (pending != null && location == '/home') {
-          _pendingListLink = null;
-          return pending;
-        }
-        // Bounce off the passive entry screens. Login/signup complete their
-        // own async success routing, so forcing them here can race OTP
-        // verification and show a false error.
-        if (location == '/welcome' || isOnboarding) {
-          return '/home';
-        }
-      }
-
-      return null;
+      await OnboardingPrefs.instance.load();
+      return entryRedirect(
+        uri,
+        state.matchedLocation,
+        currentEntryState(),
+        remember: (path) => OnboardingPrefs.instance.rememberLink(path),
+        consumeLink: () => OnboardingPrefs.instance.clearLink(),
+      );
     },
   );
 });
@@ -209,9 +263,29 @@ List<RouteBase> _bBranch(AppBranch branch) => [
 List<RouteBase> buildAppRoutes() => [
   ...authRoutes,
   StatefulShellRoute(
-    builder: (context, state, navigationShell) => MainScaffold(
-      navigationShell: navigationShell,
-      location: state.fullPath ?? state.matchedLocation,
+    // Entering the app from the onboarding or a sign-in fades in (Konzept 17
+    // §3.12: the onboarding fades out, the list lies below; scale 0.98 to 1).
+    pageBuilder: (context, state, navigationShell) => CustomTransitionPage(
+      key: state.pageKey,
+      transitionDuration: context.reduceMotion
+          ? AvoMotion.fadeReduced
+          : _kArrivalDuration,
+      transitionsBuilder: (context, animation, secondary, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        final fade = FadeTransition(opacity: curved, child: child);
+        if (context.reduceMotion) return fade;
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.98, end: 1).animate(curved),
+          child: fade,
+        );
+      },
+      child: MainScaffold(
+        navigationShell: navigationShell,
+        location: state.fullPath ?? state.matchedLocation,
+      ),
     ),
     navigatorContainerBuilder: (context, navigationShell, children) =>
         ShellBranchContainer(
