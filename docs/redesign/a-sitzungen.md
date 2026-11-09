@@ -56,7 +56,9 @@ A-D1), `b-screens/*.md` „Anfragen an Teil A“, „Komponenten“ in `a6-stand
 `showModuleOffAlert(body:)` (A-C7), Menü-Titelzeile, Sektionen, Glyph (A-C8), `SelectCircle` und sortierbare Zeilen
 (A-C9), `AvoComposerField` (Antwort anhalten, `enabled`, `maxLength`, Foto-Pull-down), `AppButton` gefüllt neutral und
 destruktiv (+ `destructiveFill`), `NavRow(valueLeading:)`, `AvatarSize.xl` mit Foto, `AvoSearchField` mit Mikrofon,
-`AvoToast` mit Ziel, fehlende `AvoIcons`, `ItemRepository`-Preis-Schnittstelle (A-D1). Erledigtes mit Commit in
+`AvoToast` mit Ziel, fehlende `AvoIcons`, `ItemRepository`-Preis-Schnittstelle (A-D1). Dazu für B's Wochenplan (`feature/b7-plan`)
+A-P1–A-P4 (Platz im Rezepte-Tab für Toolbar-Knöpfe, schwebende Kapsel, grauer Grund) und A-K10 (Untermenüs im
+Pull-down), Einzelheiten in `status-B.md`. Erledigtes mit Commit in
 `status-A.md` („Anfragen von B aus den Angebots-Slots“) eintragen und B Bescheid geben.
 
 ### AB2 Anfragen von B: Listen, Router, Reste aus A5–A8
@@ -66,6 +68,12 @@ anzeigen“, Listenkarte, „Neue Liste“ mit Markt, „Liste von heute“), A-
 Modul-Wächter, Deep Links), dazu „Offen bei A“ aus `a5-stand.md` bis `a8-stand.md` (Listen-Schalter verdrahten,
 Mitteilungs-Kategorien durchsetzen, `recipeAutoAdaptProvider`, `ThemeMode.system`, T6 im Rezepte-Tab,
 Startvorschläge im Accessory).
+
+**Abstimmen mit B (Stand 09.11.2026):** B's Zweig `feature/b-settings-a8` (auf origin, nicht auf `main`) ersetzt in
+A's `settings_search_index.dart` und dessen Test `bSettingsPagesSearchEntries` durch B's eigene Suchliste. Die nächste
+B-Sitzung klärt das vor dem Merge; die A-Sitzung prüft den Diff (`git diff main...origin/feature/b-settings-a8 --
+lib/presentation/screens/profile test/screens/profile`) und gibt das OK oder bessert nach. B's Übergabe:
+`b-sitzungen.md`.
 
 ## Arbeitsweise (erprobt in A5–A8)
 
