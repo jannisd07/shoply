@@ -77,6 +77,7 @@ export 'package:shoply/presentation/widgets/home_sections/home_sections.dart'
         HomeSavingsGoal,
         HomeSavingsHint,
         HomeSpendingComparison,
+        HomeSplitHint,
         HomeWaterTile,
         homeCaloriesHasContentProvider,
         homeCookTodayHasContentProvider,
@@ -87,6 +88,7 @@ export 'package:shoply/presentation/widgets/home_sections/home_sections.dart'
         homeSavingsGoalHasContentProvider,
         homeSavingsHintHasContentProvider,
         homeSpendingHasContentProvider,
+        homeSplitHintHasContentProvider,
         homeWaterHasContentProvider;
 
 // Avo tab (Stufe 3): A's screens set where the person is.

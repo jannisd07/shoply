@@ -164,6 +164,10 @@ extension AvoListTools on AvoAssistantService {
     return {'updated': itemIds.length, 'checked': checked};
   }
 
+  /// `complete_list`: the same checkout as "Einkauf abschließen" (W10's
+  /// `tripHistoryProvider`): the checked items go into the history as one
+  /// trip and leave the list; no market and no amount (the person adds
+  /// them in the trip detail, V5).
   Future<Map<String, Object?>> _toolCompleteList(
     Map<String, Object?> args,
     WidgetRef ref,
@@ -173,25 +177,46 @@ extension AvoListTools on AvoAssistantService {
     if (listId == null) return {'error': 'list_id is required'};
     final repository = ref.read(itemRepositoryProvider);
     final all = await repository.getListItems(listId);
-    final unchecked = all.where((i) => !i.isChecked).toList();
-    await Future.wait(
-      unchecked.map((item) => repository.toggleItemChecked(item.id, true)),
-    );
-    ref.invalidate(itemsNotifierProvider(listId));
-    await _afterBulkListChange(ref, listId);
-    if (unchecked.isNotEmpty) {
-      payloads.add(
-        AvoWidgetPayload.listChange(
-          await AvoAssistantService._changes(ref).checked(
-            listId: listId,
-            before: all,
-            itemIds: [for (final i in unchecked) i.id],
-            checked: true,
-          ),
-        ),
-      );
+    final checked = all.where((i) => i.isChecked).toList();
+    if (checked.isEmpty) {
+      return {
+        'error': 'nothing_checked',
+        'hint': 'Nothing is checked off on this list yet; check items first.',
+      };
     }
-    return {'checked_count': unchecked.length};
+    final known = ref
+        .read(listsNotifierProvider)
+        .valueOrNull
+        ?.where((l) => l.id == listId)
+        .firstOrNull
+        ?.name;
+    final listName = known ?? await repository.getListName(listId) ?? '';
+    final result = await ref
+        .read(tripHistoryProvider.notifier)
+        .checkout(
+          CheckoutRequest(
+            listId: listId,
+            listName: listName,
+            checkedItems: checked,
+          ),
+        );
+    ref.invalidate(itemsNotifierProvider(listId));
+    return switch (result) {
+      CheckoutSaved(:final trip) => {
+        'saved': true,
+        'trip_id': trip.id,
+        'items': checked.length,
+      },
+      CheckoutPending(:final localTripId, :final failed) => {
+        'saved': !failed,
+        'pending': true,
+        'trip_id': localTripId,
+        'items': checked.length,
+      },
+      CheckoutAlreadyCompleted() => {'error': 'already_completed'},
+      CheckoutListGone() => {'error': 'list_gone'},
+      CheckoutNothingChecked() => {'error': 'nothing_checked'},
+    };
   }
 
   Future<Map<String, Object?>> _toolUpdateItem(

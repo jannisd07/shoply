@@ -25,26 +25,6 @@ class SplitShare {
   });
 }
 
-/// A completed, shared-list trip with nobody assigned to split it yet —
-/// candidate for the home-screen "split this trip?" nudge.
-class UnsplitTripCandidate {
-  final String historyId;
-  final String listId;
-  final String listName;
-  final DateTime completedAt;
-  final double? totalCost;
-  final int totalItems;
-
-  const UnsplitTripCandidate({
-    required this.historyId,
-    required this.listId,
-    required this.listName,
-    required this.completedAt,
-    this.totalCost,
-    required this.totalItems,
-  });
-}
-
 /// The server calls of Kosten teilen that have a newer server function
 /// (migration `b_trip_checkout`) and an older fallback, behind an interface
 /// so the fallback paths can be tested with a fake.
@@ -215,6 +195,14 @@ class ExpenseSplitService {
       paidByName: paidByName,
       splitMode: equal ? 'equal' : 'custom',
     );
+  }
+
+  /// Removes every share of [historyId] ("Widerrufen" of a first split in
+  /// V7). Uses the row delete that the later RLS migration revokes; then
+  /// only `undo_shopping_trip` removes a split (see OPEN-ISSUES).
+  Future<void> clearSplit(String historyId) async {
+    final ids = await _backend.splitIds(historyId);
+    if (ids.isNotEmpty) await _backend.deleteSplits(ids);
   }
 
   Future<List<ExpenseSplit>> getSplitsForHistory(String historyId) async {
@@ -394,79 +382,6 @@ class ExpenseSplitService {
       ));
     }
     return result;
-  }
-
-  /// The most recent completed shared-list trip that has nobody assigned to
-  /// split it yet — for the home-screen "split this trip?" nudge. Returns
-  /// null when there's no such trip within the last week, the most recent
-  /// eligible trip is a solo list (nothing to split), or it's already been
-  /// split. Scans at most [scanLimit] recent trips, stopping as soon as one
-  /// candidate older than a week is hit (trips are returned newest-first, so
-  /// everything after that point is stale too). Disqualification checks
-  /// (already split / solo list) are batched across the scanned trips rather
-  /// than queried one row at a time.
-  Future<UnsplitTripCandidate?> getUnsplitTripNudgeCandidate({
-    int scanLimit = 5,
-  }) async {
-    final userId = _backend.currentUserId;
-    if (userId == null) return null;
-
-    final response = await _supabase
-        .from('shopping_history')
-        .select('id, list_id, list_name, completed_at, total_cost, total_items')
-        .eq('user_id', userId)
-        .not('list_id', 'is', null)
-        .order('completed_at', ascending: false)
-        .limit(scanLimit);
-
-    final rows = <Map<String, dynamic>>[];
-    for (final row in response as List) {
-      final map = row as Map<String, dynamic>;
-      final completedAt = DateTime.parse(map['completed_at'] as String);
-      if (DateTime.now().difference(completedAt) > const Duration(days: 7)) {
-        break;
-      }
-      rows.add(map);
-    }
-    if (rows.isEmpty) return null;
-
-    final historyIds = rows.map((m) => m['id'] as String).toList();
-    final listIds = rows.map((m) => m['list_id'] as String).toSet().toList();
-
-    final existingSplits = await _supabase
-        .from('expense_splits')
-        .select('history_id')
-        .inFilter('history_id', historyIds);
-    final alreadySplit = (existingSplits as List)
-        .map((r) => (r as Map<String, dynamic>)['history_id'] as String)
-        .toSet();
-
-    final memberRows = await _supabase
-        .from('list_members')
-        .select('list_id')
-        .inFilter('list_id', listIds);
-    final memberCounts = <String, int>{};
-    for (final r in memberRows as List) {
-      final listId = (r as Map<String, dynamic>)['list_id'] as String;
-      memberCounts[listId] = (memberCounts[listId] ?? 0) + 1;
-    }
-
-    for (final map in rows) {
-      final historyId = map['id'] as String;
-      final listId = map['list_id'] as String;
-      if (alreadySplit.contains(historyId)) continue;
-      if ((memberCounts[listId] ?? 0) < 2) continue;
-
-      return UnsplitTripCandidate(
-        historyId: historyId,
-        listId: listId,
-        listName: map['list_name'] as String,
-        completedAt: DateTime.parse(map['completed_at'] as String),
-        totalCost: (map['total_cost'] as num?)?.toDouble(),
-        totalItems: map['total_items'] as int? ?? 0,
-      );
-    }
-    return null;
   }
 
   List<TripSplitSummary> _summariesWithUnpaid(List response) {

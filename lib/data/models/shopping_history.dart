@@ -121,6 +121,8 @@ class ShoppingHistory extends Equatable {
     List<ShoppingHistoryItem>? items,
     String? storeChainId,
     String? totalCostSource,
+    bool clearTotalCost = false,
+    bool clearStore = false,
   }) {
     return ShoppingHistory(
       id: id,
@@ -130,13 +132,15 @@ class ShoppingHistory extends Equatable {
       totalItems: totalItems,
       completedAt: completedAt,
       completedByName: completedByName,
-      totalCost: totalCost ?? this.totalCost,
+      totalCost: clearTotalCost ? null : (totalCost ?? this.totalCost),
       paidByUserId: paidByUserId ?? this.paidByUserId,
       paidByName: paidByName ?? this.paidByName,
       items: items ?? this.items,
-      storeChainId: storeChainId ?? this.storeChainId,
+      storeChainId: clearStore ? null : (storeChainId ?? this.storeChainId),
       storeSource: storeSource,
-      totalCostSource: totalCostSource ?? this.totalCostSource,
+      totalCostSource: clearTotalCost
+          ? null
+          : (totalCostSource ?? this.totalCostSource),
       completedBy: completedBy,
     );
   }

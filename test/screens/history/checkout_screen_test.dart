@@ -199,7 +199,8 @@ void main() {
     expect(find.text('Zurück zur Liste'), findsOneWidget);
     await tester.tap(find.text('Zum Verlauf'));
     await tester.pumpAndSettle();
-    expect(find.text('Verlauf'), findsOneWidget);
+    // With W11's routes "Zum Verlauf" opens Lena's trip (V5).
+    expect(find.text('Einkauf lena-trip'), findsOneWidget);
   });
 
   testWidgets('the list was deleted meanwhile', (tester) async {

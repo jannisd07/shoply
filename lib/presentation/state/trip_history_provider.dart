@@ -514,7 +514,18 @@ final tripHistoryCacheProvider = Provider<TripHistoryCache?>((ref) {
 /// Trip pushes held behind the undo window.
 final tripPushQueueProvider = Provider<TripPushQueue>((ref) {
   final queue = TripPushQueue(
-    send: PushNotificationService.instance.sendToUsers,
+    // Lazily: the push service reads Supabase when it is created.
+    send: ({
+      required List<String> userIds,
+      required String title,
+      required String body,
+      Map<String, dynamic>? data,
+    }) => PushNotificationService.instance.sendToUsers(
+      userIds: userIds,
+      title: title,
+      body: body,
+      data: data,
+    ),
   );
   ref.onDispose(queue.dispose);
   return queue;

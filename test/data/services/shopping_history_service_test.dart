@@ -105,6 +105,32 @@ class FakeTripBackend implements TripHistoryBackend {
     List<ShoppingItemModel> items,
   ) async => restored.addAll([for (final i in items) i.name]);
 
+  bool amountRpcMissing = false;
+  final List<(String, double?)> amountCalls = [];
+  final List<(String, String?)> storeCalls = [];
+  final List<(String, Map<String, dynamic>)> tripUpdates = [];
+
+  @override
+  Future<void> setTripAmountRpc(String tripId, double? totalCost) async {
+    if (amountRpcMissing) {
+      throw const PostgrestException(message: 'missing', code: 'PGRST202');
+    }
+    amountCalls.add((tripId, totalCost));
+  }
+
+  @override
+  Future<void> setTripStoreRpc(String tripId, String? chainId) async {
+    if (amountRpcMissing) {
+      throw const PostgrestException(message: 'missing', code: 'PGRST202');
+    }
+    storeCalls.add((tripId, chainId));
+  }
+
+  @override
+  Future<void> updateTrip(String tripId, Map<String, dynamic> values) async {
+    tripUpdates.add((tripId, values));
+  }
+
   @override
   Future<bool> deleteTrip(String tripId) async {
     deleted.add(tripId);
@@ -115,12 +141,16 @@ class FakeTripBackend implements TripHistoryBackend {
   Future<ShoppingHistory?> fetchTrip(String tripId) async =>
       trips.where((t) => t.id == tripId).firstOrNull;
 
+  /// Thrown by [fetchTrips] (offline, server error).
+  Object? fetchError;
+
   @override
   Future<List<ShoppingHistory>> fetchTrips({
     int? limit,
     DateTime? before,
   }) async {
     pages.add(before);
+    if (fetchError case final e?) throw e;
     final older = [
       for (final t in trips)
         if (before == null || t.completedAt.isBefore(before)) t,

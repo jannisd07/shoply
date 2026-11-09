@@ -9,6 +9,18 @@ export 'home_calories.dart'
         homeCalorieIdeasHintHasContentProvider,
         homeCaloriesHasContentProvider,
         homeWaterHasContentProvider;
+// V9–V12 (verlauf-kosten.md): "Dein November", "Ausgaben im Vergleich",
+// "Letzte Einkäufe" and the hint about Kosten teilen.
+export 'home_history.dart'
+    show
+        HomeMonthCard,
+        HomeRecentTrips,
+        HomeSpendingComparison,
+        HomeSplitHint,
+        homeMonthHasContentProvider,
+        homeRecentTripsHasContentProvider,
+        homeSpendingHasContentProvider,
+        homeSplitHintHasContentProvider;
 
 // Home sections from Teil B for D2 "Für dich" (prompt-b-vorrang.md, Stufe 2).
 // Teil A builds the frame, the order, the 16-pt side margin and the spacing,
@@ -32,29 +44,8 @@ class HomeSavingsHint extends StatelessWidget {
   Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
-/// "Dein November": spending, purchases, and "Gespart" only with the offers
-/// module and real savings data.
-final homeMonthHasContentProvider = Provider<bool>((ref) => false);
-
-class HomeMonthCard extends StatelessWidget {
-  const HomeMonthCard({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
-/// "Ausgaben im Vergleich": six monthly bars, a list from AX1. Only months
-/// with entered amounts count.
-final homeSpendingHasContentProvider = Provider<bool>((ref) => false);
-
-class HomeSpendingComparison extends StatelessWidget {
-  const HomeSpendingComparison({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
-/// "Sparziel mit Avo" (offers module).
+/// "Sparziel mit Avo" (offers module): not in version 1 (verlauf-kosten.md
+/// §5 row 9, F12-8), so it stays hidden.
 final homeSavingsGoalHasContentProvider = Provider<bool>((ref) => false);
 
 class HomeSavingsGoal extends StatelessWidget {
@@ -83,16 +74,6 @@ final homeOffersTileHasContentProvider = Provider<bool>((ref) => false);
 
 class HomeOffersTile extends StatelessWidget {
   const HomeOffersTile({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
-/// "Letzte Einkäufe": at most three, "Alle anzeigen" opens `/history`.
-final homeRecentTripsHasContentProvider = Provider<bool>((ref) => false);
-
-class HomeRecentTrips extends StatelessWidget {
-  const HomeRecentTrips({super.key});
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();

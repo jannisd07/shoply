@@ -84,6 +84,16 @@ abstract interface class TripHistoryBackend {
 
   /// Purchase stats for recommendations ("du kaufst X alle N Tage").
   Future<void> trackPurchases(List<ShoppingItemModel> items);
+
+  /// `set_trip_amount` (L6): the amount (null removes it) and, for an equal
+  /// split, the shares in the same transaction.
+  Future<void> setTripAmountRpc(String tripId, double? totalCost);
+
+  /// `set_trip_store` ("Markt ändern" in V5): only the person who shopped.
+  Future<void> setTripStoreRpc(String tripId, String? chainId);
+
+  /// Fallback: writes [values] on the trip row.
+  Future<void> updateTrip(String tripId, Map<String, dynamic> values);
 }
 
 /// Shopping history: finishing a trip ("Einkauf abschließen", V1), undoing
@@ -366,6 +376,46 @@ class ShoppingHistoryService {
 
   /// Deletes every trip the person finished.
   Future<void> clearAllHistory() => _backend.deleteOwnTrips();
+
+  /// V6: sets or removes ([cents] null) the amount of [tripId], typed by
+  /// the person (`total_cost_source = user`). True when the server also
+  /// recomputed an equal split (L6); false on the fallback without the
+  /// migration, where the caller saves the new equal shares itself.
+  Future<bool> setTripAmount(String tripId, int? cents) async {
+    final total = cents == null ? null : centsToEuros(cents);
+    try {
+      await _backend.setTripAmountRpc(tripId, total);
+      return true;
+    } catch (e) {
+      if (!isMissingServerFeature(e)) rethrow;
+      debugPrint('⚠️ [HISTORY] Amount function missing, writing the row');
+    }
+    try {
+      await _backend.updateTrip(tripId, {
+        'total_cost': total,
+        'total_cost_source': total == null ? null : 'user',
+      });
+    } catch (e) {
+      if (!isMissingServerFeature(e)) rethrow;
+      await _backend.updateTrip(tripId, {'total_cost': total});
+    }
+    return false;
+  }
+
+  /// V5 "Markt ändern": sets or removes the trip's market (a chain id).
+  Future<void> setTripStore(String tripId, String? chainId) async {
+    try {
+      await _backend.setTripStoreRpc(tripId, chainId);
+      return;
+    } catch (e) {
+      if (!isMissingServerFeature(e)) rethrow;
+      debugPrint('⚠️ [HISTORY] Store function missing, writing the row');
+    }
+    await _backend.updateTrip(tripId, {
+      'store_chain': chainId,
+      'store_source': chainId == null ? null : 'user',
+    });
+  }
 }
 
 /// [TripHistoryBackend] on Supabase.
@@ -496,6 +546,24 @@ class SupabaseTripHistoryBackend implements TripHistoryBackend {
         _items.updateItem(item.id, {'is_checked': true, 'checked_at': now}),
     ]);
   }
+
+  @override
+  Future<void> setTripAmountRpc(String tripId, double? totalCost) =>
+      _db.rpc<dynamic>(
+        'set_trip_amount',
+        params: {'p_trip_id': tripId, 'p_total_cost': totalCost},
+      );
+
+  @override
+  Future<void> setTripStoreRpc(String tripId, String? chainId) =>
+      _db.rpc<dynamic>(
+        'set_trip_store',
+        params: {'p_trip_id': tripId, 'p_chain': chainId},
+      );
+
+  @override
+  Future<void> updateTrip(String tripId, Map<String, dynamic> values) =>
+      _db.from('shopping_history').update(values).eq('id', tripId);
 
   @override
   Future<bool> deleteTrip(String tripId) async {

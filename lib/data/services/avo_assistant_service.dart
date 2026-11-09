@@ -12,6 +12,7 @@ import 'package:shoply/data/models/meal_plan.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/store_offer.dart';
+import 'package:shoply/data/models/trip_checkout.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
@@ -62,6 +63,7 @@ import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
+import 'package:shoply/presentation/state/trip_history_provider.dart';
 
 export 'package:shoply/data/services/avo_assistant_models.dart';
 

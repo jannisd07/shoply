@@ -230,9 +230,13 @@ final class AvoSplitRecord extends AvoRecord {
     required super.tool,
     required this.tripDate,
     required this.shares,
+    this.historyId,
   });
 
   final DateTime tripDate;
+
+  /// The split trip; "Ansehen" opens its detail (V5), else the history.
+  final String? historyId;
   final List<AvoShare> shares;
 }
 

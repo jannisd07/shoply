@@ -75,7 +75,7 @@ void main() {
     });
   });
 
-  group('totalSavingsOf (ShoppingHistoryScreen lifetime + monthly figure)', () {
+  group('totalSavingsOf (history month review and trip savings)', () {
     test('zero across trips with no offer-priced items', () {
       final trips = [
         _trip(DateTime(2026, 1, 1), [_historyItem(price: 2.5, priceOldValue: null)]),

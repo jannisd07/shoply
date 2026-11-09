@@ -56,3 +56,23 @@ String storePickTripLocation({String? listId, String? selected}) => Uri(
     'selected': ?selected,
   },
 ).toString();
+
+/// V5 "Einkauf-Detail", relative to the history root.
+const String historyTripChildPath = ':tripId';
+
+/// V6 "Betrag", relative to the history root (full screen).
+const String historyAmountChildPath = ':tripId/amount';
+
+/// `/history/:tripId/amount`.
+String historyAmountLocation(String tripId) =>
+    '${RoutePaths.history}/${Uri.encodeComponent(tripId)}/amount';
+
+/// V4 with a list filter: `/history?list=<listId>`.
+String historyLocation({String? listId}) => Uri(
+  path: RoutePaths.history,
+  queryParameters: {'list': ?listId},
+).toString().replaceFirst(RegExp(r'\?$'), '');
+
+/// V8 "Offene Beträge": `/splits`, `?done=1` unfolds "Erledigt".
+String splitsLocation({bool done = false}) =>
+    done ? '${RoutePaths.splits}?done=1' : RoutePaths.splits;

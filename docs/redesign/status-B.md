@@ -192,6 +192,26 @@ nutzen beide direkt.
     - `AppFilterChip` ohne `trailing`: „Anderer Markt …“ zeigt kein `chevron.right` 11 (Spec V1 Punkt 3).
     - **Neu A-V24:** `AvoToast.show(onDismissed:)` (wenn der Hinweis geht, auch nach VoiceOver-Pause). Mit VoiceOver
       gibt B die Mitteilungen „… hat eingekauft“ heute erst nach 2 min frei, weil das Ende des Hinweises unbekannt ist.
+20. **Nach W11 (B8b, Verlauf V4–V13, `feature/b8-history`):** Routen `/history/:tripId` (V5),
+    `/history/:tripId/amount` und `/history/:tripId/split` (V6, V7, `rootNavigatorKey`) und `/splits` (V8,
+    `historyBranchRoutes[AppBranch.lists]`) sind da; Pfade in `screens/history/history_paths.dart`
+    (`historyTripLocation`, `historyLocation(listId:)`, `splitsLocation(done:)`).
+    - **A-V13:** Home `HomeSplitHint()` mit `homeSplitHintHasContentProvider` (synchron, neu in `b_slots.dart`),
+      Vorschlag direkt unter der Avo-Karte. `HomeMonthCard`, `HomeSpendingComparison`, `HomeRecentTrips` haben jetzt
+      Inhalt; ihre `…HasContentProvider` sind ab dem ersten Frame richtig. `HomeSavingsGoal` bleibt leer (§5 Zeile 9).
+    - **A-V14:** bestätigen, dass `context.push('/history/<id>')` aus Home oder dem Avo-Tab in den Listen-Tab wechselt
+      und dort Verlauf und Detail stapelt (B pusht so aus V11 und aus Avo „Ansehen“).
+    - **A-V12:** die Zeilen „Einkäufe“ → `context.push(historyLocation())`, „Offene Beträge“ →
+      `context.push(splitsLocation())` (nur Modul Kosten teilen).
+    - **A-V19:** `ItemRepository.addItems(skipOpenDuplicates: true)`; bis dahin filtert B in V5 die offenen Artikel
+      vorher selbst heraus (gleicher Name ohne Groß/klein), sie werden nie zusammengeführt.
+    - **A-V4:** Balken mit Auswahl und zweiter Kürzelzeile „bisher“, Tokens `chartBar`/`chartHighlight`/
+      `monthCardGradient`. B wählt heute über eine eigene Trefferfläche über `AvoBarChart` (gleiche Geometrie), ohne
+      „bisher“-Zeile; der Monatsverlauf auf Home ist `tintSoft` über `surface` statt #EEF7EF.
+    - **A-V6:** Zeile mit Wert und Pull-down („Bezahlt von“); B nutzt bis dahin eine eigene Zeile in V7.
+    - **A-V21:** großer Titel für Verlauf und Offene Beträge auf dritter Ebene (B zeigt ihn schon über `OffersPage`).
+    - **A-V9 Rest** (siehe 19) bleibt offen: solange `shopping_trip_completion.dart` lebt, zeigt
+      `tool/design_check.sh B` noch die Funde in `checkout_store_sheet.dart`.
 
 ## Erledigte Anfragen von Teil A
 

@@ -529,6 +529,38 @@ $$;
 revoke execute on function public.set_trip_amount(uuid, numeric) from public, anon;
 grant execute on function public.set_trip_amount(uuid, numeric) to authenticated;
 
+-- ------------------------------------------------------------------ W11
+-- "Markt ändern" in the trip detail (V5): only the person who finished the
+-- trip; a chain id (same rule as store_chain) or null. Needed because the
+-- later _rls migration grants UPDATE on shopping_history only for
+-- total_cost and the payer columns.
+create or replace function public.set_trip_store(p_trip_id uuid, p_chain text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is null then
+    raise exception 'not authenticated' using errcode = '28000';
+  end if;
+  if p_chain is not null and p_chain !~ '^[a-z0-9-]{1,64}$' then
+    raise exception 'invalid chain' using errcode = '22023';
+  end if;
+  update public.shopping_history
+  set store_chain = p_chain,
+      store_source = case when p_chain is null then null else 'user' end
+  where id = p_trip_id
+    and coalesce(completed_by, user_id) = (select auth.uid());
+  if not found then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+end;
+$$;
+
+revoke execute on function public.set_trip_store(uuid, text) from public, anon;
+grant execute on function public.set_trip_store(uuid, text) to authenticated;
+
 -- ------------------------------------------------------------------ L8
 -- The tightened policies and grants are in 20261109000100_b_trip_checkout_rls.sql
 -- and are applied LATER, once every build in use saves splits through

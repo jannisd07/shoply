@@ -312,5 +312,6 @@ Future<AvoSplitRecord?> avoSplitTrip(
     tool: 'split_trip_cost',
     tripDate: card.tripDate,
     shares: card.shares,
+    historyId: card.historyId,
   );
 }

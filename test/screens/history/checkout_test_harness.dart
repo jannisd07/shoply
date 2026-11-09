@@ -113,6 +113,15 @@ Future<GoRouter> pumpCheckout(
       GoRoute(
         path: '/history',
         builder: (context, state) => const Scaffold(body: Text('Verlauf')),
+        routes: [
+          // Stand-in for V5; the real screens have their own tests.
+          GoRoute(
+            path: ':tripId',
+            builder: (context, state) => Scaffold(
+              body: Text('Einkauf ${state.pathParameters['tripId']}'),
+            ),
+          ),
+        ],
       ),
       GoRoute(
         path: '/lists',

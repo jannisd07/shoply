@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/semantics.dart';
@@ -18,6 +20,7 @@ import 'package:shoply/presentation/screens/profile/settings/data/notification_s
 import 'package:shoply/presentation/screens/profile/settings/notifications_settings_screen.dart'
     show formatReminderTime;
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/screens/history/history_paths.dart';
 import 'package:shoply/routes/app_destinations.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -263,7 +266,9 @@ AvoRecordHead avoRecordHead(BuildContext context, AvoRecord r) {
         ),
         icon: const AvoIcon(AvoIcons.people),
         openLabel: view,
-        open: (c) => _go(c, AppDestinations.history),
+        open: (c) => r.historyId == null
+            ? _go(c, AppDestinations.history)
+            : unawaited(GoRouter.of(c).push<Object?>(historyTripLocation(r.historyId!))),
       );
   }
 }

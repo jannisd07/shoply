@@ -5,16 +5,23 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:shoply/core/modules/app_modules.dart';
+import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
 import '../layout/layout_matrix.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   const sections = <Widget>[
     HomeSavingsHint(),
     HomeMonthCard(),
     HomeSpendingComparison(),
+    HomeSplitHint(),
     HomeSavingsGoal(),
     HomeRestockTile(),
     HomeOffersTile(),
@@ -26,6 +33,7 @@ void main() {
     homeSavingsHintHasContentProvider,
     homeMonthHasContentProvider,
     homeSpendingHasContentProvider,
+    homeSplitHintHasContentProvider,
     homeSavingsGoalHasContentProvider,
     homeRestockHasContentProvider,
     homeOffersTileHasContentProvider,
@@ -33,8 +41,15 @@ void main() {
     homeCookTodayHasContentProvider,
   ];
 
+  // Signed out: no history, no shares (the history sections have content
+  // tests in test/slots/home_history_test.dart).
+  final signedOut = [
+    authUserIdProvider.overrideWithValue(null),
+    moduleEnabledProvider.overrideWith((ref, m) => true),
+  ];
+
   test('every section reports no content synchronously', () {
-    final container = ProviderContainer();
+    final container = ProviderContainer(overrides: signedOut);
     addTearDown(container.dispose);
     for (final provider in hasContent) {
       expect(container.read(provider), isFalse);
@@ -43,8 +58,9 @@ void main() {
 
   testWidgets('every section renders nothing', (tester) async {
     await tester.pumpWidget(
-      const ProviderScope(
-        child: Directionality(
+      ProviderScope(
+        overrides: signedOut,
+        child: const Directionality(
           textDirection: TextDirection.ltr,
           child: Column(children: sections),
         ),
@@ -57,6 +73,9 @@ void main() {
 
   layoutMatrix(
     'Home sections (Teil B)',
-    (context) => const ProviderScope(child: Column(children: sections)),
+    (context) => ProviderScope(
+      overrides: signedOut,
+      child: const Column(children: sections),
+    ),
   );
 }
