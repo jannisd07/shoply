@@ -26,6 +26,8 @@ export 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart'
     show openCheckoutFlow;
 export 'package:shoply/presentation/screens/lists/widgets/item_offer_badge.dart'
     show ItemOfferBadge;
+export 'package:shoply/presentation/screens/lists/widgets/item_offer_badge.dart'
+    show ItemOfferRowExtras, itemOfferRowExtras;
 export 'package:shoply/presentation/screens/lists/widgets/item_offer_card.dart'
     show ItemOfferCard;
 export 'package:shoply/presentation/screens/lists/widgets/list_offer_count_badge.dart'

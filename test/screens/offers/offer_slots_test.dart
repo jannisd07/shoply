@@ -4,6 +4,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +28,7 @@ import 'package:shoply/presentation/screens/offers/store_picker_screen.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/hint_row.dart';
+import 'package:shoply/presentation/widgets/design/item_row.dart';
 
 import 'offer_test_harness.dart';
 
@@ -157,6 +159,102 @@ void main() {
       await tester.tap(find.text('0,99 €'));
       await tester.pumpAndSettle();
       expect(find.byType(OfferDetailScreen), findsNothing);
+    });
+
+    // The call Teil A makes in its list and shopping-mode rows (request
+    // A-C1 in the BAB1 report).
+    Widget row({required bool shopping}) => Consumer(
+      builder: (context, ref, _) {
+        final extras = itemOfferRowExtras(
+          context,
+          ref,
+          listId: testListId,
+          item: milk,
+          shoppingMode: shopping,
+        );
+        return ItemRow(
+          title: 'Milch',
+          onToggle: (_) {},
+          size: shopping ? ItemRowSize.large : ItemRowSize.regular,
+          trailing: ItemOfferBadge(
+            listId: testListId,
+            item: milk,
+            compact: shopping,
+          ),
+          trailingSemanticsLabel: extras?.semanticsLabel,
+          trailingActions: extras?.actions ?? const {},
+          contextMenuItems: extras?.menuItems ?? const [],
+        );
+      },
+    );
+
+    testWidgets('row extras: one VoiceOver stop with "Angebot ansehen"', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await pumpOffers(
+        tester,
+        row(shopping: false),
+        overrides: offersOn(snapshot: snapshot, items: [milk]),
+      );
+      final label = find.bySemanticsLabel(
+        RegExp('Milch.*im Angebot 0,99 Euro laut Händler'),
+      );
+      expect(label, findsOneWidget);
+      expect(
+        find.bySemanticsLabel('im Angebot 0,99 Euro laut Händler'),
+        findsNothing,
+        reason: 'the pill is no second stop',
+      );
+      tester.semantics.customAction(
+        find.semantics.byLabel(
+          RegExp('Milch.*im Angebot 0,99 Euro laut Händler'),
+        ),
+        CustomSemanticsAction(label: 'Angebot ansehen'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(OfferDetailScreen), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('row extras in shopping mode: long press "Angebot ansehen"', (
+      tester,
+    ) async {
+      await pumpOffers(
+        tester,
+        row(shopping: true),
+        overrides: offersOn(snapshot: snapshot, items: [milk]),
+      );
+      await tester.longPress(find.text('Milch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Angebot ansehen'));
+      await tester.pumpAndSettle();
+      expect(find.byType(OfferDetailScreen), findsOneWidget);
+    });
+
+    testWidgets('row extras are null while the pill shows nothing', (
+      tester,
+    ) async {
+      ItemOfferRowExtras? seen;
+      var built = false;
+      await pumpOffers(
+        tester,
+        Consumer(
+          builder: (context, ref, _) {
+            built = true;
+            seen = itemOfferRowExtras(
+              context,
+              ref,
+              listId: testListId,
+              item: bread,
+            );
+            return const SizedBox.shrink();
+          },
+        ),
+        overrides: offersOn(snapshot: snapshot, items: [bread]),
+      );
+      expect(built, isTrue);
+      expect(seen, isNull);
     });
 
     testWidgets('a similar product carries the question mark sentence', (
