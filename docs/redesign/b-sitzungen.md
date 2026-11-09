@@ -81,6 +81,8 @@ Dazu aus A12 (`09c6ee5`, `a12-stand.md` „Von Teil B“): tote Home-Karten lös
 `design_system.dart` hängen nur noch an B-Kalorien/Verlauf (umstellen auf D2-Tokens oder vormerken für B6b/B8);
 `offer_module_off_body` löschen (status-B 17 (3) entfällt). Der GitHub-Workflow „Analyze and test“ ist aus (Owner):
 lokal prüfen.
+A hat status-B 17 (1) erledigt (`004b3fd`, `itemOfferRowExtras` in Liste und Einkaufsmodus): jetzt B's eigenes
+Semantik-Label im Angebots-Badge entfernen und 17 in `status-B.md` abhaken (17 (2) stand schon so).
 
 ### B7 Wochenplan
 
