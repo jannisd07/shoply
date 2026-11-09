@@ -1,14 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shoply/core/constants/app_brand.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/presentation/providers/account_status_provider.dart';
@@ -82,7 +85,13 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
     final details = ref.watch(proSubscriptionDetailsProvider).valueOrNull;
 
     final locale = Localizations.localeOf(context).toLanguageTag();
-    final prices = PaywallPrices.from(products, locale);
+    final live = PaywallPrices.from(products, locale);
+    final cache = ref.watch(paywallPriceCacheProvider);
+    // The last store prices at once (K18-10); StoreKit's answer replaces
+    // them and is saved for the next opening.
+    final cached = live.isComplete ? null : cache?.read(locale);
+    final prices = cached ?? live;
+    if (live.isComplete) cache?.write(locale, live);
 
     final problem =
         _problem ??
@@ -99,6 +108,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
       yearlyPerMonth: prices.yearlyPerMonth,
       monthlyPrice: prices.monthly,
       savingPercent: prices.savingPercent,
+      pricesCached: cached != null,
       trialDays: details?.trialEligible == true ? kProTrialDays : null,
       trialUsed: details != null && details.trialEndsAt != null,
       problem: problem,
@@ -292,4 +302,74 @@ class PaywallPrices {
   final String? yearlyPerMonth;
   final String? monthly;
   final int? savingPercent;
+
+  /// Both plans have a price.
+  bool get isComplete => yearly != null && monthly != null;
+
+  Map<String, Object?> _toJson(String locale) => {
+    'locale': locale,
+    'yearly': yearly,
+    'yearlyPerMonth': yearlyPerMonth,
+    'monthly': monthly,
+    'savingPercent': savingPercent,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PaywallPrices &&
+      other.yearly == yearly &&
+      other.yearlyPerMonth == yearlyPerMonth &&
+      other.monthly == monthly &&
+      other.savingPercent == savingPercent;
+
+  @override
+  int get hashCode =>
+      Object.hash(yearly, yearlyPerMonth, monthly, savingPercent);
 }
+
+/// The prices of the last StoreKit answer on this device (Konzept 18 §8.5,
+/// K18-10), so the paywall never opens with "…" twice. Kept per language:
+/// another locale formats differently and is read as no cache. The prices
+/// belong to the App Store country, not the account, so they survive a
+/// sign-out (`account_local_data.dart`).
+class PaywallPriceCache {
+  /// A cache in [prefs].
+  PaywallPriceCache(this._prefs);
+
+  /// The SharedPreferences key.
+  static const key = 'pro_price_cache_v1';
+
+  final SharedPreferences _prefs;
+
+  /// The cached prices for [locale], or null.
+  PaywallPrices? read(String locale) {
+    final raw = _prefs.getString(key);
+    if (raw == null) return null;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      if (json['locale'] != locale) return null;
+      final prices = PaywallPrices(
+        yearly: json['yearly'] as String?,
+        yearlyPerMonth: json['yearlyPerMonth'] as String?,
+        monthly: json['monthly'] as String?,
+        savingPercent: json['savingPercent'] as int?,
+      );
+      return prices.isComplete ? prices : null;
+    } catch (e) {
+      debugPrint('⚠️ [PAYWALL] Price cache unreadable: ${e.runtimeType}');
+      return null;
+    }
+  }
+
+  /// Saves [prices] for [locale] when they are complete and changed.
+  void write(String locale, PaywallPrices prices) {
+    if (!prices.isComplete || read(locale) == prices) return;
+    unawaited(_prefs.setString(key, jsonEncode(prices._toJson(locale))));
+  }
+}
+
+/// The price cache once the preferences are loaded (null before).
+final paywallPriceCacheProvider = Provider<PaywallPriceCache?>((ref) {
+  final prefs = ref.watch(sharedPreferencesProvider).valueOrNull;
+  return prefs == null ? null : PaywallPriceCache(prefs);
+});

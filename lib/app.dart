@@ -25,6 +25,7 @@ import 'package:shoply/data/services/navigation_service.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/widgets/design/zoom_page.dart';
 
 class AvoApp extends ConsumerStatefulWidget {
   const AvoApp({super.key});
@@ -44,6 +45,8 @@ class _AvoAppState extends ConsumerState<AvoApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // The paywall grows out of the tap that opened it (Konzept 18 §8.2).
+    ZoomOrigin.ensureTracking();
 
     // One-time tips (Konzept 17 §6.1) read their state before the first
     // screen builds; main() has the preferences loaded already.

@@ -37,6 +37,9 @@ enum HomeSection {
 
   /// "Tipp von Avo".
   tip,
+
+  /// "14 Tage Avo Pro gratis testen" (Konzept 18 §11.11).
+  proHint,
 }
 
 /// A tile of the "Für dich" grid.
@@ -75,6 +78,7 @@ class HomeLayoutInput {
     this.recentTrips = false,
     this.cookToday = false,
     this.tip = false,
+    this.proHint = false,
   });
 
   /// Modules (offers: module on and kill switch off).
@@ -97,6 +101,7 @@ class HomeLayoutInput {
   final bool recentTrips;
   final bool cookToday;
   final bool tip;
+  final bool proHint;
 }
 
 /// The tiles of "Für dich", in D2 order. Empty hides the section.
@@ -121,6 +126,7 @@ List<HomeSection> homeSections(HomeLayoutInput i) => [
   if (i.recentTrips) HomeSection.recentTrips,
   if (i.mealPlan && i.cookToday) HomeSection.cookToday,
   if (i.tip) HomeSection.tip,
+  if (i.proHint) HomeSection.proHint,
 ];
 
 /// Space above [section] when it follows [previous] (D2: 24 between
@@ -136,7 +142,9 @@ double homeSectionGap(HomeSection? previous, HomeSection section) {
     HomeSection.savingsGoal,
   };
   if (money.contains(previous) && money.contains(section)) return 12;
-  if (previous == HomeSection.cookToday && section == HomeSection.tip) {
+  const hints = {HomeSection.cookToday, HomeSection.tip};
+  if (hints.contains(previous) &&
+      (section == HomeSection.tip || section == HomeSection.proHint)) {
     return 12;
   }
   return 24;

@@ -18,6 +18,7 @@ import 'package:shoply/presentation/screens/profile/settings/data/list_preferenc
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/success_moment.dart';
+import 'package:shoply/presentation/widgets/design/pro_hint_counter.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
 /// Keeps the screen on while the shopping mode is open (Konzept 11 §5.1)
@@ -192,6 +193,8 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
     final saved = await openCheckoutFlow(context, widget.listId);
     if (!saved || !mounted) return;
     ref.read(tipServiceProvider).note(TipEvent.tripCompleted);
+    // The first finished trip is the aha moment for the Pro offer (§11.11).
+    ref.read(proHintCounterProvider)?.noteAha();
     unawaited(
       showSuccessMoment(
         context,

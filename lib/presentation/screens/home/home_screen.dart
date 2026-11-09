@@ -9,16 +9,19 @@ import 'package:shoply/core/utils/display_name_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/tip_service.dart';
 import 'package:shoply/data/services/widget_service.dart';
+import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/home/home_layout.dart';
 import 'package:shoply/presentation/screens/home/widgets/home_avo_card.dart';
 import 'package:shoply/presentation/screens/home/widgets/home_for_you.dart';
 import 'package:shoply/presentation/screens/home/widgets/home_header.dart';
+import 'package:shoply/presentation/screens/home/widgets/home_pro_hint.dart';
 import 'package:shoply/presentation/screens/home/widgets/home_top_lists.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
 import 'package:shoply/presentation/widgets/design/home_card.dart';
+import 'package:shoply/presentation/widgets/design/pro_hint_counter.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 import 'package:shoply/presentation/widgets/tips/home_tips.dart';
 import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
@@ -53,6 +56,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// The one-time tip of this visit (Konzept 17 §6.1), fixed at its first
   /// frame.
   final _tip = TipVisit(TipPlace.home);
+
+  /// The Pro offer of this visit (Konzept 18 §9.3), fixed like the tip.
+  final _proHint = ProHintVisit(ProHintCounter.trialOffer);
 
   // No auth listener of its own: the lists and the history rebuild per
   // account (`authUserIdProvider`), and main.dart pushes the widget
@@ -100,6 +106,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ref.watch(homeCookTodayHasContentProvider),
       ),
     );
+    final savingsRow = offersOn && ref.watch(homeSavingsHintHasContentProvider);
+    final cookRow =
+        ref.watch(moduleEnabledProvider(AppModule.mealPlan)) &&
+        ref.watch(homeCookTodayHasContentProvider);
+    final proHint = _showProHint(
+      hintRows:
+          (savingsRow ? 1 : 0) + (cookRow ? 1 : 0) + (tip != null ? 1 : 0),
+    );
     final input = HomeLayoutInput(
       avo: ref.watch(moduleEnabledProvider(AppModule.avo)),
       offers: offersOn,
@@ -118,6 +132,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       recentTrips: ref.watch(homeRecentTripsHasContentProvider),
       cookToday: ref.watch(homeCookTodayHasContentProvider),
       tip: tip != null,
+      proHint: proHint,
     );
 
     final sections = homeSections(input);
@@ -169,6 +184,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  /// Whether this visit shows the Pro offer: only with a known Pro status,
+  /// without Pro, with the trial still open, room for one more hint row
+  /// (K-38) and the counter's pacing (first trip done, once a day).
+  bool _showProHint({required int hintRows}) {
+    final status = ref.watch(subscriptionStatusProvider);
+    final details = ref.watch(proSubscriptionDetailsProvider);
+    final ready = status.hasValue && details.hasValue;
+    final subscribed = ref.watch(isSubscribedProvider);
+    return _proHint.resolve(
+      context,
+      ref.watch(proHintCounterProvider),
+      ready: ready,
+      allowed:
+          !subscribed &&
+          details.valueOrNull?.trialEligible == true &&
+          hintRows < kHomeMaxHintRows,
+    );
+  }
+
+  void _hideProHint() {
+    ref.read(proHintCounterProvider)?.hide(ProHintCounter.trialOffer);
+    setState(_proHint.dismiss);
+  }
+
   Widget _section(
     HomeSection section, {
     required HomeLayoutInput input,
@@ -211,6 +250,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return inset(const HomeCookToday());
       case HomeSection.tip:
         return HomeTipSection(visit: _tip, facts: tipFacts);
+      case HomeSection.proHint:
+        return inset(HomeProHint(onNever: _hideProHint));
     }
   }
 }

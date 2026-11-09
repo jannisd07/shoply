@@ -4,6 +4,11 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
+09.11.2026 (A9b): Paywall wächst aus dem auslösenden Element (`ZoomPage`, Zurück-Wischen 1:1, Reduce Motion
+Überblendung), Preis-Cache für die erste Öffnung, Pro-Hinweis „14 Tage Avo Pro gratis testen“ auf der Startseite
+nach dem ersten Einkauf (`ProHintCounter`). Tag-12-Erinnerung als Wunsch an B ([`a9b-stand.md`](a9b-stand.md)
+„Von Teil B“). Als Nächstes: S5b, wenn B8/B7/B6b auf `main` sind; sonst A10 (Owner) oder Wünsche von B.
+
 09.11.2026 (A9): Pro und Paywall nach Owner-Variante B („KI + Komfort“): `ProFeatures.gated = {cook_mode,
 plan_suggestions, stats}`, Katalog `ProFeatures.all`, neue D2-Paywall (`paywall_screen.dart`), Kochmodus ab Schritt 2
 Pro (auch per Wischen). Wünsche an B (Wochenplan, Verlauf, Limit → Paywall, Avo-Wissen) in
@@ -76,6 +81,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | S5 Bereiche fertig (A) | **erledigt**: Diät-Filter prüfen Zutaten (Owner), `SwipeActions` nur eine Zeile offen und Schließen beim Scrollen, `ItemRow(suggestion:)` in „Vielleicht auch“, Galerie vollständig, [`abschlussbericht-A.md`](abschlussbericht-A.md); A-V9 und Gegenprüfung B6b/B7/B8 folgen in S5b | 09.11.2026 | `git log --grep S5` |
 | S6 Gegenprüfung (A prüft B) | **erledigt** für B's fertige Screens (Angebote, Avo, Kalorien-Kern, B-Einstellungen); B6b/B7/B8 folgen, wenn sie auf `main` sind; Funde in `s6-stand.md` | 09.11.2026 | `git log --grep S6` |
 | A9 Pro und Paywall | **erledigt**: Owner-Variante B, `ProFeatures` mit Katalog, D2-Paywall mit allen Zuständen und Prüfmatrix, Kochmodus-Sperre ab Schritt 2; offen in `a9-stand.md` (→ A9b) | 09.11.2026 | `git log --grep A9` |
+| A9b Pro, Rest | **erledigt**: Zoom-Übergang der Paywall aus dem Element (`ZoomPage`, `ProGate.openPaywall(origin:)`), Preis-Cache, Pro-Hinweis auf der Startseite nach dem ersten Einkauf; Tag-12-Erinnerung als Wunsch an B (`a9b-stand.md`) | 09.11.2026 | `git log --grep A9b` |
 
 ## Verträge aus S1 (für B verbindlich)
 

@@ -42,6 +42,7 @@ class PaywallData {
     this.yearlyPerMonth,
     this.monthlyPrice,
     this.savingPercent,
+    this.pricesCached = false,
     this.trialDays,
     this.trialUsed = false,
     this.problem,
@@ -66,6 +67,10 @@ class PaywallData {
 
   /// "16 % günstiger", rounded down; null when a price is missing.
   final int? savingPercent;
+
+  /// The prices come from the last opening; StoreKit has not answered yet,
+  /// so the main action waits (same label, disabled).
+  final bool pricesCached;
 
   /// Length of the free trial the account may still start; null without one.
   final int? trialDays;
@@ -98,6 +103,7 @@ class PaywallData {
   bool get canBuy =>
       !purchasing &&
       !pending &&
+      !pricesCached &&
       problem != PaywallProblem.offline &&
       (plan == PaywallPlan.yearly ? yearlyPrice : monthlyPrice) != null;
 
@@ -118,6 +124,7 @@ class PaywallData {
     yearlyPerMonth: yearlyPerMonth,
     monthlyPrice: monthlyPrice,
     savingPercent: savingPercent,
+    pricesCached: pricesCached,
     trialDays: trialDays,
     trialUsed: trialUsed,
     problem: clearProblem ? null : (problem ?? this.problem),

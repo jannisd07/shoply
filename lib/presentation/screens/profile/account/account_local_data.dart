@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// itself, not about the account.
 ///
 /// Everything else in SharedPreferences is account-bound and goes: modules,
-/// notification categories, region and favourite markets, the Pro cache,
+/// notification categories, region and favourite markets, the Pro status,
 /// Avo's conversation and Pro hint counter, tips, list and recipe state,
 /// drafts, caches of what the person typed. A new device-wide setting has to
 /// be added here, otherwise it is reset on sign-out.
@@ -23,6 +23,8 @@ const Set<String> kDeviceBoundPreferenceKeys = {
   // Remote feature flags and the offers source configuration: not personal.
   'app_flags_v1',
   'marktguru_keys_v1',
+  // Avo Pro prices of the App Store country (paywall_screen.dart).
+  'pro_price_cache_v1',
 };
 
 /// Prefixes of device-bound keys: the App Store review pacing counts per

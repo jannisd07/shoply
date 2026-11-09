@@ -383,6 +383,9 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen>
     _goTo(next);
   }
 
+  /// The next button; the paywall grows out of it.
+  final _nextKey = GlobalKey(debugLabel: 'cooking-next');
+
   /// "Weiter" on step 1 carries the Pro badge (rebuilds on a purchase).
   bool get _proLocked =>
       _page == 1 && _stepCount > 1 && ProGate.isLocked(ref, kCookModeFeature);
@@ -399,7 +402,13 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen>
   /// purchase; closing the paywall keeps the person on their step.
   void _unlock(VoidCallback then) {
     unawaited(
-      ProGate.run(context, ref, feature: kCookModeFeature, action: then),
+      ProGate.run(
+        context,
+        ref,
+        feature: kCookModeFeature,
+        action: then,
+        origin: _nextKey.currentContext,
+      ),
     );
   }
 
@@ -827,6 +836,7 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen>
                     nextLabel: _nextLabel(),
                     onNext: _next,
                     nextIsPro: _proLocked,
+                    nextKey: _nextKey,
                     timer: _timers.isEmpty
                         ? null
                         : CookingTimerCapsule(

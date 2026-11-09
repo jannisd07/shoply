@@ -224,6 +224,7 @@ class CookingBottomBar extends StatelessWidget {
     required this.nextLabel,
     required this.onNext,
     this.nextIsPro = false,
+    this.nextKey,
     this.timer,
   });
 
@@ -235,6 +236,9 @@ class CookingBottomBar extends StatelessWidget {
   /// Shows a Pro badge on the next capsule (cooking mode locked behind Pro,
   /// Konzept 13 §16.6).
   final bool nextIsPro;
+
+  /// Key on the next button: the paywall grows out of it (Konzept 18 §8.2).
+  final Key? nextKey;
 
   /// The timer capsule, built by the screen.
   final Widget? timer;
@@ -301,7 +305,7 @@ class CookingBottomBar extends StatelessWidget {
                   constraints: BoxConstraints(
                     maxWidth: constraints.maxWidth / 2,
                   ),
-                  child: next,
+                  child: KeyedSubtree(key: nextKey, child: next),
                 ),
               ],
             ),

@@ -65,6 +65,9 @@ const Map<String, String> paywallEn = {
   'pro_manage': 'Manage subscription',
   'pro_success_title': '{pro} is active.',
   'pro_module_off': 'Turn it on under Modules.',
+  'pro_hint_trial': 'Try {pro} free for {days} days',
+  'pro_hint_view': 'View',
+  'pro_hint_never': "Don't show again",
 };
 
 const Map<String, String> paywallDe = {
@@ -130,4 +133,7 @@ const Map<String, String> paywallDe = {
   'pro_manage': 'Abo verwalten',
   'pro_success_title': '{pro} ist aktiv.',
   'pro_module_off': 'Schaltest du unter Module ein.',
+  'pro_hint_trial': '{days} Tage {pro} gratis testen',
+  'pro_hint_view': 'Ansehen',
+  'pro_hint_never': 'Nicht mehr zeigen',
 };

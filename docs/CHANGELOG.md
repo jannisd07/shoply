@@ -2,6 +2,12 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Paywall wächst aus dem Element, Pro-Hinweis nach dem ersten Einkauf (Teil A, A9b)
+
+- Paywall als Zoom-Seite aus dem angetippten Element (Zurück-Wischen 1:1, Reduce Motion: Überblendung).
+- Preise der letzten StoreKit-Antwort erscheinen sofort; Kaufen erst, wenn StoreKit geantwortet hat.
+- Startseite: „14 Tage Avo Pro gratis testen“ nach dem ersten Einkauf, höchstens einmal am Tag, „Nicht mehr zeigen“.
+
 ## 2026-11-09: Avo Pro und neue Paywall (Teil A, A9)
 
 - Owner-Entscheidung Variante B: Pro = mehr KI pro Tag, Kochmodus ab Schritt 2, Avo-Wochenvorschläge, Statistiken.

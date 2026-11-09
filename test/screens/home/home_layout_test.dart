@@ -103,5 +103,17 @@ void main() {
     expect(homeSectionGap(HomeSection.savingsGoal, HomeSection.calories), 24);
     expect(homeSectionGap(HomeSection.cookToday, HomeSection.tip), 12);
     expect(homeSectionGap(HomeSection.topLists, HomeSection.tip), 24);
+    expect(homeSectionGap(HomeSection.tip, HomeSection.proHint), 12);
+    expect(homeSectionGap(HomeSection.topLists, HomeSection.proHint), 24);
+  });
+
+  test('the Pro offer comes last, only when Home decided for it', () {
+    expect(homeSections(everything), isNot(contains(HomeSection.proHint)));
+    const withHint = HomeLayoutInput(lists: true, proHint: true);
+    expect(homeSections(withHint), [
+      HomeSection.avoCard,
+      HomeSection.topLists,
+      HomeSection.proHint,
+    ]);
   });
 }

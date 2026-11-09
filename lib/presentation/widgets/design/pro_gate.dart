@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
+import 'package:shoply/presentation/widgets/design/zoom_page.dart';
 import 'package:shoply/routes/route_paths.dart';
 
 /// One entry of the Avo Pro catalogue: what the paywall lists and what
@@ -115,21 +116,39 @@ abstract final class ProGate {
   /// opens the paywall for [feature] above everything and runs [action] once
   /// the person comes back subscribed.
   ///
+  /// The paywall grows out of [origin] (the tapped button or row) when
+  /// given, else out of [context]'s element if that is small, else out of
+  /// the spot of the tap (Konzept 18 §8.2).
+  ///
   /// Returns whether [action] ran.
   static Future<bool> run(
     BuildContext context,
     WidgetRef ref, {
     required String feature,
     required FutureOr<void> Function() action,
+    BuildContext? origin,
   }) async {
     if (!ProFeatures.isGated(feature) || ref.read(isSubscribedProvider)) {
       await action();
       return true;
     }
-    await context.push<void>(RoutePaths.proFor(feature));
+    await openPaywall(context, feature: feature, origin: origin);
     if (!context.mounted || !ref.read(isSubscribedProvider)) return false;
     await action();
     return true;
+  }
+
+  /// Opens the paywall (for [feature], if given) growing out of [origin],
+  /// or [context]'s element, or the tap. Completes when it closes.
+  static Future<void> openPaywall(
+    BuildContext context, {
+    String? feature,
+    BuildContext? origin,
+  }) {
+    ZoomOrigin.capture(origin ?? context);
+    return context.push<void>(
+      feature == null ? RoutePaths.pro : RoutePaths.proFor(feature),
+    );
   }
 
   /// Whether [feature] is locked for the person right now (for a lock or

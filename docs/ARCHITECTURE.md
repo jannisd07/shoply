@@ -40,6 +40,10 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 
 - GoRouter mit `StatefulShellRoute` für die Tabs (Home, Rezepte, Profil). Avo-Chat (`/avo`) und Listen-Detail
   (`/lists/:listId`) liegen **außerhalb** der Shell, also ohne Navbar. Dorthin immer mit `context.push`, nicht `go`.
+- Die Paywall `/pro` ist eine `ZoomPage` (`widgets/design/zoom_page.dart`): Sie wächst aus dem Element, das sie
+  geöffnet hat, und schrumpft dorthin zurück (Zurück-Wischen 1:1, Reduce Motion: Überblendung). Öffnen über
+  `ProGate.run`/`ProGate.openPaywall(origin:)`; ein schlichtes `context.push` wächst aus dem letzten Tipp
+  (`ZoomOrigin`, in `app.dart` gestartet).
 - Der Redirect macht keine Netzwerkabfrage mehr. Das Onboarding-Flag wird gecacht, sobald es `true` ist.
 - Screens, die *innerhalb* der Shell gepusht werden, müssen unten `MainScaffold.getNavbarClearance(context) + 16`
   Abstand lassen.

@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/presentation/screens/profile/account/account_local_data.dart';
 import 'package:shoply/presentation/screens/subscription/paywall_screen.dart';
 import 'package:shoply/presentation/screens/subscription/widgets/paywall_view.dart';
 import 'package:shoply/presentation/widgets/design/pro_gate.dart';
@@ -201,5 +203,40 @@ void main() {
     ], 'de-DE');
     expect(onlyYearly.savingPercent, isNull);
     expect(PaywallPrices.from(const [], 'de-DE').yearly, isNull);
+  });
+
+  test('cached prices show but cannot buy until StoreKit answers', () {
+    const cached = PaywallData(
+      yearlyPrice: '29,99 €',
+      yearlyPerMonth: '2,49 €',
+      monthlyPrice: '2,99 €',
+      pricesCached: true,
+    );
+    expect(cached.canBuy, isFalse);
+    expect(cached.copyWith(plan: PaywallPlan.monthly).canBuy, isFalse);
+    const live = PaywallData(yearlyPrice: '29,99 €', monthlyPrice: '2,99 €');
+    expect(live.canBuy, isTrue);
+  });
+
+  test('price cache: saved per language, read back, ignored elsewhere',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cache = PaywallPriceCache(prefs);
+    expect(cache.read('de-DE'), isNull);
+    const prices = PaywallPrices(
+      yearly: '29,99 €',
+      yearlyPerMonth: '2,49 €',
+      monthly: '2,99 €',
+      savingPercent: 16,
+    );
+    cache.write('de-DE', prices);
+    expect(cache.read('de-DE'), prices);
+    expect(cache.read('en-US'), isNull);
+    // Incomplete prices are never saved.
+    cache.write('en-US', const PaywallPrices(yearly: r'$29.99'));
+    expect(cache.read('en-US'), isNull);
+    // Prices belong to the App Store country, not the account.
+    expect(isDeviceBoundPreference(PaywallPriceCache.key), isTrue);
   });
 }

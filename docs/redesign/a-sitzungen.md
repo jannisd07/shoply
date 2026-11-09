@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (A9 erledigt mit Owner-Variante B, `a9-stand.md`). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (A9b erledigt, `a9b-stand.md`). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -46,12 +46,15 @@ für die nächste Sitzung geben.
 | S6 Gegenprüfung von B | erledigt (B6b/B7/B8 folgen in S5) | `s6-stand.md` |
 | S5 Bereiche fertig | erledigt (A-V9 und Gegenprüfung B6b/B7/B8 folgen in S5b) | `s5-stand.md`, `abschlussbericht-A.md` |
 | **S5b Nachzug von B** | **Als Nächstes**, wenn B8, B7 oder B6b auf `main` ist | unten, `s5-stand.md` |
-| A9b Pro, Rest | Ersatz, wenn S5b noch nicht geht und A10 nicht entschieden ist | unten, `a9-stand.md` |
+| A9b Pro, Rest | erledigt (Tag-12-Erinnerung als Wunsch an B) | `a9b-stand.md` |
 
 Reihenfolge: zu Beginn mit `git log origin/main --oneline | grep -E "B8|B7|B6b"` prüfen, ob B nachgezogen hat (dann
-S5b), und mit `AskUserQuestion` fragen, ob der Owner A10 (Maskottchen F-17-11: 3D-Figur behalten oder neu flach)
-entschieden hat (dann A10). Sonst A9b. Erklär dem Owner bei der Frage kurz, worum es geht (er hat am 09.11. „was ist
-das überhaupt“ gefragt).
+S5b; Achtung, Doku-Commits mit diesen Namen zählen nicht, es geht um Merges von `feature/b8-history`,
+`feature/b7-plan`, B6b), und mit `AskUserQuestion` fragen, ob der Owner A10 (Maskottchen F-17-11: 3D-Figur behalten
+oder neu flach) entschieden hat (dann A10). Erklär dem Owner bei der Frage kurz, worum es geht (er hat am 09.11. „was
+ist das überhaupt“ gefragt). Geht beides nicht: `status-B.md` „Anfragen an Teil A“ und „Von Teil B“-Antworten auf
+neue Wünsche prüfen (A-Paket „AB3“ daraus machen); gibt es keine, dem Owner sagen, dass Teil A auf B oder auf A10
+wartet, und die Sitzung ohne Code beenden.
 
 ### AB1 Anfragen von B: Komponenten und Daten
 
