@@ -8,7 +8,6 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/screens/auth/steps/name_step.dart'
     show nameInitials;
 import 'package:shoply/presentation/screens/profile/account/account_backend.dart';
-import 'package:shoply/presentation/screens/profile/account/account_icons.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 
@@ -175,7 +174,7 @@ class ProfilePhotoAvatar extends StatelessWidget {
                       ),
                       child: Center(
                         child: AvoIcon(
-                          AccountIcons.sync,
+                          AvoIcons.sync,
                           size: _kSyncGlyph,
                           color: colors.secondaryLabel,
                         ),

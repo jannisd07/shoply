@@ -7,7 +7,6 @@ import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/auth/auth_errors.dart';
 import 'package:shoply/presentation/screens/profile/account/account_auth_pages.dart';
 import 'package:shoply/presentation/screens/profile/account/account_backend.dart';
-import 'package:shoply/presentation/screens/profile/account/account_icons.dart';
 import 'package:shoply/presentation/screens/profile/account/account_widgets.dart';
 import 'package:shoply/presentation/screens/profile/account/deletion_summary.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
@@ -207,7 +206,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
     return [
       if (s.ownLists > 0)
         AccountInfoRow(
-          icon: AccountIcons.checklist,
+          icon: AvoIcons.checklist,
           text: _count(
             context,
             s.ownLists,
@@ -229,7 +228,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
         ),
       if (trips == null || trips > 0)
         AccountInfoRow(
-          icon: AccountIcons.history,
+          icon: AvoIcons.history,
           text: trips == null
               ? context.tr('acct_delete_history_unknown')
               : _count(
@@ -240,12 +239,12 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
                 ),
         ),
       AccountInfoRow(
-        icon: AccountIcons.personCircle,
+        icon: AvoIcons.personCircle,
         text: context.tr('acct_delete_profile'),
       ),
       if (s.calories != CalorieDiary.none)
         AccountInfoRow(
-          icon: AccountIcons.flame,
+          icon: AvoIcons.flame,
           text: context.tr(
             s.calories == CalorieDiary.on
                 ? 'acct_delete_calories'

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/screens/profile/account/account_backend.dart';
-import 'package:shoply/presentation/screens/profile/account/account_icons.dart';
 import 'package:shoply/presentation/screens/profile/account/account_screen.dart';
 import 'package:shoply/presentation/screens/profile/account/account_search.dart';
 import 'package:shoply/presentation/screens/profile/account/account_widgets.dart';
@@ -183,12 +182,12 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
       items: [
         AvoMenuItem(
           label: context.tr('acct_photo_choose'),
-          icon: AccountIcons.photo,
+          icon: AvoIcons.photo,
           onSelected: () => _pick(PhotoSource.library),
         ),
         AvoMenuItem(
           label: context.tr('acct_photo_take'),
-          icon: AccountIcons.camera,
+          icon: AvoIcons.camera,
           subtitle: access == CameraAccess.notAsked
               ? context.tr('acct_photo_take_hint')
               : null,
@@ -456,7 +455,7 @@ class _NameField extends StatelessWidget {
                 Semantics(
                   label: context.tr('acct_name_waiting'),
                   child: AvoIcon(
-                    AccountIcons.sync,
+                    AvoIcons.sync,
                     size: _kSyncSymbol,
                     color: colors.secondaryLabel,
                   ),

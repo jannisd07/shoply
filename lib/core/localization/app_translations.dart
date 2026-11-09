@@ -1,4 +1,7 @@
 import 'package:shoply/core/localization/translations/common.dart';
+import 'package:shoply/core/localization/translations/components_input.dart';
+import 'package:shoply/core/localization/translations/components_menus.dart';
+import 'package:shoply/core/localization/translations/components_rows.dart';
 import 'package:shoply/core/localization/translations/home.dart';
 import 'package:shoply/core/localization/translations/lists.dart';
 import 'package:shoply/core/localization/translations/lists_detail.dart';
@@ -57,6 +60,9 @@ class AppTranslations {
 
   static const Map<String, String> _en = {
     ...commonEn,
+    ...componentsRowsEn,
+    ...componentsInputEn,
+    ...componentsMenusEn,
     ...homeEn,
     ...listsEn,
     ...listsDetailEn,
@@ -91,6 +97,9 @@ class AppTranslations {
 
   static const Map<String, String> _de = {
     ...commonDe,
+    ...componentsRowsDe,
+    ...componentsInputDe,
+    ...componentsMenusDe,
     ...homeDe,
     ...listsDe,
     ...listsDetailDe,
