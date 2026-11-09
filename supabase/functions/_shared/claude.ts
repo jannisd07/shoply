@@ -67,8 +67,11 @@ export interface ClaudeClient {
 }
 
 export function createClaudeClient(): ClaudeClient {
-  // Reads ANTHROPIC_API_KEY from the environment.
-  return new Anthropic({ maxRetries: 1 });
+  // Without the secret the SDK constructor throws a plain error, which the log
+  // used to show only as "unexpected error" (S6 finding P1, 09.11.2026).
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) throw new AiError("provider_error", "ANTHROPIC_API_KEY secret is not set");
+  return new Anthropic({ apiKey, maxRetries: 1 });
 }
 
 /**

@@ -258,13 +258,13 @@ Deno.test("a 4xx from Anthropic (bad key) is a 502 and refunded", async () => {
   assertEquals(h.refunds.length, 1);
 });
 
-Deno.test("a stub task answers bad_request and gives its quota unit back", async () => {
+Deno.test("an avo_chat without messages is a bad_request before any quota is used", async () => {
   const h = harness();
   const res = await h.handle(post(envelope("avo_chat", { messages: [] })));
   assertEquals(res.status, 400);
   assertEquals((await errorOf(res)).code, "bad_request");
-  assertEquals(h.consumed.map((c) => c.task), ["avo_chat"]);
-  assertEquals(h.refunds, [{ task: "avo_chat", amount: 1 }]);
+  assertEquals(h.consumed, []);
+  assertEquals(h.refunds, []);
 });
 
 Deno.test("unreadable flags fail closed with provider_error", async () => {

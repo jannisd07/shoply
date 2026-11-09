@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 
-import { callStructured, FALLBACK_BETA, HAIKU, SONNET, textOf, toAiError, usageOf } from "./claude.ts";
+import { callStructured, createClaudeClient, FALLBACK_BETA, HAIKU, SONNET, textOf, toAiError, usageOf } from "./claude.ts";
 import { AiError } from "./errors.ts";
 import { FakeClaude, fakeMessage } from "./testing/fake_claude.ts";
 
@@ -190,4 +190,16 @@ Deno.test("structured call returns usage from the response", async () => {
   }));
   const out = await callStructured(HAIKU, "S", "q", SCHEMA, { client: claude, maxTokens: 10, timeoutMs: 1_000 });
   assertEquals(out.usage, { input_tokens: 20, output_tokens: 7, cache_read_input_tokens: 800 });
+});
+
+Deno.test("createClaudeClient without the secret names the missing secret in a provider_error", () => {
+  const saved = Deno.env.get("ANTHROPIC_API_KEY");
+  Deno.env.delete("ANTHROPIC_API_KEY");
+  try {
+    const err = assertThrows(() => createClaudeClient(), AiError);
+    assertEquals(err.code, "provider_error");
+    assertEquals(err.message, "ANTHROPIC_API_KEY secret is not set");
+  } finally {
+    if (saved !== undefined) Deno.env.set("ANTHROPIC_API_KEY", saved);
+  }
 });
