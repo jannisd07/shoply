@@ -25,6 +25,7 @@ class AvoComposer extends StatefulWidget {
     required this.focusNode,
     required this.onSend,
     this.onVoice,
+    this.onPhoto,
     this.above,
     this.enabled = true,
   });
@@ -33,6 +34,10 @@ class AvoComposer extends StatefulWidget {
   final FocusNode focusNode;
   final ValueChanged<String> onSend;
   final VoidCallback? onVoice;
+
+  /// "Foto hinzufügen" (Kap. 2.11): opens the pull-down "Foto aufnehmen /
+  /// Foto auswählen".
+  final VoidCallback? onPhoto;
   final Widget? above;
   final bool enabled;
 
@@ -129,6 +134,8 @@ class _AvoComposerState extends State<AvoComposer> {
       focusNode: widget.focusNode,
       onSubmitted: widget.enabled ? widget.onSend : null,
       onVoice: widget.enabled ? widget.onVoice : null,
+      onCamera: widget.enabled ? widget.onPhoto : null,
+      cameraLabel: context.tr('avo_photo_add'),
       above: panel,
       maxLines: _maxLines,
     );

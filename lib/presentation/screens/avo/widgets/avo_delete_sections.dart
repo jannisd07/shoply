@@ -6,6 +6,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/avo_consents.dart';
 import 'package:shoply/data/services/avo_conversation.dart';
+import 'package:shoply/presentation/screens/avo/avo_card_format.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/avo_l10n.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_card_scope.dart';
@@ -32,6 +33,7 @@ class AvoConfirmSection extends ConsumerWidget {
     String? body;
     String? hint;
     String done;
+    String? confirm;
     switch (pending.target) {
       case AvoDeleteTarget.list:
         final list = lists.where((l) => l.id == pending.targetId).firstOrNull;
@@ -58,7 +60,19 @@ class AvoConfirmSection extends ConsumerWidget {
         title = context.tr('avo_confirm_food_title', params: {'food': name});
         done = context.tr('avo_deleted_named', params: {'name': name});
       case AvoDeleteTarget.planEntry:
+        final date = pending.date == null ? '' : avoDay(context, pending.date!);
+        title = context.tr(
+          'avo_confirm_plan_title',
+          params: {'recipe': name, 'date': date},
+        );
+        body = context.tr('avo_confirm_plan_body');
+        confirm = context.tr('avo_confirm_plan_action');
+        done = context.tr('avo_deleted_plan', params: {'recipe': name});
       case AvoDeleteTarget.historyTrip:
+        final date = pending.date == null ? name : avoDay(context, pending.date!);
+        title = context.tr('avo_confirm_trip_title', params: {'date': date});
+        body = context.tr('avo_confirm_trip_body');
+        done = context.tr('avo_deleted_trip', params: {'date': date});
       case AvoDeleteTarget.listMember:
         title = context.tr('avo_confirm_list_title', params: {'name': name});
         done = context.tr('avo_deleted_named', params: {'name': name});
@@ -66,7 +80,7 @@ class AvoConfirmSection extends ConsumerWidget {
     return AvoConfirmCard(
       title: title,
       body: body,
-      confirmLabel: context.tr('avo_delete'),
+      confirmLabel: confirm ?? context.tr('avo_delete'),
       confirmHint: hint,
       doneText: done,
       phase: scope.chat.confirmPhaseOf(payload),

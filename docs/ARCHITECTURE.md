@@ -96,6 +96,21 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   (`lib/data/services/avo_list_changes.dart`, testbar über `AvoListWriter`) ein `AvoListChange` mit Gegen-Aktion
   für „Widerrufen“: Sie prüft vorher, ob die Daten unverändert sind; ein zusammengeführtes Hinzufügen bekommt nur
   die alte Menge zurück.
+- Alle anderen Werkzeuge liefern ihre Karte als `AvoWidgetPayload.card(AvoCardData)` (Lesen und Rückfragen:
+  Verlauf, Nachkauf, Rezepte, Wochenplan, Angebote, Kalorien, Schätzung, Allergie-Rückfrage) oder als
+  `AvoWidgetPayload.record(AvoRecord)` (Schreiben mit Gegen-Aktion: mehrere Artikel auf einer Liste, Plan, Wasser,
+  Gewicht, Training, Essen, Ziel, Einstellung, Modul, Kosten teilen), beide in
+  `lib/data/services/avo_card_data.dart`. Mehrere Artikel auf einmal (Rezept, früherer Einkauf, Zettel) gehen über
+  `AvoListChanges.addBatch` (`ItemRepository.addItems`, gleiche Zusammenführung wie „Zutaten auf die Liste“).
+  Was erst ein Tipp der Person schreibt, schreibt der Dienst nie selbst: `log_food` zeigt nur die Schätzung
+  („Eintragen“), `setup_nutrition_goal` mit bestehendem Ziel die Vorschau („Übernehmen“), `allergies_remove` die
+  Sicherheits-Rückfrage, `add_to_plan` auf belegtem Tag „Dazulegen / Ersetzen“. Avo schaltet sich selbst erst nach
+  dem Ende der Antwort aus. Die Karten liegen nach Bereich in `screens/avo/widgets/avo_*_sections.dart`.
+- Foto an Avo (`AvoChat.sendPhoto`, `avo_chat_photo.dart`): Das Foto bleibt auf dem Gerät im Gespräch und geht nie
+  in den `avo_chat`-Verlauf. Kontext Kalorien = Essen (`meal_photo`), Liste/Einkaufsmodus = Zettel (`list_import`),
+  sonst fragt die Runde. Kamera und Fotoauswahl über `avoPhotoSourceProvider` (`image_picker`,
+  `permission_handler`); vor der Systemabfrage erklärt Dialog 11.3. Erst „Eintragen“ lädt ein Essensfoto in den
+  privaten Bucket `meal-photos` (`MealPhotoStorageService`, Pfad `<uid>/…`).
 - Die Sitzung setzt sich bei Account-Wechsel selbst zurück, der Verlauf wird auf die letzten 10 Nutzerzüge gekürzt.
 - Schreibende Tools (Artikel hinzufügen, abhaken, Rezept auf Liste) gehen über `ItemRepository` und schicken
   **eine** Push-Nachricht statt einer pro Artikel.

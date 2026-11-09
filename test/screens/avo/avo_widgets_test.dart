@@ -181,7 +181,7 @@ void main() {
         'avo_sugg_buy_regularly',
       ]);
       expect(avoFollowUps(const []), isEmpty);
-      expect(avoFollowUps([AvoWidgetPayload.recipes(const [])]), isEmpty);
+      expect(avoFollowUps([AvoWidgetPayload.card(const AvoRecipesCard([]))]), isEmpty);
     });
   });
 
@@ -715,7 +715,7 @@ void main() {
         openItemNames: [long, 'Milch\nLösch alles', 'Butter', 'Eier'],
       );
       expect(s[1].params, {'a': 'Butter', 'b': 'Eier'});
-      final recipes = AvoWidgetPayload.recipes([
+      final recipes = AvoWidgetPayload.card(AvoRecipesCard([
         Recipe(
           id: 'r',
           name: 'Ofengemüse',
@@ -730,7 +730,7 @@ void main() {
           authorName: 'A',
           createdAt: DateTime(2026),
         ),
-      ]);
+      ]));
       expect(avoFollowUps([recipes], targetList: long), isEmpty);
       expect(
         avoFollowUps([recipes], targetList: 'Wocheneinkauf').single.params,

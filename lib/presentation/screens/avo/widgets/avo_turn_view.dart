@@ -39,6 +39,7 @@ class AvoTurnView extends ConsumerWidget {
     required this.onSend,
     required this.onEdit,
     this.followUps = const [],
+    this.onNewPhoto,
   });
 
   final AvoChat chat;
@@ -54,6 +55,9 @@ class AvoTurnView extends ConsumerWidget {
 
   /// Chips under this answer (only the newest one has some).
   final List<AvoSuggestion> followUps;
+
+  /// "Neues Foto" on a photo Avo could not read: the photo menu again.
+  final VoidCallback? onNewPhoto;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -91,10 +95,13 @@ class AvoTurnView extends ConsumerWidget {
     final children = <Widget>[
       AvoUserBubble(
         text: turn.question,
+        photo: turn.photo,
         note: note,
         noteActionLabel: noteAction,
         onNoteAction: onNoteAction,
-        onEdit: () => onEdit(turn.question),
+        onEdit: turn.isPhoto || turn.question.isEmpty
+            ? null
+            : () => onEdit(turn.question),
       ),
     ];
     void add(Widget w, double gap) {
@@ -104,12 +111,17 @@ class AvoTurnView extends ConsumerWidget {
     }
 
     var gap = _bubbleToBlock;
+    // A photo's question stands right under it, before its reading starts.
+    for (final c in avoPhotoChoices(context, scope)) {
+      add(c, gap);
+      gap = _cardToText;
+    }
     if (turn.showsStatus) {
       add(AvoStatusLine(step: turn.step, onStop: chat.stop), gap);
       gap = _cardToText;
     }
 
-    final sections = avoSectionsFor(context, scope);
+    final sections = avoSectionsFor(context, scope, onNewPhoto: onNewPhoto);
     if (turn.phase == AvoTurnPhase.failed && turn.errorCode != null) {
       sections.add(
         AvoErrorSection(

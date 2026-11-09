@@ -12,6 +12,7 @@ import 'package:shoply/core/constants/app_brand.dart';
 import 'package:shoply/core/constants/legal_links.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
@@ -22,19 +23,24 @@ import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/avo_hand_over.dart';
 import 'package:shoply/presentation/screens/avo/avo_initial_question.dart';
+import 'package:shoply/presentation/screens/avo/avo_photo_source.dart';
 import 'package:shoply/presentation/screens/avo/avo_suggestions.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_composer.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_context_chip.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_glyphs.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_large_title.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_list_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_record_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_status_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_suggestion_views.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_turn_view.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
+import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
+import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
 import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/glass_toolbar.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
@@ -87,6 +93,13 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
   /// head without losing its state, so it is announced once.
   final _statusKey = GlobalKey(debugLabel: 'avo-status');
   String? _announcedStatus;
+
+  /// The composer, to place the photo menu at its camera button.
+  final _composerKey = GlobalKey(debugLabel: 'avo-composer');
+
+  /// The camera is off in Settings (Kap. 7.4): the status row says so
+  /// until a photo or a question goes out.
+  bool _cameraDenied = false;
   bool _visible = false;
   late final AppLifecycleListener _lifecycle = AppLifecycleListener(
     onResume: () => _chat?.expireIfStale(),
@@ -129,6 +142,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
     _lifecycle.dispose();
     _chat?.onTurnFinished = null;
     _chat?.onChangeMade = null;
+    _chat?.onAvoTurnedOff = null;
     _scroll.removeListener(_onScroll);
     _scrollSpring.dispose();
     _scroll.dispose();
@@ -189,7 +203,95 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
     );
     if (turn == null) return;
     if (clearField) _controller.clear();
+    if (_cameraDenied) setState(() => _cameraDenied = false);
     if (typed) ref.read(tipServiceProvider).note(TipEvent.avoTextMessage);
+  }
+
+  // ---------------------------------------------------------------- photos
+
+  /// "Foto hinzufügen": the pull-down "Foto aufnehmen / Foto auswählen"
+  /// from the camera button of the composer (Kap. 2.11, 7.1).
+  void _photoMenu() {
+    final box = _composerKey.currentContext?.findRenderObject() as RenderBox?;
+    Rect? anchor;
+    if (box != null && box.hasSize) {
+      final origin = box.localToGlobal(Offset.zero);
+      anchor = Rect.fromLTWH(
+        origin.dx + AvoSpacing.screen,
+        origin.dy + box.size.height - AvoSizes.accessoryHeight,
+        AvoSizes.hitTarget,
+        AvoSizes.accessoryHeight,
+      );
+    }
+    showAvoMenu(
+      context,
+      anchorRect: anchor,
+      items: [
+        AvoMenuItem(
+          label: context.tr('avo_photo_take'),
+          onSelected: () => unawaited(_takePhoto()),
+        ),
+        AvoMenuItem(
+          label: context.tr('avo_photo_choose'),
+          onSelected: () => unawaited(_choosePhoto()),
+        ),
+      ],
+    );
+  }
+
+  /// "Neues Foto" on a photo Avo could not read.
+  void _photoMenuFromCard() => _photoMenu();
+
+  /// The camera: first the app's own explanation when the system has not
+  /// asked yet (dialog 11.3), then the system camera.
+  Future<void> _takePhoto() async {
+    final source = ref.read(avoPhotoSourceProvider);
+    final access = await source.cameraAccess();
+    if (!mounted) return;
+    if (access == AvoCameraAccess.denied) {
+      setState(() => _cameraDenied = true);
+      return;
+    }
+    if (access == AvoCameraAccess.notAsked) {
+      final go = await showAvoConfirm(
+        context,
+        title: context.tr('avo_camera_title'),
+        message: context.tr('avo_camera_body'),
+        confirmLabel: context.tr('avo_continue'),
+        cancelLabel: context.tr('avo_not_now'),
+        destructive: false,
+      );
+      if (!go || !mounted) return;
+    }
+    final photo = await source.take();
+    if (!mounted) return;
+    if (photo == null) {
+      // Declined in the system prompt: say how to allow it.
+      if (await source.cameraAccess() == AvoCameraAccess.denied && mounted) {
+        setState(() => _cameraDenied = true);
+      }
+      return;
+    }
+    _sendPhoto(photo);
+  }
+
+  Future<void> _choosePhoto() async {
+    final photo = await ref.read(avoPhotoSourceProvider).choose();
+    if (photo == null || !mounted) return;
+    _sendPhoto(photo);
+  }
+
+  /// The photo goes out with what is in the composer as its note.
+  void _sendPhoto(Uint8List photo) {
+    final chat = ref.read(avoChatProvider)..attach(ref);
+    final turn = chat.sendPhoto(
+      photo,
+      text: _controller.text,
+      offline: ref.read(isOfflineProvider),
+    );
+    if (turn == null) return;
+    _controller.clear();
+    setState(() => _cameraDenied = false);
   }
 
   /// Kap. 3.2: a change made while the tab is not visible also shows as a
@@ -198,12 +300,40 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
     if (!mounted || _visible) return;
     final chat = ref.read(avoChatProvider);
     final change = chat.changeOf(p);
-    if (change == null) return;
+    final record = chat.recordOf(p);
+    final String message;
+    final bool undoable;
+    if (change != null) {
+      message = avoChangeToast(context, change);
+      undoable = change.undo != null;
+    } else if (record != null) {
+      final head = avoRecordHead(context, record);
+      message = '${head.title}: ${head.subtitle}';
+      undoable = record.undo != null;
+    } else {
+      return;
+    }
     AvoToast.show(
       context,
-      message: avoChangeToast(context, change),
-      actionLabel: change.undo == null ? null : context.tr('avo_undo'),
-      onAction: change.undo == null ? null : () => chat.undo(p),
+      message: message,
+      actionLabel: undoable ? context.tr('avo_undo') : null,
+      onAction: undoable ? () => chat.undo(p) : null,
+    );
+  }
+
+  /// Avo switched itself off (Kap. 5.7): the global toast with
+  /// "Widerrufen"; the tab goes away with the module.
+  void _avoTurnedOff(AvoModuleRecord record) {
+    if (!mounted) return;
+    // The tab goes away with the module; the container outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    AvoToast.show(
+      context,
+      message: context.tr('avo_avo_off_toast'),
+      actionLabel: context.tr('avo_undo'),
+      onAction: () => container
+          .read(appModulesProvider.notifier)
+          .setEnabled(AppModule.avo, true),
     );
   }
 
@@ -309,9 +439,13 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
         ? context.tr('avo_err_refused')
         : turn.phase == AvoTurnPhase.failed
         ? context.tr('avo_err_title')
+        : turn.isPhoto
+        ? _photoResult(turn)
         : turn.text.value.trim();
     if (text.isEmpty) return;
-    final undo = turn.payloads.any((p) => p.listChange?.undo != null);
+    final undo = turn.payloads.any(
+      (p) => p.listChange?.undo != null || p.record?.undo != null,
+    );
     SemanticsService.sendAnnouncement(
       view,
       [
@@ -320,6 +454,27 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       ].join(' '),
       Directionality.of(context),
     );
+  }
+
+  /// What a photo round found, for its announcement (Kap. 3.6).
+  String _photoResult(AvoTurn turn) {
+    for (final p in turn.payloads.reversed) {
+      switch (p.card) {
+        case AvoEstimateCard(:final name, :final kcal):
+          return '$name, ${context.tr('avo_est_about', params: {'kcal': '$kcal'})}';
+        case AvoListImportCard(:final items):
+          return items.length == 1
+              ? context.tr('avo_import_found_one')
+              : context.tr('avo_import_found', params: {'n': '${items.length}'});
+        case AvoPhotoChoiceCard():
+          return context.tr('avo_photo_question');
+        case AvoPhotoErrorCard():
+          return context.tr('avo_err_title');
+        default:
+          break;
+      }
+    }
+    return '';
   }
 
   // ----------------------------------------------------------------- build
@@ -357,10 +512,12 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
     if (!identical(chat, _chat)) {
       _chat?.onTurnFinished = null;
       _chat?.onChangeMade = null;
+      _chat?.onAvoTurnedOff = null;
       _chat = chat;
       chat
         ..onTurnFinished = _announce
-        ..onChangeMade = _changeMade;
+        ..onChangeMade = _changeMade
+        ..onAvoTurnedOff = _avoTurnedOff;
       _turnCount = -1;
     }
     final offline = ref.watch(isOfflineProvider);
@@ -398,12 +555,20 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
           )
         : offline
         ? StatusRow(kind: StatusKind.offline, text: context.tr('avo_offline'))
+        : _cameraDenied
+        ? StatusRow(
+            kind: StatusKind.permission,
+            text: context.tr('avo_camera_denied'),
+            actionLabel: context.tr('avo_settings_action'),
+            onAction: () => ref.read(avoPhotoSourceProvider).openSettings(),
+          )
         : chat.slowConnection
         ? StatusRow(
             kind: StatusKind.pending,
             text: context.tr('avo_slow_connection'),
           )
         : null;
+    final cameraRow = aiOn && !offline && _cameraDenied;
     final media = MediaQuery.of(context);
     // The status row sits in the conversation below the large title (as
     // StatusRow wants it). Once the title has collapsed into the head it
@@ -418,6 +583,7 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
               2 * AvoSpacing.xs;
     final mayPin =
         statusText != null &&
+        !cameraRow &&
         !context.isAccessibilityText &&
         statusSpace <= media.size.height / 4;
     final pinned = mayPin && _collapsed.value;
@@ -440,24 +606,53 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       double.infinity,
     );
 
-    final pose = chat.isWorking ? AvoPose.thinking : AvoPose.waving;
+    final pose = chat.isWorking
+        ? AvoPose.thinking
+        : chat.celebrating
+        ? AvoPose.celebrating
+        : AvoPose.waving;
 
     final followUpTarget = contextName ?? contextList?.name;
     final body = <Widget>[
       // VoiceOver reads the title from the head ([_TitleForVoiceOver]), so it
       // comes before "Neues Gespräch" (Kap. 3.6).
       ExcludeSemantics(child: AvoLargeTitle(pose: pose)),
-      if (status != null)
-        pinned
-            // Holds its place while it is pinned, so nothing moves.
-            ? SizedBox(height: statusSpace)
-            : ConstrainedBox(
-                constraints: BoxConstraints(minHeight: statusSpace),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AvoSpacing.xs),
-                  child: KeyedSubtree(key: _statusKey, child: status),
-                ),
-              ),
+      // The slot is always there (empty without a status), so the rounds
+      // below keep their places in the list and their state when the row
+      // comes or goes (W1 re-review 3, Minor 2).
+      if (status == null)
+        const SizedBox.shrink()
+      else if (pinned)
+        // Holds its place while it is pinned, so nothing moves.
+        SizedBox(height: statusSpace)
+      else
+        ConstrainedBox(
+          constraints: BoxConstraints(minHeight: statusSpace),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AvoSpacing.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                KeyedSubtree(key: _statusKey, child: status),
+                // Kap. 7.4: "Stattdessen Foto auswählen" under the row.
+                if (cameraRow)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AvoSpacing.screen,
+                    ),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: AppButton.plain(
+                        label: context.tr('avo_photo_choose_instead'),
+                        onPressed: () => unawaited(_choosePhoto()),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
       const SizedBox(height: _historyStart),
       if (turns.isEmpty)
         AvoEmptyChat(
@@ -587,9 +782,11 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
               container: true,
               sortKey: const OrdinalSortKey(3),
               child: AvoComposer(
+                key: _composerKey,
                 controller: _controller,
                 focusNode: _focus,
                 enabled: aiOn,
+                onPhoto: _photoMenu,
                 onSend: (text) => _send(text, typed: true),
                 above: showChip
                     ? AvoContextChip(
@@ -625,12 +822,18 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
         followUps: followUps,
         onSend: _send,
         onEdit: _edit,
+        onNewPhoto: _photoMenuFromCard,
       ),
     );
-    if (!last) return view;
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: minHeight),
-      child: Align(alignment: Alignment.topCenter, child: view),
+    // Keyed by the round, so the list finds it again whatever comes or goes
+    // above it; the same wrapper for every round, so the newest one keeps
+    // its state when a newer round arrives.
+    return KeyedSubtree(
+      key: ValueKey('avo-turn-${turn.id}'),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: last ? minHeight : 0),
+        child: Align(alignment: Alignment.topCenter, child: view),
+      ),
     );
   }
 }

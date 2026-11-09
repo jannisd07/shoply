@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import 'package:shoply/data/services/avo_assistant_service.dart';
 
+/// What a photo for Avo is (Kap. 7.1): a meal to estimate or a shopping
+/// note to read.
+enum AvoPhotoIntent { meal, list }
+
 /// Where one question of the Avo tab stands (Kap. 3.2, 3.3).
 enum AvoTurnPhase {
   /// Sent while another answer was running: "Wird nach dieser Antwort
@@ -56,6 +60,7 @@ AvoWorkStep avoWorkStepFor(
   String name,
   Map<String, Object?> input, {
   String? Function(String listId)? listName,
+  String? Function(String? listId)? storeName,
 }) {
   String? list(String key) {
     final id = input[key];
@@ -97,7 +102,15 @@ AvoWorkStep avoWorkStepFor(
     case 'get_shopping_history':
     case 'get_restock_suggestions':
     case 'get_savings_summary':
+    case 'split_trip_cost':
       return const AvoWorkStep('avo_status_history');
+    case 'search_offers':
+    case 'get_personalized_deals':
+      final id = input['list_id'];
+      final store = storeName?.call(id is String && id.isNotEmpty ? id : null)?.trim();
+      return store == null || store.isEmpty
+          ? AvoWorkStep.thinking
+          : AvoWorkStep('avo_status_offers', {'store': store});
     default:
       return AvoWorkStep.thinking;
   }
@@ -112,11 +125,23 @@ class AvoTurn {
     this.sentText,
     this.carried = const [],
     this.proHintAllowed = false,
+    this.photo,
+    this.photoIntent,
   });
 
   final int id;
   final String question;
   final DateTime askedAt;
+
+  /// A photo for Avo (Kap. 7): shown in the bubble, read on the device's
+  /// behalf through `meal_photo` or `list_import`, never part of the chat
+  /// history sent to the server.
+  final Uint8List? photo;
+
+  /// What the photo is; null until the context or the person's choice says.
+  AvoPhotoIntent? photoIntent;
+
+  bool get isPhoto => photo != null;
 
   /// What goes to Avo when it differs from [question] (a retry that tells
   /// Avo what is already done).
@@ -168,8 +193,11 @@ class AvoTurn {
   bool get showsStatus =>
       phase == AvoTurnPhase.working &&
       text.value.isEmpty &&
-      // The invisible "done" marker of a card-less write is no content.
-      payloads.every((p) => p.kind == AvoPayloadKind.wrote);
+      // The invisible "done" marker of a card-less write is no content, and
+      // an answered photo choice stands above the line.
+      payloads.every(
+        (p) => p.kind == AvoPayloadKind.wrote || p.card is AvoPhotoChoiceCard,
+      );
 
   /// Back to a fresh answer (a retry without done changes).
   void restart() {

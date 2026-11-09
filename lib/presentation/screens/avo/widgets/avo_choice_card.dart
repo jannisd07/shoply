@@ -205,3 +205,18 @@ class _AvoChoiceCardState extends State<AvoChoiceCard> {
     );
   }
 }
+
+/// A fixed question or sentence in Avo's voice above a card ("Was soll ich
+/// mit dem Foto machen?"), body text with "Avo:" for VoiceOver.
+class AvoQuestionText extends StatelessWidget {
+  const AvoQuestionText({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '${context.tr('avo_a11y_prefix')} $text',
+    excludeSemantics: true,
+    child: Text(text, style: context.text(AvoTextStyle.body)),
+  );
+}

@@ -1,16 +1,23 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/modules/app_modules.dart';
+import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/data/services/allergen_matcher.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/avo_consents.dart';
 import 'package:shoply/data/services/avo_conversation.dart';
+import 'package:shoply/data/services/avo_list_changes.dart';
+import 'package:shoply/data/services/list_import_service.dart';
+import 'package:shoply/data/services/meal_photo_analysis_service.dart';
 import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
+import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_backend.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat_state.dart';
 import 'package:shoply/presentation/screens/avo/avo_turn.dart';
@@ -22,6 +29,7 @@ export 'package:shoply/presentation/screens/avo/avo_chat_state.dart';
 export 'package:shoply/presentation/screens/avo/avo_turn.dart';
 
 part 'avo_chat_cards.dart';
+part 'avo_chat_photo.dart';
 
 /// The conversation of the Avo tab: the questions, their answers and the
 /// state of every card. Lives as long as the account (a new account gets a
@@ -30,7 +38,7 @@ part 'avo_chat_cards.dart';
 /// Everything that runs later (answers, undo, retry, choices) uses the
 /// [WidgetRef] of the tab root ([attach]), which stays mounted in its tab;
 /// never the ref of a round that may scroll away and be disposed.
-class AvoChat extends ChangeNotifier with _AvoCardActions {
+class AvoChat extends ChangeNotifier with _AvoCardActions, _AvoPhotoTurns {
   AvoChat(this._backend, {DateTime Function()? now, AvoProHintGate? proHints})
     : _now = now ?? DateTime.now,
       _proHints = proHints ?? avoPrefsProHintGate;
@@ -65,6 +73,16 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
   @override
   void Function(AvoWidgetPayload change)? onChangeMade;
 
+  /// Avo switched itself off (`set_module`) once its answer was done: the
+  /// tab shows the global "Avo ausgeschaltet · Widerrufen" toast.
+  void Function(AvoModuleRecord record)? onAvoTurnedOff;
+
+  /// The figure celebrates for a while after "Wochenplan auf der Liste"
+  /// (Kap. 2.13), never for money or health.
+  bool get celebrating => _celebrating;
+  bool _celebrating = false;
+  Timer? _celebrateTimer;
+
   /// The tab root hands over its ref (every build).
   void attach(WidgetRef ref) => _ref = ref;
 
@@ -82,6 +100,18 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
 
   @override
   DateTime _cardNow() => _now();
+
+  @override
+  void _cardNotify() => notifyListeners();
+
+  @override
+  bool get _photoGone => _disposed;
+
+  @override
+  AvoBackend get _photoBackend => _backend;
+
+  @override
+  WidgetRef? get _photoRef => _ref;
 
   List<AvoTurn> get turns => List.unmodifiable(_turns);
   bool get isEmpty => _turns.isEmpty;
@@ -138,6 +168,7 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     return turn;
   }
 
+  @override
   void _start(AvoTurn turn, {required bool offline}) {
     if (offline) {
       turn.phase = AvoTurnPhase.notSent;
@@ -164,6 +195,13 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     String? doneNote,
   }) {
     if (!_turns.contains(turn) || identical(turn, _active)) return;
+    if (turn.isPhoto) {
+      turn
+        ..restart()
+        ..proHintAllowed = proHintAllowed;
+      _start(turn, offline: offline);
+      return;
+    }
     if (turn.payloads.any((p) => p.isDoneChange)) {
       turn.retried = true;
       final note = doneNote?.trim();
@@ -184,11 +222,44 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     _start(turn, offline: offline);
   }
 
+  /// A photo for Avo (Kap. 7.1) with an optional [text] from the composer.
+  /// The context says what it is (calories: a meal, a list: a shopping
+  /// note), otherwise the round asks "Was soll ich mit dem Foto machen?".
+  /// Offline it stays as "Nicht gesendet".
+  AvoTurn? sendPhoto(
+    Uint8List photo, {
+    String text = '',
+    bool offline = false,
+  }) {
+    if (_ref == null || photo.isEmpty) return null;
+    expireIfStale();
+    if (_cleared != null) {
+      _cleared = null;
+      _resetPending = true;
+    }
+    _askedContext = _readContext();
+    final turn = AvoTurn(
+      _nextId++,
+      text.trim(),
+      _now(),
+      photo: photo,
+      photoIntent: _photoIntentFromContext(),
+    );
+    _turns.add(turn);
+    _lastActivity = _now();
+    _start(turn, offline: offline);
+    return turn;
+  }
+
   /// "Stopp" / "Antwort anhalten": done changes stay with "Widerrufen".
   void stop() {
     if (_active == null) return;
     _stopRequested = true;
-    _backend.stop();
+    if (_active!.isPhoto) {
+      _stopPhoto();
+    } else {
+      _backend.stop();
+    }
   }
 
   Future<void> _run(AvoTurn turn) async {
@@ -203,6 +274,17 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     _stopRequested = false;
     turn.phase = AvoTurnPhase.working;
     notifyListeners();
+
+    if (turn.isPhoto) {
+      await _runPhoto(turn, stopped: () => _stopRequested);
+      _active = null;
+      _lastActivity = _now();
+      if (_disposed) return;
+      notifyListeners();
+      if (_turns.contains(turn)) onTurnFinished?.call(turn);
+      _runNext();
+      return;
+    }
 
     // Anything arriving from Avo means the connection carries again.
     void firstEvent() {
@@ -228,14 +310,20 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
           firstEvent();
           // Text before a tool is narration the answer replaces.
           turn.text.value = '';
-          turn.step = avoWorkStepFor(name, input, listName: _listName);
+          turn.step = avoWorkStepFor(
+            name,
+            input,
+            listName: _listName,
+            storeName: _storeName,
+          );
           notifyListeners();
         },
         onPayload: (payload) {
           if (_disposed || turn.payloads.contains(payload)) return;
           turn.payloads.add(payload);
           notifyListeners();
-          if (payload.kind == AvoPayloadKind.listChange &&
+          if ((payload.kind == AvoPayloadKind.listChange ||
+                  payload.kind == AvoPayloadKind.record) &&
               _turns.contains(turn)) {
             onChangeMade?.call(payload);
           }
@@ -259,14 +347,58 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
     _active = null;
     _lastActivity = _now();
     if (_disposed) return;
+    _afterAnswer(turn);
     notifyListeners();
     if (_turns.contains(turn)) onTurnFinished?.call(turn);
+    _runNext();
+  }
 
+  void _runNext() {
     final next = _turns
         .where((t) => t.phase == AvoTurnPhase.queued)
         .firstOrNull;
     if (next != null) unawaited(_run(next));
   }
+
+  /// What waits for the end of an answer: Avo switching itself off, and
+  /// the figure's short celebration with success haptics for the meal plan
+  /// on a list (Kap. 2.13, 12.4).
+  void _afterAnswer(AvoTurn turn) {
+    for (final p in turn.payloads) {
+      final record = p.record;
+      if (record is AvoModuleRecord && record.applyAfterAnswer != null) {
+        unawaited(() async {
+          try {
+            await record.applyAfterAnswer!();
+            if (!_disposed) onAvoTurnedOff?.call(record);
+          } catch (e) {
+            debugPrint('❌ [AVO_TAB] Avo not switched off: $e');
+          }
+        }());
+      }
+    }
+    if (turn.phase == AvoTurnPhase.done &&
+        turn.payloads.any(
+          (p) =>
+              p.record is AvoItemsRecord &&
+              (p.record! as AvoItemsRecord).source == AvoItemsSource.plan,
+        )) {
+      celebrate();
+    }
+  }
+
+  /// Three seconds of the celebrating figure, with the success haptic.
+  void celebrate() {
+    _celebrating = true;
+    _celebrateTimer?.cancel();
+    _celebrateTimer = Timer(_celebration, () {
+      _celebrating = false;
+      if (!_disposed) notifyListeners();
+    });
+    unawaited(AvoHaptics.success());
+  }
+
+  static const Duration _celebration = Duration(seconds: 3); // Kap. 2.13
 
   Future<void> _finish(
     AvoTurn turn,
@@ -347,6 +479,7 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
 
   // ---------------------------------------------------------------- helpers
 
+  @override
   AvoScreenContext? _readContext() {
     try {
       return _ref?.read(avoScreenContextProvider);
@@ -361,9 +494,22 @@ class AvoChat extends ChangeNotifier with _AvoCardActions {
       .firstOrNull
       ?.name;
 
+  /// The confirmed market of [listId], else of the context list.
+  String? _storeName(String? listId) {
+    final id = listId ?? _readContext()?.listId;
+    if (id == null) return null;
+    try {
+      return _ref?.read(storeForListProvider(id))?.name;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    _celebrateTimer?.cancel();
+    _stopPhoto();
     if (_active != null) _backend.stop();
     for (final t in [..._turns, ...?_cleared]) {
       t.text.dispose();

@@ -1,77 +1,132 @@
 import 'package:flutter/widgets.dart';
 
-import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_card_scope.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_delete_sections.dart';
-import 'package:shoply/presentation/screens/avo/widgets/avo_interim_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_health_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_history_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_list_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_offer_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_photo_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_plan_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_recipe_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_record_sections.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_setting_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_status_sections.dart';
 
 export 'package:shoply/presentation/screens/avo/widgets/avo_card_scope.dart';
 
 /// The sections of a round's answer card, in the order the tools finished.
-/// Choice cards ([AvoPayloadKind.pickList]) are not in it: they stand on
-/// their own under Avo's question ([avoChoiceCards]).
-List<Widget> avoSectionsFor(BuildContext context, AvoCardScope scope) => [
-  for (final p in scope.turn.payloads) ?_sectionFor(context, scope, p),
+/// Cards that ask the person something stand on their own instead
+/// ([avoChoiceCards], [avoPhotoChoices]). [onNewPhoto] is "Neues Foto" of a
+/// photo Avo could not read.
+List<Widget> avoSectionsFor(
+  BuildContext context,
+  AvoCardScope scope, {
+  VoidCallback? onNewPhoto,
+}) => [
+  for (final p in scope.turn.payloads)
+    ..._sectionsFor(context, scope, p, onNewPhoto),
 ];
 
-Widget? _sectionFor(BuildContext context, AvoCardScope s, AvoWidgetPayload p) {
+List<Widget> _sectionsFor(
+  BuildContext context,
+  AvoCardScope s,
+  AvoWidgetPayload p,
+  VoidCallback? onNewPhoto,
+) {
   switch (p.kind) {
     case AvoPayloadKind.lists:
-      return AvoListsSection(lists: p.lists ?? const []);
+      return [AvoListsSection(lists: p.lists ?? const [])];
     case AvoPayloadKind.listItems:
-      return AvoListItemsSection(payload: p, scope: s);
+      return [AvoListItemsSection(payload: p, scope: s)];
     case AvoPayloadKind.listChange:
-      return p.listChange == null
-          ? null
-          : AvoListChangeSection(payload: p, scope: s);
+      return [if (p.listChange != null) AvoListChangeSection(payload: p, scope: s)];
     case AvoPayloadKind.confirmDelete:
-      return p.pendingDelete == null
-          ? null
-          : AvoConfirmSection(payload: p, scope: s);
+      return [
+        if (p.pendingDelete != null) AvoConfirmSection(payload: p, scope: s),
+      ];
     case AvoPayloadKind.consentRequest:
-      return AvoConsentSection(payload: p, scope: s);
+      return [AvoConsentSection(payload: p, scope: s)];
     case AvoPayloadKind.moduleOff:
       final module = p.module;
-      if (module == null) return null;
-      return AvoModuleOffRow(
-        module: module,
-        phase: s.chat.modulePhaseOf(p),
-        onTurnOn: () => s.chat.turnOnModule(
-          p,
-          offline: s.offline,
-          proHintAllowed: s.proHintAllowed,
+      if (module == null) return const [];
+      return [
+        AvoModuleOffRow(
+          module: module,
+          phase: s.chat.modulePhaseOf(p),
+          onTurnOn: () => s.chat.turnOnModule(
+            p,
+            offline: s.offline,
+            proHintAllowed: s.proHintAllowed,
+          ),
+          onUndo: () => s.chat.undoModule(p),
         ),
-        onUndo: () => s.chat.undoModule(p),
-      );
-    case AvoPayloadKind.recipes:
-      final recipes = p.recipes ?? const <Recipe>[];
-      return recipes.isEmpty ? null : AvoRecipesSection(recipes: recipes);
-    case AvoPayloadKind.history:
-      final history = p.history ?? const <ShoppingHistory>[];
-      return history.isEmpty ? null : AvoHistorySection(history: history);
-    case AvoPayloadKind.nutrition:
-      final data = p.nutrition;
-      return data == null ? null : AvoNutritionSection(data: data);
-    case AvoPayloadKind.settingChange:
-      final result = p.settingChange;
-      return result == null ? null : avoSettingSection(context, result);
-    case AvoPayloadKind.appInfo:
-      final info = p.appInfo;
-      return info == null ? null : avoAppInfoSection(context, info);
+      ];
+    case AvoPayloadKind.record:
+      return [AvoRecordSection(payload: p, scope: s)];
+    case AvoPayloadKind.card:
+      final card = p.card;
+      if (card == null) return const [];
+      return _cardSections(context, s, p, card, onNewPhoto);
     case AvoPayloadKind.pickList:
     case AvoPayloadKind.wrote:
-      return null;
+      return const [];
   }
 }
 
-/// The "Auf welche Liste?" cards of [scope]'s round, each with the result of
-/// the choice under it.
+List<Widget> _cardSections(
+  BuildContext context,
+  AvoCardScope s,
+  AvoWidgetPayload p,
+  AvoCardData card,
+  VoidCallback? onNewPhoto,
+) => switch (card) {
+  AvoTripsCard() => avoTripsSections(context, s, p, card),
+  AvoRestockCard() => [avoRestockSection(context, s, p, card)],
+  AvoRecipesCard() => [AvoRecipesSection(card: card)],
+  AvoRecipeNutritionCard() => [avoRecipeNutritionSection(context, card)],
+  AvoPlanCard() => [avoPlanSection(context, card)],
+  AvoOfferSearchCard() => [AvoOfferSearchSection(card: card)],
+  AvoOfferSetupCard() => [AvoOfferSetupSection(card: card)],
+  AvoDealsCard() => [AvoDealsSection(card: card)],
+  AvoSavingsCard() => [AvoSavingsSection(card: card)],
+  AvoNutritionStatusCard() => [avoNutritionStatusSection(context, card)],
+  AvoWeekCard() => [avoWeekSection(context, card)],
+  AvoChallengesCard() => avoChallengeSections(context, card),
+  AvoEstimateCard() => [
+    AvoEstimateSection(payload: p, scope: s, card: card),
+  ],
+  AvoGoalPreviewCard() => [
+    AvoGoalPreviewSection(payload: p, scope: s, card: card),
+  ],
+  AvoAllergyCard() => [AvoAllergySection(payload: p, scope: s, card: card)],
+  AvoSettingFailedCard() => [avoSettingFailedSection(context, card)],
+  AvoAppInfoCard() => [avoAppInfoSection(context, card)],
+  AvoPhotoErrorCard() => [
+    avoPhotoErrorSection(context, s, card, onNewPhoto: onNewPhoto),
+  ],
+  // Standing on their own (choices).
+  AvoPlanTakenCard() || AvoListImportCard() || AvoPhotoChoiceCard() =>
+    const [],
+};
+
+/// The cards that ask the person to choose, each with the result of the
+/// choice under it: "Auf welche Liste?", a planned day, a shopping note.
 List<Widget> avoChoiceCards(BuildContext context, AvoCardScope scope) => [
   for (final p in scope.turn.payloads)
     if (p.kind == AvoPayloadKind.pickList && p.pickListData != null)
-      AvoPickListCard(payload: p, scope: scope),
+      AvoPickListCard(payload: p, scope: scope)
+    else if (p.card case final AvoPlanTakenCard card)
+      AvoPlanChoice(payload: p, scope: scope, card: card)
+    else if (p.card case final AvoListImportCard card)
+      AvoListImport(payload: p, scope: scope, card: card),
+];
+
+/// "Was soll ich mit dem Foto machen?": right under the photo, above the
+/// status line of the reading that follows.
+List<Widget> avoPhotoChoices(BuildContext context, AvoCardScope scope) => [
+  for (final p in scope.turn.payloads)
+    if (p.card case final AvoPhotoChoiceCard card)
+      AvoPhotoChoice(payload: p, scope: scope, card: card),
 ];

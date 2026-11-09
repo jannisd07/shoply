@@ -101,11 +101,15 @@ const _modules = AvoSuggestion('avo_sugg_modules', AvoSuggestionSymbol.toggles);
 const int _maxNameLength = 40;
 
 /// Line breaks, line and paragraph separators and other control characters
-/// (incl. U+0085, VT, FF, U+2028, U+2029).
-final RegExp _unsafeChars = RegExp(r'[\u0000-\u001F\u007F-\u009F\u2028\u2029]');
+/// (incl. U+0085, VT, FF, U+2028, U+2029), and double quotes (straight and
+/// typographic): the retry note puts names in quotes, so a name must never
+/// be able to close them and read as sentence text (W1 re-review 3).
+final RegExp _unsafeChars = RegExp(
+  r'[\u0000-\u001F\u007F-\u009F\u2028\u2029"\u201c\u201d\u201e\u201f\u2033]',
+);
 
 /// [name] trimmed, or null when it is empty, longer than 40 characters,
-/// spans lines or holds control characters.
+/// spans lines, holds control characters or a double quote.
 String? avoSafeName(String? name) {
   if (name == null) return null;
   final n = name.trim();
@@ -191,7 +195,7 @@ List<AvoSuggestion> avoFollowUps(
 }) {
   final out = <AvoSuggestion>[];
   final hasRecipes = payloads.any(
-    (p) => p.kind == AvoPayloadKind.recipes && (p.recipes?.isNotEmpty ?? false),
+    (p) => p.card is AvoRecipesCard && (p.card! as AvoRecipesCard).recipes.isNotEmpty,
   );
   final target = targetList == null ? null : avoSafeName(targetList);
   if (hasRecipes && target != null) {

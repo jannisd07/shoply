@@ -2,6 +2,23 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Avo-Antwortkarten für alle Werkzeuge und Foto an Avo (Teil B, B5 W1b)
+
+- Karten nach `docs/redesign/b-screens/avo.md` §5.2–§5.7 für jedes Werkzeug, das der Server heute anbietet:
+  Verlauf (aufklappbar, „Alle wieder auf …“), Nachkauf („Vielleicht auch“, Tippen setzt auf die Liste), Kosten
+  teilen, Rezepte (höchstens drei, kcal nur mit Modul Kalorien, Allergen-Hinweis), Nährwerte, Wochenplan (nur mit
+  Modul; belegter Tag fragt „Dazulegen / Ersetzen“), Angebote nur am Markt der Liste und mit echter Region
+  („laut Händler“, „in deiner Region“, „ca.“), Kalorien-Stand mit Ring, Wochen-Balken, Challenges, Ziel-Vorschau,
+  Wasser, Gewicht, Training, Einstellungen in der Sprache der Person, Module, Allergie entfernen nur über die
+  Sicherheits-Rückfrage. Jede Änderung mit „Widerrufen“, solange die Daten unverändert sind.
+- `log_food` speichert nie selbst: Schätzungskarte mit Mahlzeit (Menü), Portionen (Stepper), Nährwerten und
+  „Eintragen“.
+- Foto an Avo über den Kamera-Knopf der Eingabe: Essen schätzen, Einkaufszettel lesen (abwählbare Zeilen, Ziel-Liste),
+  Fehler- und Limit-Zustände, Kamera-Erklärung vor der Systemabfrage, „Kamera ist aus“.
+- Aus W1 mitgenommen: Teilergebnis von `plan_to_list` zählt als erledigt, der Platz der Statuszeile verschiebt
+  keine Runden mehr, Namen mit Anführungszeichen kommen nicht in die Erneut-Notiz.
+- Übergangskarten (`avo_interim_sections.dart`) und die alte Deals-Zusammenfassung entfernt.
+
 ## 2026-11-09: Angebots-Screens (Teil B, W4)
 
 Die übrigen Angebots-Screens im D2-Stil (`docs/redesign/b-screens/angebote.md` S9–S16): „Angebote bei {Markt}“

@@ -1,8 +1,13 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
+import 'package:shoply/data/services/avo_list_changes.dart';
+import 'package:shoply/data/services/list_import_service.dart';
+import 'package:shoply/data/services/meal_photo_analysis_service.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -51,6 +56,45 @@ abstract interface class AvoBackend {
     double quantity = 1,
     String? unit,
   });
+
+  /// Several items on a list in one batch (photo, "Alle wieder auf …").
+  Future<AvoItemsRecord> addItems(
+    WidgetRef ref, {
+    required String tool,
+    required AvoItemsSource source,
+    required String listId,
+    required List<NewItem> items,
+  });
+
+  /// "Eintragen" on an estimate: writes the diary entry.
+  Future<AvoFoodRecord> logEstimate(
+    WidgetRef ref,
+    AvoEstimateCard estimate, {
+    required MealType meal,
+    double factor = 1,
+  });
+
+  /// "Übernehmen" on a goal preview.
+  Future<AvoGoalRecord> applyGoal(WidgetRef ref, AvoGoalPreviewCard preview);
+
+  /// "Entfernen" on the allergy safety card.
+  Future<AvoSettingRecord> removeAllergy(WidgetRef ref, String allergen);
+
+  /// "Dazulegen" / "Ersetzen" on a day that has a recipe; null when the
+  /// recipe is gone.
+  Future<AvoPlanRecord?> planRecipe(
+    WidgetRef ref,
+    AvoPlanTakenCard card, {
+    required bool replace,
+  });
+
+  /// Avo's estimate of a meal photo (`meal_photo`); throws
+  /// [MealPhotoException].
+  Future<MealPhotoEstimate> readMealPhoto(Uint8List photo, {String? note});
+
+  /// The items of a photographed shopping note (`list_import`); throws
+  /// [ListImportException].
+  Future<ListImportResult> readListPhoto(Uint8List photo, CancelToken cancel);
 }
 
 /// The assistant behind the Avo tab (Claude through the edge function).
@@ -115,6 +159,62 @@ class AssistantAvoBackend implements AvoBackend {
     quantity: quantity,
     unit: unit,
   );
+
+  @override
+  Future<AvoItemsRecord> addItems(
+    WidgetRef ref, {
+    required String tool,
+    required AvoItemsSource source,
+    required String listId,
+    required List<NewItem> items,
+  }) => _service.addItemsForAvo(
+    ref,
+    tool: tool,
+    source: source,
+    listId: listId,
+    items: items,
+  );
+
+  @override
+  Future<AvoFoodRecord> logEstimate(
+    WidgetRef ref,
+    AvoEstimateCard estimate, {
+    required MealType meal,
+    double factor = 1,
+  }) => _service.logEstimateForAvo(ref, estimate, meal: meal, factor: factor);
+
+  @override
+  Future<AvoGoalRecord> applyGoal(WidgetRef ref, AvoGoalPreviewCard preview) =>
+      _service.applyGoalForAvo(ref, preview.goal, previous: preview.previous);
+
+  @override
+  Future<AvoSettingRecord> removeAllergy(WidgetRef ref, String allergen) =>
+      _service.removeAllergyForAvo(ref, allergen);
+
+  @override
+  Future<AvoPlanRecord?> planRecipe(
+    WidgetRef ref,
+    AvoPlanTakenCard card, {
+    required bool replace,
+  }) => _service.planRecipeForAvo(
+    ref,
+    recipeId: card.recipeId,
+    day: card.day,
+    servings: card.servings,
+    replacing: replace ? card.plannedEntryIds : const [],
+  );
+
+  @override
+  Future<MealPhotoEstimate> readMealPhoto(Uint8List photo, {String? note}) =>
+      MealPhotoAnalysisService.instance.analyzePhoto(photo, meal: note);
+
+  @override
+  Future<ListImportResult> readListPhoto(Uint8List photo, CancelToken cancel) =>
+      ListImportService.instance.importFromBytes(
+        photo,
+        isPdf: false,
+        cancelToken: cancel,
+      );
 }
 
 /// Lists, the items of the first three and the profile for the assistant

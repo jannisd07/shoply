@@ -33,7 +33,9 @@ const Set<String> avoWritingTools = {
 /// A tool that reports nothing written (`success: false`, `added: 0`, as
 /// `add_recipe_to_list`, `add_history_items_to_list` and `plan_to_list` do
 /// when every item failed) gets none: the retry must do it. A partial result
-/// (`added > 0` with failures) keeps it, or a retry would double quantities.
+/// (`added > 0` with failures, also `plan_to_list`'s `success: false` with
+/// `added > 0`) keeps it, or a retry would double quantities. So `added`
+/// decides before `success`.
 AvoWidgetPayload? avoWriteMarker(
   String tool,
   Map<String, Object?> result, {
@@ -41,14 +43,25 @@ AvoWidgetPayload? avoWriteMarker(
   String? listName,
 }) {
   if (!avoWritingTools.contains(tool) || hadDoneCard) return null;
-  if (result['error'] != null ||
-      result['not_available'] == true ||
+  // Nothing written yet: switched off, or the card asks the person first
+  // (an estimate to "Eintragen", a goal to "Übernehmen", a planned day,
+  // missing goal fields).
+  if (result['not_available'] == true ||
       result['tracking_enabled'] == false ||
-      result['success'] == false) {
+      result['saved'] == false ||
+      result['requires_confirmation'] == true ||
+      result['incomplete'] == true ||
+      result['asked'] == true) {
     return null;
   }
   final added = result['added'];
-  if (added is num && added <= 0) return null;
+  final wroteSome = added is num && added > 0;
+  if (!wroteSome &&
+      (result['error'] != null ||
+          result['success'] == false ||
+          (added is num && added <= 0))) {
+    return null;
+  }
   return AvoWidgetPayload.wrote(
     tool,
     listName: listName == null || listName.isEmpty ? null : listName,

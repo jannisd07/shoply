@@ -92,6 +92,23 @@ class _Writer implements AvoListWriter {
     );
   }
 
+  /// Merges like `ItemRepository.addItems`: same name and unit, unchecked.
+  @override
+  Future<List<ShoppingItemModel>> addItems(
+    String listId,
+    List<NewItem> batch,
+  ) async {
+    _check();
+    final written = <ShoppingItemModel>[];
+    for (final n in batch) {
+      await addItem(listId, name: n.name, quantity: n.quantity, unit: n.unit);
+      written.add(
+        items[listId]!.lastWhere((i) => i.name == n.name && !i.isChecked),
+      );
+    }
+    return written;
+  }
+
   @override
   Future<void> deleteItem(String listId, String itemId) async {
     _check();
@@ -175,6 +192,73 @@ void main() {
   setUp(() {
     writer = _Writer();
     changes = AvoListChanges(writer);
+  });
+
+  group('batch (recipe, trip, photo; W1b)', () {
+    test('names what was on the list and takes the batch back', () async {
+      writer.item('z', 'Zwiebeln', quantity: 1);
+      writer.item('b', 'Brot');
+      final record = await changes.addBatch(
+        tool: 'add_recipe_to_list',
+        source: AvoItemsSource.recipe,
+        listId: 'w',
+        items: const [
+          NewItem(name: 'Zwiebeln', quantity: 2),
+          NewItem(name: 'Feta', quantity: 1),
+        ],
+        recipeName: 'Ofengemüse',
+        servings: 4,
+      );
+      expect(record.listName, 'Wocheneinkauf');
+      expect(record.added, 2);
+      expect(record.alreadyOn, ['Zwiebeln']);
+      expect(record.servings, 4);
+      expect(record.noteListName, 'Wocheneinkauf');
+      expect(await record.undo!(), AvoUndoResult.undone);
+      // The new row goes, the merged one gets its old quantity back.
+      expect(writer.items['w']!.map((i) => i.name), ['Zwiebeln', 'Brot']);
+      expect(writer.items['w']!.first.quantity, 1);
+      expect(writer.deleted, hasLength(1));
+    });
+
+    test('changed since: nothing is touched', () async {
+      final record = await changes.addBatch(
+        tool: 'list_import',
+        source: AvoItemsSource.photo,
+        listId: 'w',
+        items: const [NewItem(name: 'Milch'), NewItem(name: 'Eier')],
+      );
+      final milk = writer.items['w']!.firstWhere((i) => i.name == 'Milch');
+      await writer.setChecked('w', milk.id, true);
+      expect(await record.undo!(), AvoUndoResult.changedSince);
+      expect(writer.deleted, isEmpty);
+      expect(writer.items['w'], hasLength(2));
+    });
+
+    test('unknown before (read failed): no undo, a merge is never undone '
+        'by deleting', () async {
+      writer.item('m', 'Milch');
+      final blind = _BlindBeforeWriter(writer);
+      final record = await AvoListChanges(blind).addBatch(
+        tool: 'add_history_items_to_list',
+        source: AvoItemsSource.history,
+        listId: 'w',
+        items: const [NewItem(name: 'Milch')],
+      );
+      expect(record.undo, isNull);
+      expect(record.added, 1);
+    });
+
+    test('a failing undo reports failed', () async {
+      final record = await changes.addBatch(
+        tool: 'list_import',
+        source: AvoItemsSource.photo,
+        listId: 'w',
+        items: const [NewItem(name: 'Milch')],
+      );
+      writer.failWrites = true;
+      expect(await record.undo!(), AvoUndoResult.failed);
+    });
   });
 
   group('add', () {
@@ -363,6 +447,12 @@ class _BlindBeforeWriter extends _Writer {
     required double quantity,
     String? unit,
   }) => inner.addItem(listId, name: name, quantity: quantity, unit: unit);
+
+  @override
+  Future<List<ShoppingItemModel>> addItems(
+    String listId,
+    List<NewItem> batch,
+  ) => inner.addItems(listId, batch);
 
   @override
   Future<List<ShoppingListModel>> lists() => inner.lists();

@@ -2,7 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
+import 'package:shoply/data/repositories/item_batch.dart';
 import 'package:shoply/data/services/avo_assistant_models.dart';
+
+export 'package:shoply/data/repositories/item_batch.dart' show NewItem;
 
 /// What Avo's list changes and their "Widerrufen" need from the app. The
 /// service backs it with the person's providers; tests use an in-memory fake.
@@ -22,6 +25,10 @@ abstract interface class AvoListWriter {
     required double quantity,
     String? unit,
   });
+
+  /// Puts several items on the list in one batch (`ItemRepository.addItems`:
+  /// same merge rule) and returns the rows it wrote, new and merged ones.
+  Future<List<ShoppingItemModel>> addItems(String listId, List<NewItem> items);
 
   Future<void> deleteItem(String listId, String itemId);
   Future<void> updateItem(
@@ -208,6 +215,89 @@ class AvoListChanges {
       return AvoUndoResult.undone;
     } catch (e) {
       debugPrint('❌ [AVO] Undo merge failed: $e');
+      return AvoUndoResult.failed;
+    }
+  }
+
+  // --------------------------------------------------------------- batch
+
+  /// Puts [items] on [listId] in one batch (recipe, past trip, photo) and
+  /// describes it for the card: how many lines, which were on the list
+  /// already. The undo deletes the new rows and sets merged ones back to
+  /// their old quantity, only while every row is as Avo left it. Unknown
+  /// before (read failed): no undo, a merged row is never deleted.
+  Future<AvoItemsRecord> addBatch({
+    required String tool,
+    required AvoItemsSource source,
+    required String listId,
+    required List<NewItem> items,
+    String? recipeName,
+    int? servings,
+  }) async {
+    final before = await _itemsOrUnknown(listId);
+    final written = await writer.addItems(listId, items);
+    writer.changed([listId]);
+    final open = {
+      for (final i in before ?? const <ShoppingItemModel>[])
+        if (!i.isChecked) i.id: i,
+    };
+    final merged = [
+      for (final w in written)
+        if (open[w.id] != null) w,
+    ];
+    final inserted = [
+      for (final w in written)
+        if (open[w.id] == null) w,
+    ];
+    return AvoItemsRecord(
+      tool: tool,
+      source: source,
+      listId: listId,
+      listName: await listName(listId),
+      added: written.length,
+      alreadyOn: [for (final m in merged) m.name],
+      recipeName: recipeName,
+      servings: servings,
+      undo: before == null || written.isEmpty
+          ? null
+          : () => undoBatch(
+              listId,
+              inserted: inserted,
+              merged: {for (final m in merged) m: open[m.id]!.quantity},
+            ),
+    );
+  }
+
+  /// Takes a batch back: [inserted] rows go, [merged] rows (row after Avo →
+  /// quantity before) get their old quantity, if every one is unchanged.
+  Future<AvoUndoResult> undoBatch(
+    String listId, {
+    required List<ShoppingItemModel> inserted,
+    required Map<ShoppingItemModel, double> merged,
+  }) async {
+    try {
+      final now = {for (final i in await writer.itemsOf(listId)) i.id: i};
+      bool unchanged(ShoppingItemModel row) {
+        final current = now[row.id];
+        return current != null &&
+            !current.isChecked &&
+            current.quantity == row.quantity &&
+            current.name == row.name;
+      }
+
+      if (!inserted.every(unchanged) || !merged.keys.every(unchanged)) {
+        return AvoUndoResult.changedSince;
+      }
+      for (final row in inserted) {
+        await writer.deleteItem(listId, row.id);
+      }
+      for (final e in merged.entries) {
+        await writer.updateItem(listId, e.key.id, {'quantity': e.value});
+      }
+      writer.changed([listId]);
+      return AvoUndoResult.undone;
+    } catch (e) {
+      debugPrint('❌ [AVO] Undo batch failed: $e');
       return AvoUndoResult.failed;
     }
   }

@@ -1,22 +1,32 @@
 // Fakes and sample data for the Avo tab tests (Teil B, W1).
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shoply/core/design/design.dart';
+import 'package:shoply/core/modules/app_modules.dart';
+import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/store_info.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/data/services/list_import_service.dart';
+import 'package:shoply/data/services/meal_photo_analysis_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_backend.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
+import 'package:shoply/presentation/screens/avo/avo_photo_source.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_turn_view.dart';
+import 'package:shoply/presentation/screens/lists/widgets/offer_suggestions_bar.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_status_sections.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
@@ -184,6 +194,135 @@ class FakeAvoBackend implements AvoBackend {
     return deleteOutcome;
   }
 
+  /// What the card actions did, in order ("food:Spaghetti:lunch:2").
+  final List<String> cardWrites = [];
+
+  /// Undo calls of the records the fake handed out.
+  int recordUndos = 0;
+
+  /// The answer of a photo read; a [MealPhotoException] or
+  /// [ListImportException] to fail.
+  Object? mealPhoto;
+  Object? listPhoto;
+  final List<String?> photoNotes = [];
+
+  /// Holds a photo read until [releasePhoto].
+  bool holdPhoto = false;
+  Completer<void>? _photoGate;
+  void releasePhoto() {
+    final g = _photoGate;
+    _photoGate = null;
+    g?.complete();
+  }
+
+  Future<AvoUndoResult> _undo() async {
+    recordUndos++;
+    return AvoUndoResult.undone;
+  }
+
+  @override
+  Future<AvoItemsRecord> addItems(
+    WidgetRef ref, {
+    required String tool,
+    required AvoItemsSource source,
+    required String listId,
+    required List<NewItem> items,
+  }) async {
+    cardWrites.add('items:$listId:${items.map((i) => i.name).join(',')}');
+    return AvoItemsRecord(
+      tool: tool,
+      source: source,
+      listId: listId,
+      listName: sampleLists.firstWhere((l) => l.id == listId).name,
+      added: items.length,
+      undo: _undo,
+    );
+  }
+
+  @override
+  Future<AvoFoodRecord> logEstimate(
+    WidgetRef ref,
+    AvoEstimateCard estimate, {
+    required MealType meal,
+    double factor = 1,
+  }) async {
+    cardWrites.add('food:${estimate.name}:${meal.name}:${factor.round()}');
+    return AvoFoodRecord(
+      tool: 'log_food',
+      name: estimate.name,
+      meal: meal,
+      kcal: (estimate.kcal * factor).round(),
+      leftKcal: 640,
+      undo: _undo,
+    );
+  }
+
+  @override
+  Future<AvoGoalRecord> applyGoal(
+    WidgetRef ref,
+    AvoGoalPreviewCard preview,
+  ) async {
+    cardWrites.add('goal:${preview.goal.dailyCalorieTarget}');
+    return AvoGoalRecord(
+      tool: 'setup_nutrition_goal',
+      kcal: preview.goal.dailyCalorieTarget ?? 0,
+      previousKcal: preview.previous?.dailyCalorieTarget,
+      undo: _undo,
+    );
+  }
+
+  @override
+  Future<AvoSettingRecord> removeAllergy(WidgetRef ref, String allergen) async {
+    cardWrites.add('allergy:$allergen');
+    return AvoSettingRecord(
+      tool: 'update_setting',
+      key: 'allergies_remove',
+      value: allergen,
+      undo: _undo,
+    );
+  }
+
+  @override
+  Future<AvoPlanRecord?> planRecipe(
+    WidgetRef ref,
+    AvoPlanTakenCard card, {
+    required bool replace,
+  }) async {
+    cardWrites.add('plan:${card.recipeName}:${replace ? 'replace' : 'add'}');
+    return AvoPlanRecord(
+      tool: 'add_to_plan',
+      recipeName: card.recipeName,
+      day: card.day,
+      servings: card.servings,
+      undo: _undo,
+    );
+  }
+
+  @override
+  Future<MealPhotoEstimate> readMealPhoto(
+    Uint8List photo, {
+    String? note,
+  }) async {
+    photoNotes.add(note);
+    if (holdPhoto) {
+      _photoGate = Completer<void>();
+      await _photoGate!.future;
+    }
+    final answer = mealPhoto;
+    if (answer is MealPhotoEstimate) return answer;
+    throw answer ?? const MealPhotoException('provider_error');
+  }
+
+  @override
+  Future<ListImportResult> readListPhoto(
+    Uint8List photo,
+    CancelToken cancel,
+  ) async {
+    final answer = listPhoto;
+    if (answer is ListImportResult) return answer;
+    throw answer ?? const ListImportException('provider_error');
+  }
+
   @override
   Future<AvoListChange> addItem(
     WidgetRef ref, {
@@ -244,13 +383,14 @@ List<Override> avoOverrides({
   bool allowProHint = true,
   Map<String, StoreInfo> stores = const {},
   AvoChat? chat,
+  Override? offlineOverride,
 }) => [
   avoBackendProvider.overrideWithValue(backend),
   avoChatProvider.overrideWith(
     (ref) =>
         chat ?? AvoChat(backend, proHints: FakeProHints(allow: allowProHint)),
   ),
-  isOfflineProvider.overrideWithValue(offline),
+  offlineOverride ?? isOfflineProvider.overrideWithValue(offline),
   aiRemoteEnabledProvider.overrideWithValue(aiOn),
   isSubscribedProvider.overrideWithValue(subscribed),
   authUserIdProvider.overrideWithValue('u1'),
@@ -334,3 +474,131 @@ bool avoStatusInConversation(WidgetTester tester) => find
     )
     .evaluate()
     .isNotEmpty;
+
+// ------------------------------------------------- W1b: cards and photos
+
+/// A photo source without the camera: [access] and the next photo.
+class FakePhotoSource implements AvoPhotoSource {
+  FakePhotoSource({this.access = AvoCameraAccess.granted, this.photo});
+
+  AvoCameraAccess access;
+  Uint8List? photo;
+  int takes = 0;
+  int chooses = 0;
+  int settings = 0;
+
+  @override
+  Future<AvoCameraAccess> cameraAccess() async => access;
+
+  @override
+  Future<void> openSettings() async => settings++;
+
+  @override
+  Future<Uint8List?> take() async {
+    takes++;
+    return photo;
+  }
+
+  @override
+  Future<Uint8List?> choose() async {
+    chooses++;
+    return photo;
+  }
+}
+
+/// A 1×1 PNG, enough for `Image.memory`.
+final Uint8List kTinyPng = Uint8List.fromList(const [
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, //
+  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, //
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, //
+  0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, //
+  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, //
+  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+]);
+
+/// The overrides of the card tests: modules, offers, the photo source.
+List<Override> avoCardOverrides({
+  required FakeAvoBackend backend,
+  bool offline = false,
+  Set<AppModule> modules = const {
+    AppModule.offers,
+    AppModule.calories,
+    AppModule.mealPlan,
+    AppModule.costSplit,
+    AppModule.avo,
+  },
+  bool offers = true,
+  AvoScreenContext? screen,
+  FakePhotoSource? photos,
+  AvoChat? chat,
+  List<ShoppingListModel>? lists,
+  Override? offlineOverride,
+}) => [
+  ...avoOverrides(
+    backend: backend,
+    offline: offline,
+    chat: chat,
+    lists: lists,
+    offlineOverride: offlineOverride,
+  ),
+  moduleEnabledProvider.overrideWith((ref, m) => modules.contains(m)),
+  offersAvailableProvider.overrideWithValue(offers),
+  offerCategoryOfProvider.overrideWithValue((_) => 'dairy'),
+  avoScreenContextProvider.overrideWith((ref) => screen),
+  avoPhotoSourceProvider.overrideWithValue(photos ?? FakePhotoSource()),
+];
+
+/// The rounds of a conversation on their own, as the tab draws them: each
+/// of [questions] is asked once after the first frame (or [photo] is sent).
+class AvoRounds extends ConsumerStatefulWidget {
+  const AvoRounds({super.key, this.questions = const ['Frage'], this.photo});
+
+  final List<String> questions;
+  final Uint8List? photo;
+
+  @override
+  ConsumerState<AvoRounds> createState() => _AvoRoundsState();
+}
+
+class _AvoRoundsState extends ConsumerState<AvoRounds> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final chat = ref.read(avoChatProvider)..attach(ref);
+      final photo = widget.photo;
+      if (photo != null) {
+        chat.sendPhoto(photo);
+        return;
+      }
+      for (final q in widget.questions) {
+        chat.send(q);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chat = ref.watch(avoChatProvider)..attach(ref);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final t in chat.turns)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: AvoTurnView(
+              key: ValueKey(t.id),
+              chat: chat,
+              turn: t,
+              offline: ref.watch(isOfflineProvider),
+              aiEnabled: true,
+              onSend: (_) {},
+              onEdit: (_) {},
+            ),
+          ),
+      ],
+    );
+  }
+}

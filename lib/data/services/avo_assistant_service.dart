@@ -11,7 +11,7 @@ import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/meal_plan.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/models/recipe_offer_highlight.dart';
+import 'package:shoply/data/models/store_offer.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
@@ -19,6 +19,7 @@ import 'package:shoply/data/models/weekly_nutrition_summary.dart';
 import 'package:shoply/data/models/workout.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
+import 'package:shoply/data/services/allergen_matcher.dart';
 import 'package:shoply/data/services/avo_assistant_models.dart';
 import 'package:shoply/data/services/avo_consents.dart';
 import 'package:shoply/data/services/avo_conversation.dart';
@@ -30,10 +31,11 @@ import 'package:shoply/data/services/claude_service.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
+import 'package:shoply/data/services/meal_photo_storage_service.dart';
 import 'package:shoply/data/services/meal_plan_aggregator.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
-import 'package:shoply/data/services/recipe_offer_service.dart';
+import 'package:shoply/data/services/offer_savings.dart';
 import 'package:shoply/data/services/recipe_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/subscription_service.dart';
@@ -45,8 +47,11 @@ import 'package:shoply/data/services/weight_log_service.dart';
 import 'package:shoply/data/services/workout_log_service.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
+import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/meal_plan_provider.dart';
+import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
 import 'package:shoply/presentation/providers/price_comparison_provider.dart';
+import 'package:shoply/presentation/providers/region_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
@@ -387,15 +392,15 @@ class AvoAssistantService {
     try {
       switch (name) {
         case 'search_recipes':
-          return await _toolSearchRecipes(args, payloads);
+          return await _toolSearchRecipes(args, context, payloads);
         case 'get_saved_recipes':
           return await _toolSavedRecipes(payloads);
         case 'get_recipe_nutrition':
           return await _toolRecipeNutrition(args, payloads);
         case 'add_recipe_to_list':
-          return await _toolAddRecipeToList(args, ref);
+          return await _toolAddRecipeToList(args, ref, payloads);
         case 'get_shopping_history':
-          return await _toolShoppingHistory(args, payloads);
+          return await _toolShoppingHistory(args, ref, context, payloads);
         case 'get_lists':
           return await _toolGetLists(ref, payloads);
         case 'get_list_contents':
@@ -409,21 +414,21 @@ class AvoAssistantService {
         case 'complete_list':
           return await _toolCompleteList(args, ref, payloads);
         case 'add_history_items_to_list':
-          return await _toolAddHistoryItems(args, ref);
+          return await _toolAddHistoryItems(args, ref, payloads);
         case 'update_setting':
           return await _toolUpdateSetting(args, ref, payloads);
         case 'set_module':
-          return await _toolSetModule(args, ref);
+          return await _toolSetModule(args, ref, payloads);
         case 'get_app_info':
-          return _toolAppInfo(args);
+          return _toolAppInfo(args, payloads);
         case 'search_offers':
-          return await _toolSearchOffers(args, ref, context);
+          return await _toolSearchOffers(args, ref, context, payloads);
         case 'get_restock_suggestions':
-          return await _toolRestockSuggestions(args);
+          return await _toolRestockSuggestions(args, ref, context, payloads);
         case 'get_personalized_deals':
-          return await _toolGetPersonalizedDeals(args, ref);
+          return await _toolGetPersonalizedDeals(args, ref, context, payloads);
         case 'split_trip_cost':
-          return await _toolSplitTripCost(args);
+          return await _toolSplitTripCost(args, ref, payloads);
         case 'update_item':
           return await _toolUpdateItem(args, ref, payloads);
         case 'move_items':
@@ -435,31 +440,31 @@ class AvoAssistantService {
         case 'get_user_profile':
           return await _toolGetUserProfile(ref);
         case 'setup_nutrition_goal':
-          return await _toolSetupNutritionGoal(args, ref);
+          return await _toolSetupNutritionGoal(args, ref, payloads);
         case 'get_nutrition_status':
-          return await _toolNutritionStatus(ref);
+          return await _toolNutritionStatus(ref, payloads);
         case 'log_food':
-          return await _toolLogFood(args, ref);
+          return await _toolLogFood(args, ref, payloads);
         case 'log_water':
-          return await _toolLogWater(args, ref);
+          return await _toolLogWater(args, ref, payloads);
         case 'log_weight':
-          return await _toolLogWeight(args, ref);
+          return await _toolLogWeight(args, ref, payloads);
         case 'log_workout':
-          return await _toolLogWorkout(args);
+          return await _toolLogWorkout(args, ref, payloads);
         case 'get_weekly_nutrition_summary':
-          return await _toolWeeklyNutritionSummary(ref);
+          return await _toolWeeklyNutritionSummary(ref, payloads);
         case 'get_challenge_status':
-          return await _toolChallengeStatus(ref);
+          return await _toolChallengeStatus(ref, payloads);
         case 'get_savings_summary':
-          return await _toolSavingsSummary();
+          return await _toolSavingsSummary(ref, payloads);
         case 'get_plan':
-          return _toolGetPlan(args, ref);
+          return _toolGetPlan(args, ref, payloads);
         case 'add_to_plan':
-          return await _toolAddToPlan(args, ref);
+          return await _toolAddToPlan(args, ref, payloads);
         case 'move_in_plan':
-          return await _toolMoveInPlan(args, ref);
+          return await _toolMoveInPlan(args, ref, payloads);
         case 'plan_to_list':
-          return await _toolPlanToList(args, ref);
+          return await _toolPlanToList(args, ref, payloads);
         case 'propose_delete':
           return await _toolProposeDelete(args, ref, payloads);
         default:
@@ -477,12 +482,12 @@ class AvoAssistantService {
 
   Future<Map<String, Object?>> _toolSearchRecipes(
     Map<String, Object?> args,
+    AvoContext? context,
     List<AvoWidgetPayload> payloads,
   ) async {
     final query = (args['query'] as String?) ?? '';
     final filters = _stringList(args['dietary_filters']);
-    final exclude = _stringList(args['exclude_allergens']).map((s) => s.toLowerCase()).toList();
-    final max = (args['max_results'] as int?) ?? 5;
+    final max = ((args['max_results'] as num?)?.toInt() ?? 5).clamp(1, 10);
 
     var recipes = await RecipeService.instance.searchRecipes(query);
 
@@ -494,20 +499,30 @@ class AvoAssistantService {
           .toList();
     }
 
-    // Exclude recipes whose ingredients contain any allergen keyword.
-    if (exclude.isNotEmpty) {
-      recipes = recipes.where((r) {
-        final ingredientText = r.ingredients.map((i) => i.name.toLowerCase()).join(' ');
-        return !exclude.any((a) => ingredientText.contains(a));
-      }).toList();
+    // The person's saved allergies always leave recipes out (the server
+    // promises it, whatever the model passes), plus any the model named.
+    // Matched on the device; nothing of it goes to the model.
+    final matcher = AllergenMatcher([
+      ...?context?.allergies,
+      ..._stringList(args['exclude_allergens']),
+    ]);
+    final before = recipes.length;
+    if (matcher.allergies.isNotEmpty) {
+      recipes = recipes
+          .where((r) => !matcher.anyIngredient(r.ingredients.map((i) => i.name)))
+          .toList();
     }
+    final allergensHidden = recipes.length < before;
 
     final top = recipes.take(max).toList();
-    if (top.isNotEmpty) {
-      payloads.add(AvoWidgetPayload.recipes(top));
-    }
+    payloads.add(AvoWidgetPayload.card(AvoRecipesCard(
+      top,
+      allergensHidden: allergensHidden,
+      query: query.trim().isEmpty ? null : query.trim(),
+    )));
     return {
       'found': top.length,
+      if (allergensHidden) 'left_out_for_allergies': true,
       'recipes': top
           .map((r) => {
                 'id': r.id,
@@ -527,9 +542,7 @@ class AvoAssistantService {
   ) async {
     final saved = await RecipeService.instance.getSavedRecipes();
     final top = saved.take(10).toList();
-    if (top.isNotEmpty) {
-      payloads.add(AvoWidgetPayload.recipes(top));
-    }
+    payloads.add(AvoWidgetPayload.card(AvoRecipesCard(top, saved: true)));
     return {
       'found': top.length,
       'recipes': top.map((r) => {'id': r.id, 'name': r.name}).toList(),
@@ -570,15 +583,13 @@ class AvoAssistantService {
     // Use existing nutrition if available; otherwise estimate from ingredients.
     final existing = recipe.nutrition;
     if (existing != null && existing.hasData) {
-      payloads.add(AvoWidgetPayload.nutrition(
+      payloads.add(AvoWidgetPayload.card(AvoRecipeNutritionCard(
         recipeName: recipe.name,
-        servings: recipe.defaultServings,
-        calories: existing.calories,
+        kcal: existing.calories,
         proteinG: existing.proteinG,
         carbsG: existing.carbsG,
         fatG: existing.fatG,
-        estimated: false,
-      ));
+      )));
       return {
         'recipe': recipe.name,
         'servings': recipe.defaultServings,
@@ -589,15 +600,16 @@ class AvoAssistantService {
 
     // Ask Gemini to ESTIMATE for us via a one-shot prompt that bypasses the tools.
     final estimate = await _estimateNutrition(recipe);
-    payloads.add(AvoWidgetPayload.nutrition(
-      recipeName: recipe.name,
-      servings: recipe.defaultServings,
-      calories: estimate['calories'] as int?,
-      proteinG: (estimate['protein_g'] as num?)?.toDouble(),
-      carbsG: (estimate['carbs_g'] as num?)?.toDouble(),
-      fatG: (estimate['fat_g'] as num?)?.toDouble(),
-      estimated: true,
-    ));
+    if (estimate['calories'] != null) {
+      payloads.add(AvoWidgetPayload.card(AvoRecipeNutritionCard(
+        recipeName: recipe.name,
+        kcal: estimate['calories'] as int?,
+        proteinG: (estimate['protein_g'] as num?)?.toDouble(),
+        carbsG: (estimate['carbs_g'] as num?)?.toDouble(),
+        fatG: (estimate['fat_g'] as num?)?.toDouble(),
+        estimated: true,
+      )));
+    }
     return {
       'recipe': recipe.name,
       'servings': recipe.defaultServings,
@@ -606,18 +618,14 @@ class AvoAssistantService {
     };
   }
 
-  /// Adds every ingredient of a recipe to a list — "add ingredients for
-  /// carbonara to Friday's list." Reuses [ItemsNotifier.addItem] (same write
-  /// path as add_item_to_list/add_history_items_to_list), so items get the
-  /// same auto-categorization as any manually-added item. Also attaches
-  /// current offer prices where they exist, the same way the in-app
-  /// recipe→list bottom sheet (`SelectListBottomSheet`) does, so a recipe
-  /// added via chat counts into the list's price total identically to one
-  /// added by tapping through the UI (closes the asymmetry flagged in the
-  /// idea log after this tool's first version).
+  /// Puts every ingredient of a recipe on a list in one batch, the way the
+  /// recipe's own "Zutaten auf die Liste" does (`ItemRepository.addItems`,
+  /// merged into open items of the same name and unit). The card names what
+  /// was on the list already and offers "Widerrufen".
   Future<Map<String, Object?>> _toolAddRecipeToList(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final listId = args['list_id'] as String?;
     if (listId == null || listId.isEmpty) {
@@ -641,79 +649,50 @@ class AvoAssistantService {
             .map((i) => i.adjustForServings(recipe.defaultServings, requestedServings))
             .toList()
         : recipe.ingredients;
+    final servings = scale ? requestedServings : recipe.defaultServings;
 
-    // Best-effort offer lookup — a failed/slow price check must never block
-    // the add itself, so any error just leaves ingredientOffers empty.
-    var ingredientOffers = const <String, RecipeIngredientOffer>{};
-    try {
-      final zip = await UserLocationService.instance.getZipCode();
-      if (zip != null && zip.isNotEmpty) {
-        final offersResult = await RecipeOfferService.instance.getOffers(
-          recipeId: recipe.id,
-          ingredientNames: ingredients.map((i) => i.name).toList(),
-          zipCode: zip,
-        );
-        ingredientOffers = {
-          for (final match in offersResult.matches)
-            if (match.isStillValid)
-              match.ingredientName.trim().toLowerCase(): match,
-        };
-      }
-    } catch (e) {
-      debugPrint('⚠️ [AVO] add_recipe_to_list offer lookup failed: $e');
-    }
-
-    // Write through the repository instead of ItemsNotifier.addItem, which
-    // reloads the whole list, marks it read and pushes to every member per
-    // item. Reload, mark-read and the push happen once at the end instead.
-    final repository = ref.read(itemRepositoryProvider);
-    var added = 0;
-    var addedWithOffer = 0;
-    final failed = <String>[];
-    for (final ingredient in ingredients) {
-      final offer = ingredientOffers[ingredient.name.trim().toLowerCase()];
-      try {
-        await repository.addItem(
-          listId: listId,
-          name: ingredient.name,
-          quantity: ingredient.amount,
-          unit: ingredient.unit.isEmpty ? null : ingredient.unit,
-          price: offer?.price,
-          priceCurrency: offer != null ? 'EUR' : null,
-          priceRetailer: offer?.retailerName,
-          priceUnit: offer?.unitSizeLabel,
-          priceOldValue: offer?.regularPrice,
-        );
-        added++;
-        if (offer != null) addedWithOffer++;
-      } catch (e) {
-        failed.add(ingredient.name);
-      }
-    }
-    ref.invalidate(itemsNotifierProvider(listId));
-    ref.invalidate(listsNotifierProvider);
-    await _afterBulkListChange(ref, listId, addedItemName: added > 0 ? recipe.name : null);
+    final record = await _changes(ref).addBatch(
+      tool: 'add_recipe_to_list',
+      source: AvoItemsSource.recipe,
+      listId: listId,
+      items: [
+        for (final i in ingredients)
+          NewItem(
+            name: i.name,
+            quantity: i.amount > 0 ? i.amount : 1,
+            unit: i.unit.isEmpty ? null : i.unit,
+          ),
+      ],
+      recipeName: recipe.name,
+      servings: servings,
+    );
+    payloads.add(AvoWidgetPayload.record(record));
+    await _afterBulkListChange(ref, listId, addedItemName: record.added > 0 ? recipe.name : null);
 
     return {
       'recipe': recipe.name,
-      'servings': requestedServings ?? recipe.defaultServings,
+      'servings': servings,
       'list_id': listId,
-      'added': added,
+      'added': record.added,
       'total_ingredients': ingredients.length,
-      if (addedWithOffer > 0) 'added_with_offer_price': addedWithOffer,
-      if (failed.isNotEmpty) 'failed_items': failed,
+      if (record.alreadyOn.isNotEmpty) 'already_on_list': record.alreadyOn,
     };
   }
 
   Future<Map<String, Object?>> _toolShoppingHistory(
     Map<String, Object?> args,
+    WidgetRef ref,
+    AvoContext? context,
     List<AvoWidgetPayload> payloads,
   ) async {
-    final limit = (args['limit'] as int?) ?? 5;
+    final limit = ((args['limit'] as num?)?.toInt() ?? 5).clamp(1, 30);
     final history = await ShoppingHistoryService().getRecentHistory(limit: limit);
-    if (history.isNotEmpty) {
-      payloads.add(AvoWidgetPayload.history(history));
-    }
+    final target = _targetList(ref, context);
+    payloads.add(AvoWidgetPayload.card(AvoTripsCard(
+      history,
+      listId: target?.id,
+      listName: target?.name,
+    )));
     return {
       'found': history.length,
       'history': history
@@ -828,6 +807,25 @@ class AvoAssistantService {
         unit: unit,
       );
 
+  /// Several items on [listId] in one batch, for the cards (photo note,
+  /// "Alle wieder auf …"), with "Widerrufen".
+  Future<AvoItemsRecord> addItemsForAvo(
+    WidgetRef ref, {
+    required String tool,
+    required AvoItemsSource source,
+    required String listId,
+    required List<NewItem> items,
+  }) async {
+    final record = await _changes(ref).addBatch(
+      tool: tool,
+      source: source,
+      listId: listId,
+      items: items,
+    );
+    await _afterBulkListChange(ref, listId);
+    return record;
+  }
+
   /// Avo's list changes with the person's providers.
   static AvoListChanges _changes(WidgetRef ref) =>
       AvoListChanges(_RefListWriter(ref));
@@ -915,6 +913,7 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolAddHistoryItems(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final historyId = args['history_id'] as String?;
     final listId = args['list_id'] as String?;
@@ -923,43 +922,57 @@ class AvoAssistantService {
     }
     final filter = _stringList(args['item_names']).map((s) => s.toLowerCase()).toSet();
 
-    // Find the history entry.
-    final history = await ShoppingHistoryService().getRecentHistory(limit: 30);
-    ShoppingHistory? entry;
-    for (final h in history) {
-      if (h.id == historyId) {
-        entry = h;
-        break;
-      }
-    }
+    final entry = await _findTrip(historyId);
     if (entry == null) return {'error': 'History entry not found'};
 
     final itemsToAdd = filter.isEmpty
         ? entry.items
         : entry.items.where((i) => filter.contains(i.name.toLowerCase())).toList();
+    if (itemsToAdd.isEmpty) return {'added': 0, 'note': 'No item of the trip matched.'};
 
-    final notifier = ref.read(itemsNotifierProvider(listId).notifier);
-    // One by one, so a failure after some items still reports those as
-    // added and a retry does not add them again.
-    var added = 0;
-    final failed = <String>[];
-    for (final item in itemsToAdd) {
-      try {
-        await notifier.addItem(
-          name: item.name,
-          quantity: item.quantity,
-          unit: item.unit,
-          category: item.category,
-        );
-        added++;
-      } catch (e) {
-        debugPrint('⚠️ [AVO] History item not added: $e');
-        failed.add(item.name);
-      }
+    // One batch (merged like the list screen), so it is all or nothing and
+    // "Widerrufen" takes the whole trip back.
+    final record = await _changes(ref).addBatch(
+      tool: 'add_history_items_to_list',
+      source: AvoItemsSource.history,
+      listId: listId,
+      items: [
+        for (final i in itemsToAdd)
+          NewItem(
+            name: i.name,
+            quantity: i.quantity,
+            unit: i.unit,
+            category: i.category,
+          ),
+      ],
+    );
+    payloads.add(AvoWidgetPayload.record(record));
+    await _afterBulkListChange(ref, listId);
+    return {
+      'added': record.added,
+      if (record.alreadyOn.isNotEmpty) 'already_on_list': record.alreadyOn.length,
+    };
+  }
+
+  /// A trip of the person's history by id (the newest 30).
+  Future<ShoppingHistory?> _findTrip(String historyId) async {
+    final history = await ShoppingHistoryService().getRecentHistory(limit: 30);
+    for (final h in history) {
+      if (h.id == historyId) return h;
     }
-    // Refresh lists so the UI shows the new counts.
-    ref.invalidate(listsNotifierProvider);
-    return {'added': added, if (failed.isNotEmpty) 'failed_items': failed};
+    return null;
+  }
+
+  /// The list Avo would put things on: the screen's list, else the newest.
+  ShoppingListModel? _targetList(WidgetRef ref, AvoContext? context) {
+    final lists = context?.lists ?? const <ShoppingListModel>[];
+    final screenId = ref.read(avoScreenContextProvider)?.listId;
+    if (screenId != null) {
+      final match = lists.where((l) => l.id == screenId).firstOrNull;
+      if (match != null) return match;
+    }
+    if (lists.isEmpty) return null;
+    return lists.reduce((a, b) => b.updatedAt.isAfter(a.updatedAt) ? b : a);
   }
 
   Future<Map<String, Object?>> _toolUpdateSetting(
@@ -971,56 +984,238 @@ class AvoAssistantService {
     final value = args['value'];
     if (key == null) return {'error': 'key is required'};
 
+    // Removing an allergy only ever happens from the person's tap on the
+    // safety card (Kap. 6.5); the model's call shows the card.
+    if (key == 'allergies_remove') {
+      final user = await ref.read(currentUserProvider.future);
+      final wanted = value?.toString().trim().toLowerCase() ?? '';
+      final stored = user?.allergies
+          .where((a) => a.trim().toLowerCase() == wanted)
+          .firstOrNull;
+      if (stored == null) {
+        return {'success': false, 'error': '"$value" is not in the allergies.'};
+      }
+      payloads.add(AvoWidgetPayload.card(AvoAllergyCard(stored)));
+      return {
+        'success': false,
+        'requires_confirmation': true,
+        'note': 'The app shows a card to confirm. The allergy stays until '
+            'the person taps Remove on it.',
+      };
+    }
+
+    final previous = await _settingValue(ref, key);
     final bridge = AvoSettingsBridge(ref);
     final result = await bridge.update(key, value);
-    payloads.add(AvoWidgetPayload.settingChange(result));
+    if (!result.success) {
+      payloads.add(AvoWidgetPayload.card(AvoSettingFailedCard(key)));
+      return result.toJson();
+    }
+    final now = await _settingValue(ref, key);
+    final entry = value?.toString().trim() ?? '';
+    final changed = now != previous;
+    final listKey = key.endsWith('_add') || key.endsWith('_remove');
+    payloads.add(AvoWidgetPayload.record(AvoSettingRecord(
+      tool: 'update_setting',
+      key: key,
+      // Allergies and diet show the one entry that changed.
+      value: listKey ? entry : (now ?? ''),
+      previous: previous,
+      undo: changed ? () => _undoSetting(ref, key, previous, entry, now) : null,
+    )));
     return result.toJson();
+  }
+
+  /// A setting's current raw value (`dark`, `de`, `true`, a zip code; for
+  /// allergies and diet the stored entries, joined), or null when unset.
+  Future<String?> _settingValue(WidgetRef ref, String key) async {
+    switch (key) {
+      case 'theme_mode':
+        return ref.read(themeModeProvider).name;
+      case 'accent_color':
+        final c = ref.read(accentColorProvider);
+        return '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+      case 'language':
+        return ref.read(languageProvider.notifier).savedSetting;
+      case 'zip_code':
+        final zip = await UserLocationService.instance.getManualZipCode();
+        return zip == null || zip.isEmpty ? null : zip;
+    }
+    final user = await ref.read(currentUserProvider.future);
+    if (user == null) return null;
+    String? text(String? v) => v == null || v.trim().isEmpty ? null : v;
+    return switch (key) {
+      'notifications' => '${user.notificationEnabled}',
+      'display_name' => text(user.displayName),
+      'age' => user.age?.toString(),
+      'gender' => text(user.gender),
+      'height_cm' => user.height == null ? null : '${user.height!.round()}',
+      'allergies_add' || 'allergies_remove' => text(user.allergies.join(', ')),
+      'diet_add' || 'diet_remove' => text(user.dietPreferences.join(', ')),
+      _ => null,
+    };
+  }
+
+  /// "Widerrufen" on a setting card: sets the old value again, but only
+  /// while the setting still has the value Avo gave it.
+  Future<AvoUndoResult> _undoSetting(
+    WidgetRef ref,
+    String key,
+    String? previous,
+    String entry,
+    String? after,
+  ) async {
+    try {
+      if (await _settingValue(ref, key) != after) {
+        return AvoUndoResult.changedSince;
+      }
+      final bridge = AvoSettingsBridge(ref);
+      final SettingChangeResult result;
+      if (key == 'allergies_add') {
+        result = await bridge.update('allergies_remove', entry);
+      } else if (key == 'diet_add') {
+        result = await bridge.update('diet_remove', entry);
+      } else if (key == 'diet_remove') {
+        result = await bridge.update('diet_add', entry);
+      } else {
+        result = await bridge.update(key, previous ?? (key == 'zip_code' ? '' : null));
+      }
+      return result.success ? AvoUndoResult.undone : AvoUndoResult.failed;
+    } catch (e) {
+      debugPrint('❌ [AVO] Setting not set back: $e');
+      return AvoUndoResult.failed;
+    }
+  }
+
+  /// The tap on "Entfernen" of the allergy safety card: removes the one
+  /// entry the card shows, with "Widerrufen" (adds it again).
+  Future<AvoSettingRecord> removeAllergyForAvo(
+    WidgetRef ref,
+    String allergen,
+  ) async {
+    final previous = await _settingValue(ref, 'allergies_remove');
+    final result = await AvoSettingsBridge(ref).update('allergies_remove', allergen);
+    if (!result.success) throw StateError(result.error ?? 'not removed');
+    final after = await _settingValue(ref, 'allergies_remove');
+    return AvoSettingRecord(
+      tool: 'update_setting',
+      key: 'allergies_remove',
+      value: allergen,
+      previous: previous,
+      undo: () async {
+        try {
+          if (await _settingValue(ref, 'allergies_remove') != after) {
+            return AvoUndoResult.changedSince;
+          }
+          final back = await AvoSettingsBridge(ref).update('allergies_add', allergen);
+          return back.success ? AvoUndoResult.undone : AvoUndoResult.failed;
+        } catch (e) {
+          debugPrint('❌ [AVO] Allergy not added back: $e');
+          return AvoUndoResult.failed;
+        }
+      },
+    );
+  }
+
+  /// Why an offer tool may not run now: the kill switch (no card, Avo
+  /// says nothing about offers) or the module (the card offers to switch it
+  /// on). Null when offers are available.
+  Map<String, Object?>? _offersBlocked(
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) {
+    if (!ref.read(offersRemoteEnabledProvider)) {
+      return {'not_available': true, 'error': 'Offers are not available right now.'};
+    }
+    if (!ref.read(offersAvailableProvider)) {
+      payloads.add(AvoWidgetPayload.moduleOff(AppModule.offers));
+      return {'not_available': true, 'error': 'The module Preise & Angebote is off.'};
+    }
+    return null;
+  }
+
+  /// The list an offer question is about: the call's, else the screen's,
+  /// else the newest.
+  ShoppingListModel? _offerList(
+    WidgetRef ref,
+    Map<String, Object?> args,
+    AvoContext? context,
+  ) {
+    final id = args['list_id'] as String?;
+    final lists = context?.lists ?? const <ShoppingListModel>[];
+    if (id != null && id.isNotEmpty) {
+      return lists.where((l) => l.id == id).firstOrNull;
+    }
+    return _targetList(ref, context);
   }
 
   /// Offers for one product at the market of the list in context (Kap. 12:
   /// only that market, never a comparison across markets, prices "laut
   /// Händler", "in deiner Region"). Without a region or a confirmed market
-  /// it asks for it instead of searching.
+  /// the card asks for it instead of searching.
   Future<Map<String, Object?>> _toolSearchOffers(
     Map<String, Object?> args,
     WidgetRef ref,
     AvoContext? context,
+    List<AvoWidgetPayload> payloads,
   ) async {
+    final blocked = _offersBlocked(ref, payloads);
+    if (blocked != null) return blocked;
     final query = (args['query'] as String?)?.trim() ?? '';
     if (query.isEmpty) return {'error': 'query is required'};
 
-    final region = await UserLocationService.instance.getRegion();
+    final region = ref.read(regionProvider);
     if (region == null) {
+      payloads.add(AvoWidgetPayload.card(const AvoOfferSetupCard.region()));
       return {
         'found': 0,
-        'note': 'No region set. Ask the user for their zip code (PLZ), set it '
-            'via update_setting key "zip_code", then search again.',
+        'note': 'No region set. The app shows a card to set the postcode; '
+            'or ask for it and set it via update_setting key "zip_code".',
       };
     }
-
-    final listId = (args['list_id'] as String?) ??
-        (context?.lists?.isNotEmpty == true ? context!.lists!.first.id : null);
-    final store = listId == null ? null : ref.read(storeForListProvider(listId));
+    final list = _offerList(ref, args, context);
+    if (list == null) return {'found': 0, 'note': 'The person has no list.'};
+    if (!ref.read(offersVisibleForListProvider(list.id))) {
+      return {
+        'found': 0,
+        'note': 'Offers are not shown on this list (hidden by the person, or '
+            'not loaded yet). Do not mention offers for it.',
+      };
+    }
+    final store = ref.read(storeForListProvider(list.id));
     if (store == null) {
+      payloads.add(AvoWidgetPayload.card(
+        AvoOfferSetupCard.store(listId: list.id, listName: list.name),
+      ));
       return {
         'found': 0,
-        'note': 'The list has no confirmed market. Ask which market the user '
-            'shops at; never compare markets.',
+        'note': 'The list has no confirmed market; the app shows a card to '
+            'choose one. Never compare markets.',
       };
     }
 
-    final offers = await OfferPriceService.instance
-        .searchOffers(query, zipCode: region.zip, chainId: store.id);
+    final offers = [
+      for (final o in await OfferPriceService.instance
+          .searchOffers(query, zipCode: region.zip, chainId: store.id))
+        if (o.isValidNow) o,
+    ];
     if (offers.isEmpty) {
       return {
         'found': 0,
         'store': store.name,
         'note': 'No current offer for "$query" at ${store.name} in the '
-            "user's region.",
+            "person's region.",
       };
     }
 
     final top = offers.take(5).toList();
+    payloads.add(AvoWidgetPayload.card(AvoOfferSearchCard(
+      storeName: store.name,
+      offers: top,
+      query: query,
+      zip: region.zip,
+      listId: list.id,
+    )));
     return {
       'found': top.length,
       'store': store.name,
@@ -1038,64 +1233,123 @@ class AvoAssistantService {
     };
   }
 
-  /// Chat-facing version of the offers on the person's lists
-  /// (`personalizedDealsProvider`): it shares the 6-h list snapshots with
-  /// the list screen and "Angebote der Woche", rather than re-pooling list
-  /// items itself, so a chat answer and the screens never disagree.
+  /// This week's offers at the list's market for the list's open items,
+  /// with the app's own summary sentence first (Kap. 12 rule 3: "4 von 11
+  /// Artikeln diese Woche bei Lidl im Angebot, ca. 3,20 € gespart, in
+  /// deiner Region"), so a chat answer and the list never disagree.
   Future<Map<String, Object?>> _toolGetPersonalizedDeals(
     Map<String, Object?> args,
     WidgetRef ref,
+    AvoContext? context,
+    List<AvoWidgetPayload> payloads,
   ) async {
-    final zip = await UserLocationService.instance.getZipCode();
-    if (zip == null || zip.isEmpty) {
+    final blocked = _offersBlocked(ref, payloads);
+    if (blocked != null) return blocked;
+    final region = ref.read(regionProvider);
+    if (region == null) {
+      payloads.add(AvoWidgetPayload.card(const AvoOfferSetupCard.region()));
+      return {'found': 0, 'note': 'No region set; the app shows a card to set it.'};
+    }
+    final list = _offerList(ref, args, context);
+    if (list == null) return {'found': 0, 'note': 'The person has no list.'};
+    if (!ref.read(offersVisibleForListProvider(list.id))) {
       return {
         'found': 0,
-        'note': 'No location available — ask the user for their zip code '
-            '(PLZ), set it via update_setting key "zip_code", then check '
-            'again.',
+        'note': 'Offers are not shown on this list (hidden by the person, or '
+            'not loaded yet). Do not mention offers for it.',
       };
     }
+    final store = ref.read(storeForListProvider(list.id));
+    if (store == null) {
+      payloads.add(AvoWidgetPayload.card(
+        AvoOfferSetupCard.store(listId: list.id, listName: list.name),
+      ));
+      return {'found': 0, 'note': 'The list has no confirmed market yet.'};
+    }
 
+    final items = await ItemRepository.instance.getListItems(list.id);
+    final open = [for (final i in items) if (!i.isChecked) i];
+    if (open.isEmpty) return {'found': 0, 'note': 'The list has no open items.'};
+    final snapshot = await ref.read(listOfferSyncProvider).sync(
+          listId: list.id,
+          chainId: store.id,
+          zip: region.zip,
+          itemNames: [for (final i in open) i.name],
+        );
+    final prefs = ref.read(offerDisplayPrefsProvider);
+    final now = ref.read(offerClockProvider)();
+    final byItem = <String, StoreOffer>{
+      for (final item in open)
+        if (snapshot.offerFor(item.name) case final offer?)
+          if (offer.isValidNow && !(prefs?.isDeclined(item.id, offer.id, now) ?? false))
+            item.id: offer,
+    };
+    final summary = summarizeListOffers(
+      chainId: store.id,
+      openItems: open,
+      offersByItemId: byItem,
+      realRegion: true,
+    );
+    if (summary == null) {
+      return {
+        'found': 0,
+        'note': 'Nothing on ${list.name} is on offer at ${store.name} this '
+            'week in the person\'s region.',
+      };
+    }
     final limit = ((args['limit'] as num?)?.toInt() ?? 5).clamp(1, 10);
-    final matches = await ref.read(personalizedDealsProvider.future);
-    return summarizePersonalizedDeals(matches, limit: limit);
-  }
-
-  /// Pure, unit-tested shaping of [PersonalizedDealsService.getMatches]'s
-  /// result into the JSON summary handed back to Gemini.
-  @visibleForTesting
-  static Map<String, Object?> summarizePersonalizedDeals(
-    List<RecipeIngredientOffer> matches, {
-    int limit = 5,
-  }) {
-    if (matches.isEmpty) {
-      return {
-        'found': 0,
-        'note': 'No current offers match anything on the user\'s shopping '
-            'lists right now.',
-      };
-    }
-    final top = matches.take(limit).toList();
+    final deals = [
+      for (final item in open)
+        if (byItem[item.id] case final offer?) (item: item.name, offer: offer),
+    ];
+    payloads.add(AvoWidgetPayload.card(AvoDealsCard(
+      listId: list.id,
+      listName: list.name,
+      summary: summary,
+      offers: deals,
+    )));
     return {
-      'found': top.length,
-      'deals': top
-          .map((m) => {
-                'item': m.ingredientName,
-                'product': m.productName,
-                'price': m.price,
-                if (m.regularPrice != null) 'regular_price': m.regularPrice,
-                'store': m.retailerName,
-                if (m.isBroadMatch) 'similar_product': true,
-              })
-          .toList(),
+      'summary': formatOfferSummary(summary, ref.read(languageProvider)),
+      'found': deals.length,
+      'deals': [
+        for (final d in deals.take(limit))
+          {
+            'item': d.item,
+            'product': d.offer.productName,
+            'price': d.offer.price,
+            if (d.offer.regularPrice != null)
+              'regular_price_per_retailer': d.offer.regularPrice,
+            if (d.offer.isBroadMatch) 'similar_product': true,
+          },
+      ],
     };
   }
 
   Future<Map<String, Object?>> _toolRestockSuggestions(
-      Map<String, Object?> args) async {
+    Map<String, Object?> args,
+    WidgetRef ref,
+    AvoContext? context,
+    List<AvoWidgetPayload> payloads,
+  ) async {
     final limit = (args['limit'] as num?)?.toInt() ?? 5;
     final suggestions = await AvoNudgeService.instance
         .getRestockSuggestions(limit: limit.clamp(1, 10));
+    if (suggestions.isNotEmpty) {
+      final target = _targetList(ref, context);
+      payloads.add(AvoWidgetPayload.card(AvoRestockCard(
+        [
+          for (final s in suggestions)
+            (
+              name: s.displayName,
+              everyDays: s.averageDays,
+              quantity: s.preferredQuantity,
+              category: s.preferredCategory,
+            ),
+        ],
+        listId: target?.id,
+        listName: target?.name,
+      )));
+    }
     if (suggestions.isEmpty) {
       return {
         'found': 0,
@@ -1122,7 +1376,15 @@ class AvoAssistantService {
     };
   }
 
-  Future<Map<String, Object?>> _toolSplitTripCost(Map<String, Object?> args) async {
+  Future<Map<String, Object?>> _toolSplitTripCost(
+    Map<String, Object?> args,
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) async {
+    if (!ref.read(moduleEnabledProvider(AppModule.costSplit))) {
+      payloads.add(AvoWidgetPayload.moduleOff(AppModule.costSplit));
+      return {'not_available': true, 'error': 'The module Kosten teilen is off.'};
+    }
     final historyId = args['history_id'] as String?;
     if (historyId == null || historyId.isEmpty) {
       return {'error': 'history_id is required — call get_shopping_history first'};
@@ -1132,14 +1394,7 @@ class AvoAssistantService {
       return {'error': 'participant_names must include at least one other person'};
     }
 
-    final history = await ShoppingHistoryService().getRecentHistory(limit: 30);
-    ShoppingHistory? trip;
-    for (final h in history) {
-      if (h.id == historyId) {
-        trip = h;
-        break;
-      }
-    }
+    final trip = await _findTrip(historyId);
     if (trip == null) return {'error': 'Shopping history entry not found'};
 
     final total = (args['total_cost'] as num?)?.toDouble() ?? trip.totalCost;
@@ -1183,6 +1438,19 @@ class AvoAssistantService {
       paidByUserId: userId,
       paidByName: currentUserName,
     );
+    // No undo: splits cannot be taken back yet (L9).
+    payloads.add(AvoWidgetPayload.record(AvoSplitRecord(
+      tool: 'split_trip_cost',
+      tripDate: trip.completedAt,
+      shares: [
+        for (final s in shares)
+          (
+            name: s.participantName,
+            amount: s.amount,
+            isYou: userId != null && s.userId == userId,
+          ),
+      ],
+    )));
 
     return {
       'success': true,
@@ -1358,6 +1626,7 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolSetupNutritionGoal(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     if (!ref.read(calorieTrackingEnabledProvider)) {
       return {'tracking_enabled': false, 'note': _trackingDisabledNote};
@@ -1470,21 +1739,6 @@ class AvoAssistantService {
       };
     }
 
-    // Replacing an already-configured goal needs an explicit yes.
-    final confirm = args['confirm_replace'] as bool? ?? false;
-    if (hasConfiguredGoal && !confirm) {
-      return {
-        'requires_confirmation': true,
-        'question':
-            'Replace the current ${existing.goalType.dbValue} goal '
-            '(${existing.dailyCalorieTarget} kcal/day) with a new '
-            '${goalType!.dbValue} goal?',
-        'note': 'If the user agrees, call setup_nutrition_goal again with '
-            'confirm_replace=true AND all the same field values — do not '
-            'drop any of them.',
-      };
-    }
-
     final targets = NutritionGoalCalculator.calculate(
       goalType: goalType!,
       activityLevel: activityLevel!,
@@ -1495,9 +1749,8 @@ class AvoAssistantService {
       targetWeightKg: needsTarget ? targetWeight : null,
       timelineWeeks: needsTarget ? timelineWeeks : null,
     );
-
     final now = DateTime.now();
-    await NutritionGoalService.instance.saveGoal(NutritionGoal(
+    final goal = NutritionGoal(
       userId: userId,
       calorieTrackingEnabled: true,
       goalType: goalType,
@@ -1513,8 +1766,30 @@ class AvoAssistantService {
       waterTargetMl: existing?.waterTargetMl ?? 2000,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-    ));
-    await WeightLogService.instance.logWeight(weightKg: weight);
+    );
+
+    // Replacing an already-configured goal needs an explicit yes: the card
+    // shows the new goal with "Übernehmen" (Kap. 5.6), or the model asks.
+    final confirm = args['confirm_replace'] as bool? ?? false;
+    if (hasConfiguredGoal && !confirm) {
+      payloads.add(AvoWidgetPayload.card(
+        AvoGoalPreviewCard(goal: goal, previous: existing),
+      ));
+      return {
+        'requires_confirmation': true,
+        'question':
+            'Replace the current ${existing.goalType.dbValue} goal '
+            '(${existing.dailyCalorieTarget} kcal/day) with a new '
+            '${goalType.dbValue} goal of ${targets.dailyCalorieTarget} kcal/day?',
+        'note': 'The app shows the new goal with a button to use it; it is '
+            'saved only when the person taps it. If they say yes in words '
+            'instead, call setup_nutrition_goal again with '
+            'confirm_replace=true AND all the same field values.',
+      };
+    }
+
+    final record = await applyGoalForAvo(ref, goal, previous: existing);
+    payloads.add(AvoWidgetPayload.record(record));
 
     // Keep the profile fields in sync — same as the goal-setup screen, since
     // age/height/gender are used elsewhere (personal info, diet logic).
@@ -1526,11 +1801,7 @@ class AvoAssistantService {
         gender: gender,
       ));
     }
-    ref.invalidate(nutritionGoalProvider);
     ref.invalidate(currentUserProvider);
-    invalidateNutritionLog(ref);
-    await MascotNotificationService.instance
-        .rearmDinnerIdeasReminder(force: true);
 
     return {
       'success': true,
@@ -1543,8 +1814,58 @@ class AvoAssistantService {
       if (needsTarget) 'timeline_weeks': timelineWeeks,
       'note': 'Goal saved. Tell the user their daily calorie target and '
           'macros, and that they can fine-tune it anytime in the calories '
-          'tab or by asking you.',
+          'tab or by asking you. It is a guide value, not medical advice.',
     };
+  }
+
+  /// Saves [goal] (and its weight in the weight log) and answers with the
+  /// card. "Widerrufen" puts [previous] back, or clears the goal when there
+  /// was none; only while the goal is still the one saved here.
+  Future<AvoGoalRecord> applyGoalForAvo(
+    WidgetRef ref,
+    NutritionGoal goal, {
+    NutritionGoal? previous,
+  }) async {
+    final saved = await NutritionGoalService.instance.saveGoal(goal);
+    final weight = goal.currentWeightKg;
+    if (weight != null) {
+      await WeightLogService.instance.logWeight(weightKg: weight);
+    }
+    ref.invalidate(nutritionGoalProvider);
+    invalidateNutritionLog(ref);
+    await MascotNotificationService.instance
+        .rearmDinnerIdeasReminder(force: true);
+    final configured = previous != null && previous.isConfigured;
+    return AvoGoalRecord(
+      tool: 'setup_nutrition_goal',
+      kcal: goal.dailyCalorieTarget ?? 0,
+      previousKcal: configured ? previous.dailyCalorieTarget : null,
+      undo: () async {
+        try {
+          final current = await NutritionGoalService.instance.getGoal();
+          if (current?.dailyCalorieTarget != saved.dailyCalorieTarget) {
+            return AvoUndoResult.changedSince;
+          }
+          await NutritionGoalService.instance.saveGoal(
+            configured
+                ? previous
+                : NutritionGoal(
+                    userId: goal.userId,
+                    calorieTrackingEnabled: true,
+                    waterTargetMl: goal.waterTargetMl,
+                    createdAt: goal.createdAt,
+                    updatedAt: DateTime.now(),
+                  ),
+          );
+          ref.invalidate(nutritionGoalProvider);
+          invalidateNutritionLog(ref);
+          return AvoUndoResult.undone;
+        } catch (e) {
+          debugPrint('❌ [AVO] Goal not taken back: $e');
+          return AvoUndoResult.failed;
+        }
+      },
+    );
   }
 
   // ── Nutrition / calorie-tracking tools ───────────────────────────
@@ -1554,7 +1875,10 @@ class AvoAssistantService {
       'or read. Ask if they want to enable it — if yes, call update_setting '
       'with key "calorie_tracking" and value "true".';
 
-  Future<Map<String, Object?>> _toolNutritionStatus(WidgetRef ref) async {
+  Future<Map<String, Object?>> _toolNutritionStatus(
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) async {
     if (!ref.read(calorieTrackingEnabledProvider)) {
       return {'tracking_enabled': false, 'note': _trackingDisabledNote};
     }
@@ -1563,6 +1887,10 @@ class AvoAssistantService {
     final entries = await FoodLogService.instance.getEntriesForDate(today);
     final totals = DailyNutritionTotals.fromEntries(entries);
     final waterMl = await WaterLogService.instance.getTotalForDate(today);
+    payloads.add(AvoWidgetPayload.card(AvoNutritionStatusCard(
+      consumedKcal: totals.calories,
+      goalKcal: goal?.isConfigured ?? false ? goal!.dailyCalorieTarget : null,
+    )));
 
     final result = <String, Object?>{
       'tracking_enabled': true,
@@ -1611,15 +1939,16 @@ class AvoAssistantService {
     return result;
   }
 
+  /// `log_food` never saves on its own (Kap. 5.6, 7.2): it shows the
+  /// estimate, and only "Eintragen" on the card writes the diary entry.
   Future<Map<String, Object?>> _toolLogFood(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     if (!ref.read(calorieTrackingEnabledProvider)) {
       return {'tracking_enabled': false, 'note': _trackingDisabledNote};
     }
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return {'error': 'Not signed in'};
     final foodName = (args['food_name'] as String?)?.trim() ?? '';
     if (foodName.isEmpty) return {'error': 'food_name is required'};
 
@@ -1647,65 +1976,147 @@ class AvoAssistantService {
     }
 
     final mealType = _mealTypeFromArg(args['meal_type'] as String?);
-    final now = DateTime.now();
-    final entry = await FoodLogService.instance.addEntry(FoodLogEntry(
-      id: '',
-      userId: userId,
-      loggedDate: now,
-      mealType: mealType,
-      source: FoodLogSource.manual,
-      foodName: portion.isEmpty ? foodName : '$foodName ($portion)',
-      calories: calories,
+    final user = ref.read(currentUserProvider).valueOrNull;
+    final allergens = AllergenMatcher(user?.allergies ?? const [])
+        .matches(foodName)
+        .map((m) => m.allergy)
+        .toList();
+    payloads.add(AvoWidgetPayload.card(AvoEstimateCard(
+      name: foodName,
+      kcal: calories,
       proteinG: protein,
       carbsG: carbs,
       fatG: fat,
-      createdAt: now,
-    ));
-    invalidateNutritionLog(ref);
-
-    // Fresh totals so Avo can say "that puts you at X of Y kcal".
-    final goal = await NutritionGoalService.instance.getGoal();
-    final totals = DailyNutritionTotals.fromEntries(
-        await FoodLogService.instance.getEntriesForDate(now));
+      estimated: estimated,
+      meal: mealType,
+      portion: portion.isEmpty ? null : portion,
+      allergens: allergens,
+    )));
     return {
-      'success': true,
-      'entry_id': entry.id,
-      'logged': entry.foodName,
+      'saved': false,
+      'shown_estimate': true,
+      'food': foodName,
       'meal': mealType.dbValue,
       'calories': calories,
       'estimated': estimated,
-      'consumed_today_calories': totals.calories,
-      if (goal?.dailyCalorieTarget != null)
-        'remaining_calories': goal!.dailyCalorieTarget! - totals.calories,
-      if (estimated)
-        'note': 'Nutrition was AI-estimated from the description — briefly '
-            'mention it is an estimate.',
+      'note': 'Nothing is saved yet: the app shows the estimate and the person '
+          'taps Eintragen to log it. Do not say it was logged.',
     };
+  }
+
+  /// "Eintragen" on an estimate card: writes the diary entry (with the photo
+  /// in the private bucket when there is one) and answers with its card.
+  Future<AvoFoodRecord> logEstimateForAvo(
+    WidgetRef ref,
+    AvoEstimateCard estimate, {
+    required MealType meal,
+    double factor = 1,
+  }) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw StateError('not signed in');
+    String? photoPath;
+    final photo = estimate.photo;
+    if (photo != null) {
+      try {
+        photoPath = await MealPhotoStorageService.instance.uploadPhoto(photo);
+      } catch (e) {
+        debugPrint('⚠️ [AVO] Meal photo not stored: $e');
+      }
+    }
+    double? scaled(double? v) => v == null ? null : _round1(v * factor);
+    final kcal = (estimate.kcal * factor).round();
+    final now = DateTime.now();
+    final name = estimate.portion == null || factor != 1
+        ? estimate.name
+        : '${estimate.name} (${estimate.portion})';
+    final entry = await FoodLogService.instance.addEntry(FoodLogEntry(
+      id: const Uuid().v4(),
+      userId: userId,
+      loggedDate: now,
+      mealType: meal,
+      origin: photo != null
+          ? FoodEntryOrigin.photo
+          : estimate.estimated
+          ? FoodEntryOrigin.manualEstimated
+          : FoodEntryOrigin.manual,
+      foodName: name,
+      calories: kcal,
+      proteinG: scaled(estimate.proteinG),
+      carbsG: scaled(estimate.carbsG),
+      fatG: scaled(estimate.fatG),
+      photoPath: photoPath,
+      estimated: estimate.estimated,
+      confidence: EstimateConfidenceX.fromDb(estimate.confidence),
+      createdAt: now,
+    ));
+    invalidateNutritionLog(ref);
+    final goal = await NutritionGoalService.instance.getGoal();
+    final totals = DailyNutritionTotals.fromEntries(
+      await FoodLogService.instance.getEntriesForDate(now),
+    );
+    return AvoFoodRecord(
+      tool: 'log_food',
+      name: estimate.name,
+      meal: meal,
+      kcal: kcal,
+      leftKcal: goal?.dailyCalorieTarget == null
+          ? null
+          : goal!.dailyCalorieTarget! - totals.calories,
+      undo: () async {
+        try {
+          await FoodLogService.instance.deleteEntry(entry.id);
+          invalidateNutritionLog(ref);
+          return AvoUndoResult.undone;
+        } catch (e) {
+          debugPrint('❌ [AVO] Food entry not taken back: $e');
+          return AvoUndoResult.failed;
+        }
+      },
+    );
   }
 
   Future<Map<String, Object?>> _toolLogWater(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     if (!ref.read(calorieTrackingEnabledProvider)) {
       return {'tracking_enabled': false, 'note': _trackingDisabledNote};
     }
     final amount = ((args['amount_ml'] as num?)?.round() ?? 250).clamp(1, 3000);
-    await WaterLogService.instance.addEntry(amount);
+    final entry = await WaterLogService.instance.addEntry(amount);
     invalidateNutritionLog(ref);
     final total = await WaterLogService.instance.getTotalForDate(DateTime.now());
     final goal = await NutritionGoalService.instance.getGoal();
+    final target = goal?.waterTargetMl ?? 2000;
+    payloads.add(AvoWidgetPayload.record(AvoWaterRecord(
+      tool: 'log_water',
+      amountMl: amount,
+      totalMl: total,
+      targetMl: target,
+      undo: () async {
+        try {
+          await WaterLogService.instance.deleteEntry(entry.id);
+          invalidateNutritionLog(ref);
+          return AvoUndoResult.undone;
+        } catch (e) {
+          debugPrint('❌ [AVO] Water not taken back: $e');
+          return AvoUndoResult.failed;
+        }
+      },
+    )));
     return {
       'success': true,
       'added_ml': amount,
       'total_today_ml': total,
-      'target_ml': goal?.waterTargetMl ?? 2000,
+      'target_ml': target,
     };
   }
 
   Future<Map<String, Object?>> _toolLogWeight(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     if (!ref.read(calorieTrackingEnabledProvider)) {
       return {'tracking_enabled': false, 'note': _trackingDisabledNote};
@@ -1715,9 +2126,38 @@ class AvoAssistantService {
       return {'error': 'weight_kg must be between 20 and 400'};
     }
     final previous = await WeightLogService.instance.getLatest();
-    await WeightLogService.instance.logWeight(weightKg: weight);
+    final saved = await WeightLogService.instance.logWeight(weightKg: weight);
     invalidateNutritionLog(ref);
     final goal = await NutritionGoalService.instance.getGoal();
+    final today = DateTime.now();
+    bool sameDay(DateTime a) =>
+        a.year == today.year && a.month == today.month && a.day == today.day;
+    // Today's entry is replaced: undo brings back what today had, or
+    // removes the entry when today had none.
+    final replaced = previous != null && sameDay(previous.loggedDate) ? previous : null;
+    payloads.add(AvoWidgetPayload.record(AvoWeightRecord(
+      tool: 'log_weight',
+      kg: weight,
+      day: today,
+      undo: () async {
+        try {
+          if (replaced != null) {
+            await WeightLogService.instance.upsertForDate(
+              weightKg: replaced.weightKg,
+              date: replaced.loggedDate,
+              note: replaced.note,
+            );
+          } else {
+            await WeightLogService.instance.delete(saved.id);
+          }
+          invalidateNutritionLog(ref);
+          return AvoUndoResult.undone;
+        } catch (e) {
+          debugPrint('❌ [AVO] Weight not taken back: $e');
+          return AvoUndoResult.failed;
+        }
+      },
+    )));
     return {
       'success': true,
       'weight_kg': weight,
@@ -1729,7 +2169,10 @@ class AvoAssistantService {
     };
   }
 
-  Future<Map<String, Object?>> _toolWeeklyNutritionSummary(WidgetRef ref) async {
+  Future<Map<String, Object?>> _toolWeeklyNutritionSummary(
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) async {
     if (!ref.read(calorieTrackingEnabledProvider)) {
       return {'tracking_enabled': false, 'note': _trackingDisabledNote};
     }
@@ -1742,6 +2185,12 @@ class AvoAssistantService {
       };
     }
     final summary = await ref.read(weeklyNutritionSummaryProvider.future);
+    payloads.add(AvoWidgetPayload.card(AvoWeekCard(
+      days: summary?.days ?? const [],
+      kcalByDay: summary?.caloriesByDay ?? const {},
+      averageKcal: summary?.avgCalories ?? 0,
+      goalKcal: goal.dailyCalorieTarget,
+    )));
     if (summary == null || !summary.hasAnyData) {
       return {
         'found': false,
@@ -1778,8 +2227,21 @@ class AvoAssistantService {
     };
   }
 
-  Future<Map<String, Object?>> _toolChallengeStatus(WidgetRef ref) async {
+  Future<Map<String, Object?>> _toolChallengeStatus(
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) async {
     final challenges = await ref.read(activeChallengesProvider.future);
+    payloads.add(AvoWidgetPayload.card(AvoChallengesCard([
+      for (final c in challenges)
+        (
+          type: c.type,
+          title: c.title,
+          day: c.daysElapsed,
+          totalDays: c.fixedDurationDays,
+          checkedInToday: c.isCheckedInToday,
+        ),
+    ])));
     return summarizeChallengeStatus(challenges);
   }
 
@@ -1820,55 +2282,61 @@ class AvoAssistantService {
         ChallengeType.custom => 'custom challenge',
       };
 
-  Future<Map<String, Object?>> _toolSavingsSummary() async {
+  Future<Map<String, Object?>> _toolSavingsSummary(
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) async {
+    final blocked = _offersBlocked(ref, payloads);
+    if (blocked != null) return blocked;
     final history = await ShoppingHistoryService().getShoppingHistory();
-    return summarizeLifetimeSavings(history, DateTime.now());
+    final now = DateTime.now();
+    // Savings figures only with a real region (Kap. 12 rule 4).
+    final realRegion = ref.read(regionProvider) != null;
+    final result = summarizeSavings(history, now, realRegion: realRegion);
+    payloads.add(AvoWidgetPayload.card(AvoSavingsCard(
+      month: DateTime(now.year, now.month),
+      trips: result['month_trips'] as int,
+      savedCents: result['month_saved_cents'] as int?,
+    )));
+    return result;
   }
 
-  /// Pure, unit-tested lifetime + this-month savings aggregation — reuses
-  /// [totalSavingsOf]/[tripsInMonth] (the same helpers
-  /// [ShoppingHistoryScreen] computes its "you've saved €X" lines from), so
-  /// a chat answer and the Shopping History screen can never disagree.
+  /// What the person saved through offers, as the app says it: rounded to
+  /// 10 ct with "ca.", nothing below 0,50 € and nothing without a real
+  /// region ([realRegion]); the same helpers as the history screen
+  /// ([totalSavingsOf], [tripsInMonth]).
   @visibleForTesting
-  static Map<String, Object?> summarizeLifetimeSavings(
+  static Map<String, Object?> summarizeSavings(
     List<ShoppingHistory> history,
-    DateTime now,
-  ) {
-    final total = totalSavingsOf(history);
-    final tripsWithSavings =
-        history.where((trip) => totalSavingsOf([trip]) > 0.01).length;
-
-    if (total <= 0.01) {
-      return {
-        'total_saved_eur': 0,
-        'note': 'No tracked savings yet. This only counts items bought at a '
-            'live offer/deal price and is not retroactive — it grows from '
-            'the first time an offer price is applied to a list item that '
-            'is later bought.',
-      };
+    DateTime now, {
+    required bool realRegion,
+  }) {
+    int? rounded(Iterable<ShoppingHistory> trips) {
+      if (!realRegion) return null;
+      final cents = (totalSavingsOf(trips) * 100).round();
+      return roundedSavingsCents(cents < 0 ? 0 : cents);
     }
 
-    final monthEntries =
-        tripsInMonth(history, year: now.year, month: now.month);
-    final monthSavings = totalSavingsOf(monthEntries);
-    final prevMonth = DateTime(now.year, now.month - 1);
-    final prevMonthSavings = totalSavingsOf(
-      tripsInMonth(history, year: prevMonth.year, month: prevMonth.month),
+    double? euros(int? cents) => cents == null ? null : cents / 100;
+    final month = tripsInMonth(history, year: now.year, month: now.month).toList();
+    final prev = DateTime(now.year, now.month - 1);
+    final monthCents = rounded(month);
+    final prevCents = rounded(
+      tripsInMonth(history, year: prev.year, month: prev.month),
     );
-
-    final result = <String, Object?>{
-      'total_saved_eur': double.parse(total.toStringAsFixed(2)),
-      'trips_with_savings': tripsWithSavings,
-      'month_saved_eur': double.parse(monthSavings.toStringAsFixed(2)),
-      'note': 'total_saved_eur is a lifetime figure across all of shopping '
-          'history; month_saved_eur is scoped to the current calendar month '
-          'only and may be 0 even when the lifetime total is not.',
+    final totalCents = rounded(history);
+    return {
+      'month_trips': month.length,
+      'month_saved_cents': monthCents,
+      if (monthCents != null) 'month_saved_about_eur': euros(monthCents),
+      if (prevCents != null) 'prev_month_saved_about_eur': euros(prevCents),
+      if (totalCents != null) 'total_saved_about_eur': euros(totalCents),
+      'note': realRegion
+          ? 'Amounts are already rounded ("ca."), according to the retailer; '
+              'say them as they are. A missing month amount means no savings '
+              'were recorded for it.'
+          : 'No region is set, so there is no savings figure.',
     };
-    if (prevMonthSavings > 0.01) {
-      result['prev_month_saved_eur'] =
-          double.parse(prevMonthSavings.toStringAsFixed(2));
-    }
-    return result;
   }
 
   static MealType _mealTypeFromArg(String? value) {
@@ -1882,11 +2350,7 @@ class AvoAssistantService {
       case 'snack':
         return MealType.snack;
     }
-    final hour = DateTime.now().hour;
-    if (hour < 11) return MealType.breakfast;
-    if (hour < 15) return MealType.lunch;
-    if (hour >= 17 && hour < 22) return MealType.dinner;
-    return MealType.snack;
+    return avoMealAt(DateTime.now());
   }
 
   static double _round1(double v) => (v * 10).round() / 10;
@@ -1903,6 +2367,7 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolSetModule(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     final module = _moduleFromId(args['module'] as String?);
     final enabled = args['enabled'] as bool?;
@@ -1912,18 +2377,52 @@ class AvoAssistantService {
     if (!module.released) {
       return {'not_available': true, 'error': _t(ref, 'avo_tool_not_available')};
     }
-    await ref.read(appModulesProvider.notifier).setEnabled(module, enabled);
+    final modules = ref.read(appModulesProvider.notifier);
+    final was = ref.read(moduleEnabledProvider(module));
+    Future<AvoUndoResult> back() async {
+      try {
+        if (ref.read(moduleEnabledProvider(module)) != enabled) {
+          return AvoUndoResult.changedSince;
+        }
+        await modules.setEnabled(module, was);
+        return AvoUndoResult.undone;
+      } catch (e) {
+        debugPrint('❌ [AVO] Module not switched back: $e');
+        return AvoUndoResult.failed;
+      }
+    }
+
+    // Switching Avo off ends the tab: it happens once this answer is done,
+    // never under it (Kap. 5.7).
+    final avoOff = module == AppModule.avo && !enabled;
+    if (!avoOff) await modules.setEnabled(module, enabled);
+    payloads.add(AvoWidgetPayload.record(AvoModuleRecord(
+      tool: 'set_module',
+      module: module,
+      enabled: enabled,
+      undo: was == enabled || avoOff ? null : back,
+      applyAfterAnswer: avoOff ? () => modules.setEnabled(module, false) : null,
+    )));
     return {'success': true, 'module': module.storageKey, 'enabled': enabled};
   }
 
   /// What the app knows at runtime; the static app knowledge is in the
   /// server's system prompt.
-  Map<String, Object?> _toolAppInfo(Map<String, Object?> args) {
+  Map<String, Object?> _toolAppInfo(
+    Map<String, Object?> args,
+    List<AvoWidgetPayload> payloads,
+  ) {
     final subscription = SubscriptionService.instance;
     switch (args['topic']) {
       case 'my_subscription':
+        payloads.add(AvoWidgetPayload.card(
+          AvoAppInfoCard(isPro: subscription.isSubscribed),
+        ));
         return {'is_pro': subscription.isSubscribed, 'plan_name': AppBrand.proName};
       case 'pro_plan':
+        payloads.add(AvoWidgetPayload.card(
+          AvoAppInfoCard(isPro: subscription.isSubscribed),
+        ));
         return {
           'plan_name': AppBrand.proName,
           'offers_are_never_pro': true,
@@ -1937,7 +2436,47 @@ class AvoAssistantService {
     }
   }
 
-  Future<Map<String, Object?>> _toolLogWorkout(Map<String, Object?> args) async {
+  /// Words people use for a workout, to its type ("Joggen" is running).
+  static const Map<String, WorkoutType> _workoutWords = {
+    'jogg': WorkoutType.running,
+    'lauf': WorkoutType.running,
+    'run': WorkoutType.running,
+    'spazier': WorkoutType.walking,
+    'walk': WorkoutType.walking,
+    'gehen': WorkoutType.walking,
+    'rad': WorkoutType.cycling,
+    'bike': WorkoutType.cycling,
+    'cycl': WorkoutType.cycling,
+    'schwimm': WorkoutType.swimming,
+    'swim': WorkoutType.swimming,
+    'kraft': WorkoutType.strength,
+    'strength': WorkoutType.strength,
+    'gym': WorkoutType.strength,
+    'yoga': WorkoutType.yoga,
+    'hiit': WorkoutType.hiit,
+    'wander': WorkoutType.hiking,
+    'hik': WorkoutType.hiking,
+    'tanz': WorkoutType.dance,
+    'danc': WorkoutType.dance,
+  };
+
+  @visibleForTesting
+  static WorkoutType workoutTypeOf(String activity) {
+    final lower = activity.toLowerCase();
+    for (final e in _workoutWords.entries) {
+      if (lower.contains(e.key)) return e.value;
+    }
+    return WorkoutType.other;
+  }
+
+  Future<Map<String, Object?>> _toolLogWorkout(
+    Map<String, Object?> args,
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) async {
+    if (!ref.read(calorieTrackingEnabledProvider)) {
+      return {'tracking_enabled': false, 'note': _trackingDisabledNote};
+    }
     final activity = (args['activity'] as String?)?.trim() ?? '';
     final minutes = (args['duration_min'] as num?)?.toInt() ?? 0;
     if (activity.isEmpty || minutes <= 0) {
@@ -1945,11 +2484,7 @@ class AvoAssistantService {
     }
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return {'error': 'not signed in'};
-    final lower = activity.toLowerCase();
-    final type = WorkoutType.values.firstWhere(
-      (t) => lower.contains(t.name),
-      orElse: () => WorkoutType.other,
-    );
+    final type = workoutTypeOf(activity);
     final given = (args['calories'] as num?)?.toInt();
     final kcal = given ??
         estimateWorkoutCalories(
@@ -1958,7 +2493,7 @@ class AvoAssistantService {
           durationMin: minutes,
         ).kcal;
     final now = DateTime.now();
-    await WorkoutLogService.instance.upsert(Workout(
+    final saved = await WorkoutLogService.instance.upsert(Workout(
       id: const Uuid().v4(),
       userId: userId,
       startedAt: now.subtract(Duration(minutes: minutes)),
@@ -1967,6 +2502,24 @@ class AvoAssistantService {
       calories: kcal,
       createdAt: now,
     ));
+    invalidateNutritionLog(ref);
+    payloads.add(AvoWidgetPayload.record(AvoWorkoutRecord(
+      tool: 'log_workout',
+      type: type,
+      minutes: minutes,
+      kcal: kcal,
+      estimated: given == null,
+      undo: () async {
+        try {
+          await WorkoutLogService.instance.delete(saved.id);
+          invalidateNutritionLog(ref);
+          return AvoUndoResult.undone;
+        } catch (e) {
+          debugPrint('❌ [AVO] Workout not taken back: $e');
+          return AvoUndoResult.failed;
+        }
+      },
+    )));
     return {
       'success': true,
       'activity': type.name,
@@ -1989,26 +2542,49 @@ class AvoAssistantService {
     return parsed == null ? null : DateTime(parsed.year, parsed.month, parsed.day);
   }
 
-  Map<String, Object?> _toolGetPlan(Map<String, Object?> args, WidgetRef ref) {
+  Map<String, Object?> _toolGetPlan(
+    Map<String, Object?> args,
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
+  ) {
     if (!_planOn(ref)) return _planOff(ref);
     final now = DateTime.now();
     final from = _day(args['from']) ?? DateTime(now.year, now.month, now.day);
     final days = ((args['days'] as num?)?.toInt() ?? 7).clamp(1, 14);
+    final entries = [
+      for (var i = 0; i < days; i++)
+        ...ref.read(planEntriesForDayProvider(from.add(Duration(days: i)))),
+    ];
+    payloads.add(AvoWidgetPayload.card(AvoPlanCard(
+      from: from,
+      days: days,
+      lines: [
+        for (final e in entries)
+          (
+            entryId: e.id,
+            day: e.planDate,
+            recipeId: e.recipeId,
+            name: e.snapshot.name,
+            servings: e.servings,
+            imageUrl: e.snapshot.imageUrl,
+            kcal: e.snapshot.kcalPerServing,
+          ),
+      ],
+    )));
     return {
       'from': _ymd(from),
       'days': days,
       'entries': [
-        for (var i = 0; i < days; i++)
-          for (final e in ref.read(planEntriesForDayProvider(from.add(Duration(days: i)))))
-            {
-              'entry_id': e.id,
-              'date': _ymd(e.planDate),
-              'recipe': e.snapshot.name,
-              'servings': e.servings,
-              if (e.snapshot.kcalPerServing != null)
-                'kcal_per_serving': e.snapshot.kcalPerServing,
-              'on_list': e.isSent,
-            },
+        for (final e in entries)
+          {
+            'entry_id': e.id,
+            'date': _ymd(e.planDate),
+            'recipe': e.snapshot.name,
+            'servings': e.servings,
+            if (e.snapshot.kcalPerServing != null)
+              'kcal_per_serving': e.snapshot.kcalPerServing,
+            'on_list': e.isSent,
+          },
       ],
     };
   }
@@ -2016,6 +2592,7 @@ class AvoAssistantService {
   Future<Map<String, Object?>> _toolAddToPlan(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     if (!_planOn(ref)) return _planOff(ref);
     final day = _day(args['date']);
@@ -2027,34 +2604,113 @@ class AvoAssistantService {
     if (recipe == null) return {'error': 'Recipe not found'};
     final servings = (args['servings'] as num?)?.toInt() ??
         ref.read(mealPlanSettingsProvider).defaultServings;
-    final added = await ref
-        .read(mealPlanControllerProvider)
-        .addRecipeToPlan(recipe.id, day, servings, recipe: recipe);
-    if (added == null) return {'error': 'Recipe not found'};
+
+    // A day with a recipe asks first: "Dazulegen" or "Ersetzen" (Kap. 5.4).
+    final planned = ref.read(planEntriesForDayProvider(day));
+    if (planned.isNotEmpty) {
+      payloads.add(AvoWidgetPayload.card(AvoPlanTakenCard(
+        day: day,
+        recipeId: recipe.id,
+        recipeName: recipe.name,
+        servings: servings,
+        plannedName: planned.first.snapshot.name,
+        plannedEntryIds: [for (final e in planned) e.id],
+      )));
+      return {
+        'asked': true,
+        'already_planned': [for (final e in planned) e.snapshot.name],
+        'note': 'The day has a recipe already. The app asks whether to add it '
+            'alongside or replace it; nothing is planned until the person taps.',
+      };
+    }
+    final record = await planRecipeForAvo(
+      ref,
+      recipeId: recipe.id,
+      recipe: recipe,
+      day: day,
+      servings: servings,
+    );
+    if (record == null) return {'error': 'Recipe not found'};
+    payloads.add(AvoWidgetPayload.record(record));
     return {
       'success': true,
-      'entry_id': added.entry.id,
       'date': _ymd(day),
       'recipe': recipe.name,
       'servings': servings,
     };
   }
 
+  /// Plans a recipe on [day] (after removing [replacing] when the person
+  /// chose "Ersetzen") and answers with the card; "Widerrufen" takes both
+  /// back.
+  Future<AvoPlanRecord?> planRecipeForAvo(
+    WidgetRef ref, {
+    required String recipeId,
+    Recipe? recipe,
+    required DateTime day,
+    required int servings,
+    List<String> replacing = const [],
+  }) async {
+    final controller = ref.read(mealPlanControllerProvider);
+    final removed = replacing.isEmpty ? null : await controller.removeEntries(replacing);
+    final added = await controller.addRecipeToPlan(recipeId, day, servings, recipe: recipe);
+    if (added == null) {
+      if (removed != null) await controller.undo(removed);
+      return null;
+    }
+    return AvoPlanRecord(
+      tool: 'add_to_plan',
+      recipeName: added.entry.snapshot.name,
+      day: day,
+      servings: servings,
+      undo: () async {
+        try {
+          await controller.undo(added.undo);
+          if (removed != null) await controller.undo(removed);
+          return AvoUndoResult.undone;
+        } catch (e) {
+          debugPrint('❌ [AVO] Plan not taken back: $e');
+          return AvoUndoResult.failed;
+        }
+      },
+    );
+  }
+
   Future<Map<String, Object?>> _toolMoveInPlan(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     if (!_planOn(ref)) return _planOff(ref);
     final id = args['entry_id'] as String?;
     final day = _day(args['date']);
     if (id == null || day == null) return {'error': 'entry_id and date are required'};
-    await ref.read(mealPlanControllerProvider).moveEntry(id, day);
+    final entry = ref.read(mealPlanSnapshotProvider).entries[id];
+    if (entry == null) return {'error': 'No plan entry with this id.'};
+    final controller = ref.read(mealPlanControllerProvider);
+    final undo = await controller.moveEntry(id, day);
+    payloads.add(AvoWidgetPayload.record(AvoPlanRecord(
+      tool: 'move_in_plan',
+      recipeName: entry.snapshot.name,
+      day: day,
+      moved: true,
+      undo: () async {
+        try {
+          await controller.undo(undo);
+          return AvoUndoResult.undone;
+        } catch (e) {
+          debugPrint('❌ [AVO] Plan move not taken back: $e');
+          return AvoUndoResult.failed;
+        }
+      },
+    )));
     return {'success': true, 'entry_id': id, 'date': _ymd(day)};
   }
 
   Future<Map<String, Object?>> _toolPlanToList(
     Map<String, Object?> args,
     WidgetRef ref,
+    List<AvoWidgetPayload> payloads,
   ) async {
     if (!_planOn(ref)) return _planOff(ref);
     final from = _day(args['from']);
@@ -2062,7 +2718,8 @@ class AvoAssistantService {
     if (from == null || listId == null) return {'error': 'from and list_id are required'};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final result = await ref.read(mealPlanControllerProvider).sendToList(
+    final controller = ref.read(mealPlanControllerProvider);
+    final result = await controller.sendToList(
           weekStart: planWeekStart(from),
           range: from.isAfter(today) || from == today
               ? PlanRange.fromToday
@@ -2070,6 +2727,24 @@ class AvoAssistantService {
           listId: listId,
           noteFor: (names) => names.isEmpty ? null : names.join(', '),
         );
+    if (result.addedCount > 0) {
+      payloads.add(AvoWidgetPayload.record(AvoItemsRecord(
+        tool: 'plan_to_list',
+        source: AvoItemsSource.plan,
+        listId: listId,
+        listName: await _changes(ref).listName(listId),
+        added: result.addedCount,
+        undo: () async {
+          try {
+            await controller.undoSend(result);
+            return AvoUndoResult.undone;
+          } catch (e) {
+            debugPrint('❌ [AVO] Plan send not taken back: $e');
+            return AvoUndoResult.failed;
+          }
+        },
+      )));
+    }
     return {
       'success': result.failedNames.isEmpty,
       'added': result.addedCount,
@@ -2091,11 +2766,14 @@ class AvoAssistantService {
     if (target == null || id.isEmpty) {
       return {'error': 'target_type and target_id are required'};
     }
-    final found = await _lookUpDeleteTarget(target, id);
+    final found = await _lookUpDeleteTarget(target, id, ref);
     if (found == null) {
       return {'error': 'Nothing with this id exists for the person, or it cannot be deleted from Avo yet.'};
     }
-    if (label.isNotEmpty && !_sameName(found.name, label)) {
+    // A trip has no name of its own (the model calls it by its date).
+    if (target != AvoDeleteTarget.historyTrip &&
+        label.isNotEmpty &&
+        !_sameName(found.name, label)) {
       return {'error': 'This id belongs to "${found.name}", not "$label". Check the id first.'};
     }
     final pending = _pendingDeletes.propose(
@@ -2104,6 +2782,7 @@ class AvoAssistantService {
       name: found.name,
       parentId: found.parentId,
       version: found.version,
+      date: found.date,
     );
     payloads.add(AvoWidgetPayload.confirmDelete(pending));
     return {
@@ -2119,9 +2798,11 @@ class AvoAssistantService {
 
   /// The target as the person's own rights see it (RLS); null when it does
   /// not exist for them or Avo cannot delete that kind yet.
-  Future<({String name, String? parentId, String? version})?> _lookUpDeleteTarget(
+  Future<({String name, String? parentId, String? version, DateTime? date})?>
+      _lookUpDeleteTarget(
     AvoDeleteTarget target,
     String id,
+    WidgetRef ref,
   ) async {
     switch (target) {
       case AvoDeleteTarget.item:
@@ -2135,6 +2816,7 @@ class AvoAssistantService {
           name: row['name'] as String? ?? '',
           parentId: row['list_id'] as String?,
           version: row['updated_at']?.toString(),
+          date: null,
         );
       case AvoDeleteTarget.list:
         final row = await _supabase
@@ -2147,6 +2829,7 @@ class AvoAssistantService {
           name: row['name'] as String? ?? '',
           parentId: null,
           version: row['updated_at']?.toString(),
+          date: null,
         );
       case AvoDeleteTarget.foodLog:
         final row = await _supabase
@@ -2155,9 +2838,35 @@ class AvoAssistantService {
             .eq('id', id)
             .maybeSingle();
         if (row == null) return null;
-        return (name: row['food_name'] as String? ?? '', parentId: null, version: null);
+        return (
+          name: row['food_name'] as String? ?? '',
+          parentId: null,
+          version: null,
+          date: null,
+        );
       case AvoDeleteTarget.planEntry:
+        if (!_planOn(ref)) return null;
+        final entry = ref.read(mealPlanSnapshotProvider).entries[id];
+        if (entry == null) return null;
+        return (
+          name: entry.snapshot.name,
+          parentId: null,
+          version: entry.updatedAt.toIso8601String(),
+          date: entry.planDate,
+        );
       case AvoDeleteTarget.historyTrip:
+        final row = await _supabase
+            .from('shopping_history')
+            .select('list_name, completed_at')
+            .eq('id', id)
+            .maybeSingle();
+        if (row == null) return null;
+        return (
+          name: row['list_name'] as String? ?? '',
+          parentId: null,
+          version: null,
+          date: DateTime.tryParse(row['completed_at']?.toString() ?? '')?.toLocal(),
+        );
       case AvoDeleteTarget.listMember:
         return null;
     }
@@ -2171,7 +2880,7 @@ class AvoAssistantService {
     if (pending == null) return false;
     try {
       final current =
-          await _lookUpDeleteTarget(pending.target, pending.targetId);
+          await _lookUpDeleteTarget(pending.target, pending.targetId, ref);
       if (current == null || current.version != pending.version) return false;
       switch (pending.target) {
         case AvoDeleteTarget.item:
@@ -2188,7 +2897,11 @@ class AvoAssistantService {
           await FoodLogService.instance.deleteEntryWithPhoto(pending.targetId);
           invalidateNutritionLog(ref);
         case AvoDeleteTarget.planEntry:
+          await ref
+              .read(mealPlanControllerProvider)
+              .removeEntries([pending.targetId]);
         case AvoDeleteTarget.historyTrip:
+          await ShoppingHistoryService().deleteHistory(pending.targetId);
         case AvoDeleteTarget.listMember:
           return false;
       }
@@ -2328,6 +3041,13 @@ class _RefListWriter implements AvoListWriter {
       ref
           .read(itemsNotifierProvider(listId).notifier)
           .addItem(name: name, quantity: quantity, unit: unit);
+
+  @override
+  Future<List<ShoppingItemModel>> addItems(
+    String listId,
+    List<NewItem> items,
+  ) async =>
+      (await ref.read(itemRepositoryProvider).addItems(listId, items)).items;
 
   @override
   Future<void> deleteItem(String listId, String itemId) =>

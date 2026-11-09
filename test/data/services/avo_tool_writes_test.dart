@@ -94,6 +94,82 @@ void main() {
     );
   });
 
+  test('a partial plan_to_list keeps its marker (W1 re-review 3, Minor 1)', () {
+    // plan_to_list reports success: false as soon as one line failed, with
+    // the lines it did write in `added`.
+    final marker = avoWriteMarker(
+      'plan_to_list',
+      {
+        'success': false,
+        'added': 5,
+        'failed': ['Dill'],
+      },
+      hadDoneCard: false,
+      listName: 'Wocheneinkauf',
+    );
+    expect(marker?.isDoneChange, isTrue);
+    expect(marker?.wroteListName, 'Wocheneinkauf');
+    // An error with some lines written is partial too.
+    expect(
+      avoWriteMarker('add_history_items_to_list', {
+        'error': 'network',
+        'added': 2,
+      }, hadDoneCard: false)?.isDoneChange,
+      isTrue,
+    );
+    // An error without anything written stays without one.
+    expect(
+      avoWriteMarker('plan_to_list', {
+        'error': 'network',
+      }, hadDoneCard: false),
+      isNull,
+    );
+  });
+
+  test('a card that asks first is no write yet (W1b): estimate, goal '
+      'preview, planned day, missing goal fields', () {
+    for (final (tool, result) in [
+      ('log_food', <String, Object?>{'saved': false, 'shown_estimate': true}),
+      ('setup_nutrition_goal', <String, Object?>{'requires_confirmation': true}),
+      ('setup_nutrition_goal', <String, Object?>{'incomplete': true}),
+      ('add_to_plan', <String, Object?>{'asked': true}),
+      ('update_setting', <String, Object?>{
+        'success': false,
+        'requires_confirmation': true,
+      }),
+    ]) {
+      expect(
+        avoWriteMarker(tool, result, hadDoneCard: false),
+        isNull,
+        reason: '$tool $result',
+      );
+    }
+  });
+
+  test('a record is a done card: no extra marker', () async {
+    final payloads = <AvoWidgetPayload>[];
+    payloads.add(
+      AvoWidgetPayload.record(
+        const AvoWaterRecord(
+          tool: 'log_water',
+          amountMl: 250,
+          totalMl: 500,
+          targetMl: 2000,
+        ),
+      ),
+    );
+    await avoNoteWrite(
+      payloads,
+      before: 0,
+      tool: 'log_water',
+      input: const {},
+      result: const {'success': true},
+      listName: (_) async => '',
+    );
+    expect(payloads, hasLength(1));
+    expect(payloads.single.isDoneChange, isTrue);
+  });
+
   group('avoNoteWrite (the wiring in _runToolCall)', () {
     Future<List<AvoWidgetPayload>> run(
       String tool,

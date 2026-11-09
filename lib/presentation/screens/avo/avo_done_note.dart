@@ -29,14 +29,17 @@ String avoDoneNote(
       parts.add(_listChange(context, change));
       continue;
     }
-    final setting = p.settingChange;
-    if (setting != null && setting.success) {
-      final value = avoSafeName(setting.newValue);
+    final record = p.record;
+    if (record is AvoSettingRecord) {
+      final value = avoSafeName(record.value);
       parts.add(
-        value == null
-            ? setting.displayName
-            : '${setting.displayName}: ${_quoted(value)}',
+        value == null ? record.key : '${record.key}: ${_quoted(value)}',
       );
+      continue;
+    }
+    if (record != null) {
+      final list = avoSafeName(record.noteListName);
+      parts.add(list == null ? record.tool : '${record.tool} (${_quoted(list)})');
       continue;
     }
     final tool = p.wroteTool;

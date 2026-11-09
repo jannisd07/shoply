@@ -1,11 +1,12 @@
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/recipe.dart';
-import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
-import 'package:shoply/data/services/avo_settings_bridge.dart';
+import 'package:shoply/data/services/avo_card_data.dart';
 import 'package:shoply/data/services/avo_conversation.dart';
 import 'package:shoply/data/services/avo_consents.dart';
+
+export 'package:shoply/data/services/avo_card_data.dart';
 
 // ════════════════════════════════════════════════════════════════════
 // RESPONSE / PAYLOAD MODELS
@@ -142,16 +143,17 @@ enum AvoExpressionType {
 /// Rich content the assistant wants rendered in the chat bubble.
 /// The chat screen inspects [kind] and reads the matching fields.
 enum AvoPayloadKind {
-  recipes,
   listItems,
   lists,
-  history,
   pickList,
-  nutrition,
-  settingChange,
-  appInfo,
   confirmDelete,
   consentRequest,
+
+  /// A write outside a list's own changes, with its undo ([AvoRecord]).
+  record,
+
+  /// A read result or a question card ([AvoCardData]).
+  card,
 
   /// A change Avo made on a list ([AvoListChange]).
   listChange,
@@ -167,16 +169,13 @@ enum AvoPayloadKind {
 
 class AvoWidgetPayload {
   final AvoPayloadKind kind;
-  final List<Recipe>? recipes;
   final List<ShoppingItemModel>? items;
   final String? listId;
   final String? listName;
   final List<ShoppingListModel>? lists;
-  final List<ShoppingHistory>? history;
   final AvoPickListData? pickListData;
-  final AvoNutritionData? nutrition;
-  final SettingChangeResult? settingChange;
-  final AvoAppInfoData? appInfo;
+  final AvoRecord? record;
+  final AvoCardData? card;
   final AvoPendingDelete? pendingDelete;
   final AvoConsentKind? consentKind;
   final AvoListChange? listChange;
@@ -188,16 +187,13 @@ class AvoWidgetPayload {
 
   const AvoWidgetPayload._({
     required this.kind,
-    this.recipes,
     this.items,
     this.listId,
     this.listName,
     this.lists,
-    this.history,
     this.pickListData,
-    this.nutrition,
-    this.settingChange,
-    this.appInfo,
+    this.record,
+    this.card,
     this.pendingDelete,
     this.consentKind,
     this.listChange,
@@ -215,12 +211,22 @@ class AvoWidgetPayload {
       );
 
   /// Something this payload stands for is already done (a retry must not
-  /// do it again): a list change, a saved setting, a card-less write.
+  /// do it again): a list change, a record (setting, log, plan, items), a
+  /// card-less write.
   bool get isDoneChange => switch (kind) {
-    AvoPayloadKind.listChange || AvoPayloadKind.wrote => true,
-    AvoPayloadKind.settingChange => settingChange?.success ?? false,
+    AvoPayloadKind.listChange ||
+    AvoPayloadKind.record ||
+    AvoPayloadKind.wrote => true,
     _ => false,
   };
+
+  /// A write with its card and undo (Kap. 5.2–5.7).
+  factory AvoWidgetPayload.record(AvoRecord record) =>
+      AvoWidgetPayload._(kind: AvoPayloadKind.record, record: record);
+
+  /// A read result or a question card (Kap. 5.2–5.7, 7).
+  factory AvoWidgetPayload.card(AvoCardData card) =>
+      AvoWidgetPayload._(kind: AvoPayloadKind.card, card: card);
 
   /// A change on a list, shown as a result card with "Widerrufen".
   factory AvoWidgetPayload.listChange(AvoListChange change) =>
@@ -229,9 +235,6 @@ class AvoWidgetPayload {
   /// [module] is switched off; the card offers to switch it on.
   factory AvoWidgetPayload.moduleOff(AppModule module) =>
       AvoWidgetPayload._(kind: AvoPayloadKind.moduleOff, module: module);
-
-  factory AvoWidgetPayload.recipes(List<Recipe> recipes) =>
-      AvoWidgetPayload._(kind: AvoPayloadKind.recipes, recipes: recipes);
 
   factory AvoWidgetPayload.listItems({
     required String listId,
@@ -247,9 +250,6 @@ class AvoWidgetPayload {
   factory AvoWidgetPayload.lists(List<ShoppingListModel> lists) =>
       AvoWidgetPayload._(kind: AvoPayloadKind.lists, lists: lists);
 
-  factory AvoWidgetPayload.history(List<ShoppingHistory> history) =>
-      AvoWidgetPayload._(kind: AvoPayloadKind.history, history: history);
-
   factory AvoWidgetPayload.pickList({
     required String itemName,
     required double quantity,
@@ -262,33 +262,6 @@ class AvoWidgetPayload {
       unit: unit,
     ),
   );
-
-  factory AvoWidgetPayload.nutrition({
-    required String recipeName,
-    required int servings,
-    int? calories,
-    double? proteinG,
-    double? carbsG,
-    double? fatG,
-    bool estimated = false,
-  }) => AvoWidgetPayload._(
-    kind: AvoPayloadKind.nutrition,
-    nutrition: AvoNutritionData(
-      recipeName: recipeName,
-      servings: servings,
-      calories: calories,
-      proteinG: proteinG,
-      carbsG: carbsG,
-      fatG: fatG,
-      estimated: estimated,
-    ),
-  );
-
-  factory AvoWidgetPayload.settingChange(SettingChangeResult result) =>
-      AvoWidgetPayload._(
-        kind: AvoPayloadKind.settingChange,
-        settingChange: result,
-      );
 
   /// A deletion Avo proposed; only a tap on this card deletes.
   factory AvoWidgetPayload.confirmDelete(AvoPendingDelete pending) =>
@@ -303,14 +276,6 @@ class AvoWidgetPayload {
         kind: AvoPayloadKind.consentRequest,
         consentKind: kind,
       );
-
-  factory AvoWidgetPayload.appInfo({
-    required String topic,
-    required String answer,
-  }) => AvoWidgetPayload._(
-    kind: AvoPayloadKind.appInfo,
-    appInfo: AvoAppInfoData(topic: topic, answer: answer),
-  );
 }
 
 class AvoPickListData {
@@ -318,31 +283,6 @@ class AvoPickListData {
   final double quantity;
   final String? unit;
   const AvoPickListData({required this.itemName, this.quantity = 1, this.unit});
-}
-
-class AvoNutritionData {
-  final String recipeName;
-  final int servings;
-  final int? calories;
-  final double? proteinG;
-  final double? carbsG;
-  final double? fatG;
-  final bool estimated;
-  const AvoNutritionData({
-    required this.recipeName,
-    required this.servings,
-    this.calories,
-    this.proteinG,
-    this.carbsG,
-    this.fatG,
-    this.estimated = false,
-  });
-}
-
-class AvoAppInfoData {
-  final String topic;
-  final String answer;
-  const AvoAppInfoData({required this.topic, required this.answer});
 }
 
 class AvoContext {

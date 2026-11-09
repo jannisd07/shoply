@@ -188,6 +188,7 @@ class AvoPendingDelete {
     required this.expiresAt,
     this.parentId,
     this.version,
+    this.date,
   });
 
   final String token;
@@ -202,6 +203,9 @@ class AvoPendingDelete {
 
   /// e.g. `updated_at` when the card was made; null when the target has none.
   final String? version;
+
+  /// The day of a plan entry or a past trip ("Einkauf vom 31. Okt. löschen?").
+  final DateTime? date;
   final DateTime expiresAt;
 }
 
@@ -223,6 +227,7 @@ class AvoPendingDeletes {
     required String name,
     String? parentId,
     String? version,
+    DateTime? date,
   }) {
     final token = List.generate(16, (_) => _random.nextInt(256))
         .map((b) => b.toRadixString(16).padLeft(2, '0'))
@@ -234,6 +239,7 @@ class AvoPendingDeletes {
       parentId: parentId,
       name: name,
       version: version,
+      date: date,
       expiresAt: _now().add(lifetime),
     );
     _byToken[token] = pending;

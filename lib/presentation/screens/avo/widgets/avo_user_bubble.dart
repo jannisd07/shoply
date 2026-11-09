@@ -14,6 +14,10 @@ const double _padV = 10; // D2
 const double _padH = 14; // D2
 const Radius _round = Radius.circular(20); // D2
 const Radius _tail = Radius.circular(6); // D2 small corner bottom right
+const double _photoWidth = 200; // D2 Kap. 2.2: photo 4:3, 200 wide
+const double _photoAspect = 4 / 3; // D2
+const double _photoRadius = 20; // D2 card radius
+const Duration _photoFade = Duration(milliseconds: 200); // Kap. 7.4 fade in
 
 /// The person's question: a green bubble on the right, white 17/22 text.
 ///
@@ -30,15 +34,21 @@ class AvoUserBubble extends StatelessWidget {
     this.noteActionLabel,
     this.onNoteAction,
     this.onEdit,
+    this.photo,
   });
 
   final String text;
+
+  /// A photo for Avo (Kap. 2.2): 4:3, 200 pt wide at most, the text below it
+  /// in the same bubble.
+  final Uint8List? photo;
   final String? note;
   final String? noteActionLabel;
   final VoidCallback? onNoteAction;
   final VoidCallback? onEdit;
 
   void _menu(BuildContext anchor) {
+    if (text.isEmpty) return;
     showAvoMenu(
       anchor,
       items: [
@@ -80,18 +90,31 @@ class AvoUserBubble extends StatelessWidget {
                     bottomRight: _tail,
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _padH,
-                    vertical: _padV,
-                  ),
-                  child: Text(
-                    text,
-                    style: context.text(
-                      AvoTextStyle.body,
-                      color: colors.onTint,
-                    ),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (photo != null)
+                      _Photo(
+                        bytes: photo!,
+                        width: maxWidth < _photoWidth ? maxWidth : _photoWidth,
+                        semanticLabel: context.tr('avo_photo_label'),
+                      ),
+                    if (text.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: _padH,
+                          vertical: _padV,
+                        ),
+                        child: Text(
+                          text,
+                          style: context.text(
+                            AvoTextStyle.body,
+                            color: colors.onTint,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -104,13 +127,16 @@ class AvoUserBubble extends StatelessWidget {
           children: [
             Semantics(
               header: true,
-              customSemanticsActions: {
-                CustomSemanticsAction(label: context.tr('avo_copy')): () =>
-                    Clipboard.setData(ClipboardData(text: text)),
-                if (onEdit != null)
-                  CustomSemanticsAction(label: context.tr('avo_edit_resend')):
-                      onEdit!,
-              },
+              customSemanticsActions: text.isEmpty
+                  ? null
+                  : {
+                      CustomSemanticsAction(label: context.tr('avo_copy')): () =>
+                          Clipboard.setData(ClipboardData(text: text)),
+                      if (onEdit != null)
+                        CustomSemanticsAction(
+                          label: context.tr('avo_edit_resend'),
+                        ): onEdit!,
+                    },
               child: bubble,
             ),
             if (noteText != null)
@@ -140,6 +166,49 @@ class AvoUserBubble extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// The photo in the bubble, decoded at its shown size, fading in.
+class _Photo extends StatelessWidget {
+  const _Photo({
+    required this.bytes,
+    required this.width,
+    required this.semanticLabel,
+  });
+
+  final Uint8List bytes;
+  final double width;
+  final String semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(_photoRadius),
+      child: SizedBox(
+        width: width,
+        height: width / _photoAspect,
+        child: Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          cacheWidth: (width * dpr).round(),
+          semanticLabel: semanticLabel,
+          gaplessPlayback: true,
+          frameBuilder: (context, child, frame, sync) => sync
+              ? child
+              : AnimatedOpacity(
+                  // VoiceOver hears the photo while it fades in, too.
+                  alwaysIncludeSemantics: true,
+                  opacity: frame == null ? 0 : 1,
+                  duration: context.reduceMotion ? Duration.zero : _photoFade,
+                  child: child,
+                ),
+          errorBuilder: (context, _, _) =>
+              ColoredBox(color: context.colors.fill),
+        ),
+      ),
     );
   }
 }

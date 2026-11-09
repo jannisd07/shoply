@@ -36,6 +36,8 @@ class AvoConfirmCard extends StatefulWidget {
     this.body,
     this.confirmHint,
     this.cancelLabel,
+    this.cancelledText,
+    this.safety = false,
     this.offline = false,
     this.expiresAt,
     this.onExpired,
@@ -53,6 +55,13 @@ class AvoConfirmCard extends StatefulWidget {
 
   /// The result line once deleted ("Liste „Party“ gelöscht").
   final String doneText;
+
+  /// The line after "Abbrechen"; "Nicht gelöscht." by default.
+  final String? cancelledText;
+
+  /// The safety variant (Kap. 6.5, removing an allergy): the warning
+  /// symbol in the warning colour instead of the neutral trash.
+  final bool safety;
   final AvoConfirmPhase phase;
   final VoidCallback onConfirm;
   final VoidCallback onCancel;
@@ -128,6 +137,14 @@ class _AvoConfirmCardState extends State<AvoConfirmCard> {
     super.dispose();
   }
 
+  Widget _symbol(AvoColors colors) => widget.safety
+      ? AvoIcon(
+          AvoIcons.exclamationmarkTriangleFill,
+          size: _trash,
+          color: colors.warning,
+        )
+      : AvoIcon(AvoIcons.trash, size: _trash, color: colors.secondaryLabel);
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -137,7 +154,7 @@ class _AvoConfirmCardState extends State<AvoConfirmCard> {
         phase == AvoConfirmPhase.cancelled) {
       final text = phase == AvoConfirmPhase.deleted
           ? widget.doneText
-          : context.tr('avo_not_deleted');
+          : widget.cancelledText ?? context.tr('avo_not_deleted');
       return Semantics(
         container: true,
         liveRegion: true,
@@ -145,13 +162,7 @@ class _AvoConfirmCardState extends State<AvoConfirmCard> {
           padding: const EdgeInsets.all(_pad),
           child: Row(
             children: [
-              ExcludeSemantics(
-                child: AvoIcon(
-                  AvoIcons.trash,
-                  size: _trash,
-                  color: colors.secondaryLabel,
-                ),
-              ),
+              ExcludeSemantics(child: _symbol(colors)),
               const SizedBox(width: AvoSpacing.m),
               Expanded(
                 child: Text(
@@ -218,13 +229,7 @@ class _AvoConfirmCardState extends State<AvoConfirmCard> {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: AvoSpacing.xxs),
-                  child: ExcludeSemantics(
-                    child: AvoIcon(
-                      AvoIcons.trash,
-                      size: _trash,
-                      color: colors.secondaryLabel,
-                    ),
-                  ),
+                  child: ExcludeSemantics(child: _symbol(colors)),
                 ),
                 const SizedBox(width: AvoSpacing.m),
                 Expanded(
