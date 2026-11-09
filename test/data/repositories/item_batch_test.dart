@@ -56,4 +56,18 @@ void main() {
     ]);
     expect(plan.inserts.map((i) => i.name), ['Pfeffer']);
   });
+
+  test(
+    'skipOpenDuplicates leaves open items out instead of merging (A-V19)',
+    () {
+      final plan = AddItemsPlan.of(
+        [_item('m', 'Milch', 1)],
+        const [NewItem(name: 'milch'), NewItem(name: 'Brot')],
+        skipOpenDuplicates: true,
+      );
+      expect(plan.merges, isEmpty);
+      expect(plan.skipped.map((i) => i.name), ['milch']);
+      expect(plan.inserts.map((i) => i.name), ['Brot']);
+    },
+  );
 }

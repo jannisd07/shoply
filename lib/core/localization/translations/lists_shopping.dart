@@ -26,9 +26,6 @@ const Map<String, String> listsShoppingEn = {
   'list_shop_empty_body': 'Add something or go back to the list.',
   'list_shop_offline':
       'Offline. Checking off works again once you\'re back online.',
-  'list_shop_saved_title': 'Trip saved.',
-  'list_shop_saved_one': '1 item',
-  'list_shop_saved_many': '{count} items',
 };
 
 const Map<String, String> listsShoppingDe = {
@@ -56,7 +53,4 @@ const Map<String, String> listsShoppingDe = {
   'list_shop_empty_body': 'Füg etwas hinzu oder geh zurück zur Liste.',
   'list_shop_offline':
       'Offline. Abhaken klappt wieder, sobald du Verbindung hast.',
-  'list_shop_saved_title': 'Einkauf gespeichert.',
-  'list_shop_saved_one': '1 Artikel',
-  'list_shop_saved_many': '{count} Artikel',
 };

@@ -4,6 +4,15 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
+09.11.2026 (S5b): B8 ist auf `main`, B's Wünsche aus status-B 19/20 sind erledigt: `AmountField` (A-V3),
+`AvoBarChart` mit Auswahl und Tokens `chartBar`/`chartHighlight`/`monthCardGradient` (A-V4), `ValueRow(subtitle:)` und
+`MenuValueRow` (A-V6), Erfolgsmoment ab AX3 ohne Figur (A-V7), `AvoToast.show(onDismissed:)` (A-V24),
+`AppFilterChip(trailing:)`, Mitteilungen öffnen den Einkauf (A-V11), Gruppe „Verlauf“ in der Listen-Übersicht
+(A-V12), `HomeSplitHint` unter der Avo-Karte (A-V13), `addItemsSkippingOpen`/`removeItems` (A-V19, A-V23). A-V14
+geprüft (`push` legt den Verlauf nicht unter das Detail). Gegenprüfung B8 ohne Fund. Details:
+[`s5b-stand.md`](s5b-stand.md). Als Nächstes: S5c (Gegenprüfung B7/B6b), wenn sie auf `main` sind; sonst A10 (Owner)
+oder neue Wünsche von B.
+
 09.11.2026 (A9b): Paywall wächst aus dem auslösenden Element (`ZoomPage`, Zurück-Wischen 1:1, Reduce Motion
 Überblendung), Preis-Cache für die erste Öffnung, Pro-Hinweis „14 Tage Avo Pro gratis testen“ auf der Startseite
 nach dem ersten Einkauf (`ProHintCounter`). Tag-12-Erinnerung als Wunsch an B ([`a9b-stand.md`](a9b-stand.md)
@@ -82,6 +91,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | S6 Gegenprüfung (A prüft B) | **erledigt** für B's fertige Screens (Angebote, Avo, Kalorien-Kern, B-Einstellungen); B6b/B7/B8 folgen, wenn sie auf `main` sind; Funde in `s6-stand.md` | 09.11.2026 | `git log --grep S6` |
 | A9 Pro und Paywall | **erledigt**: Owner-Variante B, `ProFeatures` mit Katalog, D2-Paywall mit allen Zuständen und Prüfmatrix, Kochmodus-Sperre ab Schritt 2; offen in `a9-stand.md` (→ A9b) | 09.11.2026 | `git log --grep A9` |
 | A9b Pro, Rest | **erledigt**: Zoom-Übergang der Paywall aus dem Element (`ZoomPage`, `ProGate.openPaywall(origin:)`), Preis-Cache, Pro-Hinweis auf der Startseite nach dem ersten Einkauf; Tag-12-Erinnerung als Wunsch an B (`a9b-stand.md`) | 09.11.2026 | `git log --grep A9b` |
+| S5b Nachzug von B (A) | **erledigt**: B's Wünsche nach B8 (A-V3, A-V4, A-V6, A-V7, A-V9-Rest, A-V11–A-V14, A-V19, A-V23, A-V24, `AppFilterChip(trailing:)`), Gegenprüfung B8 ohne Fund; B7/B6b folgen in S5c (`s5b-stand.md`) | 09.11.2026 | `git log --grep S5b` |
 
 ## Verträge aus S1 (für B verbindlich)
 

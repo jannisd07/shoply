@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/filter_chip.dart';
 
 import '../../../layout/layout_matrix.dart';
@@ -97,6 +98,58 @@ void main() {
       );
       expect(find.bySemanticsLabel('Lidl, 400 m'), findsOneWidget);
       semantics.dispose();
+    });
+
+    testWidgets('trailing sits after the label, quiet, not read', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(
+        tester,
+        AppFilterChip(
+          label: 'Anderer Markt …',
+          selected: false,
+          onSelected: (_) {},
+          trailing: const AvoIcon(AvoIcons.chevronRight, size: 11),
+        ),
+      );
+      final label = tester.getRect(find.text('Anderer Markt …'));
+      final glyph = tester.getRect(find.byType(AvoIcon));
+      expect(glyph.left, greaterThanOrEqualTo(label.right));
+      expect(glyph.center.dy, closeTo(label.center.dy, 1));
+      final scope = tester.widget<IconStyleScope>(
+        find.ancestor(
+          of: find.byType(AvoIcon),
+          matching: find.byType(IconStyleScope),
+        ),
+      );
+      expect(scope.color, AvoColors.light.secondaryLabel);
+      expect(
+        tester.getSemantics(find.byType(AppFilterChip)),
+        isSemantics(label: 'Anderer Markt …', isButton: true),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('selected: trailing takes the light text colour', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        AppFilterChip(
+          label: 'Anderer Markt …',
+          selected: true,
+          onSelected: (_) {},
+          trailing: const AvoIcon(AvoIcons.chevronRight, size: 11),
+        ),
+      );
+      final scope = tester.widget<IconStyleScope>(
+        find.ancestor(
+          of: find.byType(AvoIcon),
+          matching: find.byType(IconStyleScope),
+        ),
+      );
+      expect(scope.color, AvoColors.light.onChipSelected);
     });
 
     testWidgets('the leading slot grows with the text', (tester) async {
@@ -408,6 +461,31 @@ void main() {
             leading: SizedBox.square(dimension: 8),
           ),
           ChipChoice(value: 'all', label: 'Alle Märkte'),
+        ],
+      ),
+    ),
+    checkTapTargets: true,
+  );
+
+  layoutMatrix(
+    'AppFilterChip with trailing',
+    (context) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: AvoSpacing.l),
+      child: ChipRow(
+        wrap: true,
+        chips: [
+          AppFilterChip(
+            label: 'Lidl',
+            selected: true,
+            onSelected: (_) {},
+            trailing: const AvoIcon(AvoIcons.chevronRight, size: 11),
+          ),
+          AppFilterChip(
+            label: 'Anderer Markt …',
+            selected: false,
+            onSelected: (_) {},
+            trailing: const AvoIcon(AvoIcons.chevronRight, size: 11),
+          ),
         ],
       ),
     ),

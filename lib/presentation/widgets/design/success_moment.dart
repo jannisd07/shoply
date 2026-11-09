@@ -10,10 +10,19 @@ import 'package:shoply/presentation/widgets/design/avo_figure.dart';
 /// How long the moment stays before it fades (Konzept 00 §12.35).
 const Duration _kVisible = Duration(milliseconds: 1500);
 
+/// How long it stays while VoiceOver is on, so the announcement can finish
+/// (same as `AvoToast`, Konzept 00 §12.28, §14.11).
+const Duration _kVisibleVoiceOver = Duration(seconds: 10);
+
+/// From this text size on the figure is left out, so title and subtitle fit
+/// on the card at 320 × 568 (A-V7).
+const ContentSizeCategory _kNoFigureFrom = ContentSizeCategory.ax3;
+
 /// Start scale of the pop-in (Konzept 00 §12.35: from 0.9).
 const double _kStartScale = 0.9;
 
-/// Figure size; smaller from AX1 on so the text keeps its room.
+/// Figure size; smaller from AX1 on so the text keeps its room, gone from
+/// AX3 on ([_kNoFigureFrom]).
 const double _kFigureSize = 120;
 const double _kFigureSizeAccessibility = 72;
 
@@ -31,7 +40,13 @@ const Offset _kShadowOffset = Offset(0, 6); // D2
 /// the celebrating figure, [title] and an optional [subtitle] pop in from
 /// 0.9 on the celebrate spring together with the success haptic, stay for
 /// 1.5 s and fade; a tap anywhere closes it earlier. With Reduce Motion it
-/// only fades in. VoiceOver announces the title (and subtitle).
+/// only fades in. VoiceOver announces the title (and subtitle); while
+/// VoiceOver is on the moment stays 10 s like `AvoToast`, so the
+/// announcement can finish (a double tap still closes it).
+///
+/// The figure is 120 pt, 72 pt from AX1 on and left out from AX3 on. Title
+/// and subtitle wrap and are never cut (a subtitle of three lines and more
+/// fits; at very large sizes the card scrolls).
 ///
 /// Show it only after the screen that finished the task has closed ("Einkauf
 /// gespeichert.", "{pro} ist aktiv."). The future completes when the moment
@@ -95,6 +110,7 @@ class _SuccessMomentState extends State<_SuccessMoment>
 
   /// Read with the dependencies, so the timer never needs the context.
   bool _reduceMotion = false;
+  bool _voiceOver = false;
   bool _closing = false;
 
   String get _spoken {
@@ -113,6 +129,7 @@ class _SuccessMomentState extends State<_SuccessMoment>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _reduceMotion = context.reduceMotion;
+    _voiceOver = MediaQuery.maybeAccessibleNavigationOf(context) ?? false;
     if (_started) return;
     _started = true;
     // Visual, haptic and announcement start in the same frame.
@@ -138,7 +155,7 @@ class _SuccessMomentState extends State<_SuccessMoment>
         Directionality.maybeOf(context) ?? TextDirection.ltr,
       );
     }
-    _timer = Timer(_kVisible, _close);
+    _timer = Timer(_voiceOver ? _kVisibleVoiceOver : _kVisible, _close);
   }
 
   void _close() {
@@ -175,6 +192,7 @@ class _SuccessMomentState extends State<_SuccessMoment>
   Widget build(BuildContext context) {
     final colors = context.colors;
     final ax = context.isAccessibilityText;
+    final showFigure = context.typography.category.index < _kNoFigureFrom.index;
     final sub = widget.subtitle;
     final card = ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: _kMaxCardWidth),
@@ -199,11 +217,13 @@ class _SuccessMomentState extends State<_SuccessMoment>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AvoFigure(
-                pose: widget.pose,
-                size: ax ? _kFigureSizeAccessibility : _kFigureSize,
-              ),
-              const SizedBox(height: AvoSpacing.m),
+              if (showFigure) ...[
+                AvoFigure(
+                  pose: widget.pose,
+                  size: ax ? _kFigureSizeAccessibility : _kFigureSize,
+                ),
+                const SizedBox(height: AvoSpacing.m),
+              ],
               Text(
                 widget.title,
                 textAlign: TextAlign.center,

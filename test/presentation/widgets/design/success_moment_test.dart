@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
 import 'package:shoply/presentation/widgets/design/success_moment.dart';
 
@@ -192,6 +193,104 @@ void main() {
     );
   });
 
+  testWidgets('figure stays 72 pt at AX2', (tester) async {
+    _recordPlatform(tester);
+    await _open(tester, layout: const LayoutCase(width: 390, scale: 2));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.widget<AvoFigure>(find.byType(AvoFigure)).size, 72);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('no figure from AX3 on', (tester) async {
+    _recordPlatform(tester);
+    await _open(tester, layout: const LayoutCase(width: 390, scale: 3.1));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(AvoFigure), findsNothing);
+    expect(find.text('Einkauf gespeichert.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a three-line subtitle is shown in full at 320 x 568', (
+    tester,
+  ) async {
+    _recordPlatform(tester);
+    await loadLayoutFonts();
+    tester.view.physicalSize = const Size(320 * 3, 568 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    const sub =
+        '9 Artikel bei Lidl, circa 3,20 € durch Angebote gespart, laut '
+        'Händler.';
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(320, 568), devicePixelRatio: 3),
+        child: MaterialApp(
+          home: AvoDesignScope(
+            child: _AutoOpen(
+              (context) => showSuccessMoment(
+                context,
+                title: 'Einkauf gespeichert.',
+                subtitle: sub,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    final text = tester.widget<Text>(find.text(sub));
+    expect(text.maxLines, isNull);
+    expect(text.overflow, isNot(TextOverflow.ellipsis));
+    final lines =
+        tester.getSize(find.text(sub)).height /
+        tester
+            .element(find.text(sub))
+            .typography
+            .lineHeightOf(AvoTextStyle.subhead);
+    expect(lines.round(), greaterThanOrEqualTo(3));
+    expectNoClippedText(tester);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('with VoiceOver it stays 10 s, like AvoToast', (tester) async {
+    _recordPlatform(tester);
+    tester.view.physicalSize = const Size(390 * 3, kLayoutHeight * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    final run = _Run();
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(390, kLayoutHeight),
+          devicePixelRatio: 3,
+          accessibleNavigation: true,
+        ),
+        child: MaterialApp(
+          home: AvoDesignScope(
+            child: _AutoOpen(
+              (context) => showSuccessMoment(
+                context,
+                title: 'Einkauf gespeichert.',
+              ).then((_) => run.done = true),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 9));
+    expect(find.text('Einkauf gespeichert.'), findsOneWidget);
+    expect(run.done, isFalse);
+    await tester.pump(const Duration(seconds: 1, milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(find.text('Einkauf gespeichert.'), findsNothing);
+    expect(run.done, isTrue);
+  });
+
   testWidgets('other poses are passed through', (tester) async {
     _recordPlatform(tester);
     await _open(tester, title: 'Avo Pro ist aktiv.', pose: AvoPose.excited);
@@ -214,7 +313,10 @@ void main() {
     ),
     checkTapTargets: true,
     afterPump: (tester) async {
-      expect(find.byType(AvoFigure), findsOneWidget);
+      final context = tester.element(find.textContaining('Laktosefreie').first);
+      final ax3 =
+          context.typography.category.index >= ContentSizeCategory.ax3.index;
+      expect(find.byType(AvoFigure), ax3 ? findsNothing : findsOneWidget);
     },
   );
 }

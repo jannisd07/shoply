@@ -110,9 +110,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final cookRow =
         ref.watch(moduleEnabledProvider(AppModule.mealPlan)) &&
         ref.watch(homeCookTodayHasContentProvider);
+    final splitRow = ref.watch(homeSplitHintHasContentProvider);
     final proHint = _showProHint(
       hintRows:
-          (savingsRow ? 1 : 0) + (cookRow ? 1 : 0) + (tip != null ? 1 : 0),
+          (savingsRow ? 1 : 0) +
+          (cookRow ? 1 : 0) +
+          (tip != null ? 1 : 0) +
+          (splitRow ? 1 : 0),
     );
     final input = HomeLayoutInput(
       avo: ref.watch(moduleEnabledProvider(AppModule.avo)),
@@ -120,6 +124,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       calories: ref.watch(moduleEnabledProvider(AppModule.calories)),
       mealPlan: ref.watch(moduleEnabledProvider(AppModule.mealPlan)),
       savingsHint: ref.watch(homeSavingsHintHasContentProvider),
+      splitHint: splitRow,
       month: ref.watch(homeMonthHasContentProvider),
       spending: ref.watch(homeSpendingHasContentProvider),
       savingsGoal: ref.watch(homeSavingsGoalHasContentProvider),
@@ -232,6 +237,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       case HomeSection.savingsHint:
         return inset(const AvoCard(child: HomeSavingsHint()));
+      case HomeSection.splitHint:
+        return inset(const HomeSplitHint());
       case HomeSection.month:
         return inset(const HomeMonthCard());
       case HomeSection.spending:

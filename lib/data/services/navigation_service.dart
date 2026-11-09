@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:shoply/routes/route_paths.dart';
+
 /// Global navigation service for handling notification taps.
 ///
 /// Since notifications can be tapped when the app is in background or terminated,
@@ -63,6 +65,20 @@ class NavigationService {
     debugPrint('✅ [NAVIGATION] Navigated to recipe: $recipeId');
   }
 
+  /// Navigate to a trip of the history ("Einkauf-Detail", V5). The route
+  /// lives in the Lists tab, so a push from anywhere switches there.
+  void navigateToHistoryTrip(String tripId) {
+    if (_router == null) {
+      debugPrint('⚠️ [NAVIGATION] Router not set');
+      return;
+    }
+
+    unawaited(
+      _router!.push('${RoutePaths.history}/${Uri.encodeComponent(tripId)}'),
+    );
+    debugPrint('✅ [NAVIGATION] Navigated to trip: $tripId');
+  }
+
   /// Route a tapped notification (local or FCM) by its data payload.
   void handleNotificationData(Map<String, dynamic> data) {
     final type = data['type'] as String?;
@@ -70,6 +86,7 @@ class NavigationService {
     final listName = data['listName'] as String?;
     // 'recipe_id' is what older app versions sent for rating pushes.
     final recipeId = (data['recipeId'] ?? data['recipe_id']) as String?;
+    final historyId = data['history_id'] as String?;
 
     debugPrint('🔔 [NAVIGATION] Notification tapped: $type');
 
@@ -86,6 +103,15 @@ class NavigationService {
       case 'recipe_like':
       case 'recipe_comment':
         if (recipeId != null) navigateToRecipe(recipeId);
+      case 'shopping_complete':
+      case 'expense_split':
+      case 'split_reminder':
+        // Pushes from before B8 carry no history id: open the list instead.
+        if (historyId != null) {
+          navigateToHistoryTrip(historyId);
+        } else if (listId != null) {
+          navigateToList(listId, listName: listName);
+        }
       case 'avo_restock':
         // Opening the app is enough — the home screen shows the restock
         // card with add/dismiss actions.

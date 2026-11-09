@@ -8,6 +8,7 @@ void main() {
     calories: true,
     mealPlan: true,
     savingsHint: true,
+    splitHint: true,
     month: true,
     spending: true,
     savingsGoal: true,
@@ -25,6 +26,7 @@ void main() {
   test('everything on: exactly the D2 "Für dich" order', () {
     expect(homeSections(everything), [
       HomeSection.avoCard,
+      HomeSection.splitHint,
       HomeSection.month,
       HomeSection.spending,
       HomeSection.savingsGoal,
@@ -36,6 +38,17 @@ void main() {
       HomeSection.tip,
     ]);
     expect(homeTiles(everything), HomeTile.values);
+  });
+
+  test('the Kosten-teilen hint sits right under the Avo card (A-V13)', () {
+    const i = HomeLayoutInput(splitHint: true, month: true);
+    expect(homeSections(i), [
+      HomeSection.avoCard,
+      HomeSection.splitHint,
+      HomeSection.month,
+    ]);
+    expect(homeSectionGap(HomeSection.avoCard, HomeSection.splitHint), 12);
+    expect(homeSectionGap(HomeSection.splitHint, HomeSection.month), 24);
   });
 
   test('a brand-new account sees the Avo card only', () {

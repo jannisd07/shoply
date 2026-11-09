@@ -43,6 +43,9 @@ class AvoColors extends ThemeExtension<AvoColors> {
     required this.shadow,
     required this.scrim,
     required this.presence,
+    required this.chartBar,
+    required this.chartHighlight,
+    required this.monthCardGradientStart,
   });
 
   /// Grouped screen background (D2 `groupedBg`).
@@ -136,6 +139,27 @@ class AvoColors extends ThemeExtension<AvoColors> {
   /// "Someone is shopping right now" dot.
   final Color presence;
 
+  /// Resting bars of a chart (D2 `#ECECF0`). Carries no information alone:
+  /// every bar's value is also text.
+  final Color chartBar;
+
+  /// The selected or current bar of a chart (D2 `#34A853`): at least 3:1 on
+  /// [surface] (graphics, WCAG 1.4.11).
+  final Color chartHighlight;
+
+  /// Start colour of [monthCardGradient] (D2 Home month card `#EEF7EF`).
+  /// [secondaryLabel] and [tint] keep 4.5:1 on it.
+  final Color monthCardGradientStart;
+
+  /// Fill of the Home month card (D2: 135°, [monthCardGradientStart] to
+  /// [surface] at 70 %).
+  LinearGradient get monthCardGradient => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [monthCardGradientStart, surface],
+    stops: const [0, 0.7], // D2
+  );
+
   // --------------------------------------------------------------- variants
 
   static const light = AvoColors(
@@ -175,6 +199,9 @@ class AvoColors extends ThemeExtension<AvoColors> {
     shadow: Color(0xFF000000),
     scrim: Color(0x66000000),
     presence: Color(0xFF34C759),
+    chartBar: Color(0xFFECECF0), // D2
+    chartHighlight: Color(0xFF34A853), // D2, 3.06:1 on white
+    monthCardGradientStart: Color(0xFFEEF7EF), // D2
   );
 
   static const dark = AvoColors(
@@ -210,6 +237,9 @@ class AvoColors extends ThemeExtension<AvoColors> {
     shadow: Color(0xFF000000),
     scrim: Color(0x8C000000),
     presence: Color(0xFF30D158),
+    chartBar: Color(0xFF3A3A3C),
+    chartHighlight: Color(0xFF30D158),
+    monthCardGradientStart: Color(0xFF16301E), // tintSoft
   );
 
   static const lightHighContrast = AvoColors(
@@ -245,6 +275,9 @@ class AvoColors extends ThemeExtension<AvoColors> {
     shadow: Color(0xFF000000),
     scrim: Color(0x80000000),
     presence: Color(0xFF248A3D),
+    chartBar: Color(0xFF8A8A8E), // 3.4:1 on white
+    chartHighlight: Color(0xFF248A3D), // 4.4:1 on white
+    monthCardGradientStart: Color(0xFFEEF7EF),
   );
 
   static const darkHighContrast = AvoColors(
@@ -280,6 +313,9 @@ class AvoColors extends ThemeExtension<AvoColors> {
     shadow: Color(0xFF000000),
     scrim: Color(0xA6000000),
     presence: Color(0xFF30DB5B),
+    chartBar: Color(0xFF7C7C80), // 4.1:1 on #1C1C1E
+    chartHighlight: Color(0xFF30DB5B),
+    monthCardGradientStart: Color(0xFF16301E), // tintSoft
   );
 
   /// Picks the variant for [brightness] and Increase Contrast.
@@ -342,6 +378,12 @@ class AvoColors extends ThemeExtension<AvoColors> {
       shadow: l(shadow, other.shadow),
       scrim: l(scrim, other.scrim),
       presence: l(presence, other.presence),
+      chartBar: l(chartBar, other.chartBar),
+      chartHighlight: l(chartHighlight, other.chartHighlight),
+      monthCardGradientStart: l(
+        monthCardGradientStart,
+        other.monthCardGradientStart,
+      ),
     );
   }
 }

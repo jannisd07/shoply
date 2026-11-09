@@ -51,7 +51,8 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   im Hintergrund nach.
 - Deep Links (`shoply://`, Universal Links) kommen nur über `uriLinkStream` (app_links 6 liefert auch den
   Start-Link dort). Dieselbe URI innerhalb von 2 s wird ignoriert. Notification-Taps (lokal und FCM) laufen alle
-  über `NavigationService.handleNotificationData`.
+  über `NavigationService.handleNotificationData`; `shopping_complete`, `expense_split` und `split_reminder` mit
+  `history_id` öffnen den Einkauf (`/history/<id>`, `push`: Zurück führt dorthin, wo man herkam).
 
 ## Listen und Artikel (wichtigster Datenfluss)
 

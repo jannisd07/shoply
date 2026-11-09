@@ -11,6 +11,10 @@ enum HomeSection {
   /// The savings hint on its own when the Avo module is off.
   savingsHint,
 
+  /// One hint about Kosten teilen (Teil B, V12, A-V13): right under the Avo
+  /// card, because money is time-critical.
+  splitHint,
+
   /// "Dein November" (Teil B).
   month,
 
@@ -66,6 +70,7 @@ class HomeLayoutInput {
     this.calories = false,
     this.mealPlan = false,
     this.savingsHint = false,
+    this.splitHint = false,
     this.month = false,
     this.spending = false,
     this.savingsGoal = false,
@@ -89,6 +94,7 @@ class HomeLayoutInput {
 
   /// Content flags.
   final bool savingsHint;
+  final bool splitHint;
   final bool month;
   final bool spending;
   final bool savingsGoal;
@@ -117,6 +123,7 @@ List<HomeTile> homeTiles(HomeLayoutInput i) => [
 List<HomeSection> homeSections(HomeLayoutInput i) => [
   if (i.avo) HomeSection.avoCard,
   if (!i.avo && i.offers && i.savingsHint) HomeSection.savingsHint,
+  if (i.splitHint) HomeSection.splitHint,
   if (i.month) HomeSection.month,
   if (i.spending) HomeSection.spending,
   if (i.offers && i.savingsGoal) HomeSection.savingsGoal,
@@ -131,10 +138,16 @@ List<HomeSection> homeSections(HomeLayoutInput i) => [
 
 /// Space above [section] when it follows [previous] (D2: 24 between
 /// sections, 12 inside the money group and between "Heute kochen" and the
-/// tip, 40 above the Avo card for the figure that sticks out).
+/// tip, 40 above the Avo card for the figure that sticks out, 12 between
+/// the Avo card or the savings hint and the Kosten-teilen hint).
 double homeSectionGap(HomeSection? previous, HomeSection section) {
   if (previous == null) {
     return section == HomeSection.avoCard ? 40 : 24;
+  }
+  if (section == HomeSection.splitHint &&
+      (previous == HomeSection.avoCard ||
+          previous == HomeSection.savingsHint)) {
+    return 12;
   }
   const money = {
     HomeSection.month,

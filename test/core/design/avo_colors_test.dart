@@ -65,6 +65,39 @@ void main() {
     }
   });
 
+  test('chart and month card tokens (A-V4) in every variant', () {
+    for (final c in variants.values) {
+      // The highlighted bar is a graphic: 3:1 on the card (WCAG 1.4.11).
+      expect(contrast(c.chartHighlight, c.surface), greaterThanOrEqualTo(3));
+      // Text on the month card's start colour stays readable.
+      final start = c.monthCardGradientStart;
+      expect(contrast(c.secondaryLabel, start), greaterThanOrEqualTo(4.5));
+      expect(contrast(c.tint, start), greaterThanOrEqualTo(4.5));
+      expect(contrast(c.label, start), greaterThanOrEqualTo(7));
+      final g = c.monthCardGradient;
+      expect(g.colors, [start, c.surface]);
+      expect(g.stops, [0, 0.7]);
+      expect(g.begin, Alignment.topLeft);
+      expect(g.end, Alignment.bottomRight);
+    }
+    // Increase Contrast: the resting bar reaches 3:1 on the card.
+    for (final c in [AvoColors.lightHighContrast, AvoColors.darkHighContrast]) {
+      expect(contrast(c.chartBar, c.surface), greaterThanOrEqualTo(3));
+    }
+    const l = AvoColors.light;
+    expect(l.chartBar, const Color(0xFFECECF0));
+    expect(l.chartHighlight, const Color(0xFF34A853));
+    expect(l.monthCardGradientStart, const Color(0xFFEEF7EF));
+    expect(AvoColors.lightHighContrast.chartBar, const Color(0xFF8A8A8E));
+  });
+
+  test('lerp carries the chart tokens', () {
+    final mid = AvoColors.light.lerp(AvoColors.dark, 1);
+    expect(mid.chartBar, AvoColors.dark.chartBar);
+    expect(mid.chartHighlight, AvoColors.dark.chartHighlight);
+    expect(mid.monthCardGradientStart, AvoColors.dark.monthCardGradientStart);
+  });
+
   test('D2 light values are exact', () {
     const c = AvoColors.light;
     expect(c.background, const Color(0xFFF2F2F7));

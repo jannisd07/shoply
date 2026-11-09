@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/bar_chart.dart';
@@ -119,15 +120,17 @@ void main() {
       expect(tester.getRect(find.text('Jun')).top, bars[0].bottom + 6);
     });
 
-    testWidgets('D2 colours and type: highlighted bar tinted', (tester) async {
+    testWidgets('D2 colours and type: highlighted bar in chartHighlight', (
+      tester,
+    ) async {
       await _pump(tester, _chart());
       await tester.pumpAndSettle();
       final colors = AvoColors.light;
       final decorations = _barDecorations(tester);
       for (var i = 0; i < 5; i++) {
-        expect(decorations[i].color, colors.fill);
+        expect(decorations[i].color, colors.chartBar);
       }
-      expect(decorations[5].color, colors.tint);
+      expect(decorations[5].color, colors.chartHighlight);
 
       final value = _style(tester, '212 €');
       expect(value.fontSize, 12);
@@ -151,7 +154,7 @@ void main() {
       await _pump(tester, _chart(tintAll: true));
       await tester.pumpAndSettle();
       for (final d in _barDecorations(tester)) {
-        expect(d.color, AvoColors.light.tint);
+        expect(d.color, AvoColors.light.chartHighlight);
       }
       expect(_style(tester, 'Nov').fontWeight, FontWeight.w600);
       expect(_style(tester, 'Jun').fontWeight, isNot(FontWeight.w600));
@@ -372,6 +375,212 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('secondaryLabel: a second axis line, spoken after the label', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(
+        tester,
+        _chart(
+          entries: const [
+            AvoBarEntry(label: 'Okt', value: 208),
+            AvoBarEntry(label: 'Nov', value: 183, secondaryLabel: 'bisher'),
+          ],
+          highlight: 1,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final nov = tester.getRect(find.text('Nov'));
+      final second = tester.getRect(find.text('bisher'));
+      expect(second.top, closeTo(nov.bottom, 0.01));
+      expect(second.center.dx, closeTo(nov.center.dx, 0.01));
+      final style = _style(tester, 'bisher');
+      expect(style.fontSize, 11);
+      expect(style.color, AvoColors.light.secondaryLabel);
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Nov bisher')),
+        isSemantics(label: 'Nov bisher', value: '183 €'),
+      );
+      handle.dispose();
+    });
+
+    group('picker (onSelected)', () {
+      late List<String> haptics;
+
+      setUp(() {
+        haptics = [];
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+              if (call.method == 'HapticFeedback.vibrate') {
+                haptics.add(call.arguments as String);
+              }
+              return null;
+            });
+      });
+
+      tearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+
+      Widget picker(
+        List<int> picked, {
+        List<AvoBarEntry> entries = _months,
+        int selected = 5,
+      }) => StatefulBuilder(
+        builder: (context, setState) => AvoBarChart(
+          entries: entries,
+          formatValue: _euro,
+          semanticSummary: _summary,
+          selectedIndex: picked.isEmpty ? selected : picked.last,
+          onSelected: (i) => setState(() => picked.add(i)),
+        ),
+      );
+
+      testWidgets('a tap picks the bar under the finger, with a haptic', (
+        tester,
+      ) async {
+        final picked = <int>[];
+        await _pump(tester, picker(picked));
+        await tester.pumpAndSettle();
+        await tester.tapAt(_bars(tester)[1].center);
+        await tester.pumpAndSettle();
+        expect(picked, [1]);
+        expect(haptics, ['HapticFeedbackType.selectionClick']);
+        final d = _barDecorations(tester);
+        expect(d[1].color, AvoColors.light.chartHighlight);
+        expect(d[5].color, AvoColors.light.chartBar);
+        expect(_style(tester, 'Jul').fontWeight, FontWeight.w600);
+        // Tapping the selected bar again does nothing.
+        await tester.tapAt(_bars(tester)[1].center);
+        await tester.pumpAndSettle();
+        expect(picked, [1]);
+        expect(haptics, hasLength(1));
+      });
+
+      testWidgets('a tap in the gap picks the nearer column', (tester) async {
+        final picked = <int>[];
+        await _pump(tester, picker(picked));
+        await tester.pumpAndSettle();
+        final bars = _bars(tester);
+        final gap = bars[1].left - bars[0].right;
+        await tester.tapAt(
+          Offset(bars[0].right + gap * 0.25, bars[0].center.dy),
+        );
+        await tester.tapAt(
+          Offset(bars[0].right + gap * 0.75, bars[0].center.dy),
+        );
+        await tester.pumpAndSettle();
+        expect(picked, [0, 1]);
+      });
+
+      testWidgets('dragging across picks every column once, one haptic each', (
+        tester,
+      ) async {
+        final picked = <int>[];
+        await _pump(tester, picker(picked));
+        await tester.pumpAndSettle();
+        final bars = _bars(tester);
+        final gesture = await tester.startGesture(bars[5].center);
+        // Small steps, several per column.
+        for (var x = bars[5].center.dx; x >= bars[2].center.dx; x -= 6) {
+          await gesture.moveTo(Offset(x, bars[5].center.dy));
+          await tester.pump();
+        }
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(picked, [4, 3, 2]);
+        expect(haptics, hasLength(3));
+      });
+
+      testWidgets('bars without a value cannot be picked', (tester) async {
+        final picked = <int>[];
+        await _pump(
+          tester,
+          picker(
+            picked,
+            entries: const [
+              AvoBarEntry(label: 'Sep', value: 236),
+              AvoBarEntry(label: 'Okt'),
+              AvoBarEntry(label: 'Nov', value: 183),
+            ],
+            selected: 2,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final chart = tester.getRect(find.byType(AvoBarChart));
+        await tester.tapAt(Offset(chart.center.dx, chart.bottom - 30));
+        await tester.pumpAndSettle();
+        expect(picked, isEmpty);
+        expect(haptics, isEmpty);
+      });
+
+      testWidgets('VoiceOver: one adjustable element, skips missing bars', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        final picked = <int>[];
+        await _pump(
+          tester,
+          picker(
+            picked,
+            entries: const [
+              AvoBarEntry(label: 'Sep', value: 236, semanticLabel: 'September'),
+              AvoBarEntry(label: 'Okt', semanticValue: 'kein Betrag'),
+              AvoBarEntry(label: 'Nov', value: 183, semanticLabel: 'November'),
+            ],
+            selected: 2,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final node = tester.getSemantics(find.bySemanticsLabel(_summary));
+        expect(
+          node,
+          isSemantics(
+            label: _summary,
+            value: 'November, 183 €',
+            decreasedValue: 'September, 236 €',
+            hasDecreaseAction: true,
+            hasIncreaseAction: false,
+          ),
+        );
+        // The bars are not separate elements any more.
+        expect(find.bySemanticsLabel('September'), findsNothing);
+        tester.semantics.decrease(find.semantics.byLabel(_summary));
+        await tester.pumpAndSettle();
+        expect(picked, [0]);
+        expect(haptics, hasLength(1));
+        handle.dispose();
+      });
+
+      testWidgets('AX1 and up: tapping a row picks it', (tester) async {
+        final picked = <int>[];
+        await _pump(
+          tester,
+          picker(picked),
+          layout: const LayoutCase(width: 390, scale: 2),
+        );
+        await tester.pumpAndSettle();
+        expect(_bars(tester), isEmpty);
+        await tester.tap(find.text('Aug'));
+        await tester.pumpAndSettle();
+        expect(picked, [2]);
+        expect(_style(tester, 'Aug').fontWeight, FontWeight.w600);
+      });
+
+      testWidgets('without onSelected nothing reacts to touch', (tester) async {
+        await _pump(tester, _chart());
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(AvoBarChart),
+            matching: find.byType(GestureDetector),
+          ),
+          findsNothing,
+        );
+      });
+    });
+
     testWidgets('labels that do not fit shrink instead of wrapping', (
       tester,
     ) async {
@@ -540,6 +749,28 @@ void main() {
         tintAllBars: true,
         goal: 2000,
         maxBarHeight: 120,
+      ),
+    ),
+    scrollable: true,
+  );
+
+  layoutMatrix(
+    'AvoBarChart picker with a second axis line',
+    (context) => Padding(
+      padding: const EdgeInsets.all(AvoSpacing.xxxl),
+      child: AvoBarChart(
+        entries: const [
+          AvoBarEntry(label: 'Jun', value: 212),
+          AvoBarEntry(label: 'Jul', value: 198),
+          AvoBarEntry(label: 'Aug'),
+          AvoBarEntry(label: 'Sep', value: 236),
+          AvoBarEntry(label: 'Okt', value: 208),
+          AvoBarEntry(label: 'Nov', value: 183, secondaryLabel: 'bisher'),
+        ],
+        formatValue: (v) => '${v.round()} €',
+        semanticSummary: 'Ausgaben pro Monat',
+        selectedIndex: 3,
+        onSelected: (_) {},
       ),
     ),
     scrollable: true,

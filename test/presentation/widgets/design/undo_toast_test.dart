@@ -518,6 +518,201 @@ void main() {
     });
   });
 
+  group('onDismissed (A-V24): exactly once when the toast is gone', () {
+    testWidgets('after its time, not before', (tester) async {
+      var gone = 0;
+      final context = await _pump(tester);
+      AvoToast.show(context, message: _deleted, onDismissed: () => gone++);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 3900));
+      expect(gone, 0);
+      await tester.pump(const Duration(milliseconds: 200));
+      // Still leaving: it counts once the toast is off the screen.
+      expect(find.text(_deleted), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.text(_deleted), findsNothing);
+      expect(gone, 1);
+      await tester.pump(const Duration(seconds: 10));
+      expect(gone, 1);
+    });
+
+    testWidgets('after a swipe down', (tester) async {
+      var gone = 0;
+      final context = await _pump(tester);
+      AvoToast.show(context, message: _deleted, onDismissed: () => gone++);
+      await tester.pumpAndSettle();
+      await tester.drag(find.text(_deleted), const Offset(0, 80));
+      await tester.pumpAndSettle();
+      expect(gone, 1);
+      await tester.pump(const Duration(seconds: 10));
+      expect(gone, 1);
+    });
+
+    testWidgets('a short pull that springs back does not count', (
+      tester,
+    ) async {
+      var gone = 0;
+      final context = await _pump(tester);
+      AvoToast.show(context, message: _deleted, onDismissed: () => gone++);
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text(_deleted)),
+      );
+      await gesture.moveBy(const Offset(0, 10));
+      await tester.pump(const Duration(milliseconds: 500));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(gone, 0);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(gone, 1);
+    });
+
+    testWidgets('after the action, which runs first', (tester) async {
+      final calls = <String>[];
+      final context = await _pump(tester);
+      AvoToast.show(
+        context,
+        message: _deleted,
+        actionLabel: 'Widerrufen',
+        onAction: () => calls.add('action'),
+        onDismissed: () => calls.add('dismissed'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Widerrufen'));
+      await tester.pumpAndSettle();
+      expect(calls, ['action', 'dismissed']);
+      await tester.pump(const Duration(seconds: 10));
+      expect(calls, ['action', 'dismissed']);
+    });
+
+    testWidgets('after the target', (tester) async {
+      final calls = <String>[];
+      final context = await _pump(tester);
+      AvoToast.show(
+        context,
+        message: 'Auf Liste Wochenende',
+        targetLabel: 'Liste öffnen',
+        onTarget: () => calls.add('target'),
+        onDismissed: () => calls.add('dismissed'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Auf Liste Wochenende'));
+      await tester.pumpAndSettle();
+      expect(calls, ['target', 'dismissed']);
+    });
+
+    testWidgets('when a newer toast replaces it, also mid-exit', (
+      tester,
+    ) async {
+      var first = 0, second = 0, third = 0;
+      final context = await _pump(tester);
+      AvoToast.show(
+        context,
+        message: 'Milch gelöscht',
+        onDismissed: () {
+          first++;
+        },
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      AvoToast.show(
+        context,
+        message: 'Eier gelöscht',
+        onDismissed: () {
+          second++;
+        },
+      );
+      expect(first, 1);
+      expect(second, 0);
+      await tester.pumpAndSettle();
+      // Replace the second one while it is leaving.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(second, 0);
+      AvoToast.show(
+        context,
+        message: 'Brot gelöscht',
+        onDismissed: () {
+          third++;
+        },
+      );
+      expect(second, 1);
+      await tester.pumpAndSettle();
+      expect(find.text('Brot gelöscht'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect([first, second, third], [1, 1, 1]);
+    });
+
+    testWidgets('after a VoiceOver pause, once the time runs out', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      var gone = 0;
+      final context = await _pump(tester, voiceOver: true);
+      AvoToast.show(context, message: _deleted, onDismissed: () => gone++);
+      await tester.pumpAndSettle();
+      final node = tester.getSemantics(find.text(_deleted));
+      final owner = node.owner!;
+      owner.performAction(node.id, SemanticsAction.didGainAccessibilityFocus);
+      await tester.pump(const Duration(seconds: 30));
+      expect(gone, 0);
+      owner.performAction(node.id, SemanticsAction.didLoseAccessibilityFocus);
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pumpAndSettle();
+      expect(gone, 1);
+      handle.dispose();
+    });
+
+    testWidgets('VoiceOver dismiss action', (tester) async {
+      final handle = tester.ensureSemantics();
+      var gone = 0;
+      final context = await _pump(tester, voiceOver: true);
+      AvoToast.show(context, message: _deleted, onDismissed: () => gone++);
+      await tester.pumpAndSettle();
+      tester.semantics.dismiss(
+        find.semantics.byAction(SemanticsAction.dismiss),
+      );
+      await tester.pumpAndSettle();
+      expect(gone, 1);
+      handle.dispose();
+    });
+
+    testWidgets('when the host leaves the tree', (tester) async {
+      var gone = 0;
+      final context = await _pump(tester);
+      AvoToast.show(context, message: _deleted, onDismissed: () => gone++);
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox());
+      expect(gone, 1);
+    });
+
+    testWidgets('without a host (root overlay) as well', (tester) async {
+      var first = 0, second = 0;
+      final context = await _pump(tester, host: false);
+      AvoToast.show(
+        context,
+        message: 'Milch gelöscht',
+        onDismissed: () {
+          first++;
+        },
+      );
+      await tester.pumpAndSettle();
+      AvoToast.show(
+        context,
+        message: 'Eier gelöscht',
+        onDismissed: () {
+          second++;
+        },
+      );
+      await tester.pumpAndSettle();
+      expect(first, 1);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect([first, second], [1, 1]);
+    });
+  });
+
   layoutMatrix(
     'AvoToast in its host',
     (context) => SizedBox.expand(

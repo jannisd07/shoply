@@ -236,7 +236,23 @@ class ItemRepository {
   /// merged into it; the batch itself is combined first. Missing categories
   /// are set in the background, so the call returns as soon as the rows are
   /// written. Keep the returned token to offer "Widerrufen".
-  Future<AddItemsResult> addItems(String listId, List<NewItem> items) async {
+  Future<AddItemsResult> addItems(String listId, List<NewItem> items) =>
+      _addItems(listId, items, skipOpenDuplicates: false);
+
+  /// Like [addItems], but items that already stand open on the list are
+  /// left out instead of merged ("Alle wieder auf die Liste", A-V19); the
+  /// result names them in `skipped`. A separate method so the fakes that
+  /// override [addItems] keep compiling.
+  Future<AddItemsResult> addItemsSkippingOpen(
+    String listId,
+    List<NewItem> items,
+  ) => _addItems(listId, items, skipOpenDuplicates: true);
+
+  Future<AddItemsResult> _addItems(
+    String listId,
+    List<NewItem> items, {
+    required bool skipOpenDuplicates,
+  }) async {
     final userId = _supabase.currentUser?.id;
     if (userId == null) throw Exception('User not authenticated');
 
@@ -248,7 +264,11 @@ class ItemRepository {
     final existingItems = (existing as List)
         .map((json) => ShoppingItemModel.fromJson(json))
         .toList();
-    final plan = AddItemsPlan.of(existingItems, items);
+    final plan = AddItemsPlan.of(
+      existingItems,
+      items,
+      skipOpenDuplicates: skipOpenDuplicates,
+    );
 
     final changed = <ShoppingItemModel>[];
     final previousQuantities = <String, double>{};
@@ -320,7 +340,7 @@ class ItemRepository {
     if (uncategorized.isNotEmpty) {
       unawaited(_categorizeInBackground(uncategorized));
     }
-    return AddItemsResult(token: token, items: changed);
+    return AddItemsResult(token: token, items: changed, skipped: plan.skipped);
   }
 
   /// Takes back a batch from [addItems]: deletes its new rows and restores
@@ -545,6 +565,20 @@ class ItemRepository {
       body: (actor) => '$actor removed "$itemName"',
       data: {'type': 'item_deleted', 'listId': listId},
     );
+  }
+
+  /// Deletes the items [ids] of [listId] in one call, touches the list once
+  /// and sends no push per item (A-V23: the checked items after a trip;
+  /// the trip push says enough). Ids of other lists are never touched.
+  Future<void> removeItems(String listId, Iterable<String> ids) async {
+    final unique = ids.toSet().toList();
+    if (unique.isEmpty) return;
+    await _supabase
+        .from('shopping_items')
+        .delete()
+        .eq('list_id', listId)
+        .inFilter('id', unique);
+    await _touchList(listId);
   }
 
   /// Persist new `order_index` values ({itemId: index}) concurrently, then

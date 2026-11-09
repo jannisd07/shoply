@@ -6,6 +6,13 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/pro_badge.dart';
 
+// A row with a value and a pull-down menu ("Bezahlt von", A-V6) is
+// `MenuValueRow` in `picker_row.dart`: title left, value in
+// `secondaryLabel`, `chevron.up.chevron.down`, opens `showAvoMenu`.
+// Exported here so all settings rows come from one import.
+export 'package:shoply/presentation/widgets/design/picker_row.dart'
+    show MenuValueRow;
+
 /// Minimum row height (D2 X-Profil `.row` min-height 52).
 const double _kRowMinHeight = 52; // D2
 
@@ -485,11 +492,18 @@ class ToggleRow extends StatelessWidget {
   }
 }
 
-/// A read-only row: title and value ("Version", "4.2.0"). From AX1 on the
-/// value moves below the title.
+/// A read-only row: title, optional subtitle and value ("Version", "4.2.0").
+/// From AX1 on the value moves below the title.
+///
+/// For a value chosen from a pull-down menu use [MenuValueRow].
 class ValueRow extends StatelessWidget {
   /// Creates a value row.
-  const ValueRow({super.key, required this.title, required this.value});
+  const ValueRow({
+    super.key,
+    required this.title,
+    required this.value,
+    this.subtitle,
+  });
 
   /// Row title, 17/22.
   final String title;
@@ -497,11 +511,15 @@ class ValueRow extends StatelessWidget {
   /// The value, 17/22 `secondaryLabel`.
   final String value;
 
+  /// Second line under the title, 15/20 `secondaryLabel` ("Lena hat
+  /// bezahlt").
+  final String? subtitle;
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
       container: true,
-      label: title,
+      label: _joinLabel([title, subtitle]),
       value: value,
       child: ExcludeSemantics(
         child: _RowShell(
@@ -512,6 +530,7 @@ class ValueRow extends StatelessWidget {
               titleBlock: _TitleBlock(
                 title: title,
                 titleColor: context.colors.label,
+                subtitle: subtitle,
               ),
               value: value,
             ),

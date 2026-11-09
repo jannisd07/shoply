@@ -2,6 +2,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 // D2 "Filter-Chips" (D2-Komponenten): visible 34 high inside a 44 hit
 // height, padding 0 14, capsule, 15 pt medium; gap 8.
@@ -33,6 +34,7 @@ class AppFilterChip extends StatelessWidget {
     required this.selected,
     this.onSelected,
     this.leading,
+    this.trailing,
     this.secondaryLabel,
     this.radioIndex,
     this.radioCount,
@@ -51,6 +53,14 @@ class AppFilterChip extends StatelessWidget {
   /// 20 pt slot, scaled down to fit it, and the slot grows with the text up
   /// to about AX2. Decorative for VoiceOver.
   final Widget? leading;
+
+  /// A small glyph after the label, for example `chevron.right` at 11 pt on
+  /// "Anderer Markt …" (a chip that opens a screen). Unless it sets its own
+  /// colour it is drawn in `secondaryLabel` (the light text colour on a
+  /// selected chip) through [IconStyleScope], and sits
+  /// 6 pt after the label. Decorative for VoiceOver: say in [label] what it
+  /// means.
+  final Widget? trailing;
 
   /// Quiet text after the label, drawn as "· 400 m" in the secondary colour
   /// (pass `400 m`, not the dot). VoiceOver reads it after the label. On a
@@ -122,6 +132,17 @@ class AppFilterChip extends StatelessWidget {
                   ),
                 ),
               ),
+              if (trailing != null) ...[
+                const SizedBox(width: _leadingGap),
+                ExcludeSemantics(
+                  child: IconStyleScope(
+                    color: selected
+                        ? colors.onChipSelected
+                        : colors.secondaryLabel,
+                    child: trailing!,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

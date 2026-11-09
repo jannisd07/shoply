@@ -9,6 +9,10 @@ import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/data/services/trip_money_format.dart';
+import 'package:shoply/presentation/screens/history/history_format.dart'
+    show monthName;
+import 'package:shoply/presentation/screens/history/history_paths.dart';
 import 'package:shoply/presentation/screens/lists/list_settings_screen.dart';
 import 'package:shoply/presentation/screens/lists/widgets/all_lists_body.dart';
 import 'package:shoply/presentation/screens/lists/widgets/all_lists_data.dart';
@@ -286,6 +290,31 @@ class _AllListsScreenState extends ConsumerState<AllListsScreen> {
     }
   }
 
+  /// The group "Verlauf" (A-V12) from Teil B's synchronous summaries.
+  AllListsHistoryEntry _historyEntry() {
+    final language = Localizations.localeOf(context).languageCode;
+    final trips = ref.watch(historyEntrySummaryProvider);
+    final balances = ref.watch(openBalancesSummaryProvider);
+    return AllListsHistoryEntry(
+      onTrips: () => unawaited(context.push<void>(historyLocation())),
+      tripsValue: trips.hasTrips
+          ? context.tr(
+              'list_ov_trips_value',
+              params: {
+                'month': monthName(trips.month, language),
+                'n': '${trips.tripsThisMonth}',
+              },
+            )
+          : null,
+      onBalances: balances == null
+          ? null
+          : () => unawaited(context.push<void>(splitsLocation())),
+      balancesValue: balances == null
+          ? null
+          : formatEuroCents(balances.totalOpenCents, language),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final source = ref.watch(allListsSourceProvider);
@@ -364,6 +393,7 @@ class _AllListsScreenState extends ConsumerState<AllListsScreen> {
       onWeeklyOffers: ref.watch(offersAvailableProvider)
           ? () => unawaited(context.push<void>(weeklyOffersLocation()))
           : null,
+      history: phase == AllListsPhase.ready ? _historyEntry() : null,
     );
 
     return ColoredBox(

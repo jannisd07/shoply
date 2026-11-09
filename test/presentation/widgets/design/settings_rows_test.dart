@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/pro_badge.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
@@ -354,6 +355,60 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('optional subtitle under the title, read with the label', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pump(
+        tester,
+        const ValueRow(
+          title: 'Bezahlt von',
+          subtitle: 'Lena hat bezahlt',
+          value: 'Lena',
+        ),
+      );
+      expect(
+        _textColor(tester, 'Lena hat bezahlt'),
+        AvoColors.light.secondaryLabel,
+      );
+      expect(
+        tester.getRect(find.text('Lena hat bezahlt')).top,
+        greaterThanOrEqualTo(tester.getRect(find.text('Bezahlt von')).bottom),
+      );
+      expect(
+        tester.getSemantics(find.byType(ValueRow)),
+        isSemantics(
+          label: 'Bezahlt von, Lena hat bezahlt',
+          value: 'Lena',
+          isButton: false,
+        ),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('MenuValueRow comes with the settings rows import', (
+      tester,
+    ) async {
+      var chosen = '';
+      await _pump(
+        tester,
+        MenuValueRow(
+          title: 'Bezahlt von',
+          value: 'Du',
+          items: [
+            AvoMenuItem(label: 'Du', checked: true, onSelected: () {}),
+            AvoMenuItem(label: 'Lena', onSelected: () => chosen = 'Lena'),
+          ],
+        ),
+      );
+      expect(find.byType(AvoIcon), findsOneWidget);
+      await tester.tap(find.text('Bezahlt von'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Lena').last);
+      await tester.pumpAndSettle();
+      expect(chosen, 'Lena');
+    });
+
     testWidgets('from AX1 the value moves below', (tester) async {
       await _pump(
         tester,
@@ -486,6 +541,11 @@ void main() {
         ValueRow(
           title: 'Lieblingsmarkt',
           value: 'Laktosefreie-Bio-Vollmilch-Großhandel',
+        ),
+        ValueRow(
+          title: 'Bezahlt von',
+          subtitle: 'Lena hat am Samstag bei Rewe Center Hamburg bezahlt',
+          value: 'Lena',
         ),
       ],
     ),

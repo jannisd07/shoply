@@ -2,6 +2,14 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Verlauf in Listen und Home, Bausteine für B8 (Teil A, S5b)
+
+- Listen-Übersicht: Gruppe „Verlauf“ mit „Einkäufe“ und „Offene Beträge“; Home zeigt den Kosten-teilen-Hinweis unter
+  der Avo-Karte; Mitteilungen zu Einkauf und Aufteilung öffnen den Einkauf.
+- Neue bzw. erweiterte Bausteine: `AmountField`, `AvoBarChart` mit Auswahl, Diagramm-Farben, `ValueRow(subtitle:)`,
+  `AppFilterChip(trailing:)`, `AvoToast.show(onDismissed:)`; Erfolgsmoment ab AX3 ohne Figur.
+- `ItemRepository.addItemsSkippingOpen` und `removeItems`.
+
 ## 2026-11-09: Paywall wächst aus dem Element, Pro-Hinweis nach dem ersten Einkauf (Teil A, A9b)
 
 - Paywall als Zoom-Seite aus dem angetippten Element (Zurück-Wischen 1:1, Reduce Motion: Überblendung).

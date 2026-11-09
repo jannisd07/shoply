@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -43,10 +44,16 @@ class AvoBarEntry {
     this.value,
     this.semanticLabel,
     this.semanticValue,
+    this.secondaryLabel,
   });
 
   /// Axis label below the bar ("Jun", "Mo").
   final String label;
+
+  /// Optional second axis line below [label] ("bisher" under the running
+  /// month), 11/13 in secondaryLabel. Spoken after [label] unless
+  /// [semanticLabel] is given.
+  final String? secondaryLabel;
 
   /// The value; null means no data (an unlogged day): no bar, the value
   /// shows as [AvoBarChart.missingText]. Zero is a real zero.
@@ -66,10 +73,18 @@ class AvoBarEntry {
       other.label == label &&
       other.value == value &&
       other.semanticLabel == semanticLabel &&
-      other.semanticValue == semanticValue;
+      other.semanticValue == semanticValue &&
+      other.secondaryLabel == secondaryLabel;
 
   @override
-  int get hashCode => Object.hash(label, value, semanticLabel, semanticValue);
+  int get hashCode =>
+      Object.hash(label, value, semanticLabel, semanticValue, secondaryLabel);
+
+  /// What VoiceOver says for the bar's name.
+  String get spokenLabel {
+    final second = secondaryLabel;
+    return semanticLabel ?? (second == null ? label : '$label $second');
+  }
 }
 
 /// Simple vertical bars, one question and one series (Konzept 00 §12.16,
@@ -77,12 +92,19 @@ class AvoBarEntry {
 /// seven days of calories.
 ///
 /// The tallest value (or [goal]) fills [maxBarHeight]. Each value sits just
-/// above its bar, the label below. The [highlightIndex] bar ("now") is
-/// tinted with a semibold tinted value and a semibold label; the others are
-/// [AvoColors.fill]. With [tintAllBars] every bar is tinted and only the
-/// label weight marks the highlight (Konzept: "today" by the bold axis
-/// label, not by a second colour). An optional dashed [goal] line crosses
-/// the chart.
+/// above its bar, the label below (and an optional second line,
+/// [AvoBarEntry.secondaryLabel]). The [highlightIndex] bar ("now") is
+/// [AvoColors.chartHighlight] with a semibold tinted value and a semibold
+/// label; the others are [AvoColors.chartBar]. With [tintAllBars] every bar
+/// is highlighted and only the label weight marks the highlight (Konzept:
+/// "today" by the bold axis label, not by a second colour). An optional
+/// dashed [goal] line crosses the chart.
+///
+/// With [onSelected] the chart is a picker (A-V4): tapping a bar or dragging
+/// across the bars selects the column under the finger, with a selection
+/// haptic per new column; [selectedIndex] is then the highlighted bar.
+/// Entries without a value cannot be picked. VoiceOver gets one adjustable
+/// element (swipe up and down), never a slider.
 ///
 /// Bars grow from zero on the [AvoMotion.digits] spring when the chart
 /// appears and follow value changes from where they are; Reduce Motion
@@ -92,7 +114,8 @@ class AvoBarEntry {
 ///
 /// VoiceOver: one element reads [semanticSummary] ("Ausgaben pro Monat,
 /// November bisher 183 €, 12 % weniger als im Oktober"), then every bar is
-/// its own element ("Juni, 212 €"). Needs a bounded width.
+/// its own element ("Juni, 212 €"). As a picker it is one adjustable
+/// element: the summary, the selected bar as value. Needs a bounded width.
 class AvoBarChart extends StatefulWidget {
   /// Creates a bar chart.
   const AvoBarChart({
@@ -107,6 +130,8 @@ class AvoBarChart extends StatefulWidget {
     this.maxBarHeight = _kMaxBarHeight,
     this.missingText = '–',
     this.emptyText,
+    this.selectedIndex,
+    this.onSelected,
   });
 
   /// The bars, leading to trailing (oldest first).
@@ -119,7 +144,17 @@ class AvoBarChart extends StatefulWidget {
   final String semanticSummary;
 
   /// The bar to emphasise (current month, today); null for none.
+  /// [selectedIndex] wins when both are given.
   final int? highlightIndex;
+
+  /// The picked bar while the chart is a picker ([onSelected]); it is
+  /// highlighted like [highlightIndex].
+  final int? selectedIndex;
+
+  /// Makes the chart a picker: called with the index of the bar tapped or
+  /// dragged over (only bars with a value, only on a change). The parent
+  /// passes it back as [selectedIndex].
+  final ValueChanged<int>? onSelected;
 
   /// Tint every bar; the highlight is then shown by the label weight only.
   final bool tintAllBars;
@@ -254,7 +289,51 @@ class _AvoBarChartState extends State<AvoBarChart>
     return v == null ? widget.missingText : widget.formatValue(v);
   }
 
-  bool _highlighted(int i) => i == widget.highlightIndex;
+  int? get _selected => widget.selectedIndex ?? widget.highlightIndex;
+
+  bool _highlighted(int i) => i == _selected;
+
+  /// The last column picked by this gesture, so a drag fires once per new
+  /// column even before the parent rebuilds with the new [selectedIndex].
+  int? _picked;
+
+  bool _pickable(int i) =>
+      i >= 0 && i < widget.entries.length && widget.entries[i].value != null;
+
+  void _choose(int i) {
+    final pick = widget.onSelected;
+    if (pick == null || !_pickable(i)) return;
+    if (i == (_picked ?? _selected)) return;
+    _picked = i;
+    unawaited(AvoHaptics.selection());
+    pick(i);
+  }
+
+  /// The next pickable bar from the selection in [step] direction, or null.
+  int? _next(int step) {
+    final from = _selected;
+    if (from == null) {
+      for (var i = 0; i < widget.entries.length; i++) {
+        final j = step > 0 ? i : widget.entries.length - 1 - i;
+        if (_pickable(j)) return j;
+      }
+      return null;
+    }
+    for (var i = from + step; i >= 0 && i < widget.entries.length; i += step) {
+      if (_pickable(i)) return i;
+    }
+    return null;
+  }
+
+  String _spokenEntry(int i) {
+    final e = widget.entries[i];
+    return '${e.spokenLabel}, ${e.semanticValue ?? _valueText(e)}';
+  }
+
+  Color _barColor(BuildContext context, int i) =>
+      _highlighted(i) || widget.tintAllBars
+      ? context.colors.chartHighlight
+      : context.colors.chartBar;
 
   @override
   Widget build(BuildContext context) {
@@ -270,14 +349,33 @@ class _AvoBarChartState extends State<AvoBarChart>
     }
     if (widget.entries.isEmpty) return const SizedBox.shrink();
     final list = context.isAccessibilityText;
+    final chart = AnimatedBuilder(
+      animation: _t,
+      builder: (context, _) => list ? _buildList(context) : _buildBars(),
+    );
+    if (widget.onSelected == null) {
+      return Semantics(
+        container: true,
+        label: widget.semanticSummary,
+        explicitChildNodes: true,
+        child: chart,
+      );
+    }
+    _picked = null;
+    final selected = _selected;
+    final up = _next(1);
+    final down = _next(-1);
     return Semantics(
       container: true,
       label: widget.semanticSummary,
-      explicitChildNodes: true,
-      child: AnimatedBuilder(
-        animation: _t,
-        builder: (context, _) => list ? _buildList(context) : _buildBars(),
-      ),
+      value: selected != null && selected < widget.entries.length
+          ? _spokenEntry(selected)
+          : null,
+      increasedValue: up == null ? null : _spokenEntry(up),
+      decreasedValue: down == null ? null : _spokenEntry(down),
+      onIncrease: up == null ? null : () => _choose(up),
+      onDecrease: down == null ? null : () => _choose(down),
+      child: ExcludeSemantics(child: chart),
     );
   }
 
@@ -309,9 +407,7 @@ class _AvoBarChartState extends State<AvoBarChart>
               valueText: _valueText(entries[i]),
               fraction: _bar(i),
               highlighted: _highlighted(i),
-              barColor: _highlighted(i) || widget.tintAllBars
-                  ? colors.tint
-                  : colors.fill,
+              barColor: _barColor(context, i),
               showValue: widget.showValues,
               barWidth: barWidth,
               slot: slot,
@@ -320,7 +416,7 @@ class _AvoBarChartState extends State<AvoBarChart>
             ),
         ];
 
-        return Stack(
+        final stack = Stack(
           children: [
             if (goal != null)
               Positioned(
@@ -341,13 +437,37 @@ class _AvoBarChartState extends State<AvoBarChart>
             ),
           ],
         );
+        if (widget.onSelected == null) return stack;
+
+        // The column under [x]; each column owns its bar plus half a gap on
+        // each side, so the whole width picks something.
+        int indexAt(double x) {
+          final i = n == 1
+              ? 0
+              : ((x + gap / 2) / (barWidth + gap)).floor().clamp(0, n - 1);
+          return Directionality.of(context) == TextDirection.rtl
+              ? n - 1 - i
+              : i;
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
+          onTapUp: (d) => _choose(indexAt(d.localPosition.dx)),
+          onHorizontalDragStart: (d) => _choose(indexAt(d.localPosition.dx)),
+          onHorizontalDragUpdate: (d) => _choose(indexAt(d.localPosition.dx)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
+            child: stack,
+          ),
+        );
       },
     );
   }
 
   Widget _buildList(BuildContext context) {
-    final colors = context.colors;
     final entries = widget.entries;
+    final pickable = widget.onSelected != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -357,18 +477,22 @@ class _AvoBarChartState extends State<AvoBarChart>
             padding: EdgeInsets.only(top: i == 0 ? 0 : _kRowGap),
             child: Semantics(
               container: true,
-              label: entries[i].semanticLabel ?? entries[i].label,
+              label: entries[i].spokenLabel,
               value: entries[i].semanticValue ?? _valueText(entries[i]),
               child: ExcludeSemantics(
-                child: _BarRow(
-                  label: entries[i].label,
-                  value: _valueText(entries[i]),
-                  fraction: _bar(i),
-                  color: _highlighted(i) || widget.tintAllBars
-                      ? colors.tint
-                      : colors.fill,
-                  labelStyle: _labelStyle(context, _highlighted(i)),
-                  valueStyle: _valueStyle(context, _highlighted(i)),
+                child: _pickableRow(
+                  pickable: pickable,
+                  onTap: () => _choose(i),
+                  child: _BarRow(
+                    label: entries[i].label,
+                    secondaryLabel: entries[i].secondaryLabel,
+                    value: _valueText(entries[i]),
+                    fraction: _bar(i),
+                    color: _barColor(context, i),
+                    labelStyle: _labelStyle(context, _highlighted(i)),
+                    secondaryStyle: _secondaryStyle(context),
+                    valueStyle: _valueStyle(context, _highlighted(i)),
+                  ),
                 ),
               ),
             ),
@@ -377,6 +501,28 @@ class _AvoBarChartState extends State<AvoBarChart>
     );
   }
 }
+
+/// A row of the AX list that picks its bar on tap (44 pt at least).
+Widget _pickableRow({
+  required bool pickable,
+  required VoidCallback onTap,
+  required Widget child,
+}) {
+  if (!pickable) return child;
+  return GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    excludeFromSemantics: true,
+    onTap: onTap,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
+      child: child,
+    ),
+  );
+}
+
+/// Second axis line ("bisher"): 11/13 in secondaryLabel.
+TextStyle _secondaryStyle(BuildContext context) =>
+    context.text(AvoTextStyle.caption2, color: context.colors.secondaryLabel);
 
 /// Axis label: 13/18 secondary; highlighted 600 in [AvoColors.label] (D2).
 TextStyle _labelStyle(BuildContext context, bool highlighted) => context.text(
@@ -423,9 +569,10 @@ class _BarColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final f = fraction;
+    final second = entry.secondaryLabel;
     return Semantics(
       container: true,
-      label: entry.semanticLabel ?? entry.label,
+      label: entry.spokenLabel,
       value: entry.semanticValue ?? valueText,
       child: ExcludeSemantics(
         child: SizedBox(
@@ -472,6 +619,12 @@ class _BarColumn extends StatelessWidget {
                 style: _labelStyle(context, highlighted),
                 maxWidth: slot,
               ),
+              if (second != null)
+                _FitLabel(
+                  text: second,
+                  style: _secondaryStyle(context),
+                  maxWidth: slot,
+                ),
             ],
           ),
         ),
@@ -525,9 +678,13 @@ class _BarRow extends StatelessWidget {
     required this.labelStyle,
     required this.valueStyle,
     this.track,
+    this.secondaryLabel,
+    this.secondaryStyle,
   });
 
   final String label;
+  final String? secondaryLabel;
+  final TextStyle? secondaryStyle;
   final String value;
   final double? fraction;
   final Color color;
@@ -548,7 +705,19 @@ class _BarRow extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.end,
           spacing: _kRowTextGap,
           children: [
-            Text(label, style: labelStyle),
+            if (secondaryLabel case final second?)
+              Text.rich(
+                TextSpan(
+                  text: label,
+                  children: [
+                    const TextSpan(text: ' '),
+                    TextSpan(text: second, style: secondaryStyle),
+                  ],
+                ),
+                style: labelStyle,
+              )
+            else
+              Text(label, style: labelStyle),
             Text(value, style: valueStyle),
           ],
         ),

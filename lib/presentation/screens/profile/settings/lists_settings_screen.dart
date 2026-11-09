@@ -14,7 +14,6 @@ import 'package:shoply/presentation/state/last_list_provider.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/full_screen_editor.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
-import 'package:shoply/presentation/widgets/design/picker_row.dart';
 import 'package:shoply/presentation/widgets/design/row_highlight.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 

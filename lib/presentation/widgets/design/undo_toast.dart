@@ -45,7 +45,7 @@ const double _kEnterDistance = AvoSizes.tabBarHeight;
 /// With a target ([show]'s `targetLabel` and `onTarget`) a tap on the text
 /// opens the result ("Auf Liste Wochenende" opens the list) while the action
 /// stays "Widerrufen". While VoiceOver focus rests on the toast its timer is
-/// paused (Konzept 13 E-16).
+/// paused (Konzept 13 E-16). `onDismissed` reports once when it is gone.
 abstract final class AvoToast {
   /// Shows [message] in the nearest [AvoToastHost]. Without a host (tests,
   /// isolated screens) it falls back to the root [Overlay].
@@ -56,6 +56,13 @@ abstract final class AvoToast {
   /// [targetLabel] and [onTarget] make the text itself tappable: it runs
   /// [onTarget] and hides the toast. [targetLabel] ("Liste öffnen") is the
   /// VoiceOver action and hint of the text; both must be given.
+  ///
+  /// [onDismissed] runs exactly once when this toast is gone: its time ran
+  /// out (also after a VoiceOver pause), it was swiped away, its action or
+  /// target was used, a newer toast replaced it, or its host left the tree.
+  /// It runs after [onAction] / [onTarget]. Use it to commit what the toast
+  /// could still undo; when the host is disposed it runs during that
+  /// teardown, so do not call `setState` on a widget that may be gone.
   static void show(
     BuildContext context, {
     required String message,
@@ -64,6 +71,7 @@ abstract final class AvoToast {
     Duration? duration,
     String? targetLabel,
     VoidCallback? onTarget,
+    VoidCallback? onDismissed,
   }) {
     final request = _ToastRequest(
       message: message,
@@ -72,6 +80,7 @@ abstract final class AvoToast {
       duration: duration,
       targetLabel: targetLabel,
       onTarget: onTarget,
+      onDismissed: onDismissed,
     );
     final scope = context.getInheritedWidgetOfExactType<_AvoToastScope>();
     final layer = scope?.layerKey.currentState;
@@ -131,13 +140,14 @@ class _AvoToastScope extends InheritedWidget {
 }
 
 class _ToastRequest {
-  const _ToastRequest({
+  _ToastRequest({
     required this.message,
     this.actionLabel,
     this.onAction,
     this.duration,
     this.targetLabel,
     this.onTarget,
+    this.onDismissed,
   });
 
   final String message;
@@ -146,6 +156,16 @@ class _ToastRequest {
   final Duration? duration;
   final String? targetLabel;
   final VoidCallback? onTarget;
+  final VoidCallback? onDismissed;
+
+  bool _dismissed = false;
+
+  /// Runs [onDismissed] the first time only.
+  void notifyDismissed() {
+    if (_dismissed) return;
+    _dismissed = true;
+    onDismissed?.call();
+  }
 
   bool get hasAction => actionLabel != null && onAction != null;
   bool get hasTarget => targetLabel != null && onTarget != null;
@@ -167,6 +187,7 @@ abstract final class _OverlayFallback {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) {
       debugPrint('⚠️ [AvoToast] no AvoToastHost and no Overlay: not shown');
+      request.notifyDismissed();
       return;
     }
     final key = GlobalKey<_ToastLayerState>();
@@ -249,6 +270,9 @@ class _ToastLayerState extends State<_ToastLayer>
     _timer?.cancel();
     _shown.dispose();
     _drag.dispose();
+    final current = _current;
+    _current = null;
+    current?.notifyDismissed();
     super.dispose();
   }
 
@@ -259,6 +283,7 @@ class _ToastLayerState extends State<_ToastLayer>
   void show(_ToastRequest request) {
     _reduceMotion = context.reduceMotion;
     _timer?.cancel();
+    final replaced = _current;
     _hiding = false;
     _focusHolders = 0;
     setState(() {
@@ -271,6 +296,9 @@ class _ToastLayerState extends State<_ToastLayer>
       ..value = 0;
     _animate(_shown, 1, AvoMotion.standard);
     _startTimer();
+    if (replaced != null && !identical(replaced, request)) {
+      replaced.notifyDismissed();
+    }
     if (_voiceOver) {
       final view = View.maybeOf(context);
       if (view != null) {
@@ -298,14 +326,16 @@ class _ToastLayerState extends State<_ToastLayer>
     if (_current == null || _hiding) return;
     _timer?.cancel();
     _hiding = true;
+    final leaving = _current;
     _animate(_shown, 0, AvoMotion.standard).whenCompleteOrCancel(() {
-      if (!mounted || !_hiding) return;
+      if (!mounted || !_hiding || !identical(_current, leaving)) return;
       setState(() {
         _current = null;
         _hiding = false;
       });
       _rawDrag = 0;
       _drag.value = 0;
+      leaving?.notifyDismissed();
       widget.onEmpty?.call();
     });
   }

@@ -43,6 +43,31 @@ enum AllListsPhase {
 typedef ListMenuOpener =
     void Function(BuildContext anchor, ShoppingListModel list);
 
+/// The rows of the group "Verlauf" (A-V12, verlauf-kosten.md §1.3):
+/// "Einkäufe" with "November · 6" and, only with the module Kosten teilen
+/// and something open, "Offene Beträge" with the open total.
+class AllListsHistoryEntry {
+  /// Creates the entry.
+  const AllListsHistoryEntry({
+    required this.onTrips,
+    this.tripsValue,
+    this.onBalances,
+    this.balancesValue,
+  });
+
+  /// Opens the Verlauf (V4).
+  final VoidCallback onTrips;
+
+  /// "November · 6"; null while there is no trip at all.
+  final String? tripsValue;
+
+  /// Opens "Offene Beträge" (V8); null hides the row.
+  final VoidCallback? onBalances;
+
+  /// The open total, e.g. "34,60 €".
+  final String? balancesValue;
+}
+
 /// The scrolling content of the Listen tab (D2-Home), without the toolbar:
 /// large title with the summary line, "Schnell wieder hinzufügen" for the
 /// big card's list, the big [ListCard], "Andere Listen" and "Geteilt mit
@@ -69,6 +94,7 @@ class AllListsContent extends StatelessWidget {
     required this.onQuickAdd,
     this.onRetry,
     this.onWeeklyOffers,
+    this.history,
   });
 
   final AllListsPhase phase;
@@ -110,6 +136,9 @@ class AllListsContent extends StatelessWidget {
   /// Opens "Angebote der Woche" (S10) from the section "Sparen"; null
   /// (offers module off, kill switch) leaves the section out.
   final VoidCallback? onWeeklyOffers;
+
+  /// The group "Verlauf" at the end (A-V12); null hides it.
+  final AllListsHistoryEntry? history;
 
   @override
   Widget build(BuildContext context) {
@@ -303,6 +332,27 @@ class AllListsContent extends StatelessWidget {
           header: context.tr('list_ov_section_saving'),
           children: [
             NavRow(title: context.tr('offer_week_title'), onTap: weekly),
+          ],
+        ),
+      );
+    }
+    final h = history;
+    if (h != null) {
+      out.add(
+        InsetSection(
+          header: context.tr('list_ov_section_history'),
+          children: [
+            NavRow(
+              title: context.tr('list_ov_trips'),
+              value: h.tripsValue,
+              onTap: h.onTrips,
+            ),
+            if (h.onBalances != null)
+              NavRow(
+                title: context.tr('list_ov_open_balances'),
+                value: h.balancesValue,
+                onTap: h.onBalances,
+              ),
           ],
         ),
       );

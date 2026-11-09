@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -286,6 +288,75 @@ void main() {
       router.pop();
       await tester.pumpAndSettle();
       expect(find.text('Home'), findsOneWidget);
+    });
+  });
+
+  group('A-V14: a trip of the history from another tab', () {
+    test('/history/:tripId lives in the Listen tab below Verlauf', () {
+      final shell = _config().findMatch('/history/t1').matches.first;
+      expect(shell, isA<ShellRouteMatch>());
+      final paths = (shell as ShellRouteMatch).matches
+          .map((m) => m.route)
+          .whereType<GoRoute>()
+          .map((r) => r.path)
+          .toList();
+      expect(paths, [RoutePaths.history, ':tripId']);
+    });
+
+    // A push stacks only the detail (an imperative match), not Verlauf below
+    // it: back returns to where the person came from. A `go` would build
+    // Verlauf + detail in the Listen tab instead (s5b-stand.md, A-V14).
+    testWidgets('pushing it from Home shows the detail; back returns to Home', (
+      tester,
+    ) async {
+      Widget label(String text) => Center(child: Text(text));
+      final router = GoRouter(
+        initialLocation: RoutePaths.home,
+        routes: [
+          StatefulShellRoute.indexedStack(
+            builder: (_, __, shell) => shell,
+            branches: [
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: RoutePaths.home,
+                    builder: (_, __) => label('Home'),
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: RoutePaths.history,
+                    builder: (_, __) => label('Verlauf'),
+                    routes: [
+                      GoRoute(
+                        path: ':tripId',
+                        builder: (_, __) => label('Einkauf'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        WidgetsApp.router(routerConfig: router, color: const Color(0xFF000000)),
+      );
+      await tester.pumpAndSettle();
+      unawaited(router.push('/history/t1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Einkauf'), findsOneWidget);
+      expect(find.text('Verlauf', skipOffstage: false), findsNothing);
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Home'), findsOneWidget);
+      router.go('/history/t1');
+      await tester.pumpAndSettle();
+      expect(find.text('Einkauf'), findsOneWidget);
+      expect(find.text('Verlauf', skipOffstage: false), findsOneWidget);
     });
   });
 

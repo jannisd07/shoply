@@ -28,17 +28,15 @@ in `status-A.md` (Meilensteine mit Commits) und den `aN-stand.md` der Pakete.
 | Alle A-Screens wie im Konzept, Prüfmatrix grün | **ja**, die Paywall seit A9 eingeschlossen; Matrix-Tests laufen in CI |
 | Bug der Mutter nachweislich behoben | **im Test ja** (40 Fälle); die Geräte-Abnahme am iPhone 13 Pro mit „Größerer Text“ und AX3 steht aus (nur du) |
 | Kein Paper-Rest in A-Dateien | **ja** (die Paper-Paywall ist mit A9 gelöscht) |
-| Anfragen von B erledigt, S6 abgeschlossen | **ja für alles auf `main`**; offen sind A-V9 (kommt mit B8) und die Gegenprüfung von B6b/B7/B8, sobald B sie auf `main` bringt |
+| Anfragen von B erledigt, S6 abgeschlossen | **ja für alles auf `main`**; B8 mit S5b gegengeprüft und dessen Wünsche umgesetzt (`s5b-stand.md`); offen ist die Gegenprüfung von B6b/B7, sobald B sie auf `main` bringt |
 | Abschlussbericht | diese Datei |
 
 ## Offen bei A
 
-- **A-V9:** sobald B8 (`feature/b8-history`) auf `main` kommt, lassen Einkaufsmodus und Liste ihren eigenen
-  Erfolgsmoment nach `openCheckoutFlow == true` weg (im selben Push wie B).
-- Gegenprüfung von Wochenplan (B7), Kalorien-Woche/Gewicht/Challenges (B6b), Verlauf und Kosten teilen (B8), wenn sie
-  auf `main` sind.
+- Gegenprüfung von Wochenplan (B7) und Kalorien-Woche/Gewicht/Challenges (B6b), wenn sie auf `main` sind (B8 ist mit
+  S5b erledigt).
 - Präsenz im Einkaufsmodus (es gibt noch keinen Präsenz-Kanal), Ziehen aus der Menü-Vorschau, `ListCard` blendet das
-  Cover ab AX1 nicht aus, `ReorderableInsetSection` im Simulator ansehen, Kalender-Menü, `AmountField`,
+  Cover ab AX1 nicht aus, `ReorderableInsetSection` im Simulator ansehen, Kalender-Menü,
   `NutritionRow`, Charts mit Ziellinie, `InlineCalendar`, einklappbare `InsetSection` (Wünsche aus B's Konzepten,
   noch ohne Anfrage).
 

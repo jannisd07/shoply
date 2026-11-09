@@ -868,7 +868,8 @@ void main() {
       await tester.tap(find.text(_en('list_detail_menu_checkout')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text(_en('list_shop_saved_title')), findsNothing);
+      // The old moment said "Trip saved." (list_shop_saved_title, gone).
+      expect(find.text('Trip saved.'), findsNothing);
       await tester.pumpAndSettle(const Duration(seconds: 5));
     });
 

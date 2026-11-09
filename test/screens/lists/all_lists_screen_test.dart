@@ -103,6 +103,8 @@ List<Override> _overrides({
   bool offline = false,
   FakeListActions? actions,
   bool offers = false,
+  HistoryEntrySummary? trips,
+  OpenBalancesSummary? balances,
 }) => [
   allListsSourceProvider.overrideWithValue(lists ?? AsyncData(_lists)),
   authUserIdProvider.overrideWithValue('u1'),
@@ -115,6 +117,15 @@ List<Override> _overrides({
   listMembersProvider.overrideWith((ref, id) async => _members[id] ?? const []),
   listActionsProvider.overrideWithValue(actions ?? FakeListActions()),
   offersAvailableProvider.overrideWithValue(offers),
+  historyEntrySummaryProvider.overrideWithValue(
+    trips ??
+        HistoryEntrySummary(
+          month: DateTime(2026, 11),
+          tripsThisMonth: 0,
+          hasTrips: false,
+        ),
+  ),
+  openBalancesSummaryProvider.overrideWithValue(balances),
 ];
 
 Widget _content(BuildContext context, {List<ShoppingListModel>? lists}) {
@@ -278,6 +289,34 @@ void main() {
     await _pumpScreen(tester, _overrides(offers: true));
     await tester.scrollUntilVisible(find.text('Offers this week'), 200);
     expect(find.text('SAVINGS'), findsOneWidget);
+  });
+
+  testWidgets('"Verlauf": trips with month and count, open balances only '
+      'when something is open (A-V12)', (tester) async {
+    await _pumpScreen(tester, _overrides());
+    await tester.scrollUntilVisible(find.text('Shopping trips'), 200);
+    expect(find.text('HISTORY'), findsOneWidget);
+    expect(find.text('Open balances'), findsNothing);
+
+    await _pumpScreen(
+      tester,
+      _overrides(
+        trips: HistoryEntrySummary(
+          month: DateTime(2026, 11),
+          tripsThisMonth: 6,
+          hasTrips: true,
+        ),
+        balances: const OpenBalancesSummary(
+          openCount: 2,
+          owedToMeCents: 2460,
+          iOweCents: 1000,
+          people: 2,
+        ),
+      ),
+    );
+    await tester.scrollUntilVisible(find.text('Open balances'), 200);
+    expect(find.text('November · 6'), findsOneWidget);
+    expect(find.textContaining('34.60'), findsOneWidget);
   });
 
   testWidgets('sets Avo\'s screen context to the lists', (tester) async {

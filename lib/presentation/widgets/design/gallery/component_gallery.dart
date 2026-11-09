@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show Theme;
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/theme/app_theme.dart';
 import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
+import 'package:shoply/presentation/widgets/design/amount_field.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/app_tab_bar.dart';
 import 'package:shoply/presentation/widgets/design/avatar.dart';
@@ -829,6 +830,12 @@ class _GalleryBodyState extends State<_GalleryBody> {
               ),
             const AppFilterChip(label: 'Deaktiviert', selected: false),
             AppFilterChip(
+              label: 'Anderer Markt …',
+              selected: false,
+              onSelected: (_) {},
+              trailing: const AvoIcon(AvoIcons.chevronRight, size: 11),
+            ),
+            AppFilterChip(
               label: 'Zurücksetzen',
               selected: false,
               onSelected: _chips.isEmpty ? null : (_) => setState(_chips.clear),
@@ -938,6 +945,47 @@ class _GalleryBodyState extends State<_GalleryBody> {
               onChanged: (_) {},
             ),
             const ValueRow(title: 'Version', value: '4.2.0 (1187)'),
+            const ValueRow(
+              title: 'Bezahlt',
+              subtitle: 'Lena hat ihren Anteil überwiesen',
+              value: '12,40 €',
+            ),
+          ],
+        ),
+      ),
+      _Demo(
+        'AmountField',
+        inset: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InsetSection(
+              children: [
+                AmountField(
+                  label: 'Betrag',
+                  placeholder: 'optional',
+                  onChanged: (_) {},
+                ),
+                AmountField(
+                  label: 'Anteil von Lena',
+                  initialCents: 1240,
+                  errorText: 'Die Anteile ergeben nicht den Betrag.',
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+            const SizedBox(height: AvoSpacing.l),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AvoSpacing.screen,
+              ),
+              child: AmountField(
+                size: AmountFieldSize.large,
+                placeholder: '0,00',
+                onChanged: (_) {},
+              ),
+            ),
           ],
         ),
       ),

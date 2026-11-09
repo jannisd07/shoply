@@ -126,13 +126,21 @@ class NewItem {
 
 /// What [ItemRepository.addItems] returns.
 class AddItemsResult {
-  const AddItemsResult({required this.token, required this.items});
+  const AddItemsResult({
+    required this.token,
+    required this.items,
+    this.skipped = const [],
+  });
 
   /// Pass to [ItemRepository.undoAddItems] to take the batch back.
   final String token;
 
   /// The affected rows after the batch: new ones and merged ones.
   final List<ShoppingItemModel> items;
+
+  /// Items left out because they already stand open on the list (only from
+  /// `ItemRepository.addItemsSkippingOpen`, A-V19).
+  final List<NewItem> skipped;
 }
 
 /// How a batch lands on a list: what is inserted, what is merged into an
@@ -143,6 +151,7 @@ class AddItemsPlan {
     required this.inserts,
     required this.merges,
     this.mergePrices = const {},
+    this.skipped = const [],
   });
 
   /// New rows, already combined when the batch names an item twice.
@@ -155,11 +164,18 @@ class AddItemsPlan {
   /// batch item carries one).
   final Map<String, ItemPrice> mergePrices;
 
-  /// Plans [items] against the list's [existingUnchecked] items.
+  /// Items not written because an open item of the same name and unit is
+  /// already on the list (with `skipOpenDuplicates`).
+  final List<NewItem> skipped;
+
+  /// Plans [items] against the list's [existingUnchecked] items. With
+  /// [skipOpenDuplicates] an item that is already open on the list is left
+  /// out (listed in [skipped]) instead of merged into it.
   static AddItemsPlan of(
     List<ShoppingItemModel> existingUnchecked,
-    List<NewItem> items,
-  ) {
+    List<NewItem> items, {
+    bool skipOpenDuplicates = false,
+  }) {
     String key(String name, String? unit) {
       final u = (unit ?? '').trim().toLowerCase();
       return '${name.trim().toLowerCase()}|${u == 'pcs' ? '' : u}';
@@ -171,11 +187,16 @@ class AddItemsPlan {
     final merges = <String, double>{};
     final mergePrices = <String, ItemPrice>{};
     final inserts = <String, NewItem>{};
+    final skipped = <NewItem>[];
     for (final item in items) {
       final name = item.name.trim();
       if (name.isEmpty || item.quantity <= 0) continue;
       final k = key(name, item.unit);
       final hit = existing[k];
+      if (hit != null && skipOpenDuplicates) {
+        skipped.add(item);
+        continue;
+      }
       if (hit != null) {
         merges[hit.id] = (merges[hit.id] ?? 0) + item.quantity;
         final price = item.price;
@@ -205,6 +226,7 @@ class AddItemsPlan {
       inserts: inserts.values.toList(),
       merges: merges,
       mergePrices: mergePrices,
+      skipped: skipped,
     );
   }
 }
