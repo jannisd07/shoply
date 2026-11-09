@@ -197,6 +197,11 @@ class UserFoodsNotifier extends StateNotifier<List<UserFood>> {
 
   final Ref _ref;
   final String? _key;
+  final Completer<void> _ready = Completer<void>();
+
+  /// Completes once the first server answer is in (or failed, or there is
+  /// none to wait for), so a barcode lookup sees own foods first.
+  Future<void> get ready => _ready.future;
 
   void _load() {
     final key = _key;
@@ -209,7 +214,11 @@ class UserFoodsNotifier extends StateNotifier<List<UserFood>> {
         debugPrint('⚠️ [UserFoods] Stored foods unreadable: ${e.runtimeType}');
       }
     }
-    if (key != null && _ref.read(calorieSchemaV2Provider)) unawaited(_refresh());
+    if (key != null && _ref.read(calorieSchemaV2Provider)) {
+      unawaited(_refresh());
+    } else {
+      _ready.complete();
+    }
   }
 
   Future<void> _refresh() async {
@@ -220,6 +229,8 @@ class UserFoodsNotifier extends StateNotifier<List<UserFood>> {
       _set([...local, ...foods]);
     } catch (e) {
       debugPrint('⚠️ [UserFoods] Refresh failed: ${e is CalorieDataException ? e.code.name : e.runtimeType}');
+    } finally {
+      if (!_ready.isCompleted) _ready.complete();
     }
   }
 
@@ -270,9 +281,16 @@ final calorieOffSearchProvider = Provider<Future<List<FoodProduct>> Function(Str
 /// known about it; throws [OffRequestFailed] when it is not on the device
 /// and Open Food Facts cannot be reached (offline: `offline`). A found
 /// product is kept on the device and listed under "Zuletzt gescannt".
+/// How long a lookup waits for the own foods to arrive from the server.
+const Duration _kOwnFoodsWait = Duration(seconds: 3);
+
 Future<FoodProduct?> lookupCalorieBarcode(Ref ref, String code, {bool scanned = true}) async {
   final cache = ref.read(calorieProductCacheProvider.notifier);
-  final own = ref.read(userFoodsProvider.notifier).byBarcode(code);
+  final foods = ref.read(userFoodsProvider.notifier);
+  if (!ref.read(isOfflineProvider)) {
+    await foods.ready.timeout(_kOwnFoodsWait, onTimeout: () {});
+  }
+  final own = foods.byBarcode(code);
   if (own != null) {
     final product = own.toFoodProduct();
     cache.put(product, scanned: scanned);

@@ -94,8 +94,7 @@ class _EstimatePillState extends State<EstimatePill> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final colors = context.colors;
     final estimating = widget.estimating;
-    final withFigure = estimating &&
-        context.typography.category.index < ContentSizeCategory.ax3.index;
+    final withFigure = estimating && context.typography.category.index < ContentSizeCategory.ax3.index;
     final content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -189,11 +188,10 @@ class _ComponentRowState extends State<ComponentRow> {
     final ax = context.isAccessibilityText;
     final grams = context.tr('cal_about_grams', params: {'g': context.amount(part.grams)});
     final kcal = context.tr('cal_meal_sum', params: {'kcal': context.kcal(part.kcal)});
-    final spoken = context.tr('cal_component_a11y', params: {
-      'name': part.name,
-      'g': context.amount(part.grams),
-      'kcal': context.kcal(part.kcal),
-    });
+    final spoken = context.tr(
+      'cal_component_a11y',
+      params: {'name': part.name, 'g': context.amount(part.grams), 'kcal': context.kcal(part.kcal)},
+    );
 
     final text = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,23 +249,26 @@ class _ComponentRowState extends State<ComponentRow> {
                     child: Semantics(
                       label: context.tr('cal_grams'),
                       hint: _invalid ? context.tr('cal_number_invalid') : null,
-                      child: CupertinoTextField(
-                        controller: _grams,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: calorieNumberFormatters,
-                        style: context.text(AvoTextStyle.body, tabular: true),
-                        padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.m, vertical: AvoSpacing.s),
-                        decoration: BoxDecoration(
-                          color: colors.fill,
-                          borderRadius: BorderRadius.circular(AvoRadii.imageSmall),
-                        ),
-                        suffix: Padding(
-                          padding: const EdgeInsetsDirectional.only(end: AvoSpacing.m),
-                          child: ExcludeSemantics(
-                            child: Text('g', style: context.text(AvoTextStyle.body, color: colors.secondaryLabel)),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
+                        child: CupertinoTextField(
+                          controller: _grams,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: calorieNumberFormatters,
+                          style: context.text(AvoTextStyle.body, tabular: true),
+                          padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.m, vertical: AvoSpacing.s),
+                          decoration: BoxDecoration(
+                            color: colors.fill,
+                            borderRadius: BorderRadius.circular(AvoRadii.imageSmall),
                           ),
+                          suffix: Padding(
+                            padding: const EdgeInsetsDirectional.only(end: AvoSpacing.m),
+                            child: ExcludeSemantics(
+                              child: Text('g', style: context.text(AvoTextStyle.body, color: colors.secondaryLabel)),
+                            ),
+                          ),
+                          onChanged: _typed,
                         ),
-                        onChanged: _typed,
                       ),
                     ),
                   ),
@@ -282,7 +283,10 @@ class _ComponentRowState extends State<ComponentRow> {
                   onChanged: (v) => widget.onGrams(v.round()),
                 ),
                 if (_invalid)
-                  Text(context.tr('cal_number_invalid'), style: context.text(AvoTextStyle.footnote, color: colors.destructive)),
+                  Text(
+                    context.tr('cal_number_invalid'),
+                    style: context.text(AvoTextStyle.footnote, color: colors.destructive),
+                  ),
               ],
             ),
           );
@@ -298,7 +302,10 @@ class _ComponentRowState extends State<ComponentRow> {
           alignment: AlignmentDirectional.centerEnd,
           child: Padding(
             padding: const EdgeInsetsDirectional.only(end: AvoSpacing.xl),
-            child: Text(context.tr('cal_component_remove'), style: context.text(AvoTextStyle.body, color: colors.onTint)),
+            child: Text(
+              context.tr('cal_component_remove'),
+              style: context.text(AvoTextStyle.body, color: colors.onTint),
+            ),
           ),
         ),
       ),
@@ -378,7 +385,10 @@ class _AddComponentRowState extends State<AddComponentRow> {
                   AvoIcon(AvoIcons.plus, size: _kPlusGlyph, color: colors.tint),
                   const SizedBox(width: AvoSpacing.m),
                   Expanded(
-                    child: Text(context.tr('cal_component_add'), style: context.text(AvoTextStyle.body, color: colors.tint)),
+                    child: Text(
+                      context.tr('cal_component_add'),
+                      style: context.text(AvoTextStyle.body, color: colors.tint),
+                    ),
                   ),
                 ],
               ),

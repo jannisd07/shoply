@@ -32,6 +32,9 @@ import 'package:shoply/routes/route_paths.dart';
 const double _kPhotoAspect = 4 / 3; // D2
 const double _kWheelHeight = 216; // UIDatePicker
 
+/// Narrower than this, the stepper goes under the amount field.
+const double _kStackBelow = 320;
+
 /// S9 "Eintrag bearbeiten" (`/calories/entry/:entryId?date=`): amount, meal,
 /// day, time, name and numbers of a diary entry, saved when the screen is
 /// left ("Eintrag geändert · Widerrufen" in the diary), or "Eintrag
@@ -442,7 +445,11 @@ class _AmountRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (calorieLabelsAbove(context)) {
+    return LayoutBuilder(builder: (context, box) => _layout(context, stacked: calorieLabelsAbove(context) || box.maxWidth < _kStackBelow));
+  }
+
+  Widget _layout(BuildContext context, {required bool stacked}) {
+    if (stacked) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

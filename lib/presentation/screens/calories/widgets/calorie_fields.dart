@@ -10,6 +10,9 @@ const double _kRowVertical = 9; // D2
 /// Share of the row a label may take beside its field.
 const double _kLabelShare = 0.45;
 
+/// Share of the field area its unit may take.
+const double _kUnitShare = 0.5;
+
 /// Digits, one decimal mark and both separators (comma and point): every
 /// number field takes "450", "450,5" and "450.5" (`kalorien.md` §3.3).
 final List<TextInputFormatter> calorieNumberFormatters = [
@@ -102,18 +105,25 @@ class CalorieFieldRow extends StatelessWidget {
       minLines: 1,
     );
 
-    final fieldWithUnit = Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(child: field),
-        if (unitText != null) ...[
-          const SizedBox(width: AvoSpacing.xs),
-          ExcludeSemantics(
-            child: Text(unitText, style: context.text(AvoTextStyle.body, color: colors.secondaryLabel)),
-          ),
-        ],
-      ],
-    );
+    // The unit takes at most half the row and wraps there, so a long unit
+    // ("Portionen") never pushes the field out.
+    final fieldWithUnit = unitText == null
+        ? field
+        : LayoutBuilder(
+            builder: (context, box) => Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: AvoSpacing.xs),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: box.maxWidth * _kUnitShare),
+                  child: ExcludeSemantics(
+                    child: Text(unitText, style: context.text(AvoTextStyle.body, color: colors.secondaryLabel)),
+                  ),
+                ),
+              ],
+            ),
+          );
 
     final labelText = ExcludeSemantics(child: Text(label, style: context.text(AvoTextStyle.body)));
     final message = error;

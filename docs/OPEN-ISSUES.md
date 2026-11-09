@@ -50,6 +50,10 @@ Stand: 2026-11-08.
 - Supabase: `supabase db dump --schema-only` als Basis nach `supabase/migrations/` committen und einen
   pg_cron-Plan für `expire-subscriptions` in `supabase/config.toml` festhalten. Nach dem Pull auf jedem Mac
   einmal `supabase link` (`supabase/.temp/` ist jetzt ignoriert).
+- **Kalorien: auf dem Gerät prüfen (B6 W3b).** Die eigene Foto-Kamera (`ios/Runner/NativeChannels/MealCameraChannel.swift`,
+  neu im Xcode-Projekt) ist nur gegen das iOS-SDK typgeprüft, nicht gebaut. Beim nächsten Build bitte: Foto aufnehmen
+  (Blitz, Auslöser, „Aus Fotos“), Fotoauswahl aus „Essen eintragen“, Barcode scannen bis zur Menge, VoiceOver auf der
+  Kamera.
 
 ## 4. Produktentscheidungen
 
@@ -73,6 +77,8 @@ Stand: 2026-11-08.
 | PLZ-Tabelle (Ort zur Postleitzahl) | Ohne Tabelle zeigt „Region“ für eine getippte PLZ nur „PLZ 79098“ (den Ort gibt es nur über den Standort), und „Diese Postleitzahl kennen wir nicht.“ prüft nur Zone 00 und 99999. Quelle und Lizenz einer offenen PLZ-Liste wählen (angebote.md Owner-Frage 11, Lücke L10)? |
 | Angebote für Listen ohne Markt | Laut Spec zeigen Listen ohne festen Markt die Angebote der Lieblingsmärkte in deren Reihenfolge (K12-03, Owner-Frage 7). Die Daten dafür (Abgleich über mehrere Märkte pro Artikel) sind noch nicht gebaut: solche Listen zeigen keine Angebote, und „Lieblingsmärkte“ sagt deshalb nur „Diese Märkte stehen oben, wenn du für eine Liste einen Markt wählst.“ Als Nächstes bauen? |
 | Standort-Abfrage | Text in `Info.plist` (`NSLocationWhenInUseUsageDescription`) wie in angebote.md Owner-Frage 10 setzen: „Avo nutzt deinen Standort, um deine Postleitzahl für Angebote zu finden und den Markt vorzuschlagen, in dem du gerade bist.“ |
+| Angebots-Einstellungen pro Konto | Schalter „Angebote an Artikeln / Vorschläge beim Tippen / Ersparnis in der Liste“, „Diese Woche ausblenden“, „Nicht dieses Angebot“ und ausgeblendete Listen liegen pro Konto, aber nur auf diesem Gerät (ein zweites Gerät kennt sie nicht). Migration `user_offer_prefs` (angebote.md Owner-Frage 14) freigeben? |
+| Essensfotos und Anthropic | S3/S4/S5 sagen „Das Foto wird nur für die Schätzung verwendet und privat gespeichert.“ Passt das zur Aufbewahrung bei der Claude-API (kalorien.md §7.3)? Sonst den Satz anpassen lassen. |
 
 ## 5. Bekannte Restarbeiten im Code (kann Claude machen)
 

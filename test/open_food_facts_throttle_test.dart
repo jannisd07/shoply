@@ -122,6 +122,45 @@ void main() {
       service = build();
     });
 
+    test('a server error or no connection throws instead of answering "nothing found"', () async {
+      final failing = OpenFoodFactsService.forTesting(
+        client: MockClient((request) async => http.Response('oops', 503)),
+        limits: OffRateLimits(clock: () => now),
+        delay: (d) async => now = now.add(d),
+      );
+      await expectLater(failing.search('milch'), throwsA(isA<OffRequestFailed>()));
+      await expectLater(failing.lookupBarcode('4000000000099'), throwsA(isA<OffRequestFailed>()));
+
+      final offline = OpenFoodFactsService.forTesting(
+        client: MockClient((request) async => throw const SocketException('no route')),
+        limits: OffRateLimits(clock: () => now),
+        delay: (d) async => now = now.add(d),
+      );
+      await expectLater(
+        offline.search('milch'),
+        throwsA(isA<OffRequestFailed>().having((e) => e.reason, 'reason', 'network')),
+      );
+    });
+
+    test('an unknown barcode (404 or status 0) is null, not an error', () async {
+      expect(await service.lookupBarcode('4000000000099'), isNull);
+      productStatus = 200;
+      expect(await service.lookupBarcode('4000000000099'), isNull);
+    });
+
+    test('a product without a name has no English placeholder', () async {
+      productStatus = 200;
+      productBody = jsonEncode({
+        'status': 1,
+        'product': {'code': '4000000000099', 'nutriments': {'energy-kcal_100g': 50}, 'product_quantity_unit': 'ml'},
+      });
+      final p = (await service.lookupBarcode('4000000000099'))!;
+      expect(p.hasName, isFalse);
+      expect(p.name, isEmpty);
+      expect(p.isLiquid, isTrue);
+      expect(requests.last.url.queryParameters['fields'], contains('serving_quantity'));
+    });
+
     test('the 11th search within 60 s never reaches the network', () async {
       for (var i = 0; i < 10; i++) {
         await service.search('milch $i');

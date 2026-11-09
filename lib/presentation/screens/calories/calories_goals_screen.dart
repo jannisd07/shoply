@@ -54,12 +54,12 @@ class _CaloriesGoalsScreenState extends ConsumerState<CaloriesGoalsScreen> {
   bool _redirected = false;
 
   int? _valueOf(NutritionGoal goal, _Field f) => switch (f) {
-        _Field.kcal => goal.dailyCalorieTarget,
-        _Field.protein => goal.proteinTargetG,
-        _Field.carbs => goal.carbsTargetG,
-        _Field.fat => goal.fatTargetG,
-        _Field.water => goal.waterTargetMl,
-      };
+    _Field.kcal => goal.dailyCalorieTarget,
+    _Field.protein => goal.proteinTargetG,
+    _Field.carbs => goal.carbsTargetG,
+    _Field.fat => goal.fatTargetG,
+    _Field.water => goal.waterTargetMl,
+  };
 
   double? _current(NutritionGoal goal, _Field f) => _draft[f] ?? _valueOf(goal, f)?.toDouble();
 
@@ -79,9 +79,16 @@ class _CaloriesGoalsScreenState extends ConsumerState<CaloriesGoalsScreen> {
       waterTargetMl: field == _Field.water ? value : null,
     );
     final diary = ref.read(calorieDiaryProvider);
-    unawaited(diary.saveGoal(changed).then<void>((_) {}, onError: (Object e) {
-      debugPrint('❌ [CalorieGoals] Saving failed: ${calorieErrorKind(e)}');
-    }));
+    unawaited(
+      diary
+          .saveGoal(changed)
+          .then<void>(
+            (_) {},
+            onError: (Object e) {
+              debugPrint('❌ [CalorieGoals] Saving failed: ${calorieErrorKind(e)}');
+            },
+          ),
+    );
     if (toast && mounted) {
       AvoToast.show(
         context,
@@ -110,39 +117,39 @@ class _CaloriesGoalsScreenState extends ConsumerState<CaloriesGoalsScreen> {
   }
 
   String _formatted(BuildContext context, _Field f, double v) => switch (f) {
-        _Field.kcal => context.tr('cal_meal_sum', params: {'kcal': context.kcal(v)}),
-        _Field.water => context.tr('cal_water_plain', params: {'amount': context.liters(v.round())}),
-        _ => '${context.grams(v.round())} g',
-      };
+    _Field.kcal => context.tr('cal_meal_sum', params: {'kcal': context.kcal(v)}),
+    _Field.water => context.tr('cal_water_plain', params: {'amount': context.liters(v.round())}),
+    _ => '${context.grams(v.round())} g',
+  };
 
   String _spoken(BuildContext context, _Field f, double v) => switch (f) {
-        _Field.kcal => context.tr('cal_kcal_value', params: {'kcal': context.kcal(v)}),
-        _Field.water => context.tr('cal_liters_spoken', params: {'n': context.liters(v.round())}),
-        _ => context.tr('cal_grams_spoken', params: {'n': context.grams(v.round())}),
-      };
+    _Field.kcal => context.tr('cal_kcal_value', params: {'kcal': context.kcal(v)}),
+    _Field.water => context.tr('cal_liters_spoken', params: {'n': context.liters(v.round())}),
+    _ => context.tr('cal_grams_spoken', params: {'n': context.grams(v.round())}),
+  };
 
   String _label(BuildContext context, _Field f) => context.tr(switch (f) {
-        _Field.kcal => 'cal_calories',
-        _Field.protein => 'cal_macro_protein',
-        _Field.carbs => 'cal_macro_carbs_long',
-        _Field.fat => 'cal_macro_fat',
-        _Field.water => 'cal_water',
-      });
+    _Field.kcal => 'cal_calories',
+    _Field.protein => 'cal_macro_protein',
+    _Field.carbs => 'cal_macro_carbs_long',
+    _Field.fat => 'cal_macro_fat',
+    _Field.water => 'cal_water',
+  });
 
   String _goalType(BuildContext context, NutritionGoalType t) => context.tr(switch (t) {
-        NutritionGoalType.loseWeight => 'cal_goal_lose',
-        NutritionGoalType.gainMuscle => 'cal_goal_gain',
-        NutritionGoalType.maintain => 'cal_goal_keep',
-        NutritionGoalType.custom => 'cal_goal_custom',
-      });
+    NutritionGoalType.loseWeight => 'cal_goal_lose',
+    NutritionGoalType.gainMuscle => 'cal_goal_gain',
+    NutritionGoalType.maintain => 'cal_goal_keep',
+    NutritionGoalType.custom => 'cal_goal_custom',
+  });
 
   String _activity(BuildContext context, ActivityLevel a) => context.tr(switch (a) {
-        ActivityLevel.sedentary => 'cal_act_sedentary',
-        ActivityLevel.light => 'cal_act_light',
-        ActivityLevel.moderate => 'cal_act_moderate',
-        ActivityLevel.active => 'cal_act_active',
-        ActivityLevel.veryActive => 'cal_act_very_active',
-      });
+    ActivityLevel.sedentary => 'cal_act_sedentary',
+    ActivityLevel.light => 'cal_act_light',
+    ActivityLevel.moderate => 'cal_act_moderate',
+    ActivityLevel.active => 'cal_act_active',
+    ActivityLevel.veryActive => 'cal_act_very_active',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +246,9 @@ class _CaloriesGoalsScreenState extends ConsumerState<CaloriesGoalsScreen> {
     return [
       InsetSection(
         header: context.tr('cal_sec_per_day'),
-        footer: custom ? null : context.tr('cal_goals_calc_note', params: {'date': context.shortDate(goal.updatedAt.toLocal())}),
+        footer: custom
+            ? null
+            : context.tr('cal_goals_calc_note', params: {'date': context.shortDate(goal.updatedAt.toLocal())}),
         children: [
           for (final field in _Field.values) ...[
             _GoalValueRow(
@@ -274,10 +283,12 @@ class _CaloriesGoalsScreenState extends ConsumerState<CaloriesGoalsScreen> {
         ],
       ),
       if (mismatch)
-        _Footnote(text: context.tr('cal_macros_mismatch', params: {
-          'macroKcal': context.kcal(macroKcal),
-          'goal': context.kcal(kcal),
-        })),
+        _Footnote(
+          text: context.tr(
+            'cal_macros_mismatch',
+            params: {'macroKcal': context.kcal(macroKcal), 'goal': context.kcal(kcal)},
+          ),
+        ),
       if (custom)
         Padding(
           padding: const EdgeInsets.fromLTRB(AvoSpacing.screen + AvoSpacing.l, AvoSpacing.xs, AvoSpacing.screen, 0),
@@ -285,7 +296,10 @@ class _CaloriesGoalsScreenState extends ConsumerState<CaloriesGoalsScreen> {
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: AvoSpacing.xs,
             children: [
-              Text(context.tr('cal_goals_custom'), style: context.text(AvoTextStyle.footnote, color: colors.secondaryLabel)),
+              Text(
+                context.tr('cal_goals_custom'),
+                style: context.text(AvoTextStyle.footnote, color: colors.secondaryLabel),
+              ),
               AppButton.plain(
                 label: context.tr('cal_recalculate'),
                 onPressed: () => context.push('${RoutePaths.calories}/goals/setup?from=goals'),
@@ -302,10 +316,13 @@ class _CaloriesGoalsScreenState extends ConsumerState<CaloriesGoalsScreen> {
               title: context.tr('cal_target_weight'),
               value: weeks == null
                   ? context.tr('cal_target_weight_plain', params: {'kg': context.amount(target)})
-                  : context.tr('cal_target_weight_value', params: {
-                      'kg': context.amount(target),
-                      'when': context.roughDate(now.add(Duration(days: (weeks * 7).round())), now),
-                    }),
+                  : context.tr(
+                      'cal_target_weight_value',
+                      params: {
+                        'kg': context.amount(target),
+                        'when': context.roughDate(now.add(Duration(days: (weeks * 7).round())), now),
+                      },
+                    ),
             ),
           ValueRow(title: context.tr('cal_activity'), value: _activity(context, goal.activityLevel)),
           NavRow(
@@ -337,9 +354,14 @@ class _Footnote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(AvoSpacing.screen + AvoSpacing.l, AvoSpacing.l, AvoSpacing.screen + AvoSpacing.l, 0),
-        child: Text(text, style: context.text(AvoTextStyle.footnote, color: context.colors.secondaryLabel)),
-      );
+    padding: const EdgeInsets.fromLTRB(
+      AvoSpacing.screen + AvoSpacing.l,
+      AvoSpacing.l,
+      AvoSpacing.screen + AvoSpacing.l,
+      0,
+    ),
+    child: Text(text, style: context.text(AvoTextStyle.footnote, color: context.colors.secondaryLabel)),
+  );
 }
 
 /// A daily value: title and value ("Kalorien · 2.000 kcal"); a tap opens a
@@ -445,21 +467,24 @@ class _GoalValueRowState extends State<_GoalValueRow> {
       child: Semantics(
         label: widget.label,
         hint: _invalid ? context.tr('cal_number_invalid') : null,
-        child: CupertinoTextField(
-          controller: _field,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          inputFormatters: calorieNumberFormatters,
-          style: context.text(AvoTextStyle.body, tabular: true),
-          padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.m, vertical: AvoSpacing.s),
-          decoration: BoxDecoration(color: colors.fill, borderRadius: BorderRadius.circular(AvoRadii.imageSmall)),
-          suffix: Padding(
-            padding: const EdgeInsetsDirectional.only(end: AvoSpacing.m),
-            child: ExcludeSemantics(
-              child: Text(widget.unit, style: context.text(AvoTextStyle.body, color: colors.secondaryLabel)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
+          child: CupertinoTextField(
+            controller: _field,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            inputFormatters: calorieNumberFormatters,
+            style: context.text(AvoTextStyle.body, tabular: true),
+            padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.m, vertical: AvoSpacing.s),
+            decoration: BoxDecoration(color: colors.fill, borderRadius: BorderRadius.circular(AvoRadii.imageSmall)),
+            suffix: Padding(
+              padding: const EdgeInsetsDirectional.only(end: AvoSpacing.m),
+              child: ExcludeSemantics(
+                child: Text(widget.unit, style: context.text(AvoTextStyle.body, color: colors.secondaryLabel)),
+              ),
             ),
+            onChanged: _typed,
           ),
-          onChanged: _typed,
         ),
       ),
     );
@@ -486,14 +511,27 @@ class _GoalValueRowState extends State<_GoalValueRow> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
-                  children: [field, const SizedBox(height: AvoSpacing.s), stepper],
+                  children: [
+                    field,
+                    const SizedBox(height: AvoSpacing.s),
+                    stepper,
+                  ],
                 )
-              : Row(children: [Expanded(child: field), const SizedBox(width: AvoSpacing.m), stepper]),
+              : Row(
+                  children: [
+                    Expanded(child: field),
+                    const SizedBox(width: AvoSpacing.m),
+                    stepper,
+                  ],
+                ),
         ),
         if (_invalid)
           Padding(
             padding: const EdgeInsets.fromLTRB(AvoSpacing.l, 0, AvoSpacing.l, AvoSpacing.m),
-            child: Text(context.tr('cal_number_invalid'), style: context.text(AvoTextStyle.footnote, color: colors.destructive)),
+            child: Text(
+              context.tr('cal_number_invalid'),
+              style: context.text(AvoTextStyle.footnote, color: colors.destructive),
+            ),
           ),
       ],
     );

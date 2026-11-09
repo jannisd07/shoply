@@ -11,6 +11,19 @@ gekauft“, Suche nach Markt gruppiert und dem Menü „Auf welche Liste?“, Re
 (`/settings/offers/markets`), der Onboarding-Schritt `OffersSetupStep` mit Inhalt und die Rezept-Zeile mit „Angebote
 für {Rezept}“ (`/offers/recipe/:recipeId`). Ohne Region zeigen Liste und Eingabefeld „Postleitzahl festlegen“. Weg
 sind `weekly_deals_screen.dart`, `zip_code_sheet.dart`, die alte Rezept-Angebotskarte und ihre Texte.
+## 2026-11-09: Essen eintragen komplett, Ziele ohne Slider (Teil B, B6 W3b)
+- **„Essen eintragen“** hat jetzt „Foto | Barcode | Suche“. Die Suche findet eigene Lebensmittel sofort und Open Food
+  Facts nach einer kurzen Pause; „Manuell eintragen“ für alles andere. „Zuletzt gegessen“: Plus trägt ein, der Text
+  öffnet die Menge.
+- **Neue Vollbild-Screens:** Foto aufnehmen (eigene Kamera, öffnet mit Überblendung statt von unten), Schätzung prüfen
+  (ca.-Werte, Sicherheit in Worten, Bestandteile mit Gramm, Allergie-Hinweis, Foto privat behalten), Barcode mit
+  Nachschlagen und Ziffern-Feld, Menge mit Portion und Packung, Manuell mit „Kalorien schätzen lassen“, Eintrag
+  bearbeiten (Tippen auf eine Zeile im Tagebuch), Rezept ins Tagebuch, Ziele und Ziel berechnen.
+- **Ziele ohne Slider:** Werte mit Feld und Stepper, Tempo „Gemütlich | Normal | Zügig“; „Richtwerte, kein ärztlicher
+  Rat.“ auf beiden Screens.
+- **Fehler behoben:** Ein hängender Abruf blockiert das Tagebuch nicht mehr (Zeitlimit 20 s); Open Food Facts meldet
+  Netzfehler, statt „nichts gefunden“ zu zeigen; kein englisches „Unknown product“ mehr.
+- Weg: `goal_setup_screen.dart` (mit `Slider`), `log_recipe.dart`, 16 alte Texte.
 
 ## 2026-11-08: Avo-Tab im D2-Design (Teil B, B5 W1)
 

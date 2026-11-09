@@ -47,13 +47,7 @@ const double _kMaxAmount = 5000;
 /// nutrition the person types them in per 100 g from the pack; they are
 /// remembered (own food with the barcode).
 class CaloriesAmountScreen extends ConsumerStatefulWidget {
-  const CaloriesAmountScreen({
-    super.key,
-    required this.foodId,
-    this.food,
-    this.meal,
-    this.dateKey,
-  });
+  const CaloriesAmountScreen({super.key, required this.foodId, this.food, this.meal, this.dateKey});
 
   /// Barcode, `own:<id>` or `recent:<entry id>`.
   final String foodId;
@@ -189,11 +183,7 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
     if (!mounted || food == null || amount == null) return;
     final n = food.nutritionFor(amount, _unit, per100: _needsNutrition ? _per100 : null);
     final row = nutritionRowFor(context, kcal: n.kcal, protein: n.protein, carbs: n.carbs, fat: n.fat);
-    unawaited(SemanticsService.sendAnnouncement(
-      View.of(context),
-      row.semanticLabel,
-      Directionality.of(context),
-    ));
+    unawaited(SemanticsService.sendAnnouncement(View.of(context), row.semanticLabel, Directionality.of(context)));
   }
 
   void _setUnit(CalorieAmountUnit unit) {
@@ -239,22 +229,28 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
     final code = food.barcode;
     if (code == null) return;
     final cache = ref.read(calorieProductCacheProvider.notifier);
-    final product = cache.find(code) ??
-        FoodProduct(barcode: code, name: food.name, brand: food.brand, imageUrl: food.imageUrl);
+    final product =
+        cache.find(code) ?? FoodProduct(barcode: code, name: food.name, brand: food.brand, imageUrl: food.imageUrl);
     cache.put(product.withNutrition(kcal: per100.kcal, protein: per100.protein, carbs: per100.carbs, fat: per100.fat));
-    unawaited(ref.read(userFoodsProvider.notifier).save(UserFood(
-          id: '',
-          userId: '',
-          name: food.name,
-          barcode: code,
-          kcal100: per100.kcal.toDouble(),
-          protein100: per100.protein,
-          carbs100: per100.carbs,
-          fat100: per100.fat,
-          servingG: food.servingG,
-          packageG: food.packageG,
-          createdAt: DateTime.now().toUtc(),
-        )));
+    unawaited(
+      ref
+          .read(userFoodsProvider.notifier)
+          .save(
+            UserFood(
+              id: '',
+              userId: '',
+              name: food.name,
+              barcode: code,
+              kcal100: per100.kcal.toDouble(),
+              protein100: per100.protein,
+              carbs100: per100.carbs,
+              fat100: per100.fat,
+              servingG: food.servingG,
+              packageG: food.packageG,
+              createdAt: DateTime.now().toUtc(),
+            ),
+          ),
+    );
   }
 
   @override
@@ -269,9 +265,7 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
           if (_load == _Load.loading)
             Padding(
               padding: const EdgeInsets.only(top: AvoSpacing.l),
-              child: InsetSection(children: [
-                SkeletonSection(rows: 2, loadingLabel: context.tr('cal_loading')),
-              ]),
+              child: InsetSection(children: [SkeletonSection(rows: 2, loadingLabel: context.tr('cal_loading'))]),
             )
           else ...[
             const SizedBox(height: AvoSpacing.l),
@@ -284,14 +278,16 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
               padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
               child: AppButton.primary(
                 label: context.tr('cal_manual_row'),
-                onPressed: () => context.pushReplacement(Uri(
-                  path: '${RoutePaths.calories}/add/manual',
-                  queryParameters: {
-                    if (BarcodeScannerChannel.normalizeGtin(widget.foodId) case final code?) 'barcode': code,
-                    'meal': _meal.dbValue,
-                    if (_dateKey != null) 'date': _dateKey!,
-                  },
-                ).toString()),
+                onPressed: () => context.pushReplacement(
+                  Uri(
+                    path: '${RoutePaths.calories}/add/manual',
+                    queryParameters: {
+                      if (BarcodeScannerChannel.normalizeGtin(widget.foodId) case final code?) 'barcode': code,
+                      'meal': _meal.dbValue,
+                      if (_dateKey != null) 'date': _dateKey!,
+                    },
+                  ).toString(),
+                ),
               ),
             ),
           ],
@@ -343,7 +339,11 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
                 error: _kcal.text.isNotEmpty && !_kcalInput.isValid ? context.tr('cal_number_invalid') : null,
                 onChanged: (_) => _changed(),
               ),
-              for (final (c, key) in [(_protein, 'cal_macro_protein'), (_carbs, 'cal_macro_carbs_long'), (_fat, 'cal_macro_fat')])
+              for (final (c, key) in [
+                (_protein, 'cal_macro_protein'),
+                (_carbs, 'cal_macro_carbs_long'),
+                (_fat, 'cal_macro_fat'),
+              ])
                 CalorieFieldRow(
                   label: context.tr(key),
                   controller: c,
@@ -378,21 +378,25 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
           ],
         ),
         const SizedBox(height: AvoSpacing.section),
-        InsetSection(children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.l, vertical: AvoSpacing.m),
-            child: nutritionRowFor(context, kcal: n?.kcal, protein: n?.protein, carbs: n?.carbs, fat: n?.fat),
-          ),
-        ]),
+        InsetSection(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.l, vertical: AvoSpacing.m),
+              child: nutritionRowFor(context, kcal: n?.kcal, protein: n?.protein, carbs: n?.carbs, fat: n?.fat),
+            ),
+          ],
+        ),
         const SizedBox(height: AvoSpacing.section),
-        InsetSection(children: [
-          CalorieMealRow(meal: _meal, onChanged: (m) => setState(() => _meal = m)),
-          CalorieDateRow(
-            dateKey: shownDate,
-            todayKey: today,
-            onChanged: (k) => setState(() => _dateKey = k == today ? null : k),
-          ),
-        ]),
+        InsetSection(
+          children: [
+            CalorieMealRow(meal: _meal, onChanged: (m) => setState(() => _meal = m)),
+            CalorieDateRow(
+              dateKey: shownDate,
+              todayKey: today,
+              onChanged: (k) => setState(() => _dateKey = k == today ? null : k),
+            ),
+          ],
+        ),
         if (food.fromOpenFoodFacts && food.barcode != null)
           _OffAttribution(barcode: food.barcode!, color: colors.secondaryLabel),
       ],
@@ -419,10 +423,16 @@ class _ProductHeader extends StatelessWidget {
     ].join(' · ');
     final portion = food.portion;
     final third = portion != null
-        ? [?context.entryAmount(portion), context.tr('cal_meal_sum', params: {'kcal': context.kcal(portion.calories)})].join(' · ')
+        ? [
+            ?context.entryAmount(portion),
+            context.tr('cal_meal_sum', params: {'kcal': context.kcal(portion.calories)}),
+          ].join(' · ')
         : food.kcal100 == null
-            ? null
-            : context.tr(food.liquid ? 'cal_kcal_per_100ml' : 'cal_kcal_per_100g', params: {'kcal': context.kcal(food.kcal100!)});
+        ? null
+        : context.tr(
+            food.liquid ? 'cal_kcal_per_100ml' : 'cal_kcal_per_100g',
+            params: {'kcal': context.kcal(food.kcal100!)},
+          );
     return Padding(
       padding: const EdgeInsets.all(AvoSpacing.l),
       child: Row(
@@ -437,10 +447,10 @@ class _ProductHeader extends StatelessWidget {
                   child: Image.network(
                     image,
                     fit: BoxFit.contain,
-                    semanticLabel: food.name,
-                    frameBuilder: (context, child, frame, sync) => frame == null && !sync
-                        ? ColoredBox(color: colors.fill)
-                        : child,
+                    // The name stands next to it.
+                    excludeFromSemantics: true,
+                    frameBuilder: (context, child, frame, sync) =>
+                        frame == null && !sync ? ColoredBox(color: colors.fill) : child,
                     errorBuilder: (context, _, __) => ColoredBox(color: colors.fill),
                   ),
                 ),
@@ -491,26 +501,30 @@ class _AmountEditor extends StatelessWidget {
   final ValueChanged<CalorieAmountUnit> onUnit;
 
   String _unitLabel(BuildContext context, CalorieAmountUnit u) => switch (u) {
-        CalorieAmountUnit.base => food.baseUnit,
-        CalorieAmountUnit.serving => context.tr('cal_unit_serving', params: {'g': context.amount(food.servingG ?? 0)}),
-        CalorieAmountUnit.pack => context.tr('cal_unit_pack', params: {'g': context.amount(food.packageG ?? 0)}),
-        CalorieAmountUnit.portion => food.portion?.unit == 'serving' || food.portion?.unit == null
-            ? context.tr('cal_unit_portion')
-            : food.portion!.unit!,
-      };
+    CalorieAmountUnit.base => food.baseUnit,
+    CalorieAmountUnit.serving => context.tr('cal_unit_serving', params: {'g': context.amount(food.servingG ?? 0)}),
+    CalorieAmountUnit.pack => context.tr('cal_unit_pack', params: {'g': context.amount(food.packageG ?? 0)}),
+    CalorieAmountUnit.portion =>
+      food.portion?.unit == 'serving' || food.portion?.unit == null
+          ? context.tr('cal_unit_portion')
+          : food.portion!.unit!,
+  };
 
   /// The unit after the number ("g", "Portion").
   String _shortUnit(BuildContext context) => switch (unit) {
-        CalorieAmountUnit.base => food.baseUnit,
-        CalorieAmountUnit.serving => context.tr('cal_unit_portion'),
-        CalorieAmountUnit.pack => context.tr('cal_unit_pack_short'),
-        CalorieAmountUnit.portion => _unitLabel(context, unit),
-      };
+    CalorieAmountUnit.base => food.baseUnit,
+    CalorieAmountUnit.serving => context.tr('cal_unit_portion'),
+    CalorieAmountUnit.pack => context.tr('cal_unit_pack_short'),
+    CalorieAmountUnit.portion => _unitLabel(context, unit),
+  };
 
   String _spoken(BuildContext context, double v) => switch (unit) {
-        CalorieAmountUnit.base => context.tr(food.liquid ? 'cal_ml_spoken' : 'cal_grams_spoken', params: {'n': context.amount(v)}),
-        _ => '${context.amount(v)} ${_shortUnit(context)}',
-      };
+    CalorieAmountUnit.base => context.tr(
+      food.liquid ? 'cal_ml_spoken' : 'cal_grams_spoken',
+      params: {'n': context.amount(v)},
+    ),
+    _ => '${context.amount(v)} ${_shortUnit(context)}',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -527,16 +541,19 @@ class _AmountEditor extends StatelessWidget {
             child: Semantics(
               label: context.tr('cal_sec_amount'),
               hint: error,
-              child: CupertinoTextField(
-                key: const ValueKey('cal-amount-field'),
-                controller: controller,
-                autofocus: autofocus,
-                decoration: null,
-                padding: EdgeInsets.zero,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: calorieNumberFormatters,
-                style: context.text(AvoTextStyle.largeTitle, weight: FontWeight.w700, tabular: true),
-                onChanged: (_) => onChanged(),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
+                child: CupertinoTextField(
+                  key: const ValueKey('cal-amount-field'),
+                  controller: controller,
+                  autofocus: autofocus,
+                  decoration: null,
+                  padding: EdgeInsets.zero,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: calorieNumberFormatters,
+                  style: context.text(AvoTextStyle.largeTitle, weight: FontWeight.w700, tabular: true),
+                  onChanged: (_) => onChanged(),
+                ),
               ),
             ),
           ),
@@ -568,7 +585,13 @@ class _AmountEditor extends StatelessWidget {
             const SizedBox(height: AvoSpacing.s),
             Align(alignment: AlignmentDirectional.centerStart, child: stepper),
           ] else
-            Row(children: [Expanded(child: field), const SizedBox(width: AvoSpacing.m), stepper]),
+            Row(
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: AvoSpacing.m),
+                stepper,
+              ],
+            ),
           if (error != null) ...[
             const SizedBox(height: AvoSpacing.xs),
             ExcludeSemantics(

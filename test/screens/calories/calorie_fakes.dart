@@ -11,6 +11,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shoply/core/design/design.dart';
@@ -384,8 +385,8 @@ class FakeMealPhotoBucket implements MealPhotoBucket {
   Future<String> createSignedUrl(String path, Duration expiresIn) async => 'https://example.invalid/$path';
 }
 
-/// A tiny JPEG header: enough for the media type check.
-final Uint8List kJpeg = Uint8List.fromList([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+/// A real 4 × 4 JPEG (the photo shows, the media type check passes).
+final Uint8List kJpeg = Uint8List.fromList(img.encodeJpg(img.Image(width: 4, height: 4)));
 
 /// An Open Food Facts product.
 FoodProduct offProduct(

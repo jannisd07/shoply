@@ -103,10 +103,35 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 ## Kalorien (Modul `AppModule.calories`, Teil B)
 
 - **Routen** (`routes/areas/calories_routes.dart`): Tagebuch `/calories` ist ein Push im Home-Tab (`?date=YYYY-MM-DD`,
-  nie nach heute; `?focus=water`). Kinder im Home-Tab: `week`, `weight`, `challenges`, `goals`, `ideas` (vorerst die
-  alten Screens), `water` leitet auf `/calories?focus=water` um. Vollbild über dem Tab, aus dem man kommt:
-  `/calories/add` („Essen eintragen“, `?meal=`, `?date=`) und `/calories/goals/setup`, beide mit `ModuleGate`.
-  go_router fällt von `/calories` auf diese Root-Routen zurück, deshalb dürfen sie hinter der Shell stehen.
+  nie nach heute; `?focus=water`). Kinder im Home-Tab: `goals` (Ziele, S13), dazu `week`, `weight`, `challenges`,
+  `ideas` (vorerst die alten Screens), `water` leitet auf `/calories?focus=water` um. Dasselbe Ziele-Widget hängt als
+  `/settings/health/goals` im Profil-Tab. Vollbild über dem Tab, aus dem man kommt, alle mit `ModuleGate`:
+  `/calories/add` (S3), `/calories/add/photo` (S4), `/calories/add/estimate` (S5, das Foto nur als `extra`; ohne
+  Foto zurück zur Kamera), `/calories/scan` (S6), `/calories/add/food/:foodId` (S7), `/calories/add/manual` (S8),
+  `/calories/entry/:entryId?date=` (S9), `/calories/add/recipe/:recipeId` (S10, `openLogRecipe` in `b_slots.dart`
+  pusht sie mit dem Rezept als `extra`) und `/calories/goals/setup` (S14). go_router fällt von `/calories` auf diese
+  Root-Routen zurück, deshalb dürfen sie hinter der Shell stehen.
+- **Eintrage-Ablauf:** Die Seiten von S3 bis S8 tragen den Namen `kCalorieFlowPageName`. Nach „Eintragen“ schließt
+  `popCalorieFlow` den ganzen Ablauf, die Person landet dort, wo S3 geöffnet wurde (Home, Rezept, Avo); der
+  Rückgängig-Hinweis steht dort. Kamera → Schätzung und Kamera → Menge ersetzen die Kamera-Seite (`pushReplacement`).
+  Alle Eintrage-Screens bauen auf `CalorieFlowScaffold` (Kopf, Inhalt, untere Kapsel über der Tastatur,
+  „verwerfen?“-Dialog mit eigenen Texten). S9 speichert beim Verlassen.
+- **Kameras sind nativ:** Barcode über `shoply/scanner` (VisionKit), Essensfoto und Fotoauswahl über `shoply/camera`
+  (`ios/Runner/NativeChannels/MealCameraChannel.swift`: eigene `AVCaptureSession`, `PHPickerViewController`, beide
+  Vollbild mit Überblendung, nie von unten; JPEG 1024 px, 80 %, nur im Speicher). Die Kamera-Erlaubnis fragt Dart
+  über `shoply/scanner` erst nach dem eigenen Alert. Screens sprechen nur mit `calorieCameraProvider`
+  (`CalorieCamera`), in Tests ein Fake.
+- **Produkte und eigene Lebensmittel** (`state/calorie_entry_provider.dart`): `lookupCalorieBarcode` fragt erst die
+  eigenen Lebensmittel (`userFoodsProvider`, Tabelle `user_food`, lokal gespeichert, Schreiben über die
+  Warteschlange), dann den Produkt-Cache auf dem Gerät (`calorieProductCacheProvider`, auch „Zuletzt gescannt“), dann
+  Open Food Facts. `OpenFoodFactsService.search` und `lookupBarcode` werfen `OffRequestFailed` bei Netz- oder
+  Serverfehlern; leer bzw. `null` heißt wirklich „nichts gefunden“. Fehlende Nährwerte (S7) werden als eigenes
+  Lebensmittel mit Strichcode gemerkt.
+- **KI-Schätzungen:** Foto über `mealPhotoAnalyzerProvider` (Task `meal_photo`), Text über
+  `calorieNutritionEstimatorProvider` (Task `nutrition_estimate`, S8 und S10). Nichts wird ohne Prüfung gespeichert;
+  Einträge behalten `estimated` und `confidence`. `quota_exceeded` merkt sich den Tag (`caloriePhotoLimitReachedProvider`),
+  S3 zeigt dann das Tageslimit. Das Foto wird nach dem Eintragen im Hintergrund in `meal-photos` hochgeladen und der
+  Pfad nachgetragen, nur wenn der Eintrag noch da ist.
 - **Lokal zuerst:** Jeder Tag ist ein `calorieDayProvider(dateKey)` (`state/nutrition_provider.dart`). Er startet mit
   dem Tag aus `CalorieDayStore` (SharedPreferences, heute und 14 Tage davor), fragt danach den Server und führt die
   Antwort mit der Schreib-Warteschlange zusammen (`mergeServerDay`). Der Server kann den Tag lesen, bevor ein
@@ -126,7 +151,12 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   „Essen eintragen“ ohne Datum, „Heute nochmal eintragen“), liest die Uhr erst beim Tippen
   (`calorieTodayKeyNow`), damit ein über Nacht offener Screen nie in gestern schreibt.
 - **Ziel:** `calorieGoalStateProvider` unterscheidet lädt / kein Ziel / gesetzt / Fehler und nimmt bis zur Antwort das
-  gespeicherte Ziel. Ein Ladefehler sieht nie wie „kein Ziel“ aus (S1a nur bei `none`).
+  gespeicherte Ziel. Ein Ladefehler sieht nie wie „kein Ziel“ aus (S1a nur bei `none`). S13 ändert einzelne Werte an
+  Ort und Stelle (Feld und Stepper, kein Slider) und speichert beim Zuklappen als „Eigene Werte“ (`goalType custom`).
+  S14 rechnet mit `GoalForm`/`GoalDraft` (Teil A kann das Formular im Onboarding zeigen) und
+  `NutritionGoalCalculator` mit Tempo statt Zeitraum.
+- **Abruf mit Zeitlimit:** Ein Tages-Abruf, der nach 20 s nicht antwortet (`calorieFetchTimeoutProvider`), zählt als
+  Netzfehler; spätere Abrufe desselben Tages warten nicht mehr auf ihn.
 - **Nachbartage:** Das Tagebuch lädt den Tag davor und danach mit. ±7 Tage wie im Konzept wären 42 Abfragen beim
   Öffnen; die 14 gespeicherten Tage öffnen ohnehin sofort mit Zahlen.
 - **Wieder online:** Tagebuch und Home-Karte laden von selbst neu, sobald `isOfflineProvider` wieder `false` ist.
