@@ -21,6 +21,8 @@ import 'package:shoply/presentation/providers/recipe_offers_provider.dart'
         recipeIngredientOffersProvider,
         recipeOfferKey,
         recipeOffersCachedProvider;
+import 'package:shoply/presentation/screens/profile/settings/data/profile_settings.dart'
+    show recipeAutoAdaptProvider;
 import 'package:shoply/presentation/screens/recipes/cooking_mode_screen.dart'
     show cookingProgressProvider;
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_action_bar.dart';
@@ -109,8 +111,10 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   _Load _load = _Load.loading;
   Future<Recipe?>? _deviceLookup;
 
-  /// Version shown; "Für dich angepasst" unless switched (Konzept 13 §2.3).
-  bool _adapted = true;
+  /// Version shown (Konzept 13 §2.3): first "Für dich angepasst" or
+  /// "Original", as "Rezepte automatisch anpassen" says (Ernährung &
+  /// Allergien); the switch changes it after.
+  late bool _adapted = ref.read(recipeAutoAdaptProvider);
 
   /// The person's rating while it is being saved.
   int? _myRating;

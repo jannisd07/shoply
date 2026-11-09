@@ -14,6 +14,7 @@ import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/profile_settings.dart';
 import 'package:shoply/presentation/screens/recipes/cooking_mode_screen.dart';
 import 'package:shoply/presentation/screens/recipes/recipe_detail_screen.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_data.dart';
@@ -206,7 +207,11 @@ class _Setup {
     this.calories = false,
     this.onList = const [],
     this.resumePage,
+    this.autoAdapt = true,
   }) : actions = actions ?? _Actions();
+
+  /// "Rezepte automatisch anpassen".
+  final bool autoAdapt;
 
   /// Saved cooking page (1 = step 1); null without progress.
   final int? resumePage;
@@ -220,6 +225,9 @@ class _Setup {
 
   List<Override> get overrides => [
     recipeDetailActionsProvider.overrideWithValue(actions),
+    recipeAutoAdaptProvider.overrideWith(
+      (ref) => RecipeAutoAdaptNotifier(null)..set(autoAdapt),
+    ),
     currentUserProvider.overrideWith((ref) async => user),
     isRecipeSavedProvider.overrideWith((ref, id) => saved),
     isOfflineProvider.overrideWithValue(offline),
@@ -435,6 +443,24 @@ void main() {
       );
       await _scrollTo(tester, find.text('Pour the Milch over it.'));
       expect(find.text('Pour the Milch over it.'), findsOneWidget);
+    });
+
+    testWidgets('"Rezepte automatisch anpassen" off: opens on "Original"', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _Setup(user: _user(allergies: ['lactose']), autoAdapt: false),
+        initial: _recipe(),
+      );
+      expect(find.textContaining(RegExp(r'^Milch')), findsOneWidget);
+      expect(find.textContaining('Hafermilch'), findsNothing);
+      // The warning stays, and the switch still offers the adapted version.
+      expect(
+        find.textContaining(_en('recipe_detail_substitute_suggested')),
+        findsOneWidget,
+      );
+      expect(find.text(_en('recipe_detail_variant_original')), findsOneWidget);
     });
 
     testWidgets('no profile: no notice, no segment', (tester) async {
