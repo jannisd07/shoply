@@ -43,7 +43,6 @@ import 'package:shoply/presentation/widgets/design/skeleton.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
-import 'package:shoply/presentation/widgets/design/success_moment.dart';
 import 'package:shoply/presentation/widgets/design/pro_hint_counter.dart';
 import 'package:shoply/presentation/widgets/tips/list_tips.dart';
 import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
@@ -736,27 +735,14 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
   String get _currentName =>
       ref.read(listDetailListProvider(_listId))?.name ?? _listName;
 
-  /// "Einkauf abschließen": Teil B saves the trip and returns `true`; the
-  /// confirmation is ours, the same success moment as in shopping mode.
+  /// "Einkauf abschließen": Teil B saves the trip, shows its success moment
+  /// and returns `true` (A-V9).
   Future<void> _checkout() async {
-    final items =
-        ref.read(itemsNotifierProvider(_listId)).valueOrNull ??
-        const <ShoppingItemModel>[];
-    final count = items.where((i) => i.isChecked).length;
     final saved = await _actions.checkout(context, _listId);
     if (!saved || !mounted) return;
     ref.read(tipServiceProvider).note(TipEvent.tripCompleted);
     // The first finished trip is the aha moment for the Pro offer (§11.11).
     ref.read(proHintCounterProvider)?.noteAha();
-    unawaited(
-      showSuccessMoment(
-        context,
-        title: context.tr('list_shop_saved_title'),
-        subtitle: count == 1
-            ? context.tr('list_shop_saved_one')
-            : context.tr('list_shop_saved_many', params: {'count': '$count'}),
-      ),
-    );
   }
 
   Future<void> _share() async {

@@ -315,6 +315,29 @@ void main() {
       expect(backend.removed, ['a', 'b']);
     });
 
+    test('I3: a run-time error of the applied function falls back too', () async {
+      final backend = FakeTripBackend()
+        ..rpcError = const PostgrestException(
+          message: 'column "x" of relation "shopping_items" does not match',
+          code: '42804',
+        );
+      final saved = await ShoppingHistoryService(
+        backend: backend,
+      ).completeTrip(request(cents: 1000)) as CheckoutSaved;
+      expect(saved.legacy, isTrue);
+      expect(backend.insertedTrips, hasLength(1));
+    });
+
+    test('I3: a refusal (not a member) is not retried with inserts', () async {
+      final backend = FakeTripBackend()
+        ..rpcError = const PostgrestException(message: 'not a member', code: '42501');
+      await expectLater(
+        ShoppingHistoryService(backend: backend).completeTrip(request()),
+        throwsA(isA<PostgrestException>()),
+      );
+      expect(backend.insertedTrips, isEmpty);
+    });
+
     test('keeps an item\'s own offer retailer', () async {
       final backend = FakeTripBackend(rpcMissing: true);
       await ShoppingHistoryService(backend: backend).completeTrip(
@@ -416,13 +439,18 @@ void main() {
   });
 
   group('ShoppingHistory.fromJson (L2)', () {
-    Map<String, dynamic> row({String? chain, List<String?> retailers = const []}) => {
+    Map<String, dynamic> row({
+      String? chain,
+      String? source,
+      List<String?> retailers = const [],
+    }) => {
       'id': 't',
       'user_id': 'me',
       'list_name': 'L',
       'total_items': retailers.length,
       'completed_at': '2026-11-09T10:00:00Z',
       'store_chain': chain,
+      'store_source': source,
       'items': [
         for (var i = 0; i < retailers.length; i++)
           {
@@ -449,6 +477,16 @@ void main() {
       final trip = ShoppingHistory.fromJson(row(chain: 'lidl', retailers: ['Lidl']));
       final again = ShoppingHistory.fromJson(trip.toCacheJson());
       expect(again, trip);
+    });
+
+    test('I2: "Kein Markt" stays without a market, also after the cache', () {
+      final none = ShoppingHistory.fromJson(row(source: 'user', retailers: ['Lidl']));
+      expect(none.storeChainId, isNull);
+      final cleared = ShoppingHistory.fromJson(
+        row(chain: 'lidl', retailers: ['Lidl']),
+      ).copyWith(clearStore: true);
+      expect(cleared.storeSource, 'user');
+      expect(ShoppingHistory.fromJson(cleared.toCacheJson()).storeChainId, isNull);
     });
   });
 

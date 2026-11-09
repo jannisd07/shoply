@@ -627,7 +627,7 @@ class AvoAssistantService {
   /// What the person saved through offers, as the app says it: rounded to
   /// 10 ct with "ca.", nothing below 0,50 € and nothing without a real
   /// region ([realRegion]); the same helpers as the history screen
-  /// ([totalSavingsOf], [tripsInMonth]).
+  /// ([marketSavingsRawCents], [tripsInMonth]).
   @visibleForTesting
   static Map<String, Object?> summarizeSavings(
     List<ShoppingHistory> history,
@@ -636,8 +636,8 @@ class AvoAssistantService {
   }) {
     int? rounded(Iterable<ShoppingHistory> trips) {
       if (!realRegion) return null;
-      final cents = (totalSavingsOf(trips) * 100).round();
-      return roundedSavingsCents(cents < 0 ? 0 : cents);
+      // Same rule as V4/V9: only trips with a market count (I5).
+      return roundedSavingsCents(marketSavingsRawCents(trips));
     }
 
     double? euros(int? cents) => cents == null ? null : cents / 100;

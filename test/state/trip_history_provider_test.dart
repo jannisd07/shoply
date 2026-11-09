@@ -138,6 +138,45 @@ void main() {
     expect(c.state.trips.single.id, 'trip-1');
   });
 
+  test('I4: refresh sends "Nicht gespeichert" trips again by itself', () async {
+    final backend = FakeTripBackend()..rpcError = Exception('offline');
+    final c = controller(backend);
+    await pumpEventQueue();
+    final pending = await c.checkout(request()) as CheckoutPending;
+    expect(c.state.failed, {pending.localTripId});
+
+    backend.rpcError = null;
+    await c.refresh();
+    await pumpEventQueue();
+    expect(c.state.failed, isEmpty);
+    expect(c.state.trips.map((t) => t.id), contains('trip-1'));
+  });
+
+  test('I4: a late rejection after V1 closed is said; a direct one is not', () async {
+    final said = <CheckoutResult>[];
+    final backend = SlowBackend()
+      ..answer = {'status': 'already_completed', 'completed_by_name': 'Lena'};
+    final c = TripHistoryController(
+      service: ShoppingHistoryService(backend: backend),
+      userId: 'me',
+      cache: cache,
+      now: () => now,
+      onLateRejection: said.add,
+    );
+    await pumpEventQueue();
+    final r = request();
+    final future = c.checkout(r);
+    c.handOver(c.localIdOf(r)!);
+    backend.gate.complete();
+    expect(await future, isA<CheckoutAlreadyCompleted>());
+    expect(said.single, isA<CheckoutAlreadyCompleted>());
+    expect(c.state.trips.where((t) => isLocalTripId(t.id)), isEmpty);
+
+    said.clear();
+    expect(await c.checkout(request()), isA<CheckoutAlreadyCompleted>());
+    expect(said, isEmpty, reason: 'V1 shows it itself');
+  });
+
   test('a rejection removes the local entry again', () async {
     final backend = FakeTripBackend(
       answer: {'status': 'already_completed', 'completed_by_name': 'Lena'},

@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/services/list_store_repository.dart';
@@ -18,6 +19,9 @@ class FakeListStoreRemote implements ListStoreRemote {
 
   /// Retailer names per completed trip, newest first.
   List<List<String>> trips = const [];
+
+  /// Trips with a saved chain (after [trips]).
+  List<TripMarketSignal> signals = const [];
   int? askedTripLimit;
 
   bool failReads = false;
@@ -56,13 +60,17 @@ class FakeListStoreRemote implements ListStoreRemote {
   }
 
   @override
-  Future<List<List<String>>> recentTripRetailers(
+  Future<List<TripMarketSignal>> recentTripRetailers(
     String listId, {
     int limit = 3,
   }) async {
     askedTripLimit = limit;
     if (failReads) throw Exception('offline');
-    return trips.take(limit).toList();
+    return [
+      for (final t in trips.take(limit))
+        (chainId: null, noMarket: false, retailers: t),
+      ...signals,
+    ].take(limit).toList();
   }
 }
 
@@ -447,14 +455,70 @@ void main() {
           {'items': <Object?>[]},
           {'items': null},
           <String, dynamic>{},
-        ]),
+        ]).map((t) => (t.chainId, t.noMarket, t.retailers.join(','))).toList(),
         [
-          ['Lidl', 'REWE'],
-          <String>[],
-          <String>[],
-          <String>[],
+          (null, false, 'Lidl,REWE'),
+          (null, false, ''),
+          (null, false, ''),
+          (null, false, ''),
         ],
       );
+    });
+
+    test('I1: without the migration columns it reads only the items', () async {
+      final asked = <String>[];
+      final trips = await SupabaseListStoreRemote.readTripMarkets((columns) async {
+        asked.add(columns);
+        if (columns.contains('store_chain')) {
+          throw const PostgrestException(
+            message: 'column shopping_history.store_chain does not exist',
+            code: '42703',
+          );
+        }
+        return [
+          {
+            'items': [
+              {'price_retailer': 'Lidl'},
+            ],
+          },
+        ];
+      });
+      expect(asked, hasLength(2));
+      expect(trips.map(chainOfTrip).toList(), ['lidl']);
+    });
+
+    test('I1: with the migration the chain column is read', () async {
+      final trips = await SupabaseListStoreRemote.readTripMarkets(
+        (columns) async => [
+          {'store_chain': 'rewe', 'store_source': 'user', 'items': <Object?>[]},
+        ],
+      );
+      expect(trips.map(chainOfTrip).toList(), ['rewe']);
+    });
+
+    test('I1: the saved chain wins over the items, "Kein Markt" stays none', () {
+      final trips = SupabaseListStoreRemote.retailersOfTrips([
+        {
+          'store_chain': 'rewe',
+          'store_source': 'user',
+          'items': [
+            {'price_retailer': 'Lidl'},
+          ],
+        },
+        {
+          'store_chain': null,
+          'store_source': 'user',
+          'items': [
+            {'price_retailer': 'Lidl'},
+          ],
+        },
+        {
+          'items': [
+            {'price_retailer': 'Lidl'},
+          ],
+        },
+      ]);
+      expect(trips.map(chainOfTrip).toList(), ['rewe', null, 'lidl']);
     });
   });
 

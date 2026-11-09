@@ -48,11 +48,7 @@ final tripSavingsCentsProvider = Provider.family<int?, String>((ref, tripId) {
 /// hidden or below 0,50 €. Trips without a market do not count.
 int? savingsOfTrips(bool visible, Iterable<ShoppingHistory> trips) {
   if (!visible) return null;
-  final withStore = [
-    for (final t in trips)
-      if (t.storeChainId != null) t,
-  ];
-  return roundedSavingsCents((totalSavingsOf(withStore) * 100).round());
+  return roundedSavingsCents(marketSavingsRawCents(trips));
 }
 
 // ------------------------------------------------------------------ shares

@@ -71,7 +71,7 @@ class _Remote implements ListStoreRemote {
   @override
   Future<String?> fetchUserChainId(String listId) async => null;
   @override
-  Future<List<List<String>>> recentTripRetailers(
+  Future<List<TripMarketSignal>> recentTripRetailers(
     String listId, {
     int limit = 3,
   }) async => const [];

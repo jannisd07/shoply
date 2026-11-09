@@ -7,7 +7,7 @@ import 'package:shoply/core/localization/app_translations.dart';
 import 'package:shoply/data/models/expense_split.dart';
 import 'package:shoply/data/services/push_notification_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart'
-    show isMissingServerFeature;
+    show TripNotWrittenException, isMissingServerFeature;
 import 'package:shoply/data/services/trip_money_format.dart';
 import 'package:shoply/data/services/trip_split_math.dart';
 
@@ -491,7 +491,15 @@ class SupabaseSplitBackend implements SplitBackend {
   Future<void> updateTripPayment(
     String historyId,
     Map<String, dynamic> values,
-  ) => _db.from('shopping_history').update(values).eq('id', historyId);
+  ) async {
+    final rows = await _db
+        .from('shopping_history')
+        .update(values)
+        .eq('id', historyId)
+        .select('id');
+    // RLS answers a forbidden update with 0 rows, not an error (W11 M9).
+    if ((rows as List).isEmpty) throw const TripNotWrittenException();
+  }
 
   @override
   Future<void> deleteSplits(List<String> ids) =>

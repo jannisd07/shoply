@@ -269,7 +269,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('a saved trip shows the success moment and closes', (
+  // A-V9: the success moment is Teil B's (V3, in the checkout flow); the
+  // shopping mode only closes.
+  testWidgets('a saved trip closes the shopping mode', (
     tester,
   ) async {
     await open(tester);
@@ -284,11 +286,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(checkouts, ['l1']);
 
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Trip saved.'), findsOneWidget);
-    expect(find.text('1 item'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 11));
     await tester.pumpAndSettle();
     expect(find.text('open'), findsOneWidget);
     expect(find.text('Trip saved.'), findsNothing);

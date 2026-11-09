@@ -15,6 +15,7 @@ import 'package:shoply/presentation/providers/store_choice_provider.dart';
 import 'package:shoply/presentation/screens/history/history_format.dart';
 import 'package:shoply/presentation/screens/history/history_paths.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
+import 'package:shoply/presentation/state/expense_split_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/presentation/state/trip_history_provider.dart';
@@ -145,6 +146,24 @@ Future<bool> confirmAndDeleteTrip(
 }) async {
   final lang = Localizations.localeOf(context).languageCode;
   final now = ref.read(historyClockProvider)();
+  // The row only knows open (and lately settled) shares; an older settled
+  // split must still be named in the question (W11 M1).
+  var split = hasSplit;
+  if (!split && !isLocalTripId(trip.id)) {
+    // Keep the auto-dispose provider alive while it reads.
+    final keep = ref.listenManual(tripSplitsProvider(trip.id), (_, _) {});
+    try {
+      final splits = await ref
+          .read(tripSplitsProvider(trip.id).future)
+          .timeout(const Duration(seconds: 2));
+      split = splits.isNotEmpty;
+    } catch (e) {
+      debugPrint('⚠️ [HISTORY] Split of trip not read: ${e.runtimeType}');
+    } finally {
+      keep.close();
+    }
+    if (!context.mounted) return false;
+  }
   final ok = await showAvoConfirm(
     context,
     title: context.tr(
@@ -152,7 +171,7 @@ Future<bool> confirmAndDeleteTrip(
       params: {'date': dayMonth(trip.completedAt, lang, now)},
     ),
     message: context.tr(
-      hasSplit
+      split
           ? 'hist_delete_body_split'
           : (shared ? 'hist_delete_body_shared' : 'hist_delete_body'),
     ),

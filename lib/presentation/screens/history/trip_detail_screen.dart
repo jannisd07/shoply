@@ -213,7 +213,9 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
               _HistoryItemRow(
                 item: item,
                 lang: lang,
-                offers: offers,
+                // Pill and "laut Händler statt …" only for offers of the
+                // trip's market, like the "Gespart" line (I5, W11 M6).
+                offers: offers && itemSavesAtTripMarket(trip, item),
                 onList: target != null &&
                         openNames.contains(item.name.trim().toLowerCase())
                     ? target.name
@@ -266,7 +268,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
   }
 
   String _offerCount(BuildContext context, ShoppingHistory trip, String store) {
-    final n = trip.items.where((i) => i.savingsPerUnit != null).length;
+    final n = trip.items.where((i) => itemSavesAtTripMarket(trip, i)).length;
     return n == 1
         ? context.tr('hist_detail_savings_count_one', params: {'store': store})
         : context.tr(

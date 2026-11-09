@@ -9,6 +9,7 @@ import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/data/models/expense_split.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/trip_checkout.dart';
+import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/push_notification_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
@@ -17,6 +18,8 @@ import 'package:shoply/data/services/trip_history_cache.dart';
 import 'package:shoply/data/services/trip_money_format.dart';
 import 'package:shoply/data/services/trip_push_queue.dart';
 import 'package:shoply/data/services/trip_split_math.dart';
+import 'package:shoply/presentation/screens/history/checkout/checkout_flow.dart'
+    show showLateCheckoutRejection;
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/expense_split_provider.dart';
 import 'package:shoply/presentation/state/shopping_history_provider.dart';
@@ -114,6 +117,7 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
     TripHistoryCache? cache,
     TripPushQueue? pushes,
     DateTime Function()? now,
+    this.onLateRejection,
   }) : _service = service,
        _cache = cache,
        _pushes = pushes,
@@ -141,6 +145,15 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
   /// Whose history this is; null signed out.
   final String? userId;
 
+  /// A trip V1 no longer waits for was refused by the server (a member was
+  /// faster, the list is gone, nothing checked any more): the person must
+  /// hear it, the entry is gone (spec §3.1, W10 M7).
+  final void Function(CheckoutResult rejection)? onLateRejection;
+
+  /// Local trips V1 handed over (closed with "pending") or that were
+  /// retried later: a rejection of these is said with [onLateRejection].
+  final Set<String> _handedOver = {};
+
   final Map<String, CheckoutRequest> _requests = {};
   final Map<String, CheckoutSaved> _saved = {};
   final Set<String> _cancelled = {};
@@ -160,6 +173,7 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
   /// ones. Never throws: a failure stays in [TripHistoryState.error].
   Future<void> refresh() async {
     if (userId == null) return;
+    retryFailed();
     try {
       final page = await _service.getHistoryPage();
       if (!mounted) return;
@@ -180,8 +194,20 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
               t.completedAt.isBefore(oldest))
             t,
       ];
+      // Saved or upserted while the page was on its way (m6): keep them.
+      final newest = page.isEmpty ? null : page.first.completedAt;
+      final fresh = [
+        for (final t in state.trips)
+          if (!isLocalTripId(t.id) &&
+              !ids.contains(t.id) &&
+              (_saved.containsKey(t.id) ||
+                  (newest != null && t.completedAt.isAfter(newest))))
+            t,
+      ];
       state = state.copyWith(
-        trips: _sorted([...local, ...page, ...older]),
+        trips: _sorted({
+          for (final t in [...local, ...page, ...older, ...fresh]) t.id: t,
+        }.values.toList()),
         synced: true,
         hasMore: page.length >= ShoppingHistoryService.pageSize,
         clearError: true,
@@ -246,12 +272,27 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
       .map((e) => e.key)
       .firstOrNull;
 
+  /// V1 closed while [localTripId] was still on its way: a later
+  /// rejection is said with a toast.
+  void handOver(String localTripId) {
+    if (_requests.containsKey(localTripId)) _handedOver.add(localTripId);
+  }
+
+  /// Sends every trip marked "Nicht gespeichert" again (back online, pull
+  /// to refresh), so nothing waits for a tap (B8 final review I4).
+  void retryFailed() {
+    for (final id in [...state.failed]) {
+      unawaited(retry(id));
+    }
+  }
+
   /// Saves a trip that failed again ("Nicht gespeichert", tap).
   Future<CheckoutResult> retry(String localTripId) {
     final request = _requests[localTripId];
     if (request == null || !state.failed.contains(localTripId)) {
       return Future.value(CheckoutPending(localTripId: localTripId));
     }
+    _handedOver.add(localTripId);
     state = state.copyWith(
       sending: {...state.sending, localTripId},
       failed: {...state.failed}..remove(localTripId),
@@ -303,8 +344,11 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
           sending: {...state.sending}..remove(localId),
         );
         _persist();
+        _handedOver.remove(localId);
       } else {
+        final late = _handedOver.remove(localId);
         _drop(localId);
+        if (late) onLateRejection?.call(result);
       }
       return result;
     } catch (e) {
@@ -536,12 +580,18 @@ final tripPushQueueProvider = Provider<TripPushQueue>((ref) {
 /// Synchronous for W11's screens, Home and Teil A.
 final tripHistoryProvider =
     StateNotifierProvider<TripHistoryController, TripHistoryState>((ref) {
-      return TripHistoryController(
+      final controller = TripHistoryController(
         service: ref.watch(shoppingHistoryServiceProvider),
         userId: ref.watch(authUserIdProvider),
         cache: ref.watch(tripHistoryCacheProvider),
         pushes: ref.watch(tripPushQueueProvider),
+        onLateRejection: showLateCheckoutRejection,
       );
+      // Back online: trips that failed go out again by themselves (I4).
+      ref.listen<bool>(isOfflineProvider, (was, offline) {
+        if (was == true && !offline) controller.retryFailed();
+      });
+      return controller;
     });
 
 /// One trip from [tripHistoryProvider], or null when it is not known here.

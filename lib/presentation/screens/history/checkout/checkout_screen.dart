@@ -274,6 +274,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         );
         return;
       case CheckoutSaved() || CheckoutPending():
+        // V1 stops waiting: a later "no" comes as a toast (I4).
+        if (result is CheckoutPending) controller.handOver(result.localTripId);
         final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
         if (_splitShown(members)) {
           unawaited(prefs?.setBool(checkoutSplitLastKey(widget.listId), split));

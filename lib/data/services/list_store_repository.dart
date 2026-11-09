@@ -4,6 +4,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/data/services/shopping_history_service.dart'
+    show isMissingServerFeature;
 import 'package:shoply/data/services/store_chain_directory.dart';
 import 'package:shoply/data/services/store_detection_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -22,9 +24,27 @@ abstract interface class ListStoreRemote {
   /// Removes the market of [listId].
   Future<void> deleteAssignment(String listId);
 
-  /// Retailer names of the items of the newest [limit] completed trips of
-  /// [listId], newest trip first. Items without a retailer are left out.
-  Future<List<List<String>>> recentTripRetailers(String listId, {int limit});
+  /// The market signals of the newest [limit] completed trips of [listId],
+  /// newest trip first: the trip's chosen chain (`store_chain`, migration
+  /// `b_trip_checkout`) and the retailer names of its items (items without
+  /// a retailer are left out).
+  Future<List<TripMarketSignal>> recentTripRetailers(String listId, {int limit});
+}
+
+/// What one trip says about its market: [chainId] when one was saved,
+/// [noMarket] when the person chose "Kein Markt", else the retailers.
+typedef TripMarketSignal = ({
+  String? chainId,
+  bool noMarket,
+  List<String> retailers,
+});
+
+/// The chain of one trip: the saved chain first, nothing after "Kein
+/// Markt", else the dominant retailer of its items.
+String? chainOfTrip(TripMarketSignal trip) {
+  if (trip.chainId case final id? when id.trim().isNotEmpty) return id;
+  if (trip.noMarket) return null;
+  return dominantChain(trip.retailers);
 }
 
 class SupabaseListStoreRemote implements ListStoreRemote {
@@ -60,33 +80,54 @@ class SupabaseListStoreRemote implements ListStoreRemote {
   }
 
   @override
-  Future<List<List<String>>> recentTripRetailers(
+  Future<List<TripMarketSignal>> recentTripRetailers(
     String listId, {
     int limit = 3,
   }) async {
-    final rows = await _client
+    Future<List<Map<String, dynamic>>> read(String columns) => _client
         .from('shopping_history')
-        .select('items:shopping_history_items(price_retailer)')
+        .select(columns)
         .eq('list_id', listId)
         .order('completed_at', ascending: false)
         .limit(limit);
-    return retailersOfTrips(rows);
+    return readTripMarkets(read);
   }
 
-  /// Retailer names per trip from `shopping_history` rows with their
+  /// Reads the trips with their chain columns; on a schema without the
+  /// migration (missing column) only the items' retailers.
+  @visibleForTesting
+  static Future<List<TripMarketSignal>> readTripMarkets(
+    Future<List<Map<String, dynamic>>> Function(String columns) read,
+  ) async {
+    const items = 'items:shopping_history_items(price_retailer)';
+    try {
+      // `complete_shopping_trip` keeps the chosen chain only in
+      // `store_chain`, not in the items' retailer (B8 final review I1).
+      return retailersOfTrips(await read('store_chain, store_source, $items'));
+    } catch (e) {
+      if (!isMissingServerFeature(e)) rethrow;
+      return retailersOfTrips(await read(items));
+    }
+  }
+
+  /// Market signals per trip from `shopping_history` rows with their
   /// embedded `items`, in row order. Blank retailers are left out.
   @visibleForTesting
-  static List<List<String>> retailersOfTrips(
+  static List<TripMarketSignal> retailersOfTrips(
     List<Map<String, dynamic>> rows,
   ) =>
       [
         for (final row in rows)
-          [
-            for (final item in (row['items'] as List? ?? const []))
-              if (item case {'price_retailer': final String retailer}
-                  when retailer.trim().isNotEmpty)
-                retailer,
-          ],
+          (
+            chainId: row['store_chain'] as String?,
+            noMarket: row['store_chain'] == null && row['store_source'] != null,
+            retailers: [
+              for (final item in (row['items'] as List? ?? const []))
+                if (item case {'price_retailer': final String retailer}
+                    when retailer.trim().isNotEmpty)
+                  retailer,
+            ],
+          ),
       ];
 }
 
@@ -209,8 +250,8 @@ class ListStoreRepository {
         limit: recentTripCount,
       );
       return [
-        for (final retailers in trips)
-          if (dominantChain(retailers) case final chainId?) chainId,
+        for (final trip in trips)
+          if (chainOfTrip(trip) case final chainId?) chainId,
       ];
     } catch (e) {
       debugPrint('⚠️ [STORE] Trip history not readable: $e');

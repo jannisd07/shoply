@@ -64,8 +64,13 @@ class ShoppingHistory extends Equatable {
               .toList()
         : const <ShoppingHistoryItem>[];
     final storedChain = json['store_chain'] as String?;
+    final source = json['store_source'] as String?;
+    // The items' retailer only stands in for trips that never had a market
+    // saved; "Kein Markt" (chain null, source set) stays without one.
     final chain = storedChain != null && StoreChainDirectory.byId(storedChain) != null
         ? storedChain
+        : (storedChain != null || source != null)
+        ? null
         : dominantChain([
             for (final item in items)
               if (item.priceRetailer case final r? when r.trim().isNotEmpty) r,
@@ -83,7 +88,7 @@ class ShoppingHistory extends Equatable {
       paidByName: json['paid_by_name'] as String?,
       items: items,
       storeChainId: chain,
-      storeSource: json['store_source'] as String?,
+      storeSource: source,
       totalCostSource: json['total_cost_source'] as String?,
       completedBy: json['completed_by'] as String?,
     );
@@ -137,7 +142,7 @@ class ShoppingHistory extends Equatable {
       paidByName: paidByName ?? this.paidByName,
       items: items ?? this.items,
       storeChainId: clearStore ? null : (storeChainId ?? this.storeChainId),
-      storeSource: storeSource,
+      storeSource: clearStore || storeChainId != null ? 'user' : storeSource,
       totalCostSource: clearTotalCost
           ? null
           : (totalCostSource ?? this.totalCostSource),
@@ -265,6 +270,29 @@ double totalSavingsOf(Iterable<ShoppingHistory> trips) {
     }
   }
   return total;
+}
+
+/// Whether [item] saved something at [trip]'s market: the trip has a market
+/// and the offer is of that chain (or names none). The offer pill and the
+/// count in the trip detail use the same rule as the "Gespart" total (L4).
+bool itemSavesAtTripMarket(ShoppingHistory trip, ShoppingHistoryItem item) {
+  final chain = trip.storeChainId;
+  return chain != null &&
+      item.savingsPerUnit != null &&
+      _offerOfChain(item.priceRetailer, chain);
+}
+
+/// [totalSavingsOf] over the trips that have a market, in cents and
+/// unrounded: what V4, V9 and Avo sum before `roundedSavingsCents` (a trip
+/// without a market saves nothing, §3.14).
+int marketSavingsRawCents(Iterable<ShoppingHistory> trips) {
+  final cents = (totalSavingsOf([
+            for (final t in trips)
+              if (t.storeChainId != null) t,
+          ]) *
+          100)
+      .round();
+  return cents < 0 ? 0 : cents;
 }
 
 bool _offerOfChain(String? retailer, String chainId) {

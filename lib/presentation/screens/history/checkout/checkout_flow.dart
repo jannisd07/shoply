@@ -15,6 +15,7 @@ import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/trip_history_provider.dart';
 import 'package:shoply/presentation/widgets/design/success_moment.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
+import 'package:shoply/routes/app_branch.dart';
 
 /// Runs the checkout of [listId] on [context]. True when the trip was saved,
 /// false when it was cancelled or had nothing checked. [ref] reads the
@@ -210,4 +211,28 @@ class _ContainerRef implements WidgetRef {
     onError: onError,
     fireImmediately: fireImmediately,
   );
+}
+
+/// A trip that V1 no longer waited for was refused later (offline, slow,
+/// retried): say so over whatever is open, with the error haptic, so it
+/// never disappears without a word (spec §3.1).
+void showLateCheckoutRejection(CheckoutResult rejection) {
+  final c = rootNavigatorKey.currentContext;
+  if (c == null || !c.mounted) return;
+  final message = switch (rejection) {
+    CheckoutAlreadyCompleted(:final byName) => c.tr(
+      'hist_late_done_by_other',
+      params: {
+        'name': (byName == null || byName.trim().isEmpty)
+            ? c.tr('hist_member_unknown')
+            : byName,
+      },
+    ),
+    CheckoutListGone() => c.tr('hist_late_list_gone'),
+    CheckoutNothingChecked() => c.tr('hist_late_nothing_checked'),
+    CheckoutSaved() || CheckoutPending() => null,
+  };
+  if (message == null) return;
+  unawaited(AvoHaptics.error());
+  AvoToast.show(c, message: message);
 }

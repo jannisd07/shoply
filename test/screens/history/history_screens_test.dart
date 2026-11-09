@@ -200,6 +200,32 @@ void main() {
       expect(find.text('42,80\u00a0€'), findsNothing);
     });
 
+    testWidgets('M1: an older settled split is named in the delete question', (tester) async {
+      final world = HistoryWorld(
+        prefs: prefs,
+        trips: trips,
+        lists: [histList('l1', 'Wocheneinkauf', shared: false)],
+        splits: {
+          't1': [
+            histSplit('a', user: 'me', name: 'Jannis', cents: 2140, paid: true),
+            histSplit('b', user: 'lena', name: 'Lena', cents: 2140, position: 1, paid: true),
+          ],
+        },
+      );
+      await pumpHistory(tester, '/history', await world.overrides());
+      await tester.longPress(find.text('42,80\u00a0€'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Löschen'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Der Einkauf und seine Aufteilung werden für alle Mitglieder gelöscht. '
+          'Das lässt sich nicht rückgängig machen.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('someone else\'s trip has no delete', (tester) async {
       final world = HistoryWorld(prefs: prefs, trips: [trips[2]]);
       await pumpHistory(tester, '/history', await world.overrides());
@@ -207,6 +233,39 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Löschen'), findsNothing);
       expect(find.text('Betrag eintragen'), findsNothing);
+    });
+  });
+
+  group('I5 savings only at the trip\'s market', () {
+    testWidgets('V5: an offer of another chain gets no pill and is not counted', (tester) async {
+      final saved = histTrip(
+        't1',
+        histNow,
+        cost: 20,
+        lines: const [
+          ShoppingHistoryItem(
+            id: 'i1',
+            historyId: 't1',
+            name: 'Butter',
+            price: 1.49,
+            priceOldValue: 2.49,
+            priceRetailer: 'lidl',
+          ),
+          ShoppingHistoryItem(
+            id: 'i2',
+            historyId: 't1',
+            name: 'Käse',
+            price: 2.99,
+            priceOldValue: 3.99,
+            priceRetailer: 'REWE',
+          ),
+        ],
+      );
+      final world = HistoryWorld(prefs: prefs, trips: [saved], savings: true);
+      await pumpHistory(tester, '/history/t1', await world.overrides());
+      expect(find.text('1,49 €'), findsOneWidget);
+      expect(find.text('2,99 €'), findsNothing);
+      expect(find.textContaining('1 Artikel im Angebot'), findsOneWidget);
     });
   });
 
@@ -391,6 +450,28 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('hat bezahlt'), findsOneWidget);
+    });
+
+    testWidgets('M2: two rest cents go to the first two people', (tester) async {
+      final world = HistoryWorld(
+        prefs: prefs,
+        trips: [histTrip('t1', histNow, cost: 10.02)],
+        membersOfList: const [
+          SplitMember(userId: 'me', name: 'Jannis'),
+          SplitMember(userId: 'lena', name: 'Lena'),
+          SplitMember(userId: 'tom', name: 'Tom'),
+          SplitMember(userId: 'mia', name: 'Mia'),
+        ],
+      );
+      final router = await pumpHistory(tester, '/history/t1', await world.overrides());
+      router.push(historySplitLocation('t1'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          '2 × 2,51\u00a0€ und 2 × 2,50\u00a0€. Die Restcents gehen an die ersten 2 Personen.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('fewer than two people: save off with the reason', (tester) async {

@@ -170,15 +170,13 @@ nutzen beide direkt.
     - Ohne Nutzer, also löschbar: `screens/home/widgets/nudge_card.dart`, `data/models/recommendation_item.dart`.
 
 19. **Nach W10 (B8a, Einkauf abschließen V1–V3, `feature/b8-history`):**
-    - **A-V9 (dringend, sonst doppelter Erfolgsmoment):** `openCheckoutFlow` zeigt V3 (`showSuccessMoment` mit
-      „9 Artikel bei Lidl · ca. 3,20 € …“) und danach den Hinweis „Einkauf gespeichert · Widerrufen“ selbst. In
-      `shopping_mode_screen.dart` `_finish` und `list_detail_screen.dart` `_checkout` den eigenen
-      `showSuccessMoment(...)` streichen (nur noch `TipEvent.tripCompleted` notieren und schließen); Schlüssel
-      `list_shop_saved_*` entfallen dann. Bei 0 abgehakten Artikeln `openCheckoutFlow` nicht aufrufen.
-    - **A-V9 Rest:** `screens/lists/shopping_trip_completion.dart` hat keinen Aufrufer mehr (Alert „Einkauf
-      abschließen?“, Sheet, Snackbar): löschen. Danach löscht B `screens/lists/widgets/checkout_store_sheet.dart`
-      (Bottom-Sheet, Verstoß gegen die feste Regel; heute nur noch von dieser Datei importiert) und die Schlüssel
-      `complete_shopping_question`, `complete_shopping_checked_message`, `shopping_complete_push_*`, falls frei.
+    - **A-V9 erledigt** (B mit schriftlichem OK von A, Commit „A-V9 mit OK von A“): der eigene `showSuccessMoment`
+      in `shopping_mode_screen.dart` `_finish` und `list_detail_screen.dart` `_checkout` ist gestrichen (nur noch
+      `TipEvent.tripCompleted` und Schließen), `shopping_trip_completion.dart` (ohne Aufrufer) und
+      `checkout_store_sheet.dart` sind gelöscht, ebenso `ShoppingHistoryService.completeShoppingTrip` und B's
+      `checkout_store_*`-Schlüssel. Offen bei A: die nun freien Schlüssel `list_shop_saved_*`,
+      `complete_shopping_question`, `complete_btn`, `no_checked_items*`, `shopping_complete_push_title`, `someone` in
+      `translations/lists.dart` löschen; bei 0 abgehakten Artikeln `openCheckoutFlow` nicht aufrufen.
     - **A-V3:** `AmountField` (kompakt/groß, Locale-Eingabe, Cent). Bis dahin nutzt B `HistoryAmountField` in
       `screens/history/widgets/amount_field.dart`; Regel `parseAmountCents` in `data/services/trip_split_math.dart`.
     - **A-V11:** `navigation_service.dart`: Push-Typen `shopping_complete` und `expense_split` tragen jetzt
@@ -206,12 +204,15 @@ nutzen beide direkt.
     - **A-V19:** `ItemRepository.addItems(skipOpenDuplicates: true)`; bis dahin filtert B in V5 die offenen Artikel
       vorher selbst heraus (gleicher Name ohne Groß/klein), sie werden nie zusammengeführt.
     - **A-V4:** Balken mit Auswahl und zweiter Kürzelzeile „bisher“, Tokens `chartBar`/`chartHighlight`/
-      `monthCardGradient`. B wählt heute über eine eigene Trefferfläche über `AvoBarChart` (gleiche Geometrie), ohne
-      „bisher“-Zeile; der Monatsverlauf auf Home ist `tintSoft` über `surface` statt #EEF7EF.
+      `monthCardGradient`. B wählt heute über eine eigene Trefferfläche über `AvoBarChart` (gleiche Geometrie) und
+      zeichnet „bisher“ selbst darunter; der Monatsverlauf auf Home ist `tintSoft` über `surface` statt #EEF7EF.
     - **A-V6:** Zeile mit Wert und Pull-down („Bezahlt von“); B nutzt bis dahin eine eigene Zeile in V7.
     - **A-V21:** großer Titel für Verlauf und Offene Beträge auf dritter Ebene (B zeigt ihn schon über `OffersPage`).
-    - **A-V9 Rest** (siehe 19) bleibt offen: solange `shopping_trip_completion.dart` lebt, zeigt
-      `tool/design_check.sh B` noch die Funde in `checkout_store_sheet.dart`.
+    - **A-V22 / Folgeaufgabe B:** offene Einkäufe dauerhaft auf dem Gerät (heute nur im Speicher; Neuversuch beim
+      Wieder-online und bei „Aktualisieren“, Toast bei später Ablehnung). Siehe OPEN-ISSUES.
+    - **Offene Kleinigkeiten B8 (dürfen warten):** W10 M9, M10; W11 M3, M5, M11; W11 M10 (Frage an A/Owner: heißt
+      „im Konto gemerkt“ synchronisiert?); Widerrufen setzt `total_cost_source='user'`; Pro-Sperre für Home V10
+      (Frage an den Owner); Gesamt-Review m1–m5, m7–m11 (`b8-final-review.md`).
 
 ## Erledigte Anfragen von Teil A
 

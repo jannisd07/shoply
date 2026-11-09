@@ -26,6 +26,26 @@ bool isMissingServerFeature(Object error) {
       (message.contains('column') && message.contains('does not exist'));
 }
 
+/// An applied server function that fails at run time (a schema it does not
+/// match, a bug): the database answered with an error that is neither a
+/// permission, auth nor input error. The function ran in one transaction,
+/// so nothing was written and the old path can take over (B8 final review
+/// I3). Network errors are not [PostgrestException]s and stay errors.
+bool isServerFunctionFault(Object error) {
+  if (error is! PostgrestException) return false;
+  const refusals = {'28000', '42501', '22023', 'P0001', 'PGRST301', '401', '403'};
+  return !refusals.contains(error.code);
+}
+
+/// A row update reached no row (not allowed, or the trip is gone): the
+/// fallback writes must not say "gespeichert" then (W11 M9).
+class TripNotWrittenException implements Exception {
+  const TripNotWrittenException();
+
+  @override
+  String toString() => 'TripNotWrittenException';
+}
+
 /// The server calls of the history, behind an interface so the fallback
 /// paths can be tested with a fake.
 abstract interface class TripHistoryBackend {
@@ -143,8 +163,10 @@ class ShoppingHistoryService {
         splitPlanned: request.splitPlanned,
       );
     } catch (e) {
-      if (!isMissingServerFeature(e)) rethrow;
-      debugPrint('⚠️ [HISTORY] Checkout function missing, using inserts');
+      if (!isMissingServerFeature(e) && !isServerFunctionFault(e)) rethrow;
+      debugPrint(
+        '⚠️ [HISTORY] Checkout function missing or failing, using inserts',
+      );
       return _completeLegacy(request, items, chainId, totalCost, userId);
     }
 
@@ -326,27 +348,6 @@ class ShoppingHistoryService {
     }
   }
 
-  /// Older entry point (`shopping_trip_completion.dart` of Teil A): finishes
-  /// [items] without market or amount through [completeTrip].
-  Future<ShoppingHistory> completeShoppingTrip({
-    required String listId,
-    required String listName,
-    required List<ShoppingItemModel> items,
-    String? completedByName,
-  }) async {
-    final result = await completeTrip(
-      CheckoutRequest(
-        listId: listId,
-        listName: listName,
-        checkedItems: [
-          for (final item in items) item.isChecked ? item : item.copyWith(isChecked: true),
-        ],
-      ),
-    );
-    if (result is CheckoutSaved) return result.trip;
-    throw StateError('Trip not saved: ${result.runtimeType}');
-  }
-
   /// One page of the history (L3): trips of the person and of every list
   /// they are a member of, newest first, completed before [before].
   Future<List<ShoppingHistory>> getHistoryPage({DateTime? before}) =>
@@ -413,7 +414,7 @@ class ShoppingHistoryService {
     }
     await _backend.updateTrip(tripId, {
       'store_chain': chainId,
-      'store_source': chainId == null ? null : 'user',
+      'store_source': 'user',
     });
   }
 }
@@ -562,8 +563,15 @@ class SupabaseTripHistoryBackend implements TripHistoryBackend {
       );
 
   @override
-  Future<void> updateTrip(String tripId, Map<String, dynamic> values) =>
-      _db.from('shopping_history').update(values).eq('id', tripId);
+  Future<void> updateTrip(String tripId, Map<String, dynamic> values) async {
+    final rows = await _db
+        .from('shopping_history')
+        .update(values)
+        .eq('id', tripId)
+        .select('id');
+    // RLS answers a forbidden update with 0 rows, not an error (W11 M9).
+    if ((rows as List).isEmpty) throw const TripNotWrittenException();
+  }
 
   @override
   Future<bool> deleteTrip(String tripId) async {

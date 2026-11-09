@@ -7,7 +7,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:shoply/data/services/tip_service.dart';
 import 'package:shoply/presentation/widgets/tips/tip_slot.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
-import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/lists/item_editor_screen.dart';
 import 'package:shoply/presentation/screens/lists/widgets/list_detail_data.dart';
@@ -17,7 +16,6 @@ import 'package:shoply/presentation/screens/lists/widgets/shopping_mode_view.dar
 import 'package:shoply/presentation/screens/profile/settings/data/list_preferences.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
-import 'package:shoply/presentation/widgets/design/success_moment.dart';
 import 'package:shoply/presentation/widgets/design/pro_hint_counter.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
@@ -186,24 +184,11 @@ class _ShoppingModeScreenState extends ConsumerState<ShoppingModeScreen>
   }
 
   Future<void> _finish() async {
-    final items =
-        ref.read(itemsNotifierProvider(widget.listId)).valueOrNull ??
-        const <ShoppingItemModel>[];
-    final count = items.where((i) => i.isChecked).length;
     final saved = await openCheckoutFlow(context, widget.listId);
     if (!saved || !mounted) return;
     ref.read(tipServiceProvider).note(TipEvent.tripCompleted);
     // The first finished trip is the aha moment for the Pro offer (§11.11).
     ref.read(proHintCounterProvider)?.noteAha();
-    unawaited(
-      showSuccessMoment(
-        context,
-        title: context.tr('list_shop_saved_title'),
-        subtitle: count == 1
-            ? context.tr('list_shop_saved_one')
-            : context.tr('list_shop_saved_many', params: {'count': '$count'}),
-      ),
-    );
     _close();
   }
 

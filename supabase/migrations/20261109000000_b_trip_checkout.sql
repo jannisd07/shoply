@@ -549,7 +549,9 @@ begin
   end if;
   update public.shopping_history
   set store_chain = p_chain,
-      store_source = case when p_chain is null then null else 'user' end
+      -- 'user' for "Kein Markt" too, so the app does not guess the market
+      -- from the items again (B8 final review I2).
+      store_source = 'user'
   where id = p_trip_id
     and coalesce(completed_by, user_id) = (select auth.uid());
   if not found then

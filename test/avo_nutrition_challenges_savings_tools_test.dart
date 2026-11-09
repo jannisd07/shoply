@@ -77,6 +77,7 @@ ShoppingHistoryItem _historyItem({double? price, double? priceOldValue, double q
 ShoppingHistory _trip({
   required List<ShoppingHistoryItem> items,
   DateTime? completedAt,
+  String? chain = 'lidl',
 }) {
   return ShoppingHistory(
     id: 'h',
@@ -85,6 +86,7 @@ ShoppingHistory _trip({
     totalItems: items.length,
     completedAt: completedAt ?? DateTime(2026, 1, 1),
     items: items,
+    storeChainId: chain,
   );
 }
 
@@ -180,6 +182,20 @@ void main() {
       expect(result['month_saved_about_eur'], 1.2);
       expect(result['total_saved_about_eur'], 1.2);
       expect(result['month_trips'], 2);
+    });
+
+    test('I5: a trip without a market saves nothing, as in V4/V9', () {
+      final result = AvoAssistantService.summarizeSavings(
+        [
+          _trip(
+            chain: null,
+            items: [_historyItem(price: 1.0, priceOldValue: 3.0)],
+          ),
+        ],
+        DateTime(2026, 1, 1),
+        realRegion: true,
+      );
+      expect(result['month_saved_cents'], isNull);
     });
 
     test('below 0,50 € there is no amount', () {

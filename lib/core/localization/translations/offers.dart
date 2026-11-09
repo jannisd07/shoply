@@ -247,14 +247,6 @@ const Map<String, String> offersEn = {
   'offer_count_badge_a11y_one': '1 item on offer',
   'offer_count_badge_a11y_other': '{n} items on offer',
   'offer_ends_today': 'ends today',
-  'checkout_store_title': 'Which shop was that?',
-  'checkout_store_body':
-      'There are several shops here. Tell us which one, and Avo learns where you buy what — so offers shown to you are from the shops you actually use.',
-  'checkout_store_location_off_body':
-      'Without location access Avo cannot tell which shop you are in. That means no "your bananas are on offer at your REWE" — you can still enter the shop by hand.',
-  'checkout_store_other': 'Another shop…',
-  'checkout_store_hint': 'e.g. REWE, Lidl, Edeka',
-  'checkout_store_skip': 'Skip',
   'flyer_title': 'Your flyer',
   'flyer_subtitle': '{count} things you buy regularly are on offer right now.',
   'flyer_section_savings': 'saves {amount} €',
@@ -511,14 +503,6 @@ const Map<String, String> offersDe = {
   'offer_count_badge_a11y_one': '1 Artikel im Angebot',
   'offer_count_badge_a11y_other': '{n} Artikel im Angebot',
   'offer_ends_today': 'endet heute',
-  'checkout_store_title': 'In welchem Markt war das?',
-  'checkout_store_body':
-      'Hier liegen mehrere Märkte nebeneinander. Sag kurz welcher — dann lernt Avo, wo du was kaufst, und zeigt dir Angebote aus den Märkten, in denen du wirklich einkaufst.',
-  'checkout_store_location_off_body':
-      'Ohne Standortzugriff kann Avo nicht erkennen, in welchem Markt du bist. Damit entfällt „deine Bananen sind bei deinem REWE im Angebot“ — du kannst den Markt aber von Hand eintragen.',
-  'checkout_store_other': 'Anderer Markt…',
-  'checkout_store_hint': 'z. B. REWE, Lidl, Edeka',
-  'checkout_store_skip': 'Überspringen',
   'flyer_title': 'Dein Prospekt',
   'flyer_subtitle':
       '{count} Sachen, die du regelmäßig kaufst, sind gerade im Angebot.',

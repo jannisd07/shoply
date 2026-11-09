@@ -219,6 +219,21 @@ class _SplitEditorScreenState extends ConsumerState<SplitEditorScreen> {
       }
       final rest = shares.last;
       final firsts = shares.where((s) => s != rest).toList();
+      if (firsts.length > 1) {
+        // Two or more rest cents (W11 M2): they go to the first k people.
+        return SplitCheck(
+          text: context.tr(
+            'hist_split_remainder_many',
+            params: {
+              'k': '${firsts.length}',
+              'first': formatEuroCents(firsts.first, _lang),
+              'n': '${shares.length - firsts.length}',
+              'rest': formatEuroCents(rest, _lang),
+            },
+          ),
+          ok: true,
+        );
+      }
       return SplitCheck(
         text: context.tr(
           'hist_split_remainder',

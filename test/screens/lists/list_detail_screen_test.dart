@@ -855,7 +855,8 @@ void main() {
       expect(setup.actions.calls, ['checkout']);
     });
 
-    testWidgets('a saved trip ends with the success moment', (tester) async {
+    // A-V9: Teil B's checkout flow shows the success moment, not the list.
+    testWidgets('a saved trip shows no second success moment', (tester) async {
       final setup = _Setup(
         items: AsyncData([
           _item('e', 'Eier', checked: true, checkedAt: DateTime(2026, 1, 2)),
@@ -867,7 +868,7 @@ void main() {
       await tester.tap(find.text(_en('list_detail_menu_checkout')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text(_en('list_shop_saved_title')), findsOneWidget);
+      expect(find.text(_en('list_shop_saved_title')), findsNothing);
       await tester.pumpAndSettle(const Duration(seconds: 5));
     });
 

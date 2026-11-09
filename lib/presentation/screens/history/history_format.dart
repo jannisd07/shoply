@@ -141,7 +141,6 @@ class MonthSummary {
     required this.items,
     required this.tripsWithAmount,
     required this.spendCents,
-    required this.savingsRaw,
   });
 
   /// Day 1 of the month.
@@ -158,9 +157,6 @@ class MonthSummary {
 
   /// Sum of the typed amounts.
   final int spendCents;
-
-  /// Savings in cents, unrounded (rounded only at the end, §3.3).
-  final double savingsRaw;
 
   bool get hasAmounts => tripsWithAmount > 0;
 
@@ -194,7 +190,6 @@ MonthSummary summarizeMonth(Iterable<ShoppingHistory> trips, DateTime month) {
     items: items,
     tripsWithAmount: withAmount,
     spendCents: spend,
-    savingsRaw: totalSavingsOf(inMonth) * 100,
   );
 }
 
