@@ -32,6 +32,14 @@ Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-
 - Alle Symbole in A-Screens kommen aus `AvoIcons` (neu: Stern, Info, Buch, Glocke, Sortieren, Ersetzen, Anpassen).
 - Entwürfe zeigen einen Fehlerzustand mit „Erneut versuchen“ statt „Keine Entwürfe“.
 
+## 2026-11-09: Verlauf, Kosten teilen und Offene Beträge neu (Teil B, B8b/W11)
+
+- Verlauf `/history` mit Monatsrückblick (Zahl des Monats, sechs Balken zum Wählen, Einkäufe und Artikel, Ersparnis
+  nur als Satz mit „ca.“), Einkäufe nach Monat wie Buchungen, Filter nach Liste, Löschen mit Rückfrage je nach Fall.
+- Einkauf-Detail `/history/:tripId` (Alle wieder auf die Liste, Kosten teilen mit „Bezahlt“, Artikel), Betrag und
+  Kosten teilen als Vollbild statt Sheet, Offene Beträge `/splits` mit „Erledigt“. Home: „Dein November“, „Ausgaben im
+  Vergleich“, „Letzte Einkäufe“ und ein Hinweis zum Teilen. Alter Verlauf, Split-Sheet und Nudge-Cache entfernt.
+
 ## 2026-11-09: Einkauf abschließen neu (Teil B, B8a/W10)
 
 - „Einkauf abschließen“ ist ein Vollbild `/checkout/:listId` statt Alert, Markt-Sheet und Snackbar: Markt
