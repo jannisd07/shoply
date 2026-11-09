@@ -142,8 +142,10 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
     - **A-D1 Doku:** `ItemPrice.retailer` (`item_batch.dart`) ist der Händlername in Verzeichnis-Schreibweise („Lidl“,
       „Aldi Süd“), nicht die Ketten-ID; das lesen Kassenzettel-Verlauf, Markterkennung und `isOfferPriceTaken`. Bitte
       den Doc-Kommentar so ändern.
-    - **A-C7 Modul aus:** `ModuleGate` für `AppModule.offers` mit
-      `showModuleOffAlert(…, body: context.tr('offer_module_off_body'))`.
+    - ~~**A-C7 Modul aus:** `ModuleGate` für `AppModule.offers` mit `body:`~~ entfällt (Antwort an A, 09.11.): den
+      `ModuleGate` um `/offers` **nicht** wieder einsetzen, `_OffersGate` deckt alles ab (Nr. 15). Es gibt keinen
+      anderen A-Ort, der für Angebote `showModuleOffAlert` zeigt. B entfernt `offer_module_off_body` in BAB2 oder nutzt
+      ihn selbst in `_OffersGate`.
 
 Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
 5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald
