@@ -46,7 +46,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A4 Home (D2 „Für dich“) | **gebaut**, ohne „Tipp von Avo“ (kommt mit A5) | 08.11.2026 | `4618daf`, `22a7153`, `41a974d` |
 | A5 Listen | **gebaut** (Liste, Artikel, Einkaufsmodus, Übersicht, Teilen, Listen-Info); Daten-Lücken in `a5-stand.md` | 08.11.2026 | `0e1f753`, `c53e84f`, `5efc97f`, `5e943ba` |
 | A6 Rezepte | **gebaut** (Tab, Suche, Kategorien, Bibliothek, Detail mit Allergie-Hinweis, Zutaten auf die Liste, Kochmodus, Editor); offen in `a6-stand.md` | 08.11.2026 | `b435582`, `f2f0c0c`, `7ce2a24`, `f8d80d9` |
-| A7 Onboarding, Login, Tipps | **in Arbeit**: Schrittrahmen und Schnittstelle fertig, drei Teile (Ablauf, Konto, Tipps) laufen; Auftrag `a7-auftrag.md` | 08.11.2026 | `870da50`, `e352025` |
+| A7 Onboarding, Login, Tipps | **gebaut** (Ablauf mit Wiederaufnahme, Konto mit Apple/Google/E-Mail-Code, Passwort, Router mit gemerkten Links, Tipp-Zeilen statt Tutorial); Server-Entwurf und offen in `a7-stand.md` | 09.11.2026 | `870da50`, `de77f8a`, `f189222`, `git log --grep Onboarding` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
