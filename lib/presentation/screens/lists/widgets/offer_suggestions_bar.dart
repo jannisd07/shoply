@@ -285,10 +285,19 @@ class _PostcodeHintRowState extends ConsumerState<_PostcodeHintRow> {
       unawaited(openRegionFromList(context, from: RegionOrigin.panel));
     }
 
+    // Same shadow as the offer card above: on the white rows of the
+    // suggestions panel a white row without one is invisible.
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(AvoRadii.card),
+        boxShadow: [
+          BoxShadow(
+            color: colors.shadow.withValues(alpha: _kShadowAlpha),
+            offset: _kShadowOffset,
+            blurRadius: _kShadowBlur,
+          ),
+        ],
       ),
       child: Semantics(
         container: true,

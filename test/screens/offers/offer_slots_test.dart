@@ -105,6 +105,32 @@ void main() {
           find.text('Für Angebote in deiner Region: Postleitzahl festlegen'),
           noRegion ? findsNWidgets(2) : findsNothing,
         );
+        if (noRegion) {
+          // The hint row in the suggestions panel carries the card shadow,
+          // so it stays visible on white list rows (A11b walkthrough).
+          final hint = find.descendant(
+            of: find.byType(OfferSuggestionsBar),
+            matching: find.text(
+              'Für Angebote in deiner Region: Postleitzahl festlegen',
+            ),
+          );
+          final boxes = [
+            tester
+                .widgetList<DecoratedBox>(
+                  find.ancestor(of: hint, matching: find.byType(DecoratedBox)),
+                )
+                .first,
+          ];
+          expect(
+            boxes.any(
+              (b) =>
+                  b.decoration is BoxDecoration &&
+                  ((b.decoration as BoxDecoration).boxShadow?.isNotEmpty ??
+                      false),
+            ),
+            isTrue,
+          );
+        }
         expect(find.textContaining('€'), findsNothing);
         expect(asked, 0, reason: 'no request to the offers source');
       });
