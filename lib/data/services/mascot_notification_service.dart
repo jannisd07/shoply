@@ -11,6 +11,9 @@ import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/notification_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 
+/// A time of day of a reminder.
+typedef ReminderClock = ({int hour, int minute});
+
 /// Avo's notification voice.
 ///
 /// Earlier versions of this service sent random time-of-day motivational
@@ -49,15 +52,75 @@ class MascotNotificationService {
   /// Fixed id so re-arming always replaces the previous pending reminder.
   static const int restockReminderId = 700001;
 
-  /// Local hour (9 AM) the reminder fires at.
-  static const int _reminderHour = 9;
+  /// Local time (9:00) the reminder fires at unless the person chose one.
+  static const ReminderClock defaultRestockTime = (hour: 9, minute: 0);
 
   /// Fixed id for the "dinner ideas" reminder (Feature 8: calorie tracking
   /// × recipes × Avo nudges).
   static const int dinnerIdeasReminderId = 700002;
 
-  /// Local hour (6 PM) the dinner-ideas reminder fires at.
-  static const int _dinnerHour = 18;
+  /// Local time (18:00) the dinner-ideas reminder fires at by default.
+  static const ReminderClock defaultDinnerTime = (hour: 18, minute: 0);
+
+  /// The times chosen in Einstellungen › Mitteilungen ("H:MM", Teil A's
+  /// `NotificationTimeSlot`), and the switch "Ideen fürs Abendessen"
+  /// (`NotificationSetting.dinnerIdeas`, default on).
+  static const String restockTimeKey = 'setp_notif_time_restock';
+  static const String dinnerTimeKey = 'setp_notif_time_dinner';
+  static const String dinnerIdeasKey = 'notif_dinner_ideas';
+
+  /// [raw] ("9:00", "18:30") as a time of day, or [fallback] when it is
+  /// missing or no valid time.
+  static ReminderClock parseReminderTime(
+    String? raw,
+    ReminderClock fallback,
+  ) {
+    final parts = raw?.trim().split(':');
+    if (parts == null || parts.length != 2) return fallback;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return fallback;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return fallback;
+    return (hour: hour, minute: minute);
+  }
+
+  /// The restock reminder's moment: the next day at [time].
+  static DateTime restockMoment(DateTime now, ReminderClock time) =>
+      DateTime(now.year, now.month, now.day + 1, time.hour, time.minute);
+
+  /// The dinner-ideas reminder's moment: today at [time].
+  static DateTime dinnerMoment(DateTime now, ReminderClock time) =>
+      DateTime(now.year, now.month, now.day, time.hour, time.minute);
+
+  Future<ReminderClock> _storedTime(String key, ReminderClock fallback) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return parseReminderTime(prefs.getString(key), fallback);
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  /// The chosen time of the restock reminder.
+  @visibleForTesting
+  Future<ReminderClock> restockTime() =>
+      _storedTime(restockTimeKey, defaultRestockTime);
+
+  /// The chosen time of the dinner-ideas reminder.
+  @visibleForTesting
+  Future<ReminderClock> dinnerTime() =>
+      _storedTime(dinnerTimeKey, defaultDinnerTime);
+
+  /// "Ideen fürs Abendessen" is on (its own switch, not the restock one).
+  @visibleForTesting
+  Future<bool> dinnerIdeasEnabled() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(dinnerIdeasKey) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
 
   DateTime? _lastRearm;
   DateTime? _lastDinnerRearm;
@@ -166,8 +229,7 @@ class MascotNotificationService {
       }
 
       final lang = await _getLanguage();
-      final tomorrowMorning = DateTime(
-          now.year, now.month, now.day + 1, _reminderHour);
+      final tomorrowMorning = restockMoment(now, await restockTime());
 
       await NotificationService.instance.scheduleNotification(
         id: restockReminderId,
@@ -185,8 +247,9 @@ class MascotNotificationService {
     }
   }
 
-  /// (Re-)schedule today's "dinner ideas" reminder for [_dinnerHour] local
-  /// time, or cancel it when it no longer applies. Unlike the restock
+  /// (Re-)schedule today's "dinner ideas" reminder for the chosen time
+  /// ([dinnerTime], 18:00 by default), or cancel it when it no longer
+  /// applies. Unlike the restock
   /// reminder this is never pushed to a future day: the remaining-calorie
   /// budget and the food log are specific to *today*, so if it's already
   /// past dinner time (or nothing fits) there's simply nothing to arm until
@@ -218,14 +281,16 @@ class MascotNotificationService {
 
       if (SupabaseService.instance.currentUser == null) return;
 
-      if (!await NotificationPreferencesService.instance
-          .shouldShow(NotificationCategory.avoNudges)) {
+      // Master switch, then "Ideen fürs Abendessen" itself (Einstellungen ›
+      // Mitteilungen and › Kalorien & Gesundheit); the restock switch no
+      // longer turns it off.
+      if (!await NotificationPreferencesService.instance.shouldShow(null) ||
+          !await dinnerIdeasEnabled()) {
         debugPrint('🥑 [AVO] Dinner-ideas reminder disabled by preferences');
         return;
       }
 
-      final dinnerTimeToday =
-          DateTime(now.year, now.month, now.day, _dinnerHour);
+      final dinnerTimeToday = dinnerMoment(now, await dinnerTime());
       if (!now.isBefore(dinnerTimeToday)) {
         debugPrint('🥑 [AVO] Past dinner time — no reminder for today');
         return;
@@ -265,7 +330,6 @@ class MascotNotificationService {
         body: body,
         scheduledFor: dinnerTimeToday,
         payload: jsonEncode({'type': 'avo_dinner_ideas'}),
-        category: NotificationCategory.avoNudges,
       );
       debugPrint('🥑 [AVO] Dinner-ideas reminder armed for $dinnerTimeToday '
           '(${suggestions.map((r) => r.name).join(', ')})');

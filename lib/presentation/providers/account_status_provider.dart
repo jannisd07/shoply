@@ -8,7 +8,6 @@ import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/data/models/expense_split.dart';
 import 'package:shoply/data/services/calorie_write_queue.dart';
-import 'package:shoply/data/services/meal_plan_repository.dart';
 import 'package:shoply/data/services/subscription_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
@@ -30,12 +29,15 @@ int countPendingChanges(SharedPreferences prefs, {String? userId}) {
   var count = _jsonListLength(prefs.getString(legacyCalorieWriteQueueKey));
   if (userId != null) {
     count += _jsonListLength(prefs.getString(calorieWriteQueueKey(userId)));
-    count += _jsonListLength(
-      prefs.getString(MealPlanRepository.outboxKeyFor(userId)),
-    );
+    count += _jsonListLength(prefs.getString(mealPlanOutboxKey(userId)));
   }
   return count;
 }
+
+/// SharedPreferences key of [userId]'s unsent meal plan changes (the
+/// outbox of `MealPlanRepository`).
+@visibleForTesting
+String mealPlanOutboxKey(String userId) => 'meal_plan_outbox_v1_$userId';
 
 int _jsonListLength(String? raw) {
   if (raw == null || raw.isEmpty) return 0;

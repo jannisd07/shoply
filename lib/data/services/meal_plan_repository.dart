@@ -202,10 +202,7 @@ class MealPlanRepository {
   Future<void> _flushChain = Future.value();
 
   String get _cacheKey => 'meal_plan_cache_v1_$userId';
-  String get _outboxKey => outboxKeyFor(userId);
-
-  /// SharedPreferences key of [userId]'s unsent plan changes.
-  static String outboxKeyFor(String userId) => 'meal_plan_outbox_v1_$userId';
+  String get _outboxKey => 'meal_plan_outbox_v1_$userId';
 
   MealPlanSnapshot get snapshot => _snapshot;
 
