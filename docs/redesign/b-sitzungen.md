@@ -57,9 +57,16 @@ bei `signedOut` leeren, Avo-Antwort „Lösch mein Konto“ → `/settings/accou
 `/settings/avo`, `/settings/siri`, `/settings/widgets` (`/settings/plan` gehört zu B7), 2 eigene Suchliste und
 `RowHighlightScope`/`HighlightableRow`, 3 AvoSettingsBridge-Schlüssel (`accent_color` streichen), 4 Mitteilungszeiten aus
 `setp_notif_time_*`, 8 Presence nur mit `sharePresence`.
-Angefangen im Worktree `~/Apps/shoply-neu-wt/b8-offer-slots`, Zweig `feature/b-settings-a8` (nicht auf `main`). Was
-schon steht und was fehlt: Bericht `reports/w7-settings-a8-report.md` im Ledger-Ordner (unten). Die Sitzung prüft den
-Stand (diff gegen `origin/main`), baut den Rest, lässt einmal unabhängig prüfen, merged.
+Gebaut im Worktree `~/Apps/shoply-neu-wt/b8-offer-slots`, Zweig `feature/b-settings-a8` (auf origin gesichert,
+`0620e1f`, nicht auf `main`): Punkte 5, 6 (`513d9c1`), 7 mit neuem Avo-Tool `show_settings_link` (`2a67b51`), 3
+(`40f2e56`), 4 (`1ca7af1`), 1 und 2 als `wip` (`0620e1f`: Seiten Avo, Kalorien & Gesundheit, Siri, Widgets; eigene
+Suchliste mit Zeilen und Hervorhebung). Punkt 8: nur der Schalter, es gibt noch keinen Presence-Kanal.
+**Noch zu tun:** Barrierefreiheits- und Text-Review der neuen Seiten, volle Testsuite (nur gezielte Läufe grün),
+CHANGELOG/OPEN-ISSUES/status-B, unabhängiges Review mit Fix-Runden, Rebase, Merge. Achtung: Der Zweig ändert A's
+`settings_search_index.dart` und dessen Test (Brief verlangte es, `owner.sh` meldet es) → vor dem Merge mit A klären.
+Der neue Avo-Tool und die Setting-Schlüssel brauchen einen Deploy von `ai` (Owner-Ja; Deno-Tests sind geschrieben,
+liefen hier nicht, Deno fehlt: `npx deno test` versuchen). Abo-Felder „verlängert am“/„Familienfreigabe“ bleiben `null`
+bis `verify-subscription` (E18-10). Bericht mit „Stand bei Abbruch“: `reports/w7-settings-a8-report.md`.
 
 ### B7 Wochenplan
 
