@@ -45,10 +45,6 @@ class MascotNotificationService {
   @visibleForTesting
   MascotNotificationService.forTesting();
 
-  /// Same key `LanguageNotifier` persists the app language under
-  /// ('en', 'de' or 'system').
-  static const String _languageKey = 'language';
-
   /// Fixed id so re-arming always replaces the previous pending reminder.
   static const int restockReminderId = 700001;
 
@@ -167,18 +163,8 @@ class MascotNotificationService {
     );
   }
 
-  /// The app language as resolved by `LanguageNotifier`: the saved choice,
-  /// or the device locale for 'system' / unset (falling back to 'en').
-  Future<String> _getLanguage() async {
-    String? saved;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      saved = prefs.getString(_languageKey);
-    } catch (_) {}
-    if (saved == 'en' || saved == 'de') return saved!;
-    final system = PlatformDispatcher.instance.locale.languageCode;
-    return system == 'de' ? 'de' : 'en';
-  }
+  Future<String> _getLanguage() => NotificationService.appLanguage();
+
 
   /// (Re-)schedule the one-shot restock reminder for tomorrow morning, or
   /// cancel it when it no longer applies (signed out, nudges disabled, or

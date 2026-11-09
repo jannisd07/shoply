@@ -3,6 +3,8 @@
 // Neue Schlüssel bekommen das Bereichs-Präfix, siehe docs/redesign/arbeitsteilung.md 3.6.
 
 const Map<String, String> notificationsEn = {
+  'notif_pro_trial_ends':
+      'Your {pro} trial ends the day after tomorrow. After that it is {price} a year.',
   // B8 trips and splits (verlauf-kosten.md V14); `_one` is the singular.
   'notif_trip_done_one': '{name} shopped at {store} (1 item).',
   'notif_trip_done': '{name} shopped at {store} ({n} items).',
@@ -30,6 +32,8 @@ const Map<String, String> notificationsEn = {
 };
 
 const Map<String, String> notificationsDe = {
+  'notif_pro_trial_ends':
+      'Deine {pro}-Testphase endet übermorgen. Danach {price} pro Jahr.',
   // B8 Einkäufe und Aufteilungen (verlauf-kosten.md V14); `_one` ist Einzahl.
   'notif_trip_done_one': '{name} hat bei {store} eingekauft (1 Artikel).',
   'notif_trip_done': '{name} hat bei {store} eingekauft ({n} Artikel).',
