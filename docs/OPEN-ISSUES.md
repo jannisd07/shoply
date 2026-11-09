@@ -27,7 +27,14 @@ Stand: 2026-11-08.
 - **Edge Function `send-push-notification` deployen.** Code ist korrigiert, aber erst nach dem Deploy live:
   `supabase functions deploy send-push-notification` (Autorisierung ergänzt, keine Debug-Logs an den Aufrufer).
 - **Migrationen „Einkauf abschließen“ anwenden (B8, W10), in zwei Schritten.** Beide Dateien sind idempotent.
-  1. `supabase/migrations/20261109000000_b_trip_checkout.sql` sofort: `complete_shopping_trip` (atomar, „schon
+  0. **Erst auf einem Supabase-Branch testen, dann Produktion:** beide Dateien auf einem Branch anwenden und mit zwei
+     Mitgliedern einer Liste einmal durchspielen: abschließen → widerrufen → teilen (`save_trip_split`) → Betrag
+     ändern (`set_trip_amount`) → erste Aufteilung widerrufen (`clear_trip_split`) → Markt ändern und „Kein Markt“
+     (`set_trip_store`). Erst wenn alles klappt, Schritt 1 in Produktion. Spalten von `shopping_items`,
+     `shopping_lists.updated_at` und `users.display_name` wurden am 09.11. gegen die Datenbank geprüft (keine
+     generierten oder Identitäts-Spalten); die App fällt bei einem Laufzeitfehler von `complete_shopping_trip` auf die
+     alten Inserts zurück.
+  1. `supabase/migrations/20261109000000_b_trip_checkout.sql` nach Schritt 0: `complete_shopping_trip` (atomar, „schon
      abgeschlossen“, nur noch abgehakte Artikel), `undo_shopping_trip`, `save_trip_split` (nur Mitglieder),
      `set_trip_amount`, `set_trip_store` (W11, „Markt ändern“ im Einkauf-Detail), `clear_trip_split` (W11, Widerrufen
      einer ersten Aufteilung samt Betrag und Zahler), `open_split_shares`, Spalten `store_chain`, `store_source`, `total_cost_source`,
@@ -39,6 +46,10 @@ Stand: 2026-11-08.
      `clear_trip_split` aus Schritt 1.
   Bis Schritt 1 speichert die App mit den alten Einzel-Inserts (ohne „schon abgeschlossen“). Danach einmal einen
   Einkauf abschließen, teilen und widerrufen.
+- **Offene Einkäufe dauerhaft auf dem Gerät (B8, Folgeaufgabe, A-V22).** Ein offline abgeschlossener Einkauf wartet
+  nur im Speicher der App: beim Wieder-online und bei „Aktualisieren“ wird er neu gesendet, eine späte Ablehnung zeigt
+  einen Toast. Beendet man die App vorher, ist er weg (die Artikel bleiben abgehakt auf der Liste). Dauerhafte
+  Warteschlange wie `TripPushQueue` (SharedPreferences) oder A's `WriteQueue` nachziehen; in `status-B.md` geführt.
 - **Mitteilungen nach dem Einkauf serverseitig (B8).** Die App hält „{name} hat bei {store} eingekauft“ bis zum Ende
   des Widerrufen-Fensters auf dem Gerät zurück (höchstens 2 Minuten, nach App-Ende beim nächsten Start) und schreibt
   sie in der Sprache des Absenders. Für die Sprache des Empfängers und Bündelung (Kap. 19) braucht es eine Edge

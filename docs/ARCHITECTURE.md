@@ -78,7 +78,11 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 (`b_slots.dart`) pusht `/checkout/:listId` (`screens/history/checkout/`), speichert über
 `tripHistoryProvider` (`presentation/state/trip_history_provider.dart`: lokaler Verlauf pro Konto, optimistisch,
 Widerrufen) und `ShoppingHistoryService.completeTrip` (Server-Funktion `complete_shopping_trip`, Rückfall auf
-Einzel-Inserts, solange die Migration fehlt). Der Verlauf (`screens/history/`, W11) liest nur aus diesen
+Einzel-Inserts, solange die Migration fehlt oder die Funktion zur Laufzeit scheitert). Den Erfolgsmoment V3 zeigt nur
+B's Ablauf, Listen und Einkaufsmodus schließen danach nur. Ein nicht gespeicherter Einkauf wird beim Wieder-online und
+bei „Aktualisieren“ neu gesendet (nur im Speicher, nicht über einen Neustart); eine späte Ablehnung zeigt einen Toast.
+Der gelernte Markt einer Liste kommt aus `shopping_history.store_chain` (Rückfall: Händler der Artikel). Ohne
+Migration können zwei gleichzeitige Abschlüsse zwei Einträge ergeben (bekannte Grenze der Einzel-Inserts). Der Verlauf (`screens/history/`, W11) liest nur aus diesen
 lokalen Providern: `/history` (V4, Monatsrückblick), `/history/:tripId` (V5), `/history/:tripId/amount` und
 `/split` (V6, V7, Vollbild), `/splits` (V8); Ableitungen und der Home-Schnappschuss in
 `presentation/state/history_view_provider.dart`, die Home-Abschnitte in `widgets/home_sections/home_history.dart`.
