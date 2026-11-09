@@ -17,8 +17,8 @@ import 'package:shoply/data/services/meal_photo_storage_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
-import 'package:shoply/presentation/screens/avo/widgets/avo_interim_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_setting_sections.dart';
 import 'package:shoply/routes/route_paths.dart';
 
 import '../../screens/offers/offer_test_harness.dart' show FakeRegionLookup;
@@ -145,51 +145,56 @@ void main() {
       expect(payloads, isEmpty);
     });
 
-    testWidgets('"Konto löschen" opens /settings/account/delete', (
-      tester,
-    ) async {
-      final router = GoRouter(
-        routes: [
-          GoRoute(
-            path: '/',
-            builder: (context, state) => Scaffold(
-              body: Builder(
-                builder: (context) => AvoResultCard(
-                  sections: [
-                    avoSettingsLinkSection(
-                      context,
-                      AvoSettingsLink.accountDelete,
-                    ),
-                  ],
+    for (final (page, route, title, note) in [
+      (
+        AvoSettingsLink.accountDelete,
+        RoutePaths.settingsAccountDelete,
+        'Konto löschen',
+        'Das machst du selbst unter Konto.',
+      ),
+      (
+        AvoSettingsLink.account,
+        RoutePaths.settingsAccount,
+        'Konto',
+        'Abmelden, E-Mail und Passwort änderst du selbst unter Konto.',
+      ),
+    ]) {
+      testWidgets('"$title" opens $route', (tester) async {
+        final router = GoRouter(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (context, state) => Scaffold(
+                body: Builder(
+                  builder: (context) => AvoResultCard(
+                    sections: [avoSettingsLinkSection(context, page)],
+                  ),
                 ),
               ),
             ),
+            GoRoute(
+              path: route,
+              builder: (context, state) => const Text('target page'),
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp.router(
+              routerConfig: router,
+              locale: const Locale('de'),
+              supportedLocales: const [Locale('de'), Locale('en')],
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            ),
           ),
-          GoRoute(
-            path: RoutePaths.settingsAccountDelete,
-            builder: (context, state) => const Text('delete page'),
-          ),
-        ],
-      );
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp.router(
-            routerConfig: router,
-            locale: const Locale('de'),
-            supportedLocales: const [Locale('de'), Locale('en')],
-            localizationsDelegates: GlobalMaterialLocalizations.delegates,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Konto löschen'), findsOneWidget);
-      expect(
-        find.text('Das machst du am besten selbst unter Konto.'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Öffnen'));
-      await tester.pumpAndSettle();
-      expect(find.text('delete page'), findsOneWidget);
-    });
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(title), findsOneWidget);
+        expect(find.text(note), findsOneWidget);
+        await tester.tap(find.text('Öffnen'));
+        await tester.pumpAndSettle();
+        expect(find.text('target page'), findsOneWidget);
+      });
+    }
   });
 }

@@ -492,6 +492,54 @@ class AvoSettingsBridge {
   /// The card's name of [key] (`avo_setkey_<key>`).
   static String labelKeyOf(String key) => 'avo_setkey_$key';
 
+  /// Whether [key] is one of the A8 keys whose values [currentValue] reads.
+  static bool isA8Key(String key) =>
+      const {
+        'recipes_auto_adapt',
+        'show_item_images',
+        'suggestions_enabled',
+        'keep_screen_on',
+        'share_presence',
+        'start_list',
+      }.contains(key) ||
+      notificationKeys.containsKey(key) ||
+      notificationTimeKeys.containsKey(key) ||
+      _moduleOfKey(key) != null;
+
+  /// The value of an A8 [key] right now, in the words of [update]'s
+  /// `oldValue`/`newValue` (`on`/`off`, `H:MM`, a list name or
+  /// `last used list`); null for any other key. "Widerrufen" compares it
+  /// with what Avo set, so a value the person changed since stays.
+  String? currentValue(String key) {
+    final prefs = ref.read(listPreferencesProvider);
+    switch (key) {
+      case 'recipes_auto_adapt':
+        return _onOff(ref.read(recipeAutoAdaptProvider));
+      case 'show_item_images':
+        return _onOff(prefs.showItemImages);
+      case 'suggestions_enabled':
+        return _onOff(prefs.suggestions);
+      case 'keep_screen_on':
+        return _onOff(prefs.keepScreenOn);
+      case 'share_presence':
+        return _onOff(prefs.sharePresence);
+      case 'start_list':
+        final pinnedId = ref.read(pinnedListProvider).listId;
+        if (pinnedId == null) return 'last used list';
+        final lists = ref.read(allListsSourceProvider).valueOrNull ?? const [];
+        return lists.where((l) => l.id == pinnedId).firstOrNull?.name ??
+            'last used list';
+    }
+    final notifications = ref.read(notificationSettingsProvider);
+    final setting = notificationKeys[key];
+    if (setting != null) return _onOff(notifications.isOn(setting));
+    final slot = notificationTimeKeys[key];
+    if (slot != null) return notifications.timeOf(slot).storage;
+    final module = _moduleOfKey(key);
+    if (module != null) return _onOff(ref.read(moduleEnabledProvider(module)));
+    return null;
+  }
+
   SettingChangeResult _invalidBool(String key, String displayName, Object? v) =>
       SettingChangeResult(
         success: false,
@@ -573,7 +621,13 @@ class AvoSettingsBridge {
       );
     }
     final old = pinnedId == null ? 'last used list' : nameOf(pinnedId);
-    await ref.read(pinnedListProvider.notifier).pin(match?.id);
+    final pinned = ref.read(pinnedListProvider.notifier);
+    await pinned.pin(match?.id);
+    // A pin set while the stored one was still loading is overwritten by
+    // that load (PinnedListNotifier._load); it has finished now, so pin again.
+    if (ref.read(pinnedListProvider).listId != match?.id) {
+      await pinned.pin(match?.id);
+    }
     return SettingChangeResult(
       success: true,
       key: key,

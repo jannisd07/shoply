@@ -29,6 +29,11 @@ Stand: 2026-11-08.
 
 ## 2. Sicherheit und Abos
 
+- **Edge Function `ai` neu deployen (Teil B, BA8):** `supabase functions deploy ai`. Bringt Avos neues Werkzeug
+  `show_settings_link` (bei „Lösch mein Konto“ zeigt Avo nur eine Zeile zu Konto bzw. Konto löschen und handelt nie
+  selbst), die neuen `update_setting`-Schlüssel (Listen-Schalter, Mitteilungen und Uhrzeiten, Liste beim Start,
+  „Anderen zeigen, dass ich einkaufe“) und streicht `accent_color`. Bis dahin zeigt die App die Zeile nicht.
+  Danach einmal `npx deno test supabase/functions/ai/tasks/avo_chat_test.ts` (lokal fehlt Deno).
 - **Anmeldung mit Code (A7 Konto) im Supabase-Dashboard prüfen:** Mailvorlagen „Confirm signup“ und „Magic Link“
   enthalten `{{ .Token }}` (6 Ziffern); Mindestabstand zwischen zwei Codes 60 s; Gültigkeit 3600 s; Passwortregeln
   8 Zeichen, ein Großbuchstabe, eine Ziffer; Kontoverknüpfung bei bestätigter E-Mail (F-17-05). Die App nutzt dafür

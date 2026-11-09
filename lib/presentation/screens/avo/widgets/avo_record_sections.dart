@@ -14,6 +14,10 @@ import 'package:shoply/presentation/screens/avo/avo_l10n.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_card_scope.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_glyphs.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/notification_settings.dart'
+    show ReminderTime;
+import 'package:shoply/presentation/screens/profile/settings/notifications_settings_screen.dart'
+    show formatReminderTime;
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/routes/app_destinations.dart';
 import 'package:shoply/routes/route_paths.dart';
@@ -324,10 +328,13 @@ String _value(BuildContext context, String key, String? raw) {
       };
     case 'height_cm':
       return '$raw cm';
+    case 'notif_time_restock' || 'notif_time_dinner':
+      final time = ReminderTime.parse(raw);
+      return time == null ? raw : formatReminderTime(context, time);
     default:
       return switch (raw) {
-        'on' => context.tr('avo_value_on'),
-        'off' => context.tr('avo_value_off'),
+        'on' => context.tr('avo_val_on'),
+        'off' => context.tr('avo_val_off'),
         'last used list' => context.tr('avo_value_last_list'),
         _ => raw,
       };

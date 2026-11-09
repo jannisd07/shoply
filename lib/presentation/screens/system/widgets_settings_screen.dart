@@ -32,7 +32,7 @@ class WidgetsSettingsScreen extends StatelessWidget {
       highlightRowId: highlightRowId,
       children: [
         InsetSection(
-          header: context.tr('sys_widgets_section'),
+          header: context.tr('sys_widgets_section', params: app),
           footer: context.tr('sys_widgets_how', params: app),
           children: [
             for (final (name, description, sizes) in kHomeWidgets)

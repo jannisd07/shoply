@@ -29,7 +29,8 @@ extension AvoSettingTools on AvoAssistantService {
       return gate.result;
     }
 
-    final previous = await _settingValue(ref, key);
+    final a8 = AvoSettingsBridge.isA8Key(key);
+    final previous = a8 ? null : await _settingValue(ref, key);
     final bridge = AvoSettingsBridge(ref);
     final result = await bridge.update(key, value);
     if (!result.success) {
@@ -50,7 +51,7 @@ extension AvoSettingTools on AvoAssistantService {
             value: after,
             previous: before,
             undo: before != null && before != after
-                ? () => _undoBridgeSetting(ref, key, before)
+                ? () => _undoBridgeSetting(ref, key, before, after)
                 : null,
           ),
         ),
@@ -117,14 +118,20 @@ extension AvoSettingTools on AvoAssistantService {
     };
   }
 
-  /// "Widerrufen" on a card of an A8 setting: sets [before] again.
+  /// "Widerrufen" on a card of an A8 setting: sets [before] again, but only
+  /// while the setting still has the value Avo gave it ([after]).
   Future<AvoUndoResult> _undoBridgeSetting(
     WidgetRef ref,
     String key,
     String before,
+    String after,
   ) async {
     try {
-      final result = await AvoSettingsBridge(ref).update(key, before);
+      final bridge = AvoSettingsBridge(ref);
+      if (bridge.currentValue(key) != after) {
+        return AvoUndoResult.changedSince;
+      }
+      final result = await bridge.update(key, before);
       return result.success ? AvoUndoResult.undone : AvoUndoResult.failed;
     } catch (e) {
       debugPrint('❌ [AVO] Setting not set back: ${e.runtimeType}');

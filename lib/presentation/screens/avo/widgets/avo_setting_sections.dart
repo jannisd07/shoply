@@ -119,27 +119,27 @@ AvoResultSection avoSettingsLinkSection(
   BuildContext context,
   AvoSettingsLink page,
 ) {
-  final (titleKey, actionKey, route) = switch (page) {
+  final (titleKey, noteKey, route) = switch (page) {
     AvoSettingsLink.account => (
       'avo_link_account',
-      'avo_link_open_account',
+      'avo_link_account_note',
       RoutePaths.settingsAccount,
     ),
     AvoSettingsLink.accountDelete => (
       'avo_link_account_delete',
-      'avo_link_open',
+      'avo_link_self_note',
       RoutePaths.settingsAccountDelete,
     ),
   };
   void open() => openAppDestination(context, route);
   return AvoResultSection(
     title: context.tr(titleKey),
-    subtitle: context.tr('avo_link_self_note'),
+    subtitle: context.tr(noteKey),
     leading: const AvoSymbolTile(
       neutral: true,
       icon: Icon(CupertinoIcons.person_crop_circle),
     ),
     onOpen: open,
-    actions: [AvoCardAction(label: context.tr(actionKey), onPressed: open)],
+    actions: [AvoCardAction(label: context.tr('avo_link_open'), onPressed: open)],
   );
 }

@@ -19,7 +19,6 @@ final Uri kShortcutsAppUrl = Uri.parse('shortcuts://');
 /// one example each: the sentence key and what it does.
 const List<(String, String)> kSiriSentences = [
   ('sys_siri_add', 'sys_siri_add_action'),
-  ('sys_siri_create', 'sys_siri_create_action'),
   ('sys_siri_lists', 'sys_siri_lists_action'),
   ('sys_siri_search', 'sys_siri_search_action'),
   ('sys_siri_saved', 'sys_siri_saved_action'),

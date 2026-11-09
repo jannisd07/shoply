@@ -179,4 +179,28 @@ void main() {
     expect(r.success, isTrue);
     expect(container.read(moduleEnabledProvider(AppModule.offers)), isFalse);
   });
+
+  testWidgets('currentValue reads what update wrote, so undo can tell a '
+      'value the person changed since', (tester) async {
+    final (bridge, _) = await _bridge(tester);
+    for (final (key, value) in [
+      ('show_item_images', 'off'),
+      ('keep_screen_on', 'on'),
+      ('notif_dinner_ideas', 'off'),
+      ('notif_time_dinner', '19:15'),
+      ('start_list', 'Grillabend'),
+      ('module_calories', 'off'),
+    ]) {
+      final result = await bridge.update(key, value);
+      expect(result.success, isTrue, reason: key);
+      expect(AvoSettingsBridge.isA8Key(key), isTrue, reason: key);
+      expect(bridge.currentValue(key), result.newValue, reason: key);
+    }
+    // "Widerrufen" of the start list goes back to the last used list.
+    final back = await bridge.update('start_list', 'last used list');
+    expect(back.success, isTrue);
+    expect(bridge.currentValue('start_list'), 'last used list');
+    expect(AvoSettingsBridge.isA8Key('theme_mode'), isFalse);
+    expect(bridge.currentValue('theme_mode'), isNull);
+  });
 }

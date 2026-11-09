@@ -116,9 +116,21 @@ class AvoSettingsScreen extends ConsumerWidget {
                       title: context.tr('avo_set_delete_conversation'),
                       onTap: () => unawaited(_delete(context, ref)),
                     )
-                  : ValueRow(
-                      title: context.tr('avo_set_delete_conversation'),
+                  // Disabled "Gespräch löschen" (§10.1): VoiceOver says it is
+                  // dimmed. TODO(B): A's disabled DestructiveRow once it
+                  // exists (status-B, request 16), for the dimmed title.
+                  : Semantics(
+                      container: true,
+                      button: true,
+                      enabled: false,
+                      label: context.tr('avo_set_delete_conversation'),
                       value: context.tr('avo_set_no_conversation'),
+                      child: ExcludeSemantics(
+                        child: ValueRow(
+                          title: context.tr('avo_set_delete_conversation'),
+                          value: context.tr('avo_set_no_conversation'),
+                        ),
+                      ),
                     ),
             ),
           ],

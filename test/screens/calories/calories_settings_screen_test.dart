@@ -57,7 +57,7 @@ void main() {
     expect(find.text('2,000 kcal'), findsOneWidget);
     expect(find.text('Dinner ideas'), findsOneWidget);
     expect(
-      find.text("Daily at 6:00 PM if there's budget left"),
+      find.text("Daily at 6:00 PM if you have calories left"),
       findsOneWidget,
     );
     expect(tester.widget<ToggleRow>(find.byType(ToggleRow)).value, isTrue);
@@ -100,7 +100,7 @@ void main() {
         .setEnabled(NotificationSetting.dinnerIdeas, true);
     await settle(tester);
     expect(
-      find.text("Daily at 7:30 PM if there's budget left"),
+      find.text("Daily at 7:30 PM if you have calories left"),
       findsOneWidget,
     );
   });
@@ -157,7 +157,7 @@ void main() {
       ),
     );
     expect(find.text('Notifications from Avo are off.'), findsOneWidget);
-    expect(find.text('Open'), findsOneWidget);
+    expect(find.text('Notifications'), findsOneWidget);
     expect(tester.widget<ToggleRow>(find.byType(ToggleRow)).enabled, isFalse);
   });
 

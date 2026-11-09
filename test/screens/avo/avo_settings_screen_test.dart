@@ -98,7 +98,7 @@ void main() {
     expect(find.text('Delete conversation'), findsOneWidget);
     expect(find.text('No conversation saved'), findsOneWidget);
     expect(find.text('Kept'), findsOneWidget);
-    expect(find.text('24 hours, only on this iPhone'), findsOneWidget);
+    expect(find.text('Up to 24 hours, only on this iPhone'), findsOneWidget);
     expect(find.text('Avo uses Claude by Anthropic.'), findsOneWidget);
     expect(find.text('Privacy'), findsOneWidget);
   });

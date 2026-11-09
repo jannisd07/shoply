@@ -2,6 +2,22 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Einstellungen von Teil B und Schnittstellen für A8 (Teil B, BA8)
+
+- Neue Einstellungsseiten im Profil-Tab: Avo (`/settings/avo`: Einwilligungen, Gespeichertes, Gespräch löschen,
+  Hinweis zu Claude), Kalorien & Gesundheit (`/settings/health`: Ziele, Ideen fürs Abendessen mit Uhrzeit, Erlaubnis
+  erst beim Einschalten), Siri (`/settings/siri`) und Widgets (`/settings/widgets`) als Info-Seiten bis B9.
+- Eigene Suchliste von Teil B (`bSettingsSearchEntries`) mit Seiten und Zeilen, Modul- und Kill-Switch-Regeln; jede
+  B-Seite hebt die gesuchte Zeile hervor (`?row=`), auch „Preise & Angebote“.
+- `b_slots`: `pendingChangesCountProvider` (zählt jetzt die richtigen Warteschlangen pro Konto),
+  `openSplitBalancesCountProvider`, `proSubscriptionDetailsProvider`, `subscriptionRenewsOnProvider` und
+  `subscriptionFamilySharedProvider` (ehrlich `null` bis zur Belegprüfung), `sharePresenceProvider`;
+  `SupabaseService.requestEmailChange`/`verifyEmailChange`.
+- Abmelden leert B's Zwischenspeicher (Standort, Angebotssuchen, Regalpreise, Märkte in der Nähe, Foto-Links).
+- Avo: `update_setting` kennt die A8-Schalter und -Uhrzeiten mit Widerrufen, `accent_color` ist weg; „Lösch mein
+  Konto“ führt zu einer Zeile „Konto löschen“ statt zu einer Aktion (braucht den Deploy von `ai`).
+- Avos Erinnerungen kommen zu den gewählten Uhrzeiten; „Ideen fürs Abendessen“ hat einen eigenen Schalter.
+
 ## 2026-11-09: Avo-Antwortkarten für alle Werkzeuge und Foto an Avo (Teil B, B5 W1b)
 
 - Karten nach `docs/redesign/b-screens/avo.md` §5.2–§5.7 für jedes Werkzeug, das der Server heute anbietet:

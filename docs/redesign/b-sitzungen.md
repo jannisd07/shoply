@@ -1,6 +1,6 @@
 # Teil B: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026. Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (nach BA8). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (P0–P2 von B lief in einer Sitzung mit
 weit über einer Million Tokens). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -35,8 +35,9 @@ für die nächste Sitzung geben.
 | B2 Angebote: Slots S1–S8 und Screens S9–S16 | erledigt (`d5aff5a`, `e0b7a1b`) | `b-screens/angebote.md` |
 | B5 Avo: Tab, Antwortkarten aller Werkzeuge, Foto an Avo | erledigt (`a3a25e2`, `e3a1023`) | `b-screens/avo.md` |
 | B6 Kalorien: Tagebuch, Essen eintragen, Foto, Barcode, Menge, Manuell, Ziele | erledigt (`639e04d`) | `b-screens/kalorien.md` |
-| **BA8 Wünsche von A aus A8** (Einstellungsseiten, Bridge-Schlüssel, Schnittstellen) | **Als Nächstes** (angefangen, Zweig `feature/b-settings-a8`) | unten, `a8-stand.md` „Von Teil B“ |
-| B7 Wochenplan | angefangen (Zweig `feature/b7-plan`) | `b-screens/wochenplan.md` |
+| BA8 Wünsche von A aus A8 (Einstellungsseiten, Bridge-Schlüssel, Schnittstellen) | erledigt (Commit mit dieser Zeile) | `status-B.md` „Erledigte Anfragen von Teil A“ |
+| **BAB1 Auf A's AB1-Komponenten umstellen** | **Als Nächstes** | unten, `ab1-stand.md` |
+| B7 Wochenplan | angefangen (Zweig `feature/b7-plan`), wartet auf A-P1–A-P4, A-K10 (AB2 oder später) | unten, `b-screens/wochenplan.md` |
 | B8 Verlauf, Einkauf abschließen, Kosten teilen, Home-Abschnitte | offen | `b-screens/verlauf-kosten.md` |
 | B5b Avo: Sprachmodus, „So arbeitet Avo“, Avo-Einstellungen, Foto über `shoply/camera` | offen | `b-screens/avo.md` §8–§10 |
 | B6b Kalorien: Woche, Gewicht, Workouts, Challenges, Ideen, Apple Health, Fotos löschen | offen | `b-screens/kalorien.md` S11, S15–S24 |
@@ -46,27 +47,29 @@ für die nächste Sitzung geben.
 | B10 Qualität, S6 Gegenprüfung von A, Simulator-Durchgang mit Screenshots | offen | Plan P3 B10 |
 | BR Umbenennung „Shoply“ → „Avo“ | ganz am Ende, wenn A und B ruhen | `status-B.md` „Entschieden am 08.11.2026“ |
 
-Reihenfolge: BA8, B7, B8, B5b, B6b, B9, B4, B3b, B10, BR. A's Wünsche an B (status-A, `aN-stand.md` „Von Teil B“)
+Reihenfolge: BAB1, B7 (sobald A-P1–A-P4 da sind, sonst B8 vorziehen), B8, B5b, B6b, B9, B4, B3b, B10, BR. A's Wünsche an B (status-A, `aN-stand.md` „Von Teil B“)
 dürfen vorgezogen werden, wenn A darauf wartet.
 
-### BA8 Wünsche von A aus A8 (Als Nächstes)
+### Reste aus BA8
 
-Auftrag mit allen Punkten: `a8-stand.md` „Von Teil B“. Reihenfolge: Schnittstellen zuerst (5 `pendingChangesCountProvider`,
-`openSplitBalancesCountProvider`, Abo-Status; 6 `SupabaseService.requestEmailChange`/`verifyEmailChange`; 7 Zwischenspeicher
-bei `signedOut` leeren, Avo-Antwort „Lösch mein Konto“ → `/settings/account/delete`), dann 1 Routen `/settings/health`,
-`/settings/avo`, `/settings/siri`, `/settings/widgets` (`/settings/plan` gehört zu B7), 2 eigene Suchliste und
-`RowHighlightScope`/`HighlightableRow`, 3 AvoSettingsBridge-Schlüssel (`accent_color` streichen), 4 Mitteilungszeiten aus
-`setp_notif_time_*`, 8 Presence nur mit `sharePresence`.
-Gebaut im Worktree `~/Apps/shoply-neu-wt/b8-offer-slots`, Zweig `feature/b-settings-a8` (auf origin gesichert,
-`0620e1f`, nicht auf `main`): Punkte 5, 6 (`513d9c1`), 7 mit neuem Avo-Tool `show_settings_link` (`2a67b51`), 3
-(`40f2e56`), 4 (`1ca7af1`), 1 und 2 als `wip` (`0620e1f`: Seiten Avo, Kalorien & Gesundheit, Siri, Widgets; eigene
-Suchliste mit Zeilen und Hervorhebung). Punkt 8: nur der Schalter, es gibt noch keinen Presence-Kanal.
-**Noch zu tun:** Barrierefreiheits- und Text-Review der neuen Seiten, volle Testsuite (nur gezielte Läufe grün),
-CHANGELOG/OPEN-ISSUES/status-B, unabhängiges Review mit Fix-Runden, Rebase, Merge. Achtung: Der Zweig ändert A's
-`settings_search_index.dart` und dessen Test (Brief verlangte es, `owner.sh` meldet es) → vor dem Merge mit A klären.
-Der neue Avo-Tool und die Setting-Schlüssel brauchen einen Deploy von `ai` (Owner-Ja; Deno-Tests sind geschrieben,
-liefen hier nicht, Deno fehlt: `npx deno test` versuchen). Abo-Felder „verlängert am“/„Familienfreigabe“ bleiben `null`
-bis `verify-subscription` (E18-10). Bericht mit „Stand bei Abbruch“: `reports/w7-settings-a8-report.md`.
+Auf `main`. Offen: Deploy von `ai` (Owner, OPEN-ISSUES 2.), Deno-Tests danach; Anfragen an A in `status-B.md` Nr. 16;
+Owner-Frage zu „Bis zu 24 Stunden“ und „Kalorien übrig“. Bekannt, nicht behoben (klein): laufende Anfragen können
+nach dem Abmelden ihr Ergebnis in die gerade geleerten Zwischenspeicher schreiben (Generationszähler pro Dienst);
+„Widerrufen“ der Startliste sucht die Liste per Name statt id. Für B9: Siri-Sätze auf dem Gerät prüfen (Parameter
+sind `AppEntity`s mit festen deutschen Vorschlägen, freie Listennamen gehen nicht). Review:
+`.superpowers/sdd/2026-11-07-teil-b/reports/w7-settings-a8-review.md`.
+
+### BAB1 Auf A's AB1-Komponenten umstellen (Als Nächstes)
+
+A hat AB1 auf `main` (`f259477`, `97ee6c9`), API mit Signaturen in `ab1-stand.md`. Umstellen: `StoreFilterChip` →
+`AppFilterChip(leading:, secondaryLabel:)`, `PostcodeFieldRow` → `TextFieldRow`, die sortierbaren Zeilen in Angebote S13
+→ `SelectCircle`/`ReorderableInsetSection`, Zeichenzähler und „Antwort anhalten“ im Avo-Composer →
+`AvoComposerField(onStop:, responding:, enabled:, maxLength:, semanticLabel:, photoMenuItems:)`, Angebot in der
+Artikelzeile → `ItemRow(trailingSemanticsLabel:, trailingActions:, contextMenuItems:)`, Einkaufsmodus-Erkennung →
+`shoppingModeSessionProvider` statt `ShoppingModeHeader` als Vorfahre, `showModuleOffAlert(body:)`, `AvoToast.show(
+targetLabel:, onTarget:)`, neue `AvoIcons` statt eigener Glyphen, Preise über `ItemRepository.setItemPrice`/
+`clearItemPrice`/`undoPriceChange`. Danach B's eigene Ersatzbausteine löschen und in `status-B.md` die Punkte 13–15
+abhaken. Vor dem Bau `ab1-stand.md` ganz lesen.
 
 ### B7 Wochenplan
 

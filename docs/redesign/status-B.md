@@ -8,6 +8,12 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 aktualisiert am Ende diese Datei und [`b-sitzungen.md`](b-sitzungen.md), pusht, erinnert den Owner an eine neue Sitzung
 und gibt ihm den Start-Prompt für die nächste. Pakete, Stand und „Als Nächstes“ stehen in `b-sitzungen.md`.
 
+2026-11-09 (BA8): **A8-Wünsche sind auf `main`** (Commit mit dieser Zeile): Einstellungsseiten Avo, Kalorien &
+Gesundheit, Siri, Widgets, eigene Suchliste mit Zeilen und Hervorhebung, `b_slots`-Schnittstellen für Konto und Abo,
+E-Mail ändern, Abmelden leert B's Zwischenspeicher, Avo-Werkzeug `show_settings_link`, neue `update_setting`-Schlüssel
+mit Widerrufen, Erinnerungen zu den gewählten Uhrzeiten. Braucht den Deploy von `ai` (OPEN-ISSUES 2.). Als Nächstes:
+BAB1 (auf A's AB1-Komponenten umstellen), dann B7 Wochenplan.
+
 2026-11-09: Auf `main` sind B2 Angebote komplett (Slots S1–S8 `d5aff5a`, Screens S9–S16 `e0b7a1b`), B5 Avo-Tab
 (`a3a25e2`) und Antwortkarten aller Werkzeuge mit „Foto an Avo“ (`e3a1023`), B6 Kalorien Tagebuch, Essen eintragen,
 Foto, Barcode, Menge, Manuell, Ziele (`639e04d`), dazu Apple-Anmeldung mit Nonce (`52da1d1`), Anmeldung per Code
@@ -30,7 +36,7 @@ Widgets/Siri, Evals, Prüfmatrix.
 | S2 Fundament (A) | S2a erreicht (laut status-A) | 08.11.2026 | `f16e071` |
 | S3 Claude live (B) | erreicht: Secret, 6 Migrationen, Deploy `ai` + `extract-shopping-list` | 08.11.2026 | `0721f38` |
 | S4 Angebote abgesichert (B) | erreicht: Logik (`26677f3`), Slots mit Inhalt (`d5aff5a`), alle Angebots-Screens (`e0b7a1b`) | 09.11.2026 | `e0b7a1b` |
-| S5 Bereiche fertig (B) | in Arbeit: Angebote, Avo-Tab und -Karten, Kalorien-Kern fertig; offen siehe `b-sitzungen.md` | | |
+| S5 Bereiche fertig (B) | in Arbeit: Angebote, Avo-Tab und -Karten, Kalorien-Kern, B-Einstellungen (BA8) fertig; offen siehe `b-sitzungen.md` | | |
 | S6 Gegenprüfung (B prüft A) | offen | | |
 
 ## Anfragen an Teil A
@@ -102,6 +108,23 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
       „Region“ (S11, `/settings/offers/region`, Zeile „Region“ in „Preise & Angebote“); das Feld dort speichert ohne
       die Prüfung von S11 (`isKnownZip`, „Region entfernen“, Ortszeile).
 
+16. **Nach BA8 (B-Einstellungen):**
+    - `DestructiveRow` mit `onTap: null` und `subtitle` (gedimmt, `Semantics(enabled: false)`) für „Gespräch löschen“
+      ohne Gespräch (Avo §10.1). Bis dahin liest VoiceOver „gedimmt“, der Titel sieht aber aktiv aus.
+    - `StatusRow`: die Aktion bricht nicht um und läuft bei 320 pt ×1,35 über; B nutzt kurze Aktionen.
+    - Eine B-Routendatei `system_routes.dart` in `profile_routes.dart` einhängen; bis dahin liegen `/settings/siri` und
+      `/settings/widgets` in `avoSettingsRoutes` (nicht hinter dem Avo-Modul).
+    - Suche (`settings_search_index.dart` `_visible`): Modul der Zeile **und** der Seite prüfen. Heute findet die Suche
+      bei Avo aus und Kalorien an die Avo-Zeile „Kalorien, Gewicht und Ziele“, der Tipp zeigt nur „Avo ist aus“.
+    - `PinnedListNotifier._load` überschreibt einen Pin, der vor dem Laden gesetzt wurde (Rennen). B pinnt in
+      `AvoSettingsBridge` nach dem Laden erneut; besser wäre, dass `_load` einen schon gesetzten Pin stehen lässt.
+    - `SettingsExternalActions.openUrl` gibt nichts zurück; fehlt die Kurzbefehle-App, passiert beim Tipp nichts.
+      Bitte `Future<bool>`, dann zeigt B einen Hinweis.
+    - A-Aufrufer können umstellen: `unsentChangesProvider` → `pendingChangesCountProvider` (zählt die richtigen
+      Schlüssel pro Konto), eigene E-Mail-Änderung → `SupabaseService.requestEmailChange`/`verifyEmailChange`,
+      `DeletionSummary.openBalances` → `openSplitBalancesCountProvider`, Pro-Zeile → `proSubscriptionDetailsProvider`,
+      Präsenz → `sharePresenceProvider`, Abendessen-Kategorie setzt B's Sender schon über `notif_dinner_ideas` durch.
+
 Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
 5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald
 `categorizeLocal` gepusht ist). Danke auch für `addItems`/`undoAddItems` und `parseItemInput`: Der Wochenplan und Avo
@@ -109,6 +132,16 @@ nutzen beide direkt.
 
 ## Erledigte Anfragen von Teil A
 
+- **A8 „Von Teil B“** (Commit mit dieser Zeile): Routen `/settings/health`, `/settings/avo`, `/settings/siri`,
+  `/settings/widgets` (`/settings/plan` kommt mit B7); eigene Suchliste `bSettingsSearchEntries` mit Seiten und Zeilen,
+  `RowHighlightScope` in allen B-Einstellungsrouten (A's OK für die Änderung an `settings_search_index.dart` und
+  dessen Test kam per Nachricht); `AvoSettingsBridge`-Schlüssel ohne `accent_color`; Uhrzeiten aus
+  `setp_notif_time_*`; `pendingChangesCountProvider`, `openSplitBalancesCountProvider`,
+  `subscriptionRenewsOnProvider`/`subscriptionFamilySharedProvider` (ehrlich `null` bis `verify-subscription`),
+  `SupabaseService.requestEmailChange`/`verifyEmailChange`, Zwischenspeicher bei `signedOut` leeren, Avo-Zeile
+  „Konto löschen“ → `/settings/account/delete`. Präsenz: nur die Sperre `sharePresenceProvider`, einen Präsenz-Kanal
+  gibt es noch nicht. Abschnitt Stimme auf der Avo-Seite kommt mit B5b, Apple Health und Wasser auf der
+  Gesundheitsseite mit B6b.
 - **A6 (1) Allergene** (Commit mit dieser Zeile): `allergen_matcher.dart` kennt Feta, Halloumi, Gouda, Emmentaler,
   Cheddar, Camembert, Brie, Pecorino, Gorgonzola, Burrata, Ghee, Skyr, Paneer, Frischkäse, Buttermilch, Crème fraîche
   Crème double, Edamer, Labneh, Raclette und Manchego unter Milch **und** Laktose („Brief“ und „Edamame“ sind
@@ -174,6 +207,9 @@ Entschieden am 08.11.2026:
   „shoply“ werden migriert, nicht einfach umbenannt.
 
 Offen:
+- „24 Stunden, nur auf diesem iPhone“ (Avo §10) heißt jetzt „Bis zu 24 Stunden …“, weil das Gespräch nur im
+  Arbeitsspeicher liegt; „wenn noch Budget übrig ist“ (Kalorien S23) heißt „wenn noch Kalorien übrig sind“. Bitte
+  bestätigen.
 - Avo-Tab (Empfehlungen umgesetzt, bitte bestätigen): Karte vor Text (K2); „Neues Gespräch“ als Glas-Knopf (K6/K7);
   Pro-Zeile beim Tageslimit höchstens 1× pro Woche, nur Free; fester Vorschlag „Setz Backpapier dazu“ im
   Einkaufsmodus (Spec-Wortlaut) – gewollt?

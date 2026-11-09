@@ -251,6 +251,51 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets('A8 settings name themselves, on/off and times read like '
+        'the settings pages, unknown keys fall back', (tester) async {
+      await _pump(tester, [
+        AvoWidgetPayload.record(
+          const AvoSettingRecord(
+            tool: 'update_setting',
+            key: 'show_item_images',
+            value: 'off',
+            previous: 'on',
+          ),
+        ),
+        AvoWidgetPayload.record(
+          const AvoSettingRecord(
+            tool: 'update_setting',
+            key: 'start_list',
+            value: 'last used list',
+            previous: 'Wocheneinkauf',
+          ),
+        ),
+        AvoWidgetPayload.record(
+          const AvoSettingRecord(
+            tool: 'update_setting',
+            key: 'notif_time_dinner',
+            value: '18:30',
+            previous: '18:00',
+          ),
+        ),
+        AvoWidgetPayload.record(
+          const AvoSettingRecord(
+            tool: 'update_setting',
+            key: 'something_new',
+            value: 'x',
+            previous: 'y',
+          ),
+        ),
+      ]);
+      expect(find.text('Show item pictures'), findsOneWidget);
+      expect(find.text('off, was on'), findsOneWidget);
+      expect(find.text('List at start'), findsOneWidget);
+      expect(find.text('Last used list, was Wocheneinkauf'), findsOneWidget);
+      expect(find.text('Dinner ideas: time'), findsOneWidget);
+      expect(find.text('6:30 PM, was 6:00 PM'), findsOneWidget);
+      expect(find.text('Setting'), findsOneWidget);
+    });
   });
 
   group('§5.2 history and restocking', () {
