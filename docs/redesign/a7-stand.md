@@ -2,8 +2,10 @@
 
 Auftrag: [`a7-auftrag.md`](a7-auftrag.md). Schrittrahmen `870da50`, Schnittstelle `e352025`, Tipps `de77f8a`–`f189222`,
 Tipp-Ereignisse `3a5592d`, Ablauf und Konto siehe `git log --grep "Onboarding"`. Geprüft auf sauberem `main` (ganze
-Testsuite, `dart analyze` ohne Errors/Warnings). Nicht im Simulator angesehen: echte Apple-/Google-Blätter,
-Schlüsselbund, Code-Vorschlag aus Mail.
+Testsuite, `dart analyze` ohne Errors/Warnings). Im Simulator (iPhone 17, 09.11.2026) angesehen: Bestandskonto landet
+ohne Onboarding auf Home; nach dem Abmelden Willkommen (Variante Anmelden), Module, Konto, E-Mail, Mit Passwort anmelden;
+der Region-Platzhalter von B wird ohne Aufblitzen übersprungen. Nicht angesehen (bräuchten ein neues Konto): Name,
+Ernährung, Ziel, Erste Liste, Ankunft; dazu echte Apple-/Google-Blätter, Schlüsselbund, Code-Vorschlag aus Mail.
 
 ## Was jetzt da ist
 
