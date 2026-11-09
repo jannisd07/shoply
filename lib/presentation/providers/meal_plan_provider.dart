@@ -232,17 +232,29 @@ final planTargetListIdProvider = Provider.family<String?, DateTime>((ref, day) {
 
 // ---------------------------------------------------------------- ingredients
 
-typedef PlanAggregationRequest = ({DateTime weekStart, PlanRange range, String listId});
+/// A null [listId] (the person has no list yet) compares with nothing.
+typedef PlanAggregationRequest = ({DateTime weekStart, PlanRange range, String? listId});
+
+/// Ingredients the person chose to keep instead of their diet replacement
+/// ("Original verwenden: Milch"), as [planNameKey] of the original, per week
+/// (Monday). Kept in memory until the app closes; the screen and the send
+/// read the same set.
+final planKeepOriginalProvider = StateProvider.family<Set<String>, DateTime>((ref, weekStart) => const {});
 
 /// "Zutaten der Woche" for one week, range and target list.
 final planAggregationProvider = Provider.family<PlanAggregation, PlanAggregationRequest>((ref, request) {
   final week = ref.watch(weekPlanProvider(request.weekStart));
   final today = ref.watch(mealPlanClockProvider)();
   final entries = entriesInRange(week.entries, weekStart: week.weekStart, range: request.range, today: today);
-  return _aggregate(ref, entries, request.listId);
+  return _aggregate(
+    ref,
+    entries,
+    request.listId,
+    keepOriginal: ref.watch(planKeepOriginalProvider(planWeekStart(request.weekStart))),
+  );
 });
 
-PlanAggregation _aggregate(Ref ref, List<MealPlanEntry> entries, String? listId) {
+PlanAggregation _aggregate(Ref ref, List<MealPlanEntry> entries, String? listId, {Set<String> keepOriginal = const {}}) {
   if (entries.isEmpty) return PlanAggregation.empty;
   final settings = ref.watch(mealPlanSettingsProvider);
   final contributions = listId == null
@@ -267,6 +279,7 @@ PlanAggregation _aggregate(Ref ref, List<MealPlanEntry> entries, String? listId)
         ),
     ],
     substitute: ref.watch(mealPlanSubstituterProvider),
+    keepOriginal: keepOriginal,
     categoryOf: ref.watch(mealPlanCategorizerProvider),
     categoryOrder: order ?? Categories.allIds,
     localeCode: ref.watch(languageProvider),

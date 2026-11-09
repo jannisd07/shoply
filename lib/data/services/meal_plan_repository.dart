@@ -109,6 +109,10 @@ class MealPlanSnapshot {
     this.settings = MealPlanSettings.defaults,
     this.loaded = false,
     this.pendingChanges = 0,
+    this.answeredWeeks = const {},
+    this.hadDeviceState = false,
+    this.everUsed = false,
+    this.localOnly = false,
   });
 
   /// By id; only the weeks loaded so far.
@@ -123,6 +127,25 @@ class MealPlanSnapshot {
 
   /// Changes not yet on the server ("3 Änderungen warten").
   final int pendingChanges;
+
+  /// Mondays of the weeks the server answered for in this app run.
+  final Set<DateTime> answeredWeeks;
+
+  /// The device had a stored plan when it was read (the first frame shows
+  /// it; without one the screen waits for the server's first answer).
+  final bool hadDeviceState;
+
+  /// A recipe was ever planned on this account (on this device or as seen
+  /// from the server): the plan's first-start state shows only before.
+  final bool everUsed;
+
+  /// Something to show: the device's state, or the server's answer for
+  /// [weekStart].
+  bool knows(DateTime weekStart) =>
+      localOnly || hadDeviceState || answeredWeeks.contains(planWeekStart(weekStart));
+
+  /// No server (signed out): the device is all there is.
+  final bool localOnly;
 
   /// The day's entries in their order.
   List<MealPlanEntry> entriesForDay(DateTime day) {
@@ -186,6 +209,9 @@ class MealPlanRepository {
   MealPlanSettings _settings = MealPlanSettings.defaults;
   final Map<String, _Op> _outbox = {};
   final Set<DateTime> _fetchedWeeks = {};
+  final Set<DateTime> _answeredWeeks = {};
+  bool _hadDeviceState = false;
+  bool _everUsed = false;
 
   /// Local change counter per entry id; a server answer that started before
   /// a local change never overwrites or removes it.
@@ -222,6 +248,8 @@ class MealPlanRepository {
       final cache = prefs.getString(_cacheKey);
       if (cache != null) {
         final json = jsonDecode(cache) as Map<String, dynamic>;
+        _hadDeviceState = true;
+        _everUsed = json['ever_used'] == true;
         for (final row in json['entries'] as List? ?? const []) {
           final e = MealPlanEntry.fromRow((row as Map).cast<String, dynamic>());
           _entries[e.id] = e;
@@ -317,6 +345,7 @@ class MealPlanRepository {
       }
     }
     _fetchedWeeks.add(start);
+    _answeredWeeks.add(start);
     await _persist();
     _emit();
   }
@@ -606,6 +635,7 @@ class MealPlanRepository {
       final to = planAddDays(from, 14);
       bool cached(DateTime d) => !d.isBefore(from) && d.isBefore(to);
       await prefs.setString(_cacheKey, jsonEncode({
+        'ever_used': _everUsed,
         'entries': [for (final e in _entries.values) if (cached(e.planDate)) e.toCacheJson()],
         'weeks': [for (final w in _weeks.values) if (cached(w.weekStart)) w.toRow(userId)],
         'settings': _settings.toRow(userId),
@@ -622,12 +652,17 @@ class MealPlanRepository {
 
   void _emit() {
     if (_disposed) return;
+    if (_entries.isNotEmpty) _everUsed = true;
     _snapshot = MealPlanSnapshot(
       entries: Map.unmodifiable(_entries),
       weeks: Map.unmodifiable(_weeks),
       settings: _settings,
       loaded: _loaded,
       pendingChanges: _outbox.length,
+      answeredWeeks: Set.unmodifiable(_answeredWeeks),
+      hadDeviceState: _hadDeviceState,
+      everUsed: _everUsed,
+      localOnly: _remote == null,
     );
     _changes.add(_snapshot);
   }
