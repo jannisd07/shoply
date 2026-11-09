@@ -9,7 +9,7 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 oder für keine (A-V4), neuer Baustein `RowActions` für Wischen plus Kontextmenü (A-V17). Entschieden: der
 Rückgängig-Hinweis zählt nicht zum Glas-Budget (A-V15), „Verlauf“ und „Offene Beträge“ behalten den großen Titel
 (A-V21). A-V5, A-V18 und A-V20 waren schon erledigt. Details und Wünsche an B: [`ab3-stand.md`](ab3-stand.md). Als
-Nächstes: S5c, wenn B7 oder B6b auf `main` ist; sonst A10 (Owner) oder neue Wünsche von B.
+Nächstes: AB4 (status-B 21, nach BS6 `eb77f4c`), danach S5c, wenn B7 oder B6b auf `main` ist; A10 wartet auf den Owner.
 
 09.11.2026 (S5b): B8 ist auf `main`, B's Wünsche aus status-B 19/20 sind erledigt: `AmountField` (A-V3),
 `AvoBarChart` mit Auswahl und Tokens `chartBar`/`chartHighlight`/`monthCardGradient` (A-V4), `ValueRow(subtitle:)` und

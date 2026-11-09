@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (AB3 erledigt, `ab3-stand.md`). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (AB3 erledigt, `ab3-stand.md`; B hat danach mit BS6 `eb77f4c` Anfrage 21 gestellt, also AB4). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -47,10 +47,11 @@ für die nächste Sitzung geben.
 | S5 Bereiche fertig | erledigt (A-V9 und Gegenprüfung B6b/B7/B8 folgen in S5b) | `s5-stand.md`, `abschlussbericht-A.md` |
 | S5b Nachzug von B | erledigt (B8 gegengeprüft, Wünsche nach B8 umgesetzt) | `s5b-stand.md`, `s5b-auftrag.md` |
 | AB3 Offene Wünsche von B (`numberXL`, A-V4, A-V15, A-V17, A-V21) | erledigt | `ab3-stand.md` |
-| **S5c Nachzug von B, Teil 2** | **Als Nächstes**, wenn B7 oder B6b auf `main` ist | unten, `ab3-stand.md` |
+| **AB4 Anfragen von B nach BS6** | **Als Nächstes** | unten, `status-B.md` Nr. 21 |
+| S5c Nachzug von B, Teil 2 | danach, wenn B7 oder B6b auf `main` ist | unten, `ab3-stand.md` |
 | A9b Pro, Rest | erledigt (Tag-12-Erinnerung als Wunsch an B) | `a9b-stand.md` |
 
-Reihenfolge: zu Beginn `git fetch origin` und mit `git log origin/main --oneline | grep -E "B7|B6b"` prüfen, ob B
+Reihenfolge: **zuerst AB4**, solange es in der Tabelle „Als Nächstes“ ist. Danach: zu Beginn `git fetch origin` und mit `git log origin/main --oneline | grep -E "B7|B6b"` prüfen, ob B
 nachgezogen hat (dann S5c; Achtung, Doku-Commits mit diesen Namen zählen nicht, es geht um Code-Commits bzw. Merges von
 `feature/b7-plan` und B6b; `git merge-base --is-ancestor origin/feature/b7-plan origin/main` hilft), und mit `AskUserQuestion` fragen, ob der Owner A10 (Maskottchen F-17-11: 3D-Figur behalten
 oder neu flach) entschieden hat (dann A10). Erklär dem Owner bei der Frage kurz, worum es geht (er hat am 09.11. „was
@@ -154,6 +155,19 @@ Sheets/Slider, Simulator nach Absprache und Anmeldung des Owners), Funde an B in
 Nachricht. Die alten Wünsche (A-V4, A-V5, A-V15, A-V17, A-V18, A-V20, A-V21, `numberXL`) sind mit AB3 erledigt. Zeit
 übrig: Reste aus `ab3-stand.md` „Offen bei A“ (`ListCard` ab AX1 ohne Cover, Simulator-Punkte). Abschlussbericht
 nachführen.
+
+### AB4 Anfragen von B nach BS6
+
+Quelle: `status-B.md` „Anfragen an Teil A“ Nr. 21 (und alles Neuere), B's Nachricht vom 09.11.2026. Inhalt:
+`NavigationService.handleNotificationData` mit `case 'pro_trial_reminder'` (öffnet `data['link']`, also `shoply://pro`,
+über `appDestinationPath` mit `push`); `attachment_sheet.dart` zeigt bei `ListImportException.serverCode ==
+'quota_exceeded'` für Free die Pro-Zeile bzw. `/pro?feature=avo_questions`, für Pro den Limit-Text; `AvoMotion` mit
+Dauer und Kurve passend zur Feder `standard` (für `AnimatedSize`/`ensureVisible`), `wordFade` 120 ms und einer langsamen
+Schleife 1200 ms (S6-6); 14 fehlende `AvoIcons` (Liste in Nr. 21, S6-9); `StatusRow` mit optionalem eigenem Symbol;
+`pro_feat_ai_body` ohne feste „60 Fragen“ (Zahl aus `app_flags.ai_limits` oder weglassen). Dazu aus `a9b-stand.md`
+„Offen bei A“: B liefert jetzt `scheduleProTrialReminder(trialEndsAt, yearlyPrice:)` → `Future<bool>` (`false` = keine
+Erlaubnis oder zu spät, dann „Hinweis in der App“) und `cancelProTrialReminder()`; A ruft sie beim Start und Ende der
+Testphase auf. Texte mit `design:ux-copy` und `humanizer`. Erledigtes mit Commit in `status-A.md`, B Bescheid geben.
 
 ### AB3 Offene Wünsche von B
 
