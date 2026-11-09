@@ -93,7 +93,10 @@ export 'package:shoply/presentation/screens/avo/avo_hand_over.dart'
 
 // Onboarding, settings, modules.
 export 'package:shoply/presentation/providers/app_flags_provider.dart'
-    show offersAvailableProvider, offersRemoteEnabledProvider;
+    show
+        offersAvailableProvider,
+        offersKillSwitchOffProvider,
+        offersRemoteEnabledProvider;
 export 'package:shoply/presentation/state/calorie_tracking_provider.dart'
     show calorieTrackingEnabledProvider;
 export 'package:shoply/presentation/widgets/deals/offers_setup_step.dart'

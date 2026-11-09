@@ -37,6 +37,16 @@ final offersFlagsKnownProvider = Provider<bool>(
   (ref) => ref.watch(appFlagsProvider.select((f) => f.isKnown)),
 );
 
+/// The offers kill switch is known and off (`app_flags.offers_enabled` is
+/// false in real flags). Unknown flags are not "off" here: screens that
+/// fetch nothing (the onboarding step) may show while the flags load,
+/// because the kill switch is on by default (owner).
+final offersKillSwitchOffProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(offersFlagsKnownProvider) &&
+      !ref.watch(offersRemoteEnabledProvider),
+);
+
 /// Remote kill switch for the Claude features (`app_flags.ai_enabled`). Off
 /// until the cache was read, then on unless the flag says off. All AI calls
 /// go through the `ai` edge function, which has to enforce the flag itself.

@@ -311,12 +311,13 @@ void main() {
   testWidgets('OffersSetupStep moves on by itself, exactly once', (
     tester,
   ) async {
-    // Flags never known (first start, offline): it waits 3 s, then moves on.
+    // Kill switch known off: "nothing to show" is onDone within two frames.
     var done = 0;
-    await _pumpSlot(tester, OffersSetupStep(onDone: () => done++));
-    await tester.pump();
-    expect(done, 0, reason: 'still waiting for the flags');
-    await tester.pump(const Duration(seconds: 3));
+    await _pumpSlot(
+      tester,
+      OffersSetupStep(onDone: () => done++),
+      overrides: [offersKillSwitchOffProvider.overrideWithValue(true)],
+    );
     await tester.pump();
     expect(done, 1);
     await tester.pump(const Duration(seconds: 5));

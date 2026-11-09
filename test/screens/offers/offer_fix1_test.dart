@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/item_purchase_stats.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/recipe_offer_highlight.dart';
@@ -426,10 +427,11 @@ void main() {
   });
 
   group('S14 and the flags', () {
-    testWidgets('flags that arrive late show the step', (tester) async {
-      final known = StateProvider<bool>((ref) => false);
+    testWidgets('flags not known yet: content at once, no onDone, no timer', (
+      tester,
+    ) async {
       var done = 0;
-      final router = await pumpOfferScreen(
+      await pumpOfferScreen(
         tester,
         Scaffold(
           body: SingleChildScrollView(
@@ -438,23 +440,49 @@ void main() {
         ),
         overrides: [
           ...offersWithRegion(FakeRegionLookup()),
-          offersFlagsKnownProvider.overrideWith((ref) => ref.watch(known)),
-          offersRemoteEnabledProvider.overrideWith((ref) => ref.watch(known)),
-          offersAvailableProvider.overrideWith((ref) => ref.watch(known)),
+          offersFlagsKnownProvider.overrideWithValue(false),
+          offersRemoteEnabledProvider.overrideWithValue(false),
+          offersAvailableProvider.overrideWithValue(false),
         ],
         settle: false,
       );
       await tester.pump();
-      expect(find.text('REGION'), findsNothing);
-      expect(done, 0, reason: 'waits for the flags');
-      final container = ProviderScope.containerOf(
-        router.routerDelegate.navigatorKey.currentContext!,
-      );
-      container.read(known.notifier).state = true;
+      await tester.pump();
+      expect(find.text('REGION'), findsOneWidget, reason: 'first frames');
+      expect(done, 0);
       await tester.pumpAndSettle();
-      expect(find.text('REGION'), findsOneWidget);
-      await tester.pump(const Duration(seconds: 4));
-      expect(done, 0, reason: 'content shown, no skip');
+      expect(done, 0);
+    });
+
+    testWidgets('kill switch known off or module off: onDone in two frames', (
+      tester,
+    ) async {
+      for (final overrides in [
+        [
+          ...offersWithRegion(FakeRegionLookup()),
+          offersRemoteEnabledProvider.overrideWithValue(false),
+          offersAvailableProvider.overrideWithValue(false),
+        ],
+        [
+          ...offersWithRegion(FakeRegionLookup()),
+          offersFlagsKnownProvider.overrideWithValue(false),
+          offersRemoteEnabledProvider.overrideWithValue(false),
+          offersAvailableProvider.overrideWithValue(false),
+          moduleEnabledProvider.overrideWith((ref, m) => false),
+        ],
+      ]) {
+        var done = 0;
+        await pumpOfferScreen(
+          tester,
+          Scaffold(body: OffersSetupStep(onDone: () => done++)),
+          overrides: overrides,
+          settle: false,
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(done, 1);
+        expect(find.text('REGION'), findsNothing);
+      }
     });
 
     testWidgets('"Weiter" with a half-typed postcode says what is missing', (

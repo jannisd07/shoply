@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
@@ -19,10 +20,6 @@ import 'package:shoply/presentation/screens/offers/widgets/store_filter_chip.dar
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
-
-/// How long the step waits for the remote flags on a first start before it
-/// moves on (A's frame shows its title meanwhile; "Überspringen" works).
-const Duration _kFlagsWait = Duration(seconds: 3);
 
 /// The chip of "Aldi" before the region decides between Nord and Süd.
 const String _kAldi = 'aldi';
@@ -54,7 +51,8 @@ const List<String> _kOrder = [
 /// Only with the offers module on and the kill switch known off; otherwise
 /// it renders nothing and calls [onDone] right after the first frame, so A
 /// skips the step without a trace. While the flags are not known yet (first
-/// start) it renders nothing and waits for them, at most 3 s. No figure, no network request without a
+/// start) the kill switch counts as on, its default, and the content shows
+/// at once: the step asks the offers source nothing. No figure, no network request without a
 /// region; Overpass only after "Standort verwenden".
 class OffersSetupStep extends ConsumerStatefulWidget {
   const OffersSetupStep({super.key, required this.onDone});
@@ -72,6 +70,9 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
   bool _locating = false;
   bool _done = false;
   bool _skipped = false;
+
+  /// The content was shown once: it stays for this step.
+  bool _shown = false;
   bool _filled = false;
   LocateResult? _located;
 
@@ -93,31 +94,33 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
 
   @override
   void dispose() {
-    _flagsWait?.cancel();
     _field.dispose();
     _focus.dispose();
     super.dispose();
   }
 
-  /// Waiting for the remote flags gave up; then the step moves on.
-  Timer? _flagsWait;
-
-  /// Whether the step has content: the module on and the kill switch known
-  /// off. Null while the flags are not known yet (first start): then it
-  /// waits, up to [_kFlagsWait], instead of skipping a step the flags would
-  /// have shown.
-  bool? _availability() {
-    // The kill switch first: until it is known nothing else is read.
-    if (!ref.watch(offersRemoteEnabledProvider)) {
-      return ref.watch(offersFlagsKnownProvider) ? false : null;
+  /// Whether the step has content (A's contract: "nothing to show" is
+  /// `onDone` in the first two frames). Nothing to show only when the kill
+  /// switch is known off or the offers module is off. While the flags are
+  /// not known yet the kill switch counts as on (its default): the step
+  /// asks the offers source nothing, so it may show at once.
+  bool _availability() {
+    if (ref.watch(offersRemoteEnabledProvider)) {
+      return ref.watch(offersAvailableProvider);
     }
-    return ref.watch(offersAvailableProvider);
+    if (ref.watch(offersKillSwitchOffProvider)) return false;
+    try {
+      return ref.watch(moduleEnabledProvider(AppModule.offers));
+    } catch (e) {
+      // No module choice readable (no session yet): nothing to show.
+      debugPrint('⚠️ [OFFERS] Module choice not readable: $e');
+      return false;
+    }
   }
 
   void _skip() {
     if (_skipped) return;
     _skipped = true;
-    _flagsWait?.cancel();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onDone();
     });
@@ -186,18 +189,14 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
 
   @override
   Widget build(BuildContext context) {
-    final available = _skipped ? false : _availability();
-    if (available == null) {
-      _flagsWait ??= Timer(_kFlagsWait, () {
-        if (mounted) setState(_skip);
-      });
-      return const SizedBox.shrink();
-    }
+    // Decided on the first frame (A's probe and resume read it there);
+    // flags that turn the kill switch off later do not take the step away.
+    final available = _shown || (!_skipped && _availability());
     if (!available) {
       _skip();
       return const SizedBox.shrink();
     }
-    _flagsWait?.cancel();
+    _shown = true;
     final lang = offerLanguageOf(context);
     final current = ref.watch(regionProvider);
     if (!_filled && ref.watch(regionLoadedProvider)) {
