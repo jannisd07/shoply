@@ -219,10 +219,6 @@ const Map<String, String> offersEn = {
   'offer_favorites_note_stores':
       'These stores come first when you choose a store for a list.',
   'offer_favorites_empty': 'No favourite stores yet.',
-  'offer_favorites_row_a11y': '{store}, favourite store, {n} of {m}',
-  'offer_favorites_move_up': 'Move up',
-  'offer_favorites_move_down': 'Move down',
-  'offer_favorites_remove': 'Remove',
   // S14 Onboarding.
   'offer_setup_region': 'Area',
   'offer_setup_location_sub':
@@ -487,10 +483,6 @@ const Map<String, String> offersDe = {
   'offer_favorites_note_stores':
       'Diese Märkte stehen oben, wenn du für eine Liste einen Markt wählst.',
   'offer_favorites_empty': 'Noch keine Lieblingsmärkte.',
-  'offer_favorites_row_a11y': '{store}, Lieblingsmarkt, Platz {n} von {m}',
-  'offer_favorites_move_up': 'Nach oben',
-  'offer_favorites_move_down': 'Nach unten',
-  'offer_favorites_remove': 'Entfernen',
   // S14 Onboarding.
   'offer_setup_region': 'Region',
   'offer_setup_location_sub':

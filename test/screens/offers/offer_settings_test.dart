@@ -402,14 +402,32 @@ void main() {
       await tester.tap(find.text('REWE'));
       await tester.pumpAndSettle();
       expect(find.text('DEINE MÄRKTE'), findsOneWidget);
+      // A's ReorderableInsetSection: the handle carries name, position and
+      // the move actions; the SelectCircle is a switch named after the
+      // market.
       expect(
-        find.bySemanticsLabel('Lidl, Lieblingsmarkt, Platz 1 von 2'),
-        findsOneWidget,
+        tester.getSemantics(find.bySemanticsLabel('Lidl umsortieren')),
+        matchesSemantics(
+          label: 'Lidl umsortieren',
+          value: 'Position 1 von 2',
+          customActions: [const CustomSemanticsAction(label: 'Nach unten')],
+        ),
+      );
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Lidl')),
+        matchesSemantics(
+          label: 'Lidl',
+          hasToggledState: true,
+          isToggled: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          hasTapAction: true,
+        ),
       );
       expect((await _savedPrefs())['favorites'], ['lidl', 'rewe']);
 
       tester.semantics.customAction(
-        find.semantics.byLabel('Lidl, Lieblingsmarkt, Platz 1 von 2'),
+        find.semantics.byLabel('Lidl umsortieren'),
         CustomSemanticsAction(label: 'Nach unten'),
       );
       await tester.pumpAndSettle();
