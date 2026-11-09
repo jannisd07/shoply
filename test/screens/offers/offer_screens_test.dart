@@ -238,7 +238,7 @@ void main() {
       expect(find.text('Preis für Milch übernommen'), findsOneWidget);
       await tester.tap(find.text('Widerrufen'));
       await tester.pumpAndSettle();
-      expect(notifier.updates.last.$2['price'], isNull);
+      expect(notifier.undonePrices, ['price-1'], reason: "A's undoPrice");
     });
 
     testWidgets('a failed save says so with "Erneut versuchen"', (

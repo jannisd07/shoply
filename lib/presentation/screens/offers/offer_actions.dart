@@ -1,7 +1,7 @@
 /// What a person does with an offer (S3–S6): take its price for an item,
 /// remove that price again, hide the offer for the item, put it on a list.
-/// Every write is optimistic through the list's items notifier, shows an
-/// undo toast and, when it fails, rolls back with the error haptic and a
+/// Every write is optimistic through the list's items notifier (prices via
+/// A's `setPrice` / `clearPrice` / `undoPrice`), shows an undo toast and, when it fails, rolls back with the error haptic and a
 /// "Erneut versuchen" toast (`angebote.md` 3.6, 3.7). No success haptic:
 /// money is no success moment.
 library;
@@ -16,6 +16,7 @@ import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/store_offer.dart';
+import 'package:shoply/data/repositories/item_batch.dart' show ItemPrice;
 import 'package:shoply/data/services/store_chain_directory.dart';
 import 'package:shoply/presentation/providers/offer_display_prefs_provider.dart';
 import 'package:shoply/presentation/providers/offer_lookup_provider.dart';
@@ -33,36 +34,15 @@ const Duration _declineWithoutEnd = Duration(days: 7);
 /// (server clocks drift a little).
 const Duration _addedWindow = Duration(minutes: 1);
 
-/// The price columns an offer writes onto an item. The market is stored in
-/// the directory's spelling ("Lidl", "Aldi Süd"), which the trip history
-/// reads back as the chain.
-Map<String, dynamic> offerPriceFields(StoreOffer offer) => {
-  'price': offer.price,
-  'price_currency': 'EUR',
-  'price_retailer': offerStoreName(offer),
-  'price_unit': offer.unitSizeLabel ?? offer.unitShortName,
-  'price_updated_at': DateTime.now().toUtc().toIso8601String(),
-  'price_old_value': offer.regularPrice,
-};
-
-/// The price columns of [item] as they are, to put back on undo.
-Map<String, dynamic> _priceFieldsOf(ShoppingItemModel item) => {
-  'price': item.price,
-  'price_currency': item.priceCurrency,
-  'price_retailer': item.priceRetailer,
-  'price_unit': item.priceUnit,
-  'price_updated_at': item.priceUpdatedAt?.toIso8601String(),
-  'price_old_value': item.priceOldValue,
-};
-
-const Map<String, dynamic> _noPrice = {
-  'price': null,
-  'price_currency': null,
-  'price_retailer': null,
-  'price_unit': null,
-  'price_updated_at': null,
-  'price_old_value': null,
-};
+/// The price an offer writes onto an item (A-D1 `ItemPrice`). The market is
+/// stored in the directory's spelling ("Lidl", "Aldi Süd"), which the trip
+/// history reads back as the chain.
+ItemPrice offerItemPrice(StoreOffer offer) => ItemPrice(
+  price: offer.price,
+  retailer: offerStoreName(offer),
+  unit: offer.unitSizeLabel ?? offer.unitShortName,
+  oldValue: offer.regularPrice,
+);
 
 /// Whether [item] carries the price of [offer] ("Preis übernommen").
 bool isOfferPriceTaken(ShoppingItemModel item, StoreOffer offer) {
@@ -85,28 +65,34 @@ void rememberOffer(BuildContext context, StoreOffer offer) =>
       listen: false,
     ).read(offerCacheProvider).remember(offer);
 
-/// Writes [fields] onto [item] and shows [message] with undo. On failure
-/// the item rolls back (the notifier does that), the toast says "Preis
-/// nicht gespeichert" with a retry and the result is false.
+/// Sets [price] on [item] (null removes it) through Teil A's optimistic
+/// `ItemsNotifier.setPrice` / `clearPrice` and shows [message] with undo
+/// (`undoPrice`, which puts the old price back only while the item still
+/// has this one). On failure the row rolls back (the notifier does that),
+/// the toast says "Preis nicht gespeichert" with a retry and the result is
+/// false.
 Future<bool> _writePrice(
   BuildContext context, {
   required String listId,
   required ShoppingItemModel item,
-  required Map<String, dynamic> fields,
+  required ItemPrice? price,
   required String message,
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final notifier = container.read(itemsNotifierProvider(listId).notifier);
   final toastContext = _toastContext(context);
-  final before = _priceFieldsOf(item);
+  final write = price == null
+      ? notifier.clearPrice(item.id)
+      : notifier.setPrice(item.id, price);
   AvoToast.show(
     toastContext,
     message: message,
     actionLabel: toastContext.tr('common_undo'),
-    onAction: () => unawaited(_quietly(notifier.updateItem(item.id, before))),
+    onAction: () =>
+        unawaited(_quietly(write.then((token) => notifier.undoPrice(token)))),
   );
   try {
-    await notifier.updateItem(item.id, fields);
+    await write;
     return true;
   } catch (e) {
     debugPrint('❌ [OFFERS] Price of an item not saved: $e');
@@ -123,7 +109,7 @@ Future<bool> _writePrice(
             toastContext,
             listId: listId,
             item: item,
-            fields: fields,
+            price: price,
             message: message,
           ),
         );
@@ -152,7 +138,7 @@ Future<void> takeOfferPrice(
   context,
   listId: listId,
   item: item,
-  fields: offerPriceFields(offer),
+  price: offerItemPrice(offer),
   message: context.tr('offer_toast_price_taken', params: {'item': item.name}),
 ).then((_) {});
 
@@ -165,7 +151,7 @@ Future<void> removeOfferPrice(
   context,
   listId: listId,
   item: item,
-  fields: _noPrice,
+  price: null,
   message: context.tr('offer_toast_price_removed', params: {'item': item.name}),
 ).then((_) {});
 
@@ -242,7 +228,7 @@ Future<bool> addOfferToList(
       toastContext,
       listId: listId,
       item: open,
-      fields: offerPriceFields(offer),
+      price: offerItemPrice(offer),
       message: attached,
     );
     // Said once it is saved: "Angebot an Milch angehängt".
@@ -253,17 +239,17 @@ Future<bool> addOfferToList(
   }
 
   final started = DateTime.now();
-  final fields = offerPriceFields(offer);
+  final price = offerItemPrice(offer);
   try {
     await notifier.addItem(
       name: trimmed,
       quantity: quantity,
       unit: unit,
-      price: offer.price,
-      priceCurrency: fields['price_currency'] as String,
-      priceRetailer: fields['price_retailer'] as String,
-      priceUnit: fields['price_unit'] as String?,
-      priceOldValue: offer.regularPrice,
+      price: price.price,
+      priceCurrency: price.currency,
+      priceRetailer: price.retailer,
+      priceUnit: price.unit,
+      priceOldValue: price.oldValue,
       autoParse: false,
     );
   } catch (e) {

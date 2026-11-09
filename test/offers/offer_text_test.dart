@@ -208,13 +208,13 @@ void main() {
       expect(isOfferPriceTaken(item(), offer), isFalse);
     });
 
-    test('the price fields store the market as the directory spells it', () {
-      final fields = offerPriceFields(
+    test('the item price stores the market as the directory spells it', () {
+      final price = offerItemPrice(
         _offer(retailer: 'aldi-sued', volume: 1, unit: 'l'),
       );
-      expect(fields['price'], 0.99);
-      expect(fields['price_retailer'], 'Aldi Süd');
-      expect(fields['price_currency'], 'EUR');
+      expect(price.price, 0.99);
+      expect(price.retailer, 'Aldi Süd');
+      expect(price.currency, 'EUR');
     });
   });
 

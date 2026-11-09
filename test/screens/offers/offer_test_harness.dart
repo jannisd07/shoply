@@ -134,6 +134,28 @@ class RecordingItemsNotifier extends ItemsNotifier {
     if (fail) throw Exception('offline');
   }
 
+  /// Tokens passed to [undoPrice].
+  final undonePrices = <String>[];
+
+  /// Prices go through A's `setPrice` / `clearPrice`; recorded with the
+  /// columns they write, like [updateItem].
+  @override
+  Future<String> setPrice(String itemId, ItemPrice price) async {
+    updates.add((itemId, price.toColumns()));
+    if (fail) throw Exception('offline');
+    return 'price-${updates.length}';
+  }
+
+  @override
+  Future<String> clearPrice(String itemId) async {
+    updates.add((itemId, ItemPrice.clearedColumns));
+    if (fail) throw Exception('offline');
+    return 'price-${updates.length}';
+  }
+
+  @override
+  Future<void> undoPrice(String token) async => undonePrices.add(token);
+
   @override
   Future<void> deleteItem(String itemId) async => deleted.add(itemId);
 
