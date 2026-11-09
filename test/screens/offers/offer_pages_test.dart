@@ -85,7 +85,15 @@ void main() {
         notifier: notifier,
         chainId: chainId,
       ),
-      regularOffersProvider.overrideWith((ref) async => regulars),
+      regularOffersAtProvider.overrideWith(
+        (ref, chain) async => RegularOffers(
+          hasStats: regulars.hasStats,
+          offers: [
+            for (final r in regulars.offers)
+              if (r.chainId == chain) r,
+          ],
+        ),
+      ),
     ];
 
     testWidgets('title, sentence, the list\'s offers in its order', (
@@ -778,6 +786,7 @@ class _Source implements RecipeOfferSource {
     required List<String> ingredientNames,
     required String zipCode,
     String? chainId,
+    bool force = false,
   }) async {
     fetches++;
     chains.add(chainId);

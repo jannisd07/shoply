@@ -110,6 +110,19 @@ void main() {
         const ListOffersScreen(listId: testListId),
         overrides: [
           ...offersOn(snapshot: snapshot, items: items),
+          regularOffersAtProvider.overrideWith(
+            (ref, chain) async => RegularOffers(
+              hasStats: true,
+              offers: [
+                RegularOffer(
+                  name: 'Kichererbsen',
+                  offer: regular.offer,
+                  chainId: 'lidl',
+                  averageDays: 14,
+                ),
+              ],
+            ),
+          ),
           regularOffersProvider.overrideWith(
             (ref) async => RegularOffers(
               hasStats: true,
@@ -407,5 +420,6 @@ class _Source implements RecipeOfferSource {
     required List<String> ingredientNames,
     required String zipCode,
     String? chainId,
+    bool force = false,
   }) async => result;
 }

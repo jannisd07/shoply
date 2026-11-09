@@ -177,6 +177,7 @@ List<Override> offersOn({
   String listName = 'Wocheneinkauf',
 }) => [
   offersRemoteEnabledProvider.overrideWithValue(true),
+  offersFlagsKnownProvider.overrideWithValue(true),
   offersAvailableProvider.overrideWithValue(true),
   offerAccountIdProvider.overrideWithValue(testAccount),
   offersVisibleForListProvider.overrideWith((ref, id) => true),
@@ -197,9 +198,13 @@ List<Override> offersOn({
   offerSuggestionsProvider.overrideWith((ref, request) async => suggestions),
   offerCategoryOfProvider.overrideWithValue((name) => 'dairy'),
   offerListNameProvider.overrideWith((ref, id) => listName),
+  offerListExistsProvider.overrideWith((ref, id) => true),
   moduleEnabledProvider.overrideWith((ref, module) => true),
   isOfflineProvider.overrideWithValue(false),
   regularOffersProvider.overrideWith((ref) async => RegularOffers.none),
+  regularOffersAtProvider.overrideWith(
+    (ref, chainId) async => RegularOffers.none,
+  ),
 ];
 
 /// Pumps [child] at `/` of a router that also knows Teil B's offer routes,
@@ -331,6 +336,7 @@ List<Override> offersWithRegion(
   String? account = testAccount,
 }) => [
   offersRemoteEnabledProvider.overrideWithValue(remote),
+  offersFlagsKnownProvider.overrideWithValue(true),
   offersAvailableProvider.overrideWithValue(remote),
   offerAccountIdProvider.overrideWithValue(account),
   regionLookupProvider.overrideWithValue(lookup),

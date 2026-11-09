@@ -311,10 +311,16 @@ void main() {
   testWidgets('OffersSetupStep moves on by itself, exactly once', (
     tester,
   ) async {
+    // Flags never known (first start, offline): it waits 3 s, then moves on.
     var done = 0;
     await _pumpSlot(tester, OffersSetupStep(onDone: () => done++));
     await tester.pump();
+    expect(done, 0, reason: 'still waiting for the flags');
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
     expect(done, 1);
+    await tester.pump(const Duration(seconds: 5));
+    expect(done, 1, reason: 'exactly once');
   });
 
   testWidgets('ArticleImage keeps its final size as a neutral square', (
@@ -714,6 +720,7 @@ class _RecipeSourceSpy implements RecipeOfferSource {
     required List<String> ingredientNames,
     required String zipCode,
     String? chainId,
+    bool force = false,
   }) async {
     spy.calls++;
     return RecipeOffersResult(
