@@ -4,6 +4,12 @@ Auftrag: [`a8-auftrag.md`](a8-auftrag.md). Schnittstellen `8f67ca8`, `28d2463`; 
 `git log --grep "Profil\|Einstellung\|Konto"`. Server-Entwürfe: [`a8-server-entwurf.sql`](a8-server-entwurf.sql).
 Paywall und Pro-Flächen (Konzept 18 Kap. 8, 9) gehören zu A9.
 
+Im Simulator (iPhone 17, 09.11.2026) angesehen: Profil-Wurzel (oben bis Fuß mit Version), Suche mit Sprung und
+Hervorhebung, Ernährung & Allergien, Profil bearbeiten, Konto. Behoben danach: Profilfoto im Querformat war oben und
+unten abgeschnitten (`523b3fd`), Suche zeigte Treffer der anderen Sprache vor denen der App-Sprache (`cb09597`). Nicht
+angesehen: Module, Persönliche Daten, Listen, Mitteilungen, Darstellung, Sprache, Hilfe, Rechtliches, Abmelden, Konto
+löschen (nur in Tests).
+
 ## Was jetzt da ist
 
 - **Profil-Wurzel** (`profile_root_screen.dart`, Tab „Profil“ und `/settings`): Großtitel, Suchfeld, Kopfzeile Person
