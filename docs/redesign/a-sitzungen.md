@@ -58,7 +58,8 @@ A-D1), `b-screens/*.md` „Anfragen an Teil A“, „Komponenten“ in `a6-stand
 destruktiv (+ `destructiveFill`), `NavRow(valueLeading:)`, `AvatarSize.xl` mit Foto, `AvoSearchField` mit Mikrofon,
 `AvoToast` mit Ziel, fehlende `AvoIcons`, `ItemRepository`-Preis-Schnittstelle (A-D1). Dazu für B's Wochenplan (`feature/b7-plan`)
 A-P1–A-P4 (Platz im Rezepte-Tab für Toolbar-Knöpfe, schwebende Kapsel, grauer Grund) und A-K10 (Untermenüs im
-Pull-down), Einzelheiten in `status-B.md`. Erledigtes mit Commit in
+Pull-down), Einzelheiten in `b-screens/wochenplan.md` (nicht verwechseln mit A-P1 „Profil“ aus
+`b-screens/angebote.md`, das mit A8 erledigt ist); weitere Kalorien-Wünsche in `b-screens/kalorien.md`. Erledigtes mit Commit in
 `status-A.md` („Anfragen von B aus den Angebots-Slots“) eintragen und B Bescheid geben.
 
 ### AB2 Anfragen von B: Listen, Router, Reste aus A5–A8
