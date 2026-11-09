@@ -166,10 +166,14 @@ final class AvoGoalRecord extends AvoRecord {
     super.undo,
     required this.kcal,
     this.previousKcal,
+    this.weightKg,
   });
 
   final int kcal;
   final int? previousKcal;
+
+  /// The weight entry for today it added, if any (named on the card).
+  final double? weightKg;
 }
 
 /// A setting Avo changed (`update_setting`), with the raw values so the card
@@ -362,6 +366,11 @@ final class AvoSplitPreviewCard extends AvoCardData {
     required this.shares,
     this.replaces = const [],
     this.yourUserId,
+    this.payerUserId,
+    this.payerName,
+    this.payerIsYou = true,
+    this.payerIsNew = false,
+    this.paidReset = const [],
   });
 
   final String historyId;
@@ -375,6 +384,17 @@ final class AvoSplitPreviewCard extends AvoCardData {
   /// The split in place now; "Teilen" replaces it.
   final List<({String name, bool paid})> replaces;
   final String? yourUserId;
+
+  /// Who paid: the trip's payer, kept as it is; or, for a trip without one,
+  /// the person ([payerIsNew], named on the card).
+  final String? payerUserId;
+  final String? payerName;
+  final bool payerIsYou;
+  final bool payerIsNew;
+
+  /// Shares marked paid now that are not paid after "Teilen" (the payer's
+  /// own share is made again as paid).
+  final List<String> paidReset;
 }
 
 /// `search_offers`: this week's offers at the list's market, in the
@@ -528,22 +548,32 @@ final class AvoEstimateCard extends AvoCardData {
   final List<String> allergens;
 }
 
-/// `setup_nutrition_goal` when a goal exists: "Neues Ziel: 1.800 kcal am Tag
-/// / bisher 2.000"; only "Übernehmen" saves [goal].
+/// `setup_nutrition_goal`: "Neues Ziel: 1.800 kcal am Tag / bisher 2.000"
+/// with every field that changes; only "Übernehmen" saves [goal].
 final class AvoGoalPreviewCard extends AvoCardData {
-  const AvoGoalPreviewCard({required this.goal, this.previous});
+  const AvoGoalPreviewCard({
+    required this.goal,
+    this.previous,
+    this.writesWeight = false,
+  });
 
   final NutritionGoal goal;
   final NutritionGoal? previous;
+
+  /// "Übernehmen" also enters [goal]'s weight for today (today has none).
+  final bool writesWeight;
 }
 
-/// `update_setting` with `allergies_remove`: the safety confirm card (Kap.
-/// 6.5); only "Entfernen" removes [allergen].
-final class AvoAllergyCard extends AvoCardData {
-  const AvoAllergyCard(this.allergen);
+/// `update_setting` with `allergies_remove` (the safety card, Kap. 6.5) or
+/// `diet_remove`: only "Entfernen" removes [entry].
+final class AvoRemovalCard extends AvoCardData {
+  const AvoRemovalCard(this.entry, {this.diet = false});
 
-  /// The allergy as the person stored it.
-  final String allergen;
+  /// The allergy or diet as the person stored it.
+  final String entry;
+
+  /// A diet entry (else an allergy).
+  final bool diet;
 }
 
 /// `update_setting` that did not work.

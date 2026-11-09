@@ -6,7 +6,7 @@ extension AvoHealthTools on AvoAssistantService {
     final user = await ref.read(currentUserProvider.future);
     if (user == null) return {'error': 'Not signed in'};
 
-    final trackingOn = ref.read(calorieTrackingEnabledProvider);
+    final trackingOn = ref.read(moduleEnabledProvider(AppModule.calories));
     final zip = await UserLocationService.instance.getManualZipCode();
     final goal = trackingOn
         ? await NutritionGoalService.instance.getGoal()
@@ -52,13 +52,14 @@ extension AvoHealthTools on AvoAssistantService {
     WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    if (!ref.read(calorieTrackingEnabledProvider)) {
+    if (!ref.read(moduleEnabledProvider(AppModule.calories))) {
       return {
         'tracking_enabled': false,
         'note': AvoAssistantService._trackingDisabledNote,
       };
     }
-    final userId = _supabase.auth.currentUser?.id;
+    final store = ref.read(avoGoalStoreProvider);
+    final userId = store.userId;
     if (userId == null) return {'error': 'Not signed in'};
 
     // Validate the enum-ish args strictly so a hallucinated value can't be
@@ -98,7 +99,7 @@ extension AvoHealthTools on AvoAssistantService {
     // Prefill everything not passed from the profile, the existing goal and
     // the weight log — the same sources the goal-setup screen prefills from.
     final user = await ref.read(currentUserProvider.future);
-    final existing = await NutritionGoalService.instance.getGoal();
+    final existing = await store.goal();
     final hasConfiguredGoal = existing != null && existing.isConfigured;
 
     if (gender == null || gender.isEmpty) {
@@ -123,7 +124,7 @@ extension AvoHealthTools on AvoAssistantService {
     var weight =
         (args['current_weight_kg'] as num?)?.toDouble() ??
         existing?.currentWeightKg;
-    weight ??= (await WeightLogService.instance.getLatest())?.weightKg;
+    weight ??= (await store.latestWeight())?.weightKg;
     if (weight != null && (weight < 20 || weight > 400)) {
       return {'error': 'current_weight_kg must be between 20 and 400'};
     }
@@ -210,105 +211,44 @@ extension AvoHealthTools on AvoAssistantService {
     // Always the preview with "Übernehmen" (Kap. 5.6): a first goal too, and
     // `confirm_replace` only shows it again. Only the tap saves
     // ([applyGoalForAvo]); nothing in the profile or the weight log is
-    // touched here.
-    final gate = avoGoalGate(goal, previous: existing);
+    // touched here. The card names a weight entry for today when there is
+    // none yet.
+    final latest = await store.latestWeight();
+    final gate = avoGoalGate(
+      goal,
+      previous: existing,
+      todayHasWeight:
+          latest != null && AvoAssistantService._sameDay(latest.loggedDate, now),
+    );
     payloads.add(gate.card);
     return gate.result;
   }
 
-  /// "Übernehmen" on a goal preview. Reads the goal and today's weight at
-  /// the tap: saves [goal], writes its weight only when today has no entry
-  /// yet (never over the person's own), and leaves the profile alone.
-  /// "Widerrufen" puts back exactly that: the goal as it was at the tap
-  /// (or none) and the weight entry it added, each only while unchanged.
+  /// "Übernehmen" on a goal preview ([avoApplyGoal]): the goal and today's
+  /// weight are read at the tap; the profile is never touched.
   Future<AvoGoalRecord> applyGoalForAvo(
     WidgetRef ref,
-    NutritionGoal goal,
-  ) async {
-    final before = await NutritionGoalService.instance.getGoal();
-    final now = DateTime.now();
-    final saved = await NutritionGoalService.instance.saveGoal(
-      AvoAssistantService._goalAt(
-        goal,
-        createdAt: before?.createdAt ?? now,
-        updatedAt: now,
-      ),
-    );
-    WeightLogEntry? addedWeight;
-    final weight = goal.currentWeightKg;
-    if (weight != null) {
-      final latest = await WeightLogService.instance.getLatest();
-      final today =
-          latest != null &&
-          AvoAssistantService._sameDay(latest.loggedDate, now);
-      if (!today) {
-        addedWeight = await WeightLogService.instance.logWeight(
-          weightKg: weight,
-        );
-      }
-    }
-    ref.invalidate(nutritionGoalProvider);
-    invalidateNutritionLog(ref);
-    await MascotNotificationService.instance.rearmDinnerIdeasReminder(
-      force: true,
-    );
-    final had = before != null && before.isConfigured;
-    return AvoGoalRecord(
-      tool: 'setup_nutrition_goal',
-      kcal: saved.dailyCalorieTarget ?? goal.dailyCalorieTarget ?? 0,
-      previousKcal: had ? before.dailyCalorieTarget : null,
-      undo: () async {
-        try {
-          final current = await NutritionGoalService.instance.getGoal();
-          if (current == null ||
-              current.dailyCalorieTarget != saved.dailyCalorieTarget ||
-              current.goalType != saved.goalType ||
-              current.activityLevel != saved.activityLevel) {
-            return AvoUndoResult.changedSince;
-          }
-          final latest = await WeightLogService.instance.getLatest();
-          final weightBack =
-              addedWeight != null &&
-              latest != null &&
-              latest.id == addedWeight.id &&
-              latest.weightKg == addedWeight.weightKg;
-          if (addedWeight != null && !weightBack) {
-            return AvoUndoResult.changedSince;
-          }
-          await NutritionGoalService.instance.saveGoal(
-            before != null
-                ? AvoAssistantService._goalAt(
-                    before,
-                    createdAt: before.createdAt,
-                    updatedAt: DateTime.now(),
-                  )
-                : NutritionGoal(
-                    userId: goal.userId,
-                    calorieTrackingEnabled: true,
-                    waterTargetMl: goal.waterTargetMl,
-                    createdAt: saved.createdAt,
-                    updatedAt: DateTime.now(),
-                  ),
-          );
-          if (addedWeight != null) {
-            await WeightLogService.instance.delete(addedWeight.id);
-          }
-          ref.invalidate(nutritionGoalProvider);
-          invalidateNutritionLog(ref);
-          return AvoUndoResult.undone;
-        } catch (e) {
-          debugPrint('❌ [AVO] Goal not taken back: $e');
-          return AvoUndoResult.failed;
-        }
-      },
-    );
-  }
+    AvoGoalPreviewCard card,
+  ) => avoApplyGoal(
+    ref.read(avoGoalStoreProvider),
+    card,
+    now: DateTime.now(),
+    changed: () {
+      ref.invalidate(nutritionGoalProvider);
+      invalidateNutritionLog(ref);
+      unawaited(
+        MascotNotificationService.instance.rearmDinnerIdeasReminder(
+          force: true,
+        ),
+      );
+    },
+  );
 
   Future<Map<String, Object?>> _toolNutritionStatus(
     WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    if (!ref.read(calorieTrackingEnabledProvider)) {
+    if (!ref.read(moduleEnabledProvider(AppModule.calories))) {
       return {
         'tracking_enabled': false,
         'note': AvoAssistantService._trackingDisabledNote,
@@ -390,7 +330,7 @@ extension AvoHealthTools on AvoAssistantService {
     WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    if (!ref.read(calorieTrackingEnabledProvider)) {
+    if (!ref.read(moduleEnabledProvider(AppModule.calories))) {
       return {
         'tracking_enabled': false,
         'note': AvoAssistantService._trackingDisabledNote,
@@ -522,7 +462,7 @@ extension AvoHealthTools on AvoAssistantService {
     WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    if (!ref.read(calorieTrackingEnabledProvider)) {
+    if (!ref.read(moduleEnabledProvider(AppModule.calories))) {
       return {
         'tracking_enabled': false,
         'note': AvoAssistantService._trackingDisabledNote,
@@ -569,7 +509,7 @@ extension AvoHealthTools on AvoAssistantService {
     WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    if (!ref.read(calorieTrackingEnabledProvider)) {
+    if (!ref.read(moduleEnabledProvider(AppModule.calories))) {
       return {
         'tracking_enabled': false,
         'note': AvoAssistantService._trackingDisabledNote,
@@ -643,7 +583,7 @@ extension AvoHealthTools on AvoAssistantService {
     WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    if (!ref.read(calorieTrackingEnabledProvider)) {
+    if (!ref.read(moduleEnabledProvider(AppModule.calories))) {
       return {
         'tracking_enabled': false,
         'note': AvoAssistantService._trackingDisabledNote,
@@ -702,7 +642,7 @@ extension AvoHealthTools on AvoAssistantService {
     WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) async {
-    if (!ref.read(calorieTrackingEnabledProvider)) {
+    if (!ref.read(moduleEnabledProvider(AppModule.calories))) {
       return {
         'tracking_enabled': false,
         'note': AvoAssistantService._trackingDisabledNote,

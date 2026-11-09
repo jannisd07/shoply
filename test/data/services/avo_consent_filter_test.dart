@@ -120,6 +120,32 @@ void main() {
     expect(_f('update_setting', theme), theme);
   });
 
+  test('update_setting zip_code: never the postcode, only whether one is set '
+      '(N6), also with every consent', () {
+    final r = {
+      'success': true,
+      'key': 'zip_code',
+      'display_name': 'Zip code',
+      'old_value': '80331',
+      'new_value': '10115',
+    };
+    for (final (h, b) in [(false, false), (true, true)]) {
+      final out = _f('update_setting', r, health: h, body: b);
+      expect(out.containsKey('old_value'), isFalse);
+      expect(out.containsKey('new_value'), isFalse);
+      expect(out['postcode_set'], isTrue);
+    }
+    expect(
+      _f(
+        'update_setting',
+        {...r, 'new_value': 'none'},
+        health: true,
+        body: true,
+      )['postcode_set'],
+      isFalse,
+    );
+  });
+
   test('other tools pass unchanged', () {
     final r = {'found': 3, 'lists': []};
     expect(_f('get_lists', r), r);

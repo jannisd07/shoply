@@ -15,10 +15,11 @@ import 'package:shoply/routes/route_paths.dart';
 
 // Kap. 5.7: settings, modules, the app.
 
-/// Removing an allergy (Kap. 6.5): the safety variant of the confirm card;
-/// only "Entfernen" removes it, then the result with "Widerrufen".
-class AvoAllergySection extends StatelessWidget {
-  const AvoAllergySection({
+/// Removing an allergy (Kap. 6.5, the safety variant with the warning
+/// symbol) or a diet (the neutral confirm card): only "Entfernen" removes
+/// it, then the result with "Widerrufen".
+class AvoRemovalSection extends StatelessWidget {
+  const AvoRemovalSection({
     super.key,
     required this.payload,
     required this.scope,
@@ -27,7 +28,7 @@ class AvoAllergySection extends StatelessWidget {
 
   final AvoWidgetPayload payload;
   final AvoCardScope scope;
-  final AvoAllergyCard card;
+  final AvoRemovalCard card;
 
   @override
   Widget build(BuildContext context) {
@@ -36,18 +37,27 @@ class AvoAllergySection extends StatelessWidget {
     if (phase == AvoConfirmPhase.deleted && chat.recordOf(payload) != null) {
       return AvoRecordSection(payload: payload, scope: scope);
     }
-    final allergen = {'allergen': card.allergen};
+    final p = card.diet ? {'diet': card.entry} : {'allergen': card.entry};
     return AvoConfirmCard(
-      safety: true,
-      title: context.tr('avo_confirm_allergy_title', params: allergen),
-      body: context.tr('avo_confirm_allergy_body', params: allergen),
+      safety: !card.diet,
+      title: context.tr(
+        card.diet ? 'avo_confirm_diet_title' : 'avo_confirm_allergy_title',
+        params: p,
+      ),
+      body: context.tr(
+        card.diet ? 'avo_confirm_diet_body' : 'avo_confirm_allergy_body',
+        params: p,
+      ),
       confirmLabel: context.tr('avo_remove'),
-      doneText: context.tr('avo_rec_allergy_removed', params: allergen),
+      doneText: context.tr(
+        card.diet ? 'avo_rec_diet_removed' : 'avo_rec_allergy_removed',
+        params: p,
+      ),
       cancelledText: context.tr('avo_not_removed'),
       phase: phase,
       offline: scope.offline,
       firstShow: chat.firstShowOf(payload),
-      onConfirm: () => chat.removeAllergy(payload),
+      onConfirm: () => chat.removeEntry(payload),
       onCancel: () => chat.cancelDelete(payload),
     );
   }

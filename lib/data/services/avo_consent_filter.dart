@@ -35,7 +35,9 @@ Map<String, Object?> avoConsentFilter(
   required bool health,
   required bool body,
 }) {
-  if (health && body) return result;
+  if (health && body && !(tool == 'update_setting' && result['key'] == 'zip_code')) {
+    return result;
+  }
   final out = Map<String, Object?>.of(result);
   void drop(Iterable<String> keys) => keys.forEach(out.remove);
   switch (tool) {
@@ -58,6 +60,13 @@ Map<String, Object?> avoConsentFilter(
       ];
     case 'search_recipes' when !health:
       drop(const ['left_out_for_allergies']);
+    case 'update_setting' when result['key'] == 'zip_code':
+      // The postcode never goes to the model, only whether one is set
+      // (contract, like get_user_profile).
+      final value = result['new_value'];
+      drop(const ['old_value', 'new_value']);
+      out['postcode_set'] =
+          value is String && value.isNotEmpty && value != 'none';
     case 'update_setting':
       final key = result['key'];
       final hidden =

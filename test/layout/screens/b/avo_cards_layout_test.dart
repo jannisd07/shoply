@@ -350,7 +350,8 @@ final _health = [
 ];
 
 final _settingsAndPhoto = [
-  AvoWidgetPayload.card(const AvoAllergyCard('Erdnüsse')),
+  AvoWidgetPayload.card(const AvoRemovalCard('Erdnüsse')),
+  AvoWidgetPayload.card(const AvoRemovalCard('Vegetarisch', diet: true)),
   AvoWidgetPayload.card(const AvoSettingFailedCard('zip_code')),
   AvoWidgetPayload.card(const AvoAppInfoCard(isPro: true)),
   AvoWidgetPayload.confirmDelete(

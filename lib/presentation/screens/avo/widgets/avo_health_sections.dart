@@ -4,6 +4,7 @@ import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/diet_challenge.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
+import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/presentation/screens/avo/avo_card_format.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
@@ -210,6 +211,7 @@ class AvoGoalPreviewSection extends StatelessWidget {
     final kcal = card.goal.dailyCalorieTarget ?? 0;
     final was = card.previous?.dailyCalorieTarget;
     final working = chat.isCardWorking(payload);
+    final changes = avoGoalChanges(context, card);
     return AvoResultSection(
       title: context.tr('avo_goal_new', params: {'kcal': avoInt(context, kcal)}),
       subtitle: [
@@ -218,6 +220,24 @@ class AvoGoalPreviewSection extends StatelessWidget {
         context.tr('avo_guide_value'),
       ].join(' · '),
       leading: const AvoSymbolTile(icon: Icon(CupertinoIcons.flag)),
+      // Every field "Übernehmen" changes, the weight entry too (N3).
+      maxCollapsed: changes.length,
+      details: [
+        for (final c in changes)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AvoSpacing.l,
+              vertical: AvoSpacing.xxs,
+            ),
+            child: Text(
+              c,
+              style: context.text(
+                AvoTextStyle.subhead,
+                color: context.colors.secondaryLabel,
+              ),
+            ),
+          ),
+      ],
       actions: [
         AvoCardAction(
           label: context.tr('avo_goal_use'),
@@ -229,6 +249,61 @@ class AvoGoalPreviewSection extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The lines of a goal preview: each field that differs from the goal in
+/// place (all set ones for a first goal), and the weight entry for today.
+List<String> avoGoalChanges(BuildContext context, AvoGoalPreviewCard card) {
+  final g = card.goal;
+  final b = card.previous;
+  String field(String label, String value) => context.tr(
+    'avo_field',
+    params: {'label': context.tr(label), 'value': value},
+  );
+  String kg(double v) => '${avoDecimal(context, v)} kg';
+  return [
+    if (b == null || b.goalType != g.goalType)
+      field('avo_goal_field_type', context.tr('avo_goal_type_${g.goalType.dbValue}')),
+    if (b == null || b.activityLevel != g.activityLevel)
+      field(
+        'avo_goal_field_activity',
+        context.tr('avo_activity_${g.activityLevel.dbValue}'),
+      ),
+    if (g.heightCm != null && b?.heightCm != g.heightCm)
+      field('avo_goal_field_height', '${avoInt(context, g.heightCm!)} cm'),
+    if (g.currentWeightKg != null && b?.currentWeightKg != g.currentWeightKg)
+      field('avo_goal_field_weight', kg(g.currentWeightKg!)),
+    if (b?.targetWeightKg != g.targetWeightKg)
+      field(
+        'avo_goal_field_target',
+        g.targetWeightKg == null ? context.tr('avo_val_none') : kg(g.targetWeightKg!),
+      ),
+    if (b?.timelineWeeks != g.timelineWeeks && g.timelineWeeks != null)
+      field(
+        'avo_goal_field_weeks',
+        context.tr('avo_goal_weeks', params: {'n': '${g.timelineWeeks}'}),
+      ),
+    if (b == null ||
+        b.proteinTargetG != g.proteinTargetG ||
+        b.carbsTargetG != g.carbsTargetG ||
+        b.fatTargetG != g.fatTargetG)
+      field(
+        'avo_goal_field_macros',
+        context.tr(
+          'avo_goal_macros',
+          params: {
+            'p': '${g.proteinTargetG ?? '–'}',
+            'c': '${g.carbsTargetG ?? '–'}',
+            'f': '${g.fatTargetG ?? '–'}',
+          },
+        ),
+      ),
+    if (card.writesWeight && g.currentWeightKg != null)
+      context.tr(
+        'avo_goal_weight_today',
+        params: {'kg': avoDecimal(context, g.currentWeightKg!)},
+      ),
+  ];
 }
 
 /// Avo's estimate of a meal (Kap. 7.2): never saved until "Eintragen".

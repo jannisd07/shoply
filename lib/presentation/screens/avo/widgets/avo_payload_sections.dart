@@ -101,7 +101,7 @@ List<Widget> _cardSections(
   AvoGoalPreviewCard() => [
     AvoGoalPreviewSection(payload: p, scope: s, card: card),
   ],
-  AvoAllergyCard() => [AvoAllergySection(payload: p, scope: s, card: card)],
+  AvoRemovalCard() => [AvoRemovalSection(payload: p, scope: s, card: card)],
   AvoSettingFailedCard() => [avoSettingFailedSection(context, card)],
   AvoAppInfoCard() => [avoAppInfoSection(context, card)],
   AvoPhotoErrorCard() => [

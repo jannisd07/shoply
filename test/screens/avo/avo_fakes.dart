@@ -289,12 +289,15 @@ class FakeAvoBackend implements AvoBackend {
   }
 
   @override
-  Future<AvoSettingRecord> removeAllergy(WidgetRef ref, String allergen) async {
-    cardWrites.add('allergy:$allergen');
+  Future<AvoSettingRecord> removeEntry(
+    WidgetRef ref,
+    AvoRemovalCard card,
+  ) async {
+    cardWrites.add('${card.diet ? 'diet' : 'allergy'}:${card.entry}');
     return AvoSettingRecord(
       tool: 'update_setting',
-      key: 'allergies_remove',
-      value: allergen,
+      key: card.diet ? 'diet_remove' : 'allergies_remove',
+      value: card.entry,
       undo: _undo,
     );
   }

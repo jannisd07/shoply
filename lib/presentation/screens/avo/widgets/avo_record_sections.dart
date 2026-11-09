@@ -211,6 +211,11 @@ AvoRecordHead avoRecordHead(BuildContext context, AvoRecord r) {
         subtitle: [
           if (was != null)
             context.tr('avo_goal_was', params: {'kcal': avoInt(context, was)}),
+          if (r.weightKg != null)
+            context.tr(
+              'avo_goal_weight_logged',
+              params: {'kg': avoDecimal(context, r.weightKg!)},
+            ),
           context.tr('avo_guide_value'),
         ].join(' · '),
         icon: const Icon(CupertinoIcons.flag),
@@ -384,7 +389,7 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
     'gender' => ('avo_set_gender', const AvoIcon(AvoIcons.person)),
     'height_cm' => ('avo_set_height', const AvoIcon(AvoIcons.person)),
     'display_name' || 'name' => ('avo_set_name', const AvoIcon(AvoIcons.person)),
-    _ => ('avo_set_generic', const Icon(CupertinoIcons.gear)),
+    _ => ('avo_set_generic', const AvoIcon(avoTogglesIcon)),
   };
   final value = _value(context, r.key, r.value);
   return (

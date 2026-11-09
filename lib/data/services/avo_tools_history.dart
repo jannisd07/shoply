@@ -191,16 +191,15 @@ extension AvoHistoryTools on AvoAssistantService {
         'error': 'history_id is required — call get_shopping_history first',
       };
     }
-    final trip = await _findTrip(historyId);
+    final store = ref.read(avoSplitStoreProvider);
+    final trip = await store.trip(historyId);
     if (trip == null) return {'error': 'Shopping history entry not found'};
-    final existing = await ExpenseSplitService.instance.getSplitsForHistory(
-      historyId,
-    );
+    final existing = await store.splits(historyId);
     final plan = avoSplitGate(
       trip: trip,
       others: AvoAssistantService._stringList(args['participant_names']),
       yourName: await _yourName(ref),
-      yourUserId: _supabase.auth.currentUser?.id,
+      yourUserId: store.userId,
       existing: existing,
       modelTotal: (args['total_cost'] as num?)?.toDouble(),
     );
@@ -220,54 +219,14 @@ extension AvoHistoryTools on AvoAssistantService {
     return AvoAssistantService._t(ref, 'avo_you');
   }
 
-  /// "Teilen" on a split preview: reads the trip and its split again and
-  /// saves only when both are as the card showed them (a total recorded
-  /// meanwhile, or a share paid meanwhile, means the card is out of date).
-  /// Null when the card is out of date. There is no way back yet (L9); the
-  /// card said what it replaces before the tap.
+  /// "Teilen" on a split preview ([avoSplitTrip]): checks module, trip,
+  /// payer and split again at the tap. Null when the card is out of date.
   Future<AvoSplitRecord?> splitTripForAvo(
     WidgetRef ref,
     AvoSplitPreviewCard card,
-  ) async {
-    final trip = await _findTrip(card.historyId);
-    if (trip == null) return null;
-    final tripTotal = trip.totalCost;
-    final hasTotal = tripTotal != null && tripTotal > 0;
-    if (hasTotal != card.totalFromTrip ||
-        (hasTotal && (tripTotal - card.total).abs() > 0.005)) {
-      return null;
-    }
-    final existing = await ExpenseSplitService.instance.getSplitsForHistory(
-      card.historyId,
-    );
-    final now = [
-      for (final s in existing) (name: s.participantName, paid: s.isPaid),
-    ];
-    if (now.length != card.replaces.length ||
-        !now.every(card.replaces.contains)) {
-      return null;
-    }
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null || userId != card.yourUserId) return null;
-    final you = card.shares.firstWhere((s) => s.isYou);
-    await ExpenseSplitService.instance.createSplits(
-      historyId: card.historyId,
-      totalCost: card.total,
-      shares: [
-        for (final s in card.shares)
-          SplitShare(
-            userId: s.isYou ? userId : null,
-            participantName: s.name,
-            amount: s.amount,
-          ),
-      ],
-      paidByUserId: userId,
-      paidByName: you.name,
-    );
-    return AvoSplitRecord(
-      tool: 'split_trip_cost',
-      tripDate: card.tripDate,
-      shares: card.shares,
-    );
-  }
+  ) => avoSplitTrip(
+    ref.read(avoSplitStoreProvider),
+    card,
+    moduleOn: ref.read(moduleEnabledProvider(AppModule.costSplit)),
+  );
 }

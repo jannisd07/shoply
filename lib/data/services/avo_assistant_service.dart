@@ -16,7 +16,6 @@ import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/models/shopping_item_model.dart';
 import 'package:shoply/data/models/shopping_list_model.dart';
 import 'package:shoply/data/models/weekly_nutrition_summary.dart';
-import 'package:shoply/data/models/weight_log_entry.dart';
 import 'package:shoply/data/models/workout.dart';
 import 'package:shoply/data/repositories/item_repository.dart';
 import 'package:shoply/data/repositories/list_repository.dart';
@@ -26,16 +25,17 @@ import 'package:shoply/data/services/avo_consent_filter.dart';
 import 'package:shoply/data/services/avo_consents.dart';
 import 'package:shoply/data/services/avo_conversation.dart';
 import 'package:shoply/data/services/avo_list_changes.dart';
+import 'package:shoply/data/services/avo_stores.dart';
 import 'package:shoply/data/services/avo_tool_gates.dart';
 import 'package:shoply/data/services/avo_tool_writes.dart';
 import 'package:shoply/data/services/avo_nudge_service.dart';
 import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/data/services/claude_service.dart';
-import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/meal_photo_storage_service.dart';
 import 'package:shoply/data/services/meal_plan_aggregator.dart';
+import 'package:shoply/data/services/meal_plan_repository.dart' show MealPlanUndo;
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/offer_price_service.dart';
 import 'package:shoply/data/services/offer_savings.dart';
@@ -56,7 +56,6 @@ import 'package:shoply/presentation/providers/price_comparison_provider.dart';
 import 'package:shoply/presentation/providers/region_provider.dart';
 import 'package:shoply/presentation/providers/store_for_list_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
-import 'package:shoply/presentation/state/calorie_tracking_provider.dart';
 import 'package:shoply/presentation/state/diet_challenge_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
@@ -91,7 +90,8 @@ class AvoAssistantService {
   static final AvoAssistantService instance = AvoAssistantService._();
   AvoAssistantService._();
 
-  final _supabase = Supabase.instance.client;
+  /// Read when used, so tests can make the service without Supabase.
+  SupabaseClient get _supabase => Supabase.instance.client;
 
   final AvoConversation _conversation = AvoConversation();
   final AvoPendingDeletes _pendingDeletes = AvoPendingDeletes();
@@ -339,13 +339,15 @@ class AvoAssistantService {
   // ── Tool dispatcher ──────────────────────────────────────────────
 
   /// Runs one checked tool call and answers with its tool_result block.
+  /// [run] stands in for the tool itself in tests ([debugRunToolCall]).
   Future<Map<String, dynamic>> _runToolCall(
     AvoToolCall call,
     WidgetRef ref,
     AvoContext? context,
     List<AvoWidgetPayload> payloads,
-    ({bool health, bool body}) consents,
-  ) async {
+    ({bool health, bool body}) consents, {
+    Future<Map<String, Object?>> Function()? run,
+  }) async {
     final error = call.error;
     if (error != null) {
       return AvoConversation.toolResult(call.id, error, isError: true);
@@ -362,7 +364,8 @@ class AvoAssistantService {
     final before = payloads.length;
     final result = avoConsentFilter(
       call.name,
-      await _runTool(call.name, call.input, ref, context, payloads),
+      await (run?.call() ??
+          _runTool(call.name, call.input, ref, context, payloads, consents)),
       health: consents.health,
       body: consents.body,
     );
@@ -387,6 +390,31 @@ class AvoAssistantService {
     return AvoConversation.toolResult(call.id, result, isError: failed);
   }
 
+  /// The tool-result path for tests: [name] with [input] as the model would
+  /// call it, with the consents; [run] replaces the tool (to check what the
+  /// filter and the markers do with its result).
+  @visibleForTesting
+  Future<Map<String, dynamic>> debugRunToolCall(
+    String name,
+    Map<String, Object?> input,
+    WidgetRef ref,
+    List<AvoWidgetPayload> payloads, {
+    required bool health,
+    required bool body,
+    Future<Map<String, Object?>> Function()? run,
+  }) => _runToolCall(
+    AvoToolCall(id: 'test', name: name, input: input),
+    ref,
+    null,
+    payloads,
+    (health: health, body: body),
+    run: run,
+  );
+
+  /// A service for tests (no conversation shared with the app's).
+  @visibleForTesting
+  factory AvoAssistantService.forTest() => AvoAssistantService._();
+
   /// Tools that read calories, weight or goals (server BODY_DATA_TOOLS).
   static const _bodyDataTools = {
     'get_nutrition_status',
@@ -401,6 +429,7 @@ class AvoAssistantService {
     WidgetRef ref,
     AvoContext? context,
     List<AvoWidgetPayload> payloads,
+    ({bool health, bool body}) consents,
   ) async {
     try {
       switch (name) {
@@ -429,7 +458,7 @@ class AvoAssistantService {
         case 'add_history_items_to_list':
           return await _toolAddHistoryItems(args, ref, payloads);
         case 'update_setting':
-          return await _toolUpdateSetting(args, ref, payloads);
+          return await _toolUpdateSetting(args, ref, payloads, consents);
         case 'set_module':
           return await _toolSetModule(args, ref, payloads);
         case 'get_app_info':
@@ -487,7 +516,13 @@ class AvoAssistantService {
           };
       }
     } catch (e) {
-      return {'error': e.toString()};
+      // Never the exception's text (it can hold rows or ids) to the model.
+      debugPrint('❌ [AVO] Tool $name failed: ${e.runtimeType}');
+      return {
+        'error': 'tool_failed',
+        'note': 'The app could not do that right now. Say so briefly; the '
+            'person can try again.',
+      };
     }
   }
 
@@ -510,31 +545,6 @@ class AvoAssistantService {
   }
 
   // ── Profile & preference-guidance tools ─────────────────────────
-
-  /// [g] with new timestamps (`copyWith` keeps them).
-  static NutritionGoal _goalAt(
-    NutritionGoal g, {
-    required DateTime createdAt,
-    required DateTime updatedAt,
-  }) => NutritionGoal(
-    userId: g.userId,
-    calorieTrackingEnabled: g.calorieTrackingEnabled,
-    goalType: g.goalType,
-    activityLevel: g.activityLevel,
-    currentWeightKg: g.currentWeightKg,
-    targetWeightKg: g.targetWeightKg,
-    heightCm: g.heightCm,
-    timelineWeeks: g.timelineWeeks,
-    dailyCalorieTarget: g.dailyCalorieTarget,
-    proteinTargetG: g.proteinTargetG,
-    carbsTargetG: g.carbsTargetG,
-    fatTargetG: g.fatTargetG,
-    waterTargetMl: g.waterTargetMl,
-    creditWorkouts: g.creditWorkouts,
-    pace: g.pace,
-    createdAt: createdAt,
-    updatedAt: updatedAt,
-  );
 
   static bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;

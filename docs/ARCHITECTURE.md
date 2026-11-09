@@ -103,15 +103,21 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   `lib/data/services/avo_card_data.dart`. Mehrere Artikel auf einmal (Rezept, früherer Einkauf, Zettel) gehen über
   `AvoListChanges.addBatch` (`ItemRepository.addItems`, gleiche Zusammenführung wie „Zutaten auf die Liste“).
   Was erst ein Tipp der Person schreibt, schreibt der Dienst nie selbst: `log_food` zeigt nur die Schätzung
-  („Eintragen“), `setup_nutrition_goal` mit bestehendem Ziel die Vorschau („Übernehmen“), `allergies_remove` die
-  Sicherheits-Rückfrage, `add_to_plan` auf belegtem Tag „Dazulegen / Ersetzen“, `setup_nutrition_goal` immer die
-  Vorschau, `split_trip_cost` die Aufteilung zum „Teilen“. Diese Entscheidungen sind reine Funktionen in
-  `avo_tool_gates.dart` (getestet). Avo schaltet sich selbst erst nach dem Ende der Antwort aus. Die Karten liegen
+  („Eintragen“), `setup_nutrition_goal` immer die Vorschau („Übernehmen“, nennt jedes Feld, das sich ändert, auch
+  einen Gewichtseintrag für heute), `allergies_remove` und `diet_remove` die Rückfrage (ohne Einwilligung „Ernährung
+  und Allergien“ nur die Einwilligungskarte und ein neutrales Ergebnis), `add_to_plan` auf belegtem Tag „Dazulegen /
+  Ersetzen“, `split_trip_cost` die Aufteilung zum „Teilen“ (Betrag und Zahler kommen aus dem Einkauf). Diese
+  Entscheidungen sind reine Funktionen in `avo_tool_gates.dart` (getestet). Was Ziel- und Teilen-Tipp lesen und
+  schreiben, liegt hinter `avoGoalStoreProvider` / `avoSplitStoreProvider` (`avo_stores.dart`): Der Tipp liest
+  Ziel, Gewicht, Einkauf, Zahler und Aufteilung neu und schreibt nur, wenn alles noch wie auf der Karte ist; das
+  übernommene Ziel behält Felder, die die Karte nicht zeigt (Wasser, Training, Tempo). Avo schaltet sich selbst
+  erst nach dem Ende der Antwort aus. Die Karten liegen
   nach Bereich in `screens/avo/widgets/avo_*_sections.dart`, die Werkzeuge nach Bereich in den Teil-Dateien
   `lib/data/services/avo_tools_*.dart` (Erweiterungen des Dienstes).
 - Jedes Werkzeug-Ergebnis geht durch `avoConsentFilter` (`avo_consent_filter.dart`): ohne „Kalorien, Gewicht und
   Ziele“ keine Summen, Ziele, Gewichte, Alter oder Größe, ohne „Ernährung und Allergien“ keine Allergien und keine
-  Ernährung; die Postleitzahl nie (nur, ob eine gesetzt ist).
+  Ernährung; die Postleitzahl nie (nur, ob eine gesetzt ist). Ein Werkzeug-Fehler geht nur als `tool_failed` an
+  das Modell, nie mit dem Fehlertext. Tests rufen den Weg über `debugRunToolCall` auf.
 - Foto an Avo (`AvoChat.sendPhoto`, `avo_chat_photo.dart`): Das Foto bleibt auf dem Gerät im Gespräch und geht nie
   in den `avo_chat`-Verlauf. Kontext Kalorien = Essen (`meal_photo`), Liste/Einkaufsmodus = Zettel (`list_import`),
   sonst fragt die Runde. Kamera und Fotoauswahl über `avoPhotoSourceProvider` (`image_picker`; „Kamera ist aus“

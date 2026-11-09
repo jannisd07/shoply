@@ -85,10 +85,19 @@ extension AvoRecipeTools on AvoAssistantService {
   /// Resolves a recipe by id (exact match against the full library) or,
   /// failing that, by a free-text name (first search result) — the shared
   /// lookup every recipe-scoped tool (nutrition, add-to-list) needs.
-  Future<Recipe?> _resolveRecipe(String? id, String? name) async {
+  /// [byId] looks an id up first (the meal plan's own lookup, with its
+  /// cache); else the recipe service.
+  Future<Recipe?> _resolveRecipe(
+    String? id,
+    String? name, {
+    Future<Recipe?> Function(String id)? byId,
+  }) async {
     if (id != null && id.isNotEmpty) {
       try {
-        return await RecipeService.instance.getRecipeById(id);
+        final found = byId == null
+            ? await RecipeService.instance.getRecipeById(id)
+            : await byId(id);
+        if (found != null) return found;
       } catch (_) {
         // Not found (or a hallucinated id) — fall back to the name search.
       }
@@ -304,6 +313,7 @@ extension AvoRecipeTools on AvoAssistantService {
     final recipe = await _resolveRecipe(
       args['recipe_id'] as String?,
       args['recipe_name'] as String?,
+      byId: ref.read(mealPlanRecipeLookupProvider),
     );
     if (recipe == null) return {'error': 'Recipe not found'};
     final servings =
@@ -351,18 +361,23 @@ extension AvoRecipeTools on AvoAssistantService {
     List<String> replacing = const [],
   }) async {
     final controller = ref.read(mealPlanControllerProvider);
-    final removed = replacing.isEmpty
-        ? null
-        : await controller.removeEntries(replacing);
+    // The new recipe first: if it cannot be planned, nothing is taken out.
     final added = await controller.addRecipeToPlan(
       recipeId,
       day,
       servings,
       recipe: recipe,
     );
-    if (added == null) {
-      if (removed != null) await controller.undo(removed);
-      return null;
+    if (added == null) return null;
+    MealPlanUndo? removed;
+    if (replacing.isNotEmpty) {
+      try {
+        removed = await controller.removeEntries(replacing);
+      } catch (e) {
+        // "Ersetzen" did not go through: take the new one back too.
+        await controller.undo(added.undo);
+        rethrow;
+      }
     }
     return AvoPlanRecord(
       tool: 'add_to_plan',

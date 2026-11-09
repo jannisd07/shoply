@@ -241,19 +241,19 @@ mixin _AvoCardActions on ChangeNotifier {
 
   // -------------------------------------------------------------- allergy
 
-  /// "Entfernen" on the allergy safety card: the only way an allergy goes.
-  Future<void> removeAllergy(AvoWidgetPayload p) async {
+  /// "Entfernen" on a removal card: the only way an allergy or a diet goes.
+  Future<void> removeEntry(AvoWidgetPayload p) async {
     final card = p.card;
     final phase = confirmPhaseOf(p);
-    if (card is! AvoAllergyCard ||
+    if (card is! AvoRemovalCard ||
         (phase != AvoConfirmPhase.asking && phase != AvoConfirmPhase.failed)) {
       return;
     }
     _confirm[p] = AvoConfirmPhase.working;
     notifyListeners();
     final record = await _cardWrite(
-      (p, 'allergy'),
-      (ref) => _cardBackend.removeAllergy(ref, card.allergen),
+      (p, 'removal'),
+      (ref) => _cardBackend.removeEntry(ref, card),
     );
     if (_cardsGone) return;
     if (record == null) {

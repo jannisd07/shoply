@@ -161,33 +161,44 @@ List<Widget> avoSplitPreviewSections(
       '${sh.isYou ? context.tr('avo_you') : sh.name} ${avoEuro(context, sh.amount)}',
   ].join(' · ');
   final total = avoEuro(context, card.total);
-  final paid = [
-    for (final r in card.replaces)
-      if (r.paid) r.name,
-  ];
+  final payer = card.payerIsYou
+      ? context.tr('avo_split_paid_you')
+      : card.payerName == null
+      ? context.tr('avo_split_paid_other')
+      : context.tr('avo_split_paid_by', params: {'name': card.payerName!});
   final stale = s.chat.isSplitStale(p);
   final working = s.chat.isCardWorking(p);
+  // Everything "Teilen" changes besides the shares: the split it replaces,
+  // whose "bezahlt" is reset, a payer set for the first time.
+  final notes = [
+    if (card.replaces.isNotEmpty)
+      card.paidReset.isEmpty
+          ? context.tr('avo_split_replaces')
+          : context.tr(
+              'avo_split_replaces_paid',
+              params: {'names': avoAnd(context, card.paidReset)},
+            ),
+    if (card.payerIsNew) context.tr('avo_split_payer_new'),
+  ];
   return [
     AvoResultSection(
       title: context.tr(
         'avo_rec_split_title',
         params: {'date': avoDay(context, card.tripDate)},
       ),
-      subtitle: context.tr(
-        card.totalFromTrip ? 'avo_split_preview' : 'avo_split_preview_said',
-        params: {'shares': shares, 'total': total},
-      ),
+      subtitle: [
+        context.tr(
+          card.totalFromTrip ? 'avo_split_preview' : 'avo_split_preview_said',
+          params: {'shares': shares, 'total': total},
+        ),
+        payer,
+      ].join(' · '),
       leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.people)),
       footnote: stale
           ? context.tr('avo_confirm_expired')
-          : card.replaces.isEmpty
+          : notes.isEmpty
           ? null
-          : paid.isEmpty
-          ? context.tr('avo_split_replaces')
-          : context.tr(
-              'avo_split_replaces_paid',
-              params: {'names': paid.join(', ')},
-            ),
+          : notes.join(' '),
       actions: [
         if (!stale)
           AvoCardAction(

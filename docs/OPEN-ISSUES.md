@@ -82,7 +82,7 @@ Stand: 2026-11-08.
 | Avo: Menge der Essens-Schätzung | Bis B6's Mengen-Eingabe (Vollbild) da ist, nur ganze Portionen (Stepper 1–10) in der Karte. So lassen oder auf B6 warten? |
 | Avo: Rezept auf die Liste ohne Angebotspreise | Avo hängt beim Rezept auf die Liste keine Angebotspreise mehr an (vorher eine Suche über alle Märkte, Plan 8). Bestätigen? |
 | Avo schaltet sich selbst aus | „Schalte Avo aus“ wirkt nach dem Ende der Antwort, danach Toast „Avo ausgeschaltet · Widerrufen“. So gewollt? |
-| Avo: Kosten teilen ohne Widerrufen | „Teilen“ auf Avos Vorschau ersetzt eine frühere Aufteilung (die Karte sagt, wessen „bezahlt“ zurückgesetzt wird); zurück geht es noch nicht. Rückweg bauen (`ExpenseSplitService` stellt alte Anteile wieder her) oder so lassen? |
+| Avo: Kosten teilen ohne Widerrufen | „Teilen“ auf Avos Vorschau ersetzt eine frühere Aufteilung (die Karte sagt, wessen „bezahlt“ zurückgesetzt wird; der Zahler des Einkaufs bleibt); zurück geht es noch nicht. Rückweg bauen (`ExpenseSplitService` stellt alte Anteile wieder her) oder so lassen? |
 | Fotoauswahl als System-Blatt | „Foto auswählen“ zeigt Apples Fotoauswahl (PHPicker) als Blatt, das von unten hereinfährt; die Kamera kommt bildschirmfüllend, ebenfalls von unten. Beides steuert iOS (image_picker), A's Zettel-Import macht es genauso. Hinnehmen oder die Vollbild-Kamera aus B6 (Kalorien, jetzt auf main) auch für Avo nutzen? |
 
 ## 5. Bekannte Restarbeiten im Code (kann Claude machen)

@@ -5,6 +5,7 @@ import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/services/allergen_matcher.dart';
 import 'package:shoply/data/services/avo_assistant_models.dart';
+import 'package:shoply/data/services/avo_consents.dart';
 
 // The owner's hard rules for writes the model may ask for, as pure
 // decisions (W1b review M10): what a tool call shows and answers when only
@@ -15,22 +16,51 @@ import 'package:shoply/data/services/avo_assistant_models.dart';
 /// the model (always without a write).
 typedef AvoGate = ({AvoWidgetPayload card, Map<String, Object?> result});
 
-/// `update_setting` with `allergies_remove` (Kap. 6.5): the safety card
-/// with the entry as the person stored it; null when it is no allergy of
-/// theirs (the result then says so). Never removes anything.
-AvoGate? avoAllergyRemovalGate(Object? value, List<String> stored) {
+/// `update_setting` with `allergies_remove` (Kap. 6.5) or `diet_remove`:
+/// the removal card with the entry as the person stored it; only its tap
+/// removes. Without the consent "Ernährung und Allergien" ([healthShared])
+/// the answer is the same whether the entry is stored or not (no way to
+/// probe the allergies) and the consent card shows; nothing is removed.
+AvoGate avoRemovalGate(
+  String key,
+  Object? value,
+  List<String> stored, {
+  required bool healthShared,
+}) {
+  if (!healthShared) {
+    return (
+      card: AvoWidgetPayload.consentRequest(AvoConsentKind.health),
+      result: {
+        'success': false,
+        'not_shared': true,
+        'note': 'The person has not shared diet and allergies with Avo, so '
+            'nothing was looked up or changed. The app shows a card to share '
+            'them; ask them to tap it, then ask again.',
+      },
+    );
+  }
+  final diet = key == 'diet_remove';
   final wanted = value?.toString().trim().toLowerCase() ?? '';
   final match = stored
       .where((a) => a.trim().toLowerCase() == wanted)
       .firstOrNull;
-  if (match == null) return null;
+  if (match == null) {
+    return (
+      card: AvoWidgetPayload.card(AvoSettingFailedCard(key)),
+      result: {
+        'success': false,
+        'error': diet
+            ? 'That is not one of the saved diets.'
+            : 'That is not one of the saved allergies.',
+      },
+    );
+  }
   return (
-    card: AvoWidgetPayload.card(AvoAllergyCard(match)),
+    card: AvoWidgetPayload.card(AvoRemovalCard(match, diet: diet)),
     result: {
       'success': false,
       'requires_confirmation': true,
-      'note':
-          'The app shows a card to confirm. The allergy stays until the '
+      'note': 'The app shows a card to confirm. The entry stays until the '
           'person taps Remove on it.',
     },
   );
@@ -79,11 +109,22 @@ AvoGate avoFoodGate({
 /// preview with "Übernehmen", for a first goal too and whatever
 /// `confirm_replace` says. [previous] is the goal in place now (for
 /// "bisher"); the tap reads it again.
-AvoGate avoGoalGate(NutritionGoal goal, {NutritionGoal? previous}) {
+AvoGate avoGoalGate(
+  NutritionGoal goal, {
+  NutritionGoal? previous,
+  bool todayHasWeight = true,
+}) {
   final had = previous != null && previous.isConfigured;
+  // The tap enters the weight for today only where there is none yet; the
+  // card says so.
+  final writesWeight = goal.currentWeightKg != null && !todayHasWeight;
   return (
     card: AvoWidgetPayload.card(
-      AvoGoalPreviewCard(goal: goal, previous: had ? previous : null),
+      AvoGoalPreviewCard(
+        goal: goal,
+        previous: had ? previous : null,
+        writesWeight: writesWeight,
+      ),
     ),
     result: {
       'requires_confirmation': true,
@@ -91,6 +132,7 @@ AvoGate avoGoalGate(NutritionGoal goal, {NutritionGoal? previous}) {
       'goal_type': goal.goalType.dbValue,
       'daily_calorie_target': goal.dailyCalorieTarget,
       if (had) 'replaces_daily_calorie_target': previous.dailyCalorieTarget,
+      if (writesWeight) 'would_log_weight_today': true,
       'note':
           'Nothing is saved yet: the app shows the new goal with a button '
           '"Übernehmen"; only the person\'s tap saves it. Calling again, also '
@@ -171,18 +213,34 @@ AvoSplitPlan avoSplitGate({
   final share = double.parse((total / (names.length + 1)).toStringAsFixed(2));
   // The payer's share takes the cent remainder, so the shares add up.
   final yours = double.parse((total - share * names.length).toStringAsFixed(2));
+  // The trip's payer stays; a trip without one gets the person as payer.
+  final payerIsNew = trip.paidByUserId == null && trip.paidByName == null;
+  final payerIsYou =
+      payerIsNew || (yourUserId != null && trip.paidByUserId == yourUserId);
+  final payerName = payerIsNew ? yourName : trip.paidByName;
+  // The payer's own share is made again as paid; every other paid one is
+  // reset.
+  final payerShare = payerIsYou ? yourName : payerName;
   final card = AvoSplitPreviewCard(
     historyId: trip.id,
     tripDate: trip.completedAt,
     total: total,
     totalFromTrip: fromTrip,
     yourUserId: yourUserId,
+    payerUserId: payerIsNew ? yourUserId : trip.paidByUserId,
+    payerName: payerName,
+    payerIsYou: payerIsYou,
+    payerIsNew: payerIsNew,
     shares: [
       (name: yourName, amount: yours, isYou: true),
       for (final n in names) (name: n, amount: share, isYou: false),
     ],
     replaces: [
       for (final s in existing) (name: s.participantName, paid: s.isPaid),
+    ],
+    paidReset: [
+      for (final s in existing)
+        if (s.isPaid && s.participantName != payerShare) s.participantName,
     ],
   );
   return (
@@ -196,6 +254,7 @@ AvoSplitPlan avoSplitGate({
         'total_from_trip': fromTrip,
         'each_share': share,
         'participants': [yourName, ...names],
+        'paid_by_you': payerIsYou,
         if (existing.isNotEmpty) 'replaces_existing_split': true,
         'note':
             'Nothing is split yet: the app shows the split and only the '

@@ -298,6 +298,7 @@ void main() {
             (name: 'Lena', amount: 21.4, isYou: false),
           ],
           replaces: const [(name: 'Lena', paid: true)],
+          paidReset: const ['Lena'],
         ),
       );
       final backend = FakeAvoBackend([AvoScript(payloads: [card])]);
@@ -309,7 +310,7 @@ void main() {
       );
       await settle(tester);
       expect(
-        find.text('Split: you €21.40 · Lena €21.40 · total €42.80'),
+        find.text('Split: you €21.40 · Lena €21.40 · total €42.80 · You paid'),
         findsOneWidget,
       );
       expect(
@@ -700,9 +701,12 @@ void main() {
           payloads: [
             AvoWidgetPayload.card(
               AvoGoalPreviewCard(
+                writesWeight: true,
                 goal: NutritionGoal(
                   userId: 'u1',
                   dailyCalorieTarget: 1800,
+                  proteinTargetG: 120,
+                  currentWeightKg: 80,
                   createdAt: DateTime(2026),
                   updatedAt: DateTime(2026),
                 ),
@@ -729,6 +733,12 @@ void main() {
         find.text('was 2,000 · guide value, not medical advice'),
         findsOneWidget,
       );
+      // Every field that changes is named (N3).
+      expect(
+        find.text('Per day: protein 120 g · carbs – g · fat – g'),
+        findsOneWidget,
+      );
+      expect(find.text("Also logs 80 kg as today's weight"), findsOneWidget);
       expect(backend.cardWrites, isEmpty);
       await tester.tap(find.text('Use this goal'));
       await settle(tester);
@@ -810,7 +820,7 @@ void main() {
     ) async {
       final backend = FakeAvoBackend([
         AvoScript(
-          payloads: [AvoWidgetPayload.card(const AvoAllergyCard('Erdnuss'))],
+          payloads: [AvoWidgetPayload.card(const AvoRemovalCard('Erdnuss'))],
         ),
       ]);
       await tester.pumpWidget(
@@ -836,10 +846,37 @@ void main() {
       expect(find.text('Undo'), findsOneWidget);
     });
 
+    testWidgets('removing a diet entry goes through its own confirm card', (
+      tester,
+    ) async {
+      final backend = FakeAvoBackend([
+        AvoScript(
+          payloads: [
+            AvoWidgetPayload.card(
+              const AvoRemovalCard('Vegetarisch', diet: true),
+            ),
+          ],
+        ),
+      ]);
+      await tester.pumpWidget(
+        avoHarness(
+          const SingleChildScrollView(child: AvoRounds()),
+          avoCardOverrides(backend: backend),
+        ),
+      );
+      await settle(tester);
+      expect(find.text('Remove Vegetarisch from your diet?'), findsOneWidget);
+      expect(backend.cardWrites, isEmpty);
+      await tester.tap(find.text('Remove'));
+      await settle(tester);
+      expect(backend.cardWrites, ['diet:Vegetarisch']);
+      expect(find.text('Vegetarisch removed'), findsOneWidget);
+    });
+
     testWidgets('cancel keeps it', (tester) async {
       final backend = FakeAvoBackend([
         AvoScript(
-          payloads: [AvoWidgetPayload.card(const AvoAllergyCard('Erdnuss'))],
+          payloads: [AvoWidgetPayload.card(const AvoRemovalCard('Erdnuss'))],
         ),
       ]);
       await tester.pumpWidget(

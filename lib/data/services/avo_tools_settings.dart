@@ -6,22 +6,25 @@ extension AvoSettingTools on AvoAssistantService {
     Map<String, Object?> args,
     WidgetRef ref,
     List<AvoWidgetPayload> payloads,
+    ({bool health, bool body}) consents,
   ) async {
     final key = args['key'] as String?;
     final value = args['value'];
     if (key == null) return {'error': 'key is required'};
 
-    // Removing an allergy only ever happens from the person's tap on the
-    // safety card (Kap. 6.5); the model's call shows the card.
-    if (key == 'allergies_remove') {
+    // Removing an allergy or a diet only ever happens from the person's tap
+    // on its card (Kap. 6.5); the model's call shows the card, and without
+    // the consent it learns nothing about what is stored.
+    if (key == 'allergies_remove' || key == 'diet_remove') {
       final user = await ref.read(currentUserProvider.future);
-      final gate = avoAllergyRemovalGate(value, user?.allergies ?? const []);
-      if (gate == null) {
-        return {
-          'success': false,
-          'error': 'That is not one of the saved allergies.',
-        };
-      }
+      final gate = avoRemovalGate(
+        key,
+        value,
+        key == 'diet_remove'
+            ? user?.dietPreferences ?? const []
+            : user?.allergies ?? const [],
+        healthShared: consents.health,
+      );
       payloads.add(gate.card);
       return gate.result;
     }
@@ -120,32 +123,32 @@ extension AvoSettingTools on AvoAssistantService {
 
   /// The tap on "Entfernen" of the allergy safety card: removes the one
   /// entry the card shows, with "Widerrufen" (adds it again).
-  Future<AvoSettingRecord> removeAllergyForAvo(
+  /// "Entfernen" on a removal card: removes the one entry the card shows
+  /// (an allergy or a diet), with "Widerrufen" (adds it again).
+  Future<AvoSettingRecord> removeEntryForAvo(
     WidgetRef ref,
-    String allergen,
+    AvoRemovalCard card,
   ) async {
-    final previous = await _settingValue(ref, 'allergies_remove');
-    final result = await AvoSettingsBridge(
-      ref,
-    ).update('allergies_remove', allergen);
+    final remove = card.diet ? 'diet_remove' : 'allergies_remove';
+    final add = card.diet ? 'diet_add' : 'allergies_add';
+    final previous = await _settingValue(ref, remove);
+    final result = await AvoSettingsBridge(ref).update(remove, card.entry);
     if (!result.success) throw StateError(result.error ?? 'not removed');
-    final after = await _settingValue(ref, 'allergies_remove');
+    final after = await _settingValue(ref, remove);
     return AvoSettingRecord(
       tool: 'update_setting',
-      key: 'allergies_remove',
-      value: allergen,
+      key: remove,
+      value: card.entry,
       previous: previous,
       undo: () async {
         try {
-          if (await _settingValue(ref, 'allergies_remove') != after) {
+          if (await _settingValue(ref, remove) != after) {
             return AvoUndoResult.changedSince;
           }
-          final back = await AvoSettingsBridge(
-            ref,
-          ).update('allergies_add', allergen);
+          final back = await AvoSettingsBridge(ref).update(add, card.entry);
           return back.success ? AvoUndoResult.undone : AvoUndoResult.failed;
         } catch (e) {
-          debugPrint('❌ [AVO] Allergy not added back: $e');
+          debugPrint('❌ [AVO] Entry not added back: $e');
           return AvoUndoResult.failed;
         }
       },
