@@ -67,6 +67,23 @@ abstract final class RoutePaths {
   /// `/settings/health`.
   static const settings = '/settings';
 
+  /// A8 settings pages of Teil A (Konzept 18 §4, §5, §7, E18-11). A search
+  /// hit adds `?row=<rowId>` to highlight one row.
+  static const settingsProfile = '/settings/profile';
+  static const settingsModules = '/settings/modules';
+  static const settingsDiet = '/settings/diet';
+  static const settingsPersonal = '/settings/personal';
+  static const settingsLists = '/settings/lists';
+  static const settingsNotifications = '/settings/notifications';
+  static const settingsAppearance = '/settings/appearance';
+  static const settingsLanguage = '/settings/language';
+  static const settingsHelp = '/settings/help';
+  static const settingsLegal = '/settings/legal';
+  static const settingsLegalSources = '/settings/legal/sources';
+  static String settingsLegalDocument(String id) => '$settingsLegal/$id';
+  static const settingsAccount = '/settings/account';
+  static const settingsAccountDelete = '/settings/account/delete';
+
   /// Paywall (full screen); `?feature=<id>` names the feature that led here.
   /// Registered with A9.
   static const pro = '/pro';

@@ -15,6 +15,9 @@ import 'package:shoply/core/localization/translations/auth.dart';
 import 'package:shoply/core/localization/translations/auth_flow.dart';
 import 'package:shoply/core/localization/translations/home_tips.dart';
 import 'package:shoply/core/localization/translations/onboarding_flow.dart';
+import 'package:shoply/core/localization/translations/profile_root.dart';
+import 'package:shoply/core/localization/translations/settings_account.dart';
+import 'package:shoply/core/localization/translations/settings_pages.dart';
 import 'package:shoply/core/localization/translations/profile.dart';
 import 'package:shoply/core/localization/translations/settings.dart';
 import 'package:shoply/core/localization/translations/paywall.dart';
@@ -70,6 +73,9 @@ class AppTranslations {
     ...onboardingFlowEn,
     ...authFlowEn,
     ...homeTipsEn,
+    ...profileRootEn,
+    ...settingsPagesEn,
+    ...settingsAccountEn,
     ...profileEn,
     ...settingsEn,
     ...paywallEn,
@@ -101,6 +107,9 @@ class AppTranslations {
     ...onboardingFlowDe,
     ...authFlowDe,
     ...homeTipsDe,
+    ...profileRootDe,
+    ...settingsPagesDe,
+    ...settingsAccountDe,
     ...profileDe,
     ...settingsDe,
     ...paywallDe,
