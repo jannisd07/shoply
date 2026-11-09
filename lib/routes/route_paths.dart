@@ -84,6 +84,23 @@ abstract final class RoutePaths {
   static const settingsAccount = '/settings/account';
   static const settingsAccountDelete = '/settings/account/delete';
 
+  /// Teil B's settings pages in the Profil tab (Konzept 18 §6). They exist
+  /// once Teil B mounts them in its `*SettingsRoutes`; the profile root shows
+  /// their rows only then.
+  static const settingsOffers = '/settings/offers';
+  static const settingsOffersRegion = '/settings/offers/region';
+  static const settingsOffersMarkets = '/settings/offers/markets';
+  static const settingsHealth = '/settings/health';
+  static const settingsPlan = '/settings/plan';
+  static const settingsAvo = '/settings/avo';
+  static const settingsSiri = '/settings/siri';
+  static const settingsWidgets = '/settings/widgets';
+
+  /// [route] with the row a search hit highlights once
+  /// (`/settings/diet?row=diet.allergies`, E18-14).
+  static String settingsRow(String route, String rowId) =>
+      Uri(path: route, queryParameters: {'row': rowId}).toString();
+
   /// Paywall (full screen); `?feature=<id>` names the feature that led here.
   /// Registered with A9.
   static const pro = '/pro';
