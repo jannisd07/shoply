@@ -69,6 +69,21 @@ RegularOffer _regular({
   averageDays: 10,
 );
 
+/// Holds `attach` until [release] completes (S6 P3: leave the screen first).
+class _SlowSync extends ListOfferSync {
+  _SlowSync(super.service);
+
+  final release = Completer<void>();
+
+  @override
+  Future<void> attach({
+    required String listId,
+    required String chainId,
+    required String name,
+    required StoreOffer offer,
+  }) => release.future;
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -181,6 +196,39 @@ void main() {
       expect(notifier.added.single.price, 0.59);
       expect(find.text('Haferflocken auf Wocheneinkauf'), findsOneWidget);
       handle.dispose();
+    });
+
+    testWidgets('leaving while a regular is being added does not assert', (
+      tester,
+    ) async {
+      _tall(tester);
+      late _SlowSync sync;
+      final router = await pumpOfferScreen(
+        tester,
+        const Text('Liste'),
+        overrides: [
+          ...on(
+            notifier: RecordingItemsNotifier([_milk, _bread]),
+            regulars: RegularOffers(hasStats: true, offers: [_regular()]),
+          ),
+          listOfferSyncProvider.overrideWith(
+            (ref) => sync = _SlowSync(ref.watch(offerPriceServiceProvider)),
+          ),
+        ],
+        routes: _offerRoutes,
+      );
+      router.push(offerListLocation(testListId));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsLabel('Haferflocken auf Wocheneinkauf setzen'),
+      );
+      await tester.pump();
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(ListOffersScreen), findsNothing);
+      sync.release.complete();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('"ausblenden" hides the list\'s offers, says so and closes', (

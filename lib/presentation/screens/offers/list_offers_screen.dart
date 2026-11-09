@@ -351,6 +351,9 @@ class _Body extends ConsumerWidget {
     RegularOffer r,
     String chain,
   ) async {
+    // The container outlives the screen; a `ref` of a widget that was left
+    // during the awaits would assert on `invalidate` (S6 P3).
+    final container = ProviderScope.containerOf(context, listen: false);
     final sync = ref.read(listOfferSyncProvider);
     final saved = await addOfferToList(
       context,
@@ -367,7 +370,7 @@ class _Body extends ConsumerWidget {
       name: r.name,
       offer: r.offer,
     );
-    ref.invalidate(listOfferSnapshotProvider(listId));
+    container.invalidate(listOfferSnapshotProvider(listId));
   }
 
   void _hide(BuildContext context, WidgetRef ref) {
