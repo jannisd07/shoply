@@ -97,7 +97,8 @@ class SupabaseAuthGateway implements AuthGateway {
   }
 
   @override
-  Future<bool> signInWithApple() => _service.signInWithApple();
+  Future<bool> signInWithApple() async =>
+      await _service.signInWithApple() != null;
 
   @override
   Future<bool> signInWithGoogle() => _service.signInWithGoogle();

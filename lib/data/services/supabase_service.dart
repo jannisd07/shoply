@@ -1,9 +1,16 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show debugPrint, defaultTargetPlatform, TargetPlatform;
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shoply/core/config/env.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart'
+    show debugPrint, defaultTargetPlatform, TargetPlatform, visibleForTesting;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'package:shoply/core/config/env.dart';
 
 class SupabaseService {
   static SupabaseService? _instance;
@@ -54,68 +61,77 @@ class SupabaseService {
   }
 
 
-  // Sign in with Apple (iOS only)
-  Future<bool> signInWithApple() async {
-    debugPrint('🍎 [APPLE_AUTH] signInWithApple() called');
-    debugPrint('🍎 [APPLE_AUTH] Platform: $defaultTargetPlatform');
-    
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      try {
-        // Check if Apple Sign In is available (not available in Simulator)
-        final isAvailable = await SignInWithApple.isAvailable();
-        debugPrint('🍎 [APPLE_AUTH] isAvailable: $isAvailable');
-        
-        if (!isAvailable) {
-          throw Exception('Apple Sign-In ist auf diesem Gerät nicht verfügbar. Bitte verwenden Sie ein echtes iOS-Gerät.');
-        }
-        
-        debugPrint('🍎 [APPLE_AUTH] Requesting Apple credentials...');
-        
-        // Use native Apple Sign In package for better UX
-        final appleCredential = await SignInWithApple.getAppleIDCredential(
-          scopes: [
-            AppleIDAuthorizationScopes.email,
-            AppleIDAuthorizationScopes.fullName,
-          ],
-        );
-        
-        debugPrint('🍎 [APPLE_AUTH] Got Apple credential, identityToken present: ${appleCredential.identityToken != null}');
-
-        if (appleCredential.identityToken == null) {
-          throw Exception('Apple Sign-In fehlgeschlagen: Kein Identity Token erhalten.');
-        }
-
-        debugPrint('🍎 [APPLE_AUTH] Signing in to Supabase...');
-        
-        // Sign in to Supabase with Apple credentials
-        await client.auth.signInWithIdToken(
-          provider: OAuthProvider.apple,
-          idToken: appleCredential.identityToken!,
-        );
-
-        debugPrint('🍎 [APPLE_AUTH] Success!');
-        return true;
-      } on SignInWithAppleAuthorizationException catch (e) {
-        debugPrint('🍎 [APPLE_AUTH] Authorization exception: ${e.code} - ${e.message}');
-        if (e.code == AuthorizationErrorCode.canceled) {
-          // User cancelled - not an error
-          return false;
-        }
-        throw Exception('Apple Sign-In Fehler: ${e.message}');
-      } catch (e) {
-        debugPrint('🍎 [APPLE_AUTH] Error: $e');
-        // Check if it's a configuration error
-        if (e.toString().contains('validation_failed') || e.toString().contains('OAuth secret')) {
-          throw Exception('Apple Sign-In ist noch nicht konfiguriert. Bitte verwenden Sie Email/Passwort.');
-        }
-        if (e.toString().contains('nicht verfügbar')) {
-          rethrow;
-        }
-        rethrow;
-      }
-    } else {
-      throw Exception('Apple Sign-In ist nur auf iOS-Geräten verfügbar.');
+  /// Sign in with Apple (iOS only). Null when the person closed the Apple
+  /// sheet. Errors are rethrown unchanged
+  /// ([SignInWithAppleAuthorizationException], [AuthException] with `code`,
+  /// [PlatformException]); `PlatformException(code: 'apple_unavailable')`
+  /// off iOS or where Apple sign-in is not available.
+  ///
+  /// The raw nonce goes to Supabase, its SHA-256 to Apple, so a token can't
+  /// be replayed. Apple sends the name only at the first authorization; it
+  /// is saved as `given_name`/`family_name` in the user metadata then.
+  Future<AppleSignInResult?> signInWithApple() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS ||
+        !await SignInWithApple.isAvailable()) {
+      throw PlatformException(code: 'apple_unavailable');
     }
+    final nonce = appleNonce();
+    final AuthorizationCredentialAppleID credential;
+    try {
+      credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce.hashed,
+      );
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) return null;
+      rethrow;
+    }
+    final idToken = credential.identityToken;
+    if (idToken == null) {
+      throw const AuthException('Apple sent no identity token',
+          code: 'apple_no_identity_token');
+    }
+    await client.auth.signInWithIdToken(
+      provider: OAuthProvider.apple,
+      idToken: idToken,
+      nonce: nonce.raw,
+    );
+    final result = AppleSignInResult(
+      givenName: _nonEmpty(credential.givenName),
+      familyName: _nonEmpty(credential.familyName),
+    );
+    if (result.givenName != null || result.familyName != null) {
+      try {
+        await client.auth.updateUser(UserAttributes(data: {
+          if (result.givenName != null) 'given_name': result.givenName,
+          if (result.familyName != null) 'family_name': result.familyName,
+        }));
+      } on AuthException catch (e) {
+        // The sign-in worked; the name step asks again if this failed.
+        debugPrint('⚠️ [APPLE_AUTH] Saving the name failed: ${e.code}');
+      }
+    }
+    return result;
+  }
+
+  /// A fresh nonce for Sign in with Apple: [raw] for Supabase, [hashed]
+  /// (SHA-256, hex) for Apple.
+  @visibleForTesting
+  static ({String raw, String hashed}) appleNonce([Random? random]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._';
+    final rng = random ?? Random.secure();
+    final raw = List.generate(32, (_) => charset[rng.nextInt(charset.length)])
+        .join();
+    return (raw: raw, hashed: sha256.convert(utf8.encode(raw)).toString());
+  }
+
+  static String? _nonEmpty(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   // Sign in with Google
@@ -191,41 +207,6 @@ class SupabaseService {
     await client.auth.signOut();
   }
 
-  // Reset password - sends OTP code instead of magic link
-  Future<void> resetPassword(String email) async {
-    debugPrint('🔐 [SUPABASE] Sending password reset OTP to: $email');
-    
-    try {
-      // Use signInWithOtp with shouldCreateUser: false to send recovery code
-      await client.auth.signInWithOtp(
-        email: email,
-        shouldCreateUser: false, // Don't create new user, just send recovery code
-      );
-      debugPrint('✅ [SUPABASE] Password reset OTP sent successfully');
-    } catch (e) {
-      debugPrint('❌ [SUPABASE] Password reset OTP error: $e');
-      rethrow;
-    }
-  }
-
-  // Verify OTP for password reset and sign in
-  Future<AuthResponse> verifyPasswordResetOtp(String email, String otp) async {
-    debugPrint('🔐 [SUPABASE] Verifying password reset OTP for: $email');
-    
-    try {
-      final response = await client.auth.verifyOTP(
-        email: email,
-        token: otp,
-        type: OtpType.email, // Use email type for signInWithOtp
-      );
-      debugPrint('✅ [SUPABASE] Password reset OTP verified successfully');
-      return response;
-    } catch (e) {
-      debugPrint('❌ [SUPABASE] Password reset OTP verification error: $e');
-      rethrow;
-    }
-  }
-
   /// Sends a 6-digit code to [email] (Supabase OTP). With [createUser] the
   /// address may register a new account; without it only an existing
   /// account gets a code. Errors are rethrown unchanged ([AuthException]
@@ -275,4 +256,13 @@ class SupabaseService {
 
   // Realtime methods
   RealtimeChannel channel(String name) => client.channel(name);
+}
+
+/// The name Apple shared at the first authorization; both null on later
+/// sign-ins (Apple sends the name only once).
+class AppleSignInResult {
+  const AppleSignInResult({this.givenName, this.familyName});
+
+  final String? givenName;
+  final String? familyName;
 }
