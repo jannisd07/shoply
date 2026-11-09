@@ -9,6 +9,7 @@ import 'package:shoply/data/services/trip_money_format.dart';
 import 'package:shoply/presentation/screens/history/history_format.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/bar_chart.dart';
+import 'package:shoply/presentation/widgets/design/pro_badge.dart';
 import 'package:shoply/presentation/widgets/design/rolling_number.dart';
 
 // D2-FuerDich §4 month card: radius 26, padding 16, 16 between the parts.
@@ -359,6 +360,7 @@ class MonthReview extends StatelessWidget {
     required this.onSelected,
     required this.series,
     required this.now,
+    this.statsLocked = false,
     this.savingsCents,
     this.weekday,
   });
@@ -368,6 +370,9 @@ class MonthReview extends StatelessWidget {
   final ValueChanged<int> onSelected;
   final MonthSeries series;
   final DateTime now;
+
+  /// Earlier months are Avo Pro (A9): a [ProBadge] after the headline.
+  final bool statsLocked;
 
   /// Rounded savings of the selected month, or null.
   final int? savingsCents;
@@ -447,7 +452,10 @@ class MonthReview extends StatelessWidget {
               Semantics(
                 container: true,
                 label: [
-                  headline,
+                  if (statsLocked)
+                    '$headline, ${context.tr('common_pro_feature')}'
+                  else
+                    headline,
                   '$monthLine: $spokenNumber',
                   ?coverage,
                 ].join('. '),
@@ -456,12 +464,20 @@ class MonthReview extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      headline,
-                      style: context.text(
-                        AvoTextStyle.subhead,
-                        color: colors.secondaryLabel,
-                      ),
+                    Wrap(
+                      spacing: AvoSpacing.xs,
+                      runSpacing: AvoSpacing.xxs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          headline,
+                          style: context.text(
+                            AvoTextStyle.subhead,
+                            color: colors.secondaryLabel,
+                          ),
+                        ),
+                        if (statsLocked) const ProBadge(),
+                      ],
                     ),
                     _BigNumber(
                       cents: spend ? m.spendCents : null,

@@ -9,7 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/presentation/screens/history/history_format.dart';
 import 'package:shoply/presentation/screens/history/history_paths.dart';
+import 'package:shoply/presentation/screens/history/widgets/month_review.dart';
 import 'package:shoply/presentation/state/trip_history_provider.dart' show SplitMember;
+import 'package:shoply/presentation/widgets/design/pro_badge.dart';
 import 'package:shoply/routes/areas/history_routes.dart';
 
 import '../offers/offer_test_harness.dart' show testItem;
@@ -205,6 +207,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Löschen'), findsNothing);
       expect(find.text('Betrag eintragen'), findsNothing);
+    });
+  });
+
+  group('A9 statistics are Pro', () {
+    Future<void> tapOctober(WidgetTester tester) async {
+      final bars = tester.getRect(find.byType(SpendingBars));
+      // Six months, Oktober is the fifth.
+      await tester.tapAt(Offset(bars.left + bars.width * 4.5 / 6, bars.center.dy));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('without Pro: badge, the running month free, earlier opens the paywall', (tester) async {
+      final world = HistoryWorld(prefs: prefs, trips: trips);
+      await pumpHistory(tester, '/history', await world.overrides());
+      expect(find.byType(ProBadge), findsOneWidget);
+      expect(find.text('November, bisher'), findsOneWidget);
+      await tapOctober(tester);
+      expect(find.text('Paywall'), findsOneWidget);
+    });
+
+    testWidgets('with Pro: no badge, an earlier month opens in place', (tester) async {
+      final world = HistoryWorld(prefs: prefs, trips: trips, pro: true);
+      await pumpHistory(tester, '/history', await world.overrides());
+      expect(find.byType(ProBadge), findsNothing);
+      await tapOctober(tester);
+      expect(find.text('Paywall'), findsNothing);
+      expect(find.text('November, bisher'), findsNothing);
+    });
+
+    testWidgets('Kosten teilen stays free, without a badge', (tester) async {
+      final world = HistoryWorld(prefs: prefs, trips: [histTrip('t1', histNow, cost: 10)]);
+      final router = await pumpHistory(tester, '/history/t1', await world.overrides());
+      expect(find.byType(ProBadge), findsNothing);
+      router.push(historySplitLocation('t1'));
+      await tester.pumpAndSettle();
+      expect(find.text('WER TEILT?'), findsOneWidget);
+      expect(find.byType(ProBadge), findsNothing);
     });
   });
 

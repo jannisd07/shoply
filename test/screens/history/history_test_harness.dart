@@ -20,6 +20,7 @@ import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/shopping_history_service.dart';
 import 'package:shoply/data/services/trip_history_cache.dart';
+import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/expense_split_provider.dart';
 import 'package:shoply/presentation/state/history_view_provider.dart';
@@ -172,6 +173,7 @@ class HistoryWorld {
     this.savings = false,
     this.synced = true,
     this.failRefresh = false,
+    this.pro = false,
     this.membersOfList = const [
       SplitMember(userId: 'me', name: 'Jannis'),
       SplitMember(userId: 'lena', name: 'Lena'),
@@ -191,6 +193,9 @@ class HistoryWorld {
   /// False: no answer yet (first load without cache).
   final bool synced;
   final bool failRefresh;
+
+  /// Avo Pro (A9: earlier months of the statistics).
+  final bool pro;
   /// Null: the members are still loading.
   final List<SplitMember>? membersOfList;
 
@@ -240,6 +245,7 @@ class HistoryWorld {
         (ref, m) => m == AppModule.costSplit ? splitModule : true,
       ),
       isOfflineProvider.overrideWithValue(offline),
+      isSubscribedProvider.overrideWithValue(pro),
       historySavingsVisibleProvider.overrideWith((ref, id) => savings),
       listsNotifierProvider.overrideWith((ref) => FakeLists(lists)),
       itemsNotifierProvider.overrideWith((ref, id) => RecordingItemsNotifier(open)),
@@ -261,6 +267,7 @@ Future<GoRouter> pumpHistory(
     routes: [
       GoRoute(path: '/', builder: (_, _) => const Text('Start')),
       GoRoute(path: RoutePaths.lists, builder: (_, _) => const Text('Listen')),
+      GoRoute(path: RoutePaths.pro, builder: (_, _) => const Text('Paywall')),
       GoRoute(
         path: RoutePaths.history,
         builder: buildHistoryRoot,

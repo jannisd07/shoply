@@ -7,7 +7,9 @@ void main() {
   late List<String> sent;
   late SharedPreferences prefs;
 
-  TripPushQueue queue() => TripPushQueue(
+  /// [now]: a fixed clock for the fake-time tests (the timers run on the
+  /// test's fake time, so nothing depends on how busy the machine is).
+  TripPushQueue queue({DateTime Function()? now}) => TripPushQueue(
     send:
         ({
           required List<String> userIds,
@@ -16,16 +18,20 @@ void main() {
           Map<String, dynamic>? data,
         }) async => sent.add(body),
     prefs: () async => prefs,
+    now: now,
   );
 
-  DeferredTripPush push(String trip, Duration wait) => DeferredTripPush(
-    tripId: trip,
-    userIds: const ['lena'],
-    title: 'WG',
-    body: 'Jannis hat bei Lidl eingekauft ($trip).',
-    data: const {'type': 'shopping_complete'},
-    notBefore: DateTime.now().add(wait),
-  );
+  DeferredTripPush push(String trip, Duration wait, {DateTime? from}) =>
+      DeferredTripPush(
+        tripId: trip,
+        userIds: const ['lena'],
+        title: 'WG',
+        body: 'Jannis hat bei Lidl eingekauft ($trip).',
+        data: const {'type': 'shopping_complete'},
+        notBefore: (from ?? DateTime.now()).add(wait),
+      );
+
+  final t0 = DateTime(2026, 11, 9, 12);
 
   Future<void> wait(int ms) => Future<void>.delayed(Duration(milliseconds: ms));
 
@@ -35,22 +41,27 @@ void main() {
     prefs = await SharedPreferences.getInstance();
   });
 
-  test('waits for the undo window, then sends once', () async {
-    final q = queue();
-    await q.enqueue(push('t1', const Duration(milliseconds: 120)));
-    await wait(30);
+  // testWidgets for its fake clock: the undo window is two minutes of fake
+  // time, advanced with pump; no real timers.
+  testWidgets('waits for the undo window, then sends once', (tester) async {
+    final q = queue(now: () => t0);
+    await q.enqueue(push('t1', const Duration(minutes: 2), from: t0));
+    await tester.pump(const Duration(seconds: 119));
     expect(sent, isEmpty);
-    await wait(200);
+    expect(prefs.getString(TripPushQueue.storageKey), isNotNull);
+    await tester.pump(const Duration(seconds: 1));
     expect(sent, ['Jannis hat bei Lidl eingekauft (t1).']);
     expect(prefs.getString(TripPushQueue.storageKey), isNull);
+    await tester.pump(const Duration(minutes: 5));
+    expect(sent, hasLength(1), reason: 'sent once');
     q.dispose();
   });
 
-  test('"Widerrufen" cancels the push', () async {
-    final q = queue();
-    await q.enqueue(push('t1', const Duration(milliseconds: 80)));
+  testWidgets('"Widerrufen" cancels the push', (tester) async {
+    final q = queue(now: () => t0);
+    await q.enqueue(push('t1', const Duration(minutes: 2), from: t0));
     await q.cancel('t1');
-    await wait(150);
+    await tester.pump(const Duration(minutes: 5));
     expect(sent, isEmpty);
     q.dispose();
   });

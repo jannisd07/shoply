@@ -26,6 +26,7 @@ import 'package:shoply/presentation/widgets/design/empty_state.dart';
 import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/hint_row.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
+import 'package:shoply/presentation/widgets/design/pro_gate.dart';
 import 'package:shoply/presentation/widgets/design/skeleton.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/swipe_actions.dart';
@@ -63,6 +64,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   int? _selected;
   MonthSeries? _series;
   bool _timedOut = false;
+
+  /// The paywall for an earlier month is open (a drag must not stack it).
+  bool _gating = false;
   Timer? _timer;
 
   @override
@@ -88,6 +92,25 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         AvoToast.show(context, message: context.tr('hist_trip_gone'));
       }
     });
+  }
+
+  void _selectMonth(int index, int count) {
+    if (index == count - 1 || !ProGate.isLockedNow(ref, ProFeatures.stats)) {
+      setState(() => _selected = index);
+      return;
+    }
+    if (_gating) return;
+    _gating = true;
+    unawaited(
+      ProGate.run(
+        context,
+        ref,
+        feature: ProFeatures.stats,
+        action: () {
+          if (mounted) setState(() => _selected = index);
+        },
+      ).whenComplete(() => _gating = false),
+    );
   }
 
   @override
@@ -190,7 +213,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         _series ??= chartShowsSpending(sixMonths(all, now))
             ? MonthSeries.spending
             : MonthSeries.trips;
-    final selected = (_selected ?? months.length - 1).clamp(0, months.length - 1);
+    // Statistics are Pro (A9, ProFeatures.stats): the running month is
+    // free, an earlier one opens through ProGate.
+    final statsLocked = ProGate.isLocked(ref, ProFeatures.stats);
+    final selected = statsLocked
+        ? months.length - 1
+        : (_selected ?? months.length - 1).clamp(0, months.length - 1);
     final selectedMonth = months[selected].month;
     final monthTrips = tripsInMonth(
       trips,
@@ -230,7 +258,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       MonthReview(
         months: months,
         selected: selected,
-        onSelected: (i) => setState(() => _selected = i),
+        onSelected: (i) => _selectMonth(i, months.length),
+        statsLocked: statsLocked,
         series: series,
         now: now,
         savingsCents: savings,
