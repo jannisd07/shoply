@@ -8,6 +8,14 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 aktualisiert am Ende diese Datei und [`b-sitzungen.md`](b-sitzungen.md), pusht, erinnert den Owner an eine neue Sitzung
 und gibt ihm den Start-Prompt für die nächste. Pakete, Stand und „Als Nächstes“ stehen in `b-sitzungen.md`.
 
+2026-11-09 (BS6): **Avo-Fehler gefunden, Funde aus S6 und Wünsche aus A9/A9b erledigt** (Commit mit dieser Zeile).
+Avo antwortet nicht, weil das Supabase-Secret `ANTHROPIC_API_KEY` fehlt (`supabase secrets list`); der Owner setzt es
+und deployt `ai` neu (OPEN-ISSUES 1.). `ai` meldet ein fehlendes Secret jetzt ausdrücklich, die App loggt Code und
+Status. S6 2–5, 7, 8, 10 erledigt, S6-9 zu 13/37 (Rest fehlt in `AvoIcons`), S6-6 wartet auf `AvoMotion`-Werte von A.
+A9 3–5 und A9b 1–2 erledigt: Limit → Pro-Zeile/Paywall nur für Free (Hintergrund-KI bleibt still), Kalorien nicht Pro,
+Avo-Wissen aus `ProFeatures.all`, `scheduleProTrialReminder(trialEndsAt, yearlyPrice:)` → `Future<bool>` (10 Uhr,
+48 h vorher, ersetzt einen alten). Anfrage an A: 21. Bericht `reports/w12-bs6-report.md`. Als Nächstes: B7.
+
 2026-11-09 (B8): **Verlauf, Einkauf abschließen und Kosten teilen sind fertig** (Commit mit dieser Zeile): V1
 Einkauf abschließen im Vollbild mit Erfolgsmoment und Rückgängig (A's eigener Erfolgsmoment ist mit A's OK weg, A-V9),
 Verlauf mit Monatsrückblick (frühere Monate Pro, `ProFeatures.stats`), Einkauf-Detail, Betrag, Kosten teilen gleich und
@@ -223,6 +231,21 @@ nutzen beide direkt.
       „im Konto gemerkt“ synchronisiert?); Widerrufen setzt `total_cost_source='user'`; Pro-Sperre für Home V10
       (Frage an den Owner); Gesamt-Review m1–m5, m7–m11 (`b8-final-review.md`).
 
+21. **Nach BS6 (S6, A9, A9b):**
+    - **Tipp auf die Testphasen-Erinnerung:** `NavigationService.handleNotificationData` braucht
+      `case 'pro_trial_reminder':`, das `data['link']` (`shoply://pro`) über `appDestinationPath` mit `push` öffnet;
+      bis dahin öffnet der Tipp nur die App.
+    - **Zettel-Import (`attachment_sheet.dart`):** bei `ListImportException.serverCode == 'quota_exceeded'` Free die
+      Pro-Zeile/Paywall `/pro?feature=avo_questions` zeigen, Pro den Limit-Text.
+    - **`AvoMotion` (S6-6):** Dauer + Kurve passend zur Feder `standard` (für `AnimatedSize`/`ensureVisible`),
+      `wordFade` 120 ms, eine langsame Schleife 1200 ms.
+    - **`AvoIcons` (S6-9):** `circle.lefthalf.fill`, `drop`, `drop.fill`, `gauge`, `sportscourt`, `flag`, `globe`,
+      `doc.text.viewfinder`, `questionmark`, `exclamationmark.triangle` (Umriss), `barcode.viewfinder`, `camera.fill`,
+      `square.and.pencil`, `scope`.
+    - **`StatusRow`:** optionales eigenes Symbol (Angebots-Einstellungen nutzen bis dahin `HintRow`).
+    - **`pro_feat_ai_body`** nennt „60 Fragen am Tag“ fest; Avo liest den Text über `get_app_info`. Besser die Zahl
+      aus `app_flags.ai_limits` einsetzen oder weglassen.
+
 ## Erledigte Anfragen von Teil A
 
 - **AB2 und A12 „Von Teil B“** (Commit mit dieser Zeile): `/settings/siri` und `/settings/widgets` liegen in
@@ -313,6 +336,8 @@ Entschieden am 08.11.2026:
   „shoply“ werden migriert, nicht einfach umbenannt.
 
 Offen:
+- **BS6:** Supabase-Secret `ANTHROPIC_API_KEY` setzen, dann Deploy von `ai` und `extract-shopping-list` (Ja nötig);
+  APNs-Schlüssel in Firebase prüfen (Push scheitert mit `BadEnvironmentKeyInToken`). OPEN-ISSUES 1.
 - „24 Stunden, nur auf diesem iPhone“ (Avo §10) heißt jetzt „Bis zu 24 Stunden …“, weil das Gespräch nur im
   Arbeitsspeicher liegt; „wenn noch Budget übrig ist“ (Kalorien S23) heißt „wenn noch Kalorien übrig sind“. Bitte
   bestätigen.

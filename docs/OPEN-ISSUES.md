@@ -6,8 +6,16 @@ Stand: 2026-11-08.
 
 ## 1. Dringend: Dinge, die gerade kaputt sind
 
-- **Claude ist live (S3, 08.11.2026):** Secret gesetzt, alle sechs B-Migrationen angewendet, `ai` und
-  `extract-shopping-list` deployt. Es bleiben zwei Schritte für den Owner:
+- **Avo antwortet nicht: Secret `ANTHROPIC_API_KEY` fehlt in Supabase (BS6, 09.11.2026).** `supabase secrets list`
+  zeigt es nicht; jede KI-Anfrage endet mit `502 provider_error` (Log `avo_chat … unexpected error`). Owner:
+  `supabase secrets set ANTHROPIC_API_KEY=<Schlüssel aus der Claude Console> --project-ref rtwzzerhgieyxsijemsd`.
+  Danach `ai` und `extract-shopping-list` neu deployen (Stand BA8 + BS6; der Log nennt ein fehlendes Secret dann
+  ausdrücklich): `supabase functions deploy ai` und `supabase functions deploy extract-shopping-list`, nur nach Ja.
+- **Push scheitert an APNs (`BadEnvironmentKeyInToken`, Logs 08./09.11.).** FCM meldet „Invalid APNs credential“:
+  der APNs-Schlüssel in Firebase (`shoply-92f28` → Cloud Messaging → Apple-App-Konfiguration) passt nicht zur
+  Umgebung (Sandbox/Produktion) oder zum Team. Schlüssel (.p8) mit Key-ID und Team-ID neu hochladen.
+- **Claude ist live (S3, 08.11.2026):** alle sechs B-Migrationen angewendet, `ai` und
+  `extract-shopping-list` deployt (das Secret fehlt aber, siehe oben). Es bleiben zwei Schritte für den Owner:
   1. Den alten Gemini-Key in Google AI Studio widerrufen; er steckt in ausgelieferten Builds.
   2. In der Claude Console eine harte Monatsgrenze setzen.
 - **Abo-RPCs: Sofortmaßnahme angewendet (08.11., `20261108003000_b_lock_subscription_rpcs`).** `anon` kann

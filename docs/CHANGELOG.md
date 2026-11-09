@@ -2,6 +2,17 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Avo-Fehlersuche, Funde aus S6, Pro nach Variante B (Teil B, BS6)
+
+- Ursache „Avo ist nicht erreichbar“: das Supabase-Secret `ANTHROPIC_API_KEY` fehlt (OPEN-ISSUES 1.); `ai` meldet das
+  jetzt ausdrücklich, die App loggt Fehlercode und Status ohne Nutzerdaten. Veraltete Stub-Tests der Edge Function
+  ersetzt (204 Deno-Tests grün).
+- Avo-Tab zeigt nur noch einen Titel; Fundstellen aus A's Gegenprüfung S6 (Einstellungen, Symbole, Farben, Riverpod
+  nach `await`, design_check) behoben.
+- KI-Limit erreicht: Free sieht die Pro-Zeile bzw. Paywall statt eines Fehlers; Kalorien sind nicht mehr Pro; Avo
+  kennt Pro nur aus `ProFeatures.all` („Avo Pro“, keine Preise).
+- Neu: `scheduleProTrialReminder`/`cancelProTrialReminder` (Tag 12 der Testphase, 10 Uhr) für A's Paywall.
+
 ## 2026-11-09: Zeilen-Aktionen, große Zahl, Diagramm-Werte (Teil A, AB3)
 
 - Neuer Baustein `RowActions`: Wischaktionen, Kontextmenü per Langdruck und VoiceOver-Aktionen für eine Zeile.

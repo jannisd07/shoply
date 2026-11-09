@@ -1,6 +1,6 @@
 # Teil B: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (nach B8). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (nach BS6). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (P0–P2 von B lief in einer Sitzung mit
 weit über einer Million Tokens). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -39,8 +39,9 @@ für die nächste Sitzung geben.
 | BAB1 Auf A's AB1-Komponenten umstellen | erledigt (Commit mit dieser Zeile) | `reports/w9-bab1-report.md`, `w9-bab1-review.md` |
 | BAB2 Wünsche von A aus AB2 und A12 | erledigt (Commit mit dieser Zeile) | `status-B.md` „Erledigte Anfragen von Teil A“ |
 | B8 Verlauf, Einkauf abschließen, Kosten teilen, Home-Abschnitte | erledigt (Commit mit dieser Zeile) | `b-screens/verlauf-kosten.md`, Reste unten |
-| **BS6 Avo erreichbar, Funde aus S6, Wünsche aus A9/A9b** | **Als Nächstes** | unten |
-| B7 Wochenplan | angefangen (Zweig `feature/b7-plan`), wartet nicht mehr auf A (A11b `920ba7e`) | unten, `b-screens/wochenplan.md` |
+| BS6 Avo erreichbar, Funde aus S6, Wünsche aus A9/A9b | erledigt (Commit mit dieser Zeile) | `reports/w12-bs6-report.md`, Reste unten |
+| **B7 Wochenplan** | **Als Nächstes** (angefangen, Zweig `feature/b7-plan`) | unten, `b-screens/wochenplan.md` |
+| B8c Verlauf auf A's S5b/AB3-Bausteine umstellen | offen | unten „B8 Reste“ |
 | B5b Avo: Sprachmodus, „So arbeitet Avo“, Avo-Einstellungen, Foto über `shoply/camera` | offen | `b-screens/avo.md` §8–§10 |
 | B6b Kalorien: Woche, Gewicht, Workouts, Challenges, Ideen, Apple Health, Fotos löschen | offen | `b-screens/kalorien.md` S11, S15–S24 |
 | B4 Artikelbilder | offen (Logik da, Bilder fehlen) | Plan B4 |
@@ -49,7 +50,7 @@ für die nächste Sitzung geben.
 | B10 Qualität, S6 Gegenprüfung von A, Simulator-Durchgang mit Screenshots | offen | Plan P3 B10 |
 | BR Umbenennung „Shoply“ → „Avo“ | ganz am Ende, wenn A und B ruhen | `status-B.md` „Entschieden am 08.11.2026“ |
 
-Reihenfolge: BS6, B7, B5b, B6b, B9, B4, B3b, B10, BR. A's Wünsche an B (status-A, `aN-stand.md` „Von Teil B“)
+Reihenfolge: B7, B8c, B5b, B6b, B9, B4, B3b, B10, BR. A's Wünsche an B (status-A, `aN-stand.md` „Von Teil B“)
 dürfen vorgezogen werden, wenn A darauf wartet.
 
 ### Reste aus BA8, BAB1 und BAB2
@@ -68,7 +69,7 @@ Bewusst so gelassen (Review M1, M11, M12): „Antwort anhalten“
 nur bei leerem Feld (Kap. 2.11); S14-Chips ohne Häkchen, VoiceOver „Lidl, 400 m“, Ziehen in S13 nur am Griff (A's
 Komponenten). Nicht umgestellt: alte Material-Screens mit `Icons.*` (eigene Pakete) und Symbole ohne `AvoIcons`-Gegenstück.
 
-### B7 Wochenplan
+### B7 Wochenplan (Als Nächstes)
 
 Spec `b-screens/wochenplan.md` S1–S13 (inkl. Einstellungen `/settings/plan`), Tabellen sind angewendet. A-Schnittstellen:
 `TipService.instance.markDone(TipId.mealPlan)` beim ersten Plan auf einer Liste, `TipSlot(place: TipPlace.plan, …)`
@@ -86,26 +87,16 @@ A polstert nur `ShellInsets.bottom` (A-P2); `buildPlanToolbarActions` statt Gesp
 `showAvoMenu`, beliebig tief, dazu `showAvoMenu(…, preview:)` (A-K10). Offen bleibt: `ModuleGate` zeigt für nicht
 freigegebene Module immer die Fehlerseite, also braucht der Plan einen kleinen B-Wächter. Pro (A9, Variante B): nur
 „Avo füllt die Woche“ über `ProGate.run(feature: ProFeatures.planSuggestions)`, „N Zutaten auf Wocheneinkauf“ bleibt
-frei ohne Badge. Der Worktree `b5-avo-tab` trägt jetzt B8; `feature/b7-plan` neu auschecken.
+frei ohne Badge. Der Worktree `b5-avo-tab` trägt jetzt BS6 (`feature/bs6`, nach dem Merge löschbar); `feature/b7-plan` neu auschecken.
 Bericht mit „Stand bei Abbruch“: `reports/w8-plan-report.md`.
 
-### BS6 Avo erreichbar, Funde aus S6, Wünsche aus A9/A9b (Als Nächstes)
+### BS6 Reste
 
-- **P1 zuerst:** jede Avo-Frage endet mit „Avo ist gerade nicht erreichbar“ (`s6-stand.md` „Von Teil B“ 1). Befund
-  (nur gelesen): `ai` läuft als Version 1 vom 08.11. 21:23 (vor den BA8-Änderungen), `app_flags.ai_enabled` ist an, in
-  `ai_usage_daily_b` stehen insgesamt nur 2 Zeilen, die Aufrufe scheitern also vor der Quote. Der Fehler landet im
-  `default`-Zweig von `avo_status_sections.dart`. Logs sind über die MCP-Tools nicht lesbar: Owner bitten, im Dashboard
-  (Edge Functions → `ai` → Logs) nachzusehen, oder den Fehlercode in der App lesbar loggen (ohne Nutzerdaten). Deploy
-  von `ai` nur nach Owner-Ja.
-- **S6** (`s6-stand.md` „Von Teil B“ 2–10): Avo-Titel doppelt, Fuß/„These switches“ in Avo-Einstellungen,
-  Standort-Symbol statt Hand, `_addRegular` nach `await`, Dauern aus `AvoMotion`, `destructiveFill`, design_check-
-  Einzelfälle, 37 `CupertinoIcons`, Kommentar in `main.dart`.
-- **A9** (`a9-stand.md` „Von Teil B“ 1, 3–5): KI-Limit → `/pro?feature=avo_questions`, `AvoAppKnowledge` aus
-  `ProFeatures.all` („Avo Pro“, keine Preise), Kalorien nicht Pro (`isSubscribedProvider` in
-  `calories_estimate_screen`/`calorie_add_photo`). Punkt 1 (Wochenplan-Pro) gehört zu B7, Punkt 2 ist mit B8 erledigt.
-- **A9b** (`a9b-stand.md` „Von Teil B“): `scheduleProTrialReminder(DateTime trialEndsAt)`/`cancelProTrialReminder()` in
-  `notification_service.dart` (Tag 12, Text dort, Tipp öffnet `shoply://pro`); optional `origin:` für
-  `ProGate.run`/`openPaywall` in `avo_status_sections.dart` und `avo_setting_sections.dart`.
+Owner: Secret `ANTHROPIC_API_KEY` fehlt in Supabase (Ursache „Avo nicht erreichbar“), danach Deploy `ai` und
+`extract-shopping-list`; APNs-Schlüssel (`BadEnvironmentKeyInToken`). Logs der Edge Functions sind über `query_logs`
+(Supabase-MCP, Quelle `function_logs`) lesbar. Wartet auf A (status-B 21): Tipp auf die Testphasen-Erinnerung,
+Zettel-Import-Limit, `AvoMotion`-Werte (S6-6), 14 `AvoIcons` (Rest von S6-9), `StatusRow` mit Symbol; danach die
+Stellen in B umstellen. Nicht im Simulator geprüft: Titel-Einklappen, Paywall aus der Pro-Zeile.
 
 ### B8 Reste
 
@@ -117,6 +108,14 @@ im Verlauf (L10, mit B4), A-Bausteine `AmountField` (A-V3), Balkenauswahl (A-V4)
 Übergangsversionen (status-B 19, 20). Kleinere offene Review-Punkte: `reports/w11-review.md` (M3, M5, M10, M11),
 Rückgängig einer Aufteilung setzt `total_cost_source` immer auf `user`. A räumt `list_shop_saved_*` auf (S5b).
 Nicht auf dem Gerät geprüft: Simulator-Durchgang V1–V12 mit B10.
+
+**B8c (A hat geliefert, S5b und AB3, `s5b-stand.md`/`ab3-stand.md` „Von Teil B“):** `AmountField` statt
+`HistoryAmountField`, `AvoBarChart(selectedIndex:, onSelected:)` statt `SpendingBars`, Tokens `chartBar`,
+`chartHighlight`, `monthCardGradient` und `AvoTextStyle.numberXL` für die Monatskarte (ersetzt „D2 numberXL cap“ in
+`month_review.dart`), `MenuValueRow`/`ValueRow(subtitle:)` für „Bezahlt von“, `AppFilterChip(trailing:)` für
+„Anderer Markt …“, `AvoToast.show(onDismissed:)` für die 2-min-Sperre, `ItemRepository.addItemsSkippingOpen` und
+`removeItems`, `RowActions` statt `SwipeActions` + `onLongPress` in `trip_row`, `open_balances_screen`,
+`trip_detail_screen`, `split_editor_screen`. A-V14: bei `push` bleiben. A-V22 (dauerhafte Warteschlange) bleibt B.
 
 ### B5b, B6b, B9, B4, B3b, B10, BR
 
