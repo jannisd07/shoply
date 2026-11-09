@@ -68,7 +68,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A12 Aufräumen und Analysen | **erledigt** (13 tote Dateien, tote Symbole, 543 ungenutzte Textschlüssel, Paper-Reste bis auf die Paywall, `feature-ideen.md`, `claude/daily` pausieren); Wünsche an B in `a12-stand.md` | 09.11.2026 | `git log --grep A12` |
 | A11 Qualität, Teil 1 | **erledigt**: Prüfmatrix für alle A-Screens (außer Paywall), `tool/design_check.sh` (A: 0 Funde), Messtests `integration_test/perf/`, status-B 17 (1), 4 Fehler behoben; Simulator nur bis zur Abmeldung; Rest in `a11-stand.md` (→ A11b) | 09.11.2026 | `git log --grep A11` |
 | A11b Qualität, Teil 2 | **erledigt**: status-B 18, A-P1–A-P4, A-K10 (`AvoSubmenu`, Vorschau), Simulator-Rundgang hell/dunkel/AX3 (Rezept „vegan“ mit Eigelb, Datum ohne Jahr behoben), Flows Hinzufügen/Teilen, alle `CupertinoIcons` → `AvoIcons`, Fehlerzustand Entwürfe | 09.11.2026 | `git log --grep A11b` |
-| S5 Bereiche fertig (A) | offen | | |
+| S5 Bereiche fertig (A) | **erledigt**: Diät-Filter prüfen Zutaten (Owner), `SwipeActions` nur eine Zeile offen und Schließen beim Scrollen, `ItemRow(suggestion:)` in „Vielleicht auch“, Galerie vollständig, [`abschlussbericht-A.md`](abschlussbericht-A.md); A-V9 und Gegenprüfung B6b/B7/B8 folgen in S5b | 09.11.2026 | `git log --grep S5` |
 | S6 Gegenprüfung (A prüft B) | **erledigt** für B's fertige Screens (Angebote, Avo, Kalorien-Kern, B-Einstellungen); B6b/B7/B8 folgen, wenn sie auf `main` sind; Funde in `s6-stand.md` | 09.11.2026 | `git log --grep S6` |
 
 ## Verträge aus S1 (für B verbindlich)
@@ -238,5 +238,7 @@ Offen:
 - Neue Maskottchen-Grafiken und das finale App-Icon-Motiv (A10, mit Bild-Prompts).
 - TestFlight und App Store (erst am Ende).
 - Ideen aus [`feature-ideen.md`](feature-ideen.md) §5 (A12).
+
+Beantwortet am 09.11.2026: Diät-Filter im Rezepte-Tab prüfen Zutaten wie das Rezeptdetail (S5).
 
 Beantwortet am 07.11.2026: App-Name, Module beim ersten Start, `claude/daily`, Paletten, Abhak-Ring, Migration der Modulwahl (siehe oben).

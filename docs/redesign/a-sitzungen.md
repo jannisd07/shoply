@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (S6 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (S5 erledigt, Abschlussbericht `abschlussbericht-A.md`). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -44,10 +44,13 @@ für die nächste Sitzung geben.
 | A11 Qualität, Teil 1 | erledigt | `a11-pruefplan.md`, `a11-stand.md` |
 | A11b Qualität, Teil 2 | erledigt | `a11b-stand.md` |
 | S6 Gegenprüfung von B | erledigt (B6b/B7/B8 folgen in S5) | `s6-stand.md` |
-| **S5 Bereiche fertig** | **Als Nächstes** | prompt §11, „Offen bei A“ in `s6-stand.md` und `a11b-stand.md` |
+| S5 Bereiche fertig | erledigt (A-V9 und Gegenprüfung B6b/B7/B8 folgen in S5b) | `s5-stand.md`, `abschlussbericht-A.md` |
+| **S5b Nachzug von B** | **Als Nächstes** (erst, wenn B8, B7 oder B6b auf `main` ist; sonst A9/A10) | unten, `s5-stand.md` |
 
-Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst S5. Fragt die Sitzung den
-Owner zu Beginn nach A9/A10, nur wenn eins davon „Als Nächstes“ ist.
+Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst S5b. Die S5b-Sitzung fragt zu Beginn mit
+`AskUserQuestion`, ob der Owner A9 (Free/Pro) oder A10 (Maskottchen) entschieden hat; dann wird das Paket bearbeitet.
+Ist keins entschieden und nichts von B8/B7/B6b auf `main` (`git log origin/main --oneline | grep -E "B8|B7|B6b"`),
+sagt die Sitzung das dem Owner und endet ohne Änderungen.
 
 ### AB1 Anfragen von B: Komponenten und Daten
 
@@ -123,6 +126,16 @@ Screens wie in S6 gegenprüfen (Matrix, `design_check.sh B`, Sheets/Slider) und 
 (Filter-Chips mit `recipeShownDiet` nur nach Owner-Frage, Galerie-Einträge, `SwipeActions`-Reste,
 `ItemRow`-Vorschlagsvariante). Dann prompt §11 Punkt für Punkt prüfen und den Abschlussbericht für den Owner
 schreiben (`abschlussbericht-A.md`: gebaut, offen, Entscheidungen; A9/A10 als offen, falls weiter ohne Entscheidung).
+
+### S5b Nachzug von B
+
+Quellen: `s5-stand.md` und `s6-stand.md` „Offen bei A“, `status-B.md` „Anfragen an Teil A“ (gehen vor),
+`abschlussbericht-A.md`. **A-V9 (status-B 19):** mit B8 lassen `shopping_mode_screen.dart` und
+`list_detail_screen.dart` ihren Erfolgsmoment nach `openCheckoutFlow == true` weg, im selben Push wie B. Danach die
+neuen B-Screens (B6b, B7, B8) wie in S6 gegenprüfen (Matrix, `bash tool/design_check.sh B`, keine Sheets/Slider,
+Simulator nach Absprache, vorher fragen, ob der Owner angemeldet ist), Funde an B in `s5b-stand.md` „Von Teil B“ und
+per Nachricht. Dann den Abschlussbericht nachführen. Zeit übrig: Reste aus „Offen bei A“ im Abschlussbericht
+(`ListCard` ab AX1 ohne Cover, Galerie und gestrichelter Kreis im Simulator ansehen).
 
 ### A12 Aufräumen und Analysen
 

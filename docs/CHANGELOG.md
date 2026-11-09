@@ -2,6 +2,13 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Bereiche fertig (Teil A, S5)
+
+- Diät-Filter „Vegan“/„Vegetarisch“ und „Passt zu mir“ prüfen die Zutaten wie das Rezeptdetail.
+- Wischaktionen: nur eine Zeile ist offen, Scrollen schließt sie.
+- „Vielleicht auch“ zeigt Artikel mit gestricheltem Plus-Kreis (`ItemRow(suggestion: true)`).
+- Galerie mit allen neueren Bausteinen; Abschlussbericht Teil A in `docs/redesign/abschlussbericht-A.md`.
+
 ## 2026-11-09: Qualität der A-Screens, zweiter Teil (Teil A, A11b)
 
 - Für B's Wochenplan: Segment im Rezepte-Tab als Sliver, schwebende Leiste und eigene Toolbar-Knöpfe, grauer Grund.
