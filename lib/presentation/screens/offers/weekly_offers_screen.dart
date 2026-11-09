@@ -16,7 +16,7 @@ import 'package:shoply/presentation/screens/offers/region_screen.dart'
 import 'package:shoply/presentation/screens/offers/store_menu.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offers_page.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offers_source_footnote.dart';
-import 'package:shoply/presentation/screens/offers/widgets/store_filter_chip.dart';
+import 'package:shoply/presentation/screens/offers/widgets/store_mark.dart';
 import 'package:shoply/presentation/screens/offers/widgets/weekly_offer_sections.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
@@ -294,17 +294,18 @@ class _WeeklyOffersScreenState extends ConsumerState<WeeklyOffersScreen> {
         ],
         if (chips.isNotEmpty) ...[
           const SizedBox(height: AvoSpacing.s),
-          ChipRow(
-            chips: [
+          SingleChoiceChipRow<String>(
+            choices: [
               for (final id in chips)
-                StoreFilterChip(
-                  chainId: id,
+                ChipChoice(
+                  value: id,
                   label: storeNameOf(id),
-                  selected: _chain == id,
-                  onTap: () =>
-                      setState(() => _chain = _chain == id ? null : id),
+                  leading: StoreMark.chain(id),
                 ),
             ],
+            value: _chain,
+            allowDeselect: true,
+            onChanged: (id) => setState(() => _chain = id),
           ),
         ],
         if (offline && searching)

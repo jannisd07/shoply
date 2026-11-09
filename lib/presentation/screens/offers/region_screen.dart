@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -17,6 +18,7 @@ import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
+import 'package:shoply/presentation/widgets/design/text_field_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 
 /// Opens the iOS settings of the app (location denied); override in tests.
@@ -336,7 +338,7 @@ class _RegionScreenState extends ConsumerState<RegionScreen> {
       const SizedBox(height: AvoSpacing.section),
       InsetSection(
         children: [
-          PostcodeFieldRow(
+          TextFieldRow(
             controller: _field,
             focusNode: _focus,
             label: context.tr('offer_postcode_label'),
@@ -344,14 +346,18 @@ class _RegionScreenState extends ConsumerState<RegionScreen> {
               'offer_postcode_placeholder',
               params: {'example': '79098'},
             ),
-            error: error,
-            place: place,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.postalCode],
+            inputFormatters: postcodeInputFormatters,
+            autocorrect: false,
+            errorText: error,
+            hintText: place,
             onChanged: (_) => setState(() {}),
-            onSubmitted: dirty ? () => unawaited(_save()) : null,
+            onSubmitted: dirty ? (_) => unawaited(_save()) : null,
           ),
         ],
       ),
-      PostcodeNote(place: place, error: error),
       if (current != null) ...[
         const SizedBox(height: AvoSpacing.section),
         InsetSection(

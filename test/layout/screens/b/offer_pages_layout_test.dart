@@ -23,11 +23,12 @@ import 'package:shoply/presentation/screens/offers/recipe_offers_screen.dart';
 import 'package:shoply/presentation/screens/offers/region_screen.dart';
 import 'package:shoply/presentation/screens/offers/weekly_offers_screen.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offer_entry_row.dart';
-import 'package:shoply/presentation/screens/offers/widgets/store_filter_chip.dart';
+import 'package:shoply/presentation/screens/offers/widgets/store_mark.dart';
 import 'package:shoply/presentation/screens/profile/settings/offers_settings_screen.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_data.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_offers_card.dart';
 import 'package:shoply/presentation/widgets/deals/offers_setup_step.dart';
+import 'package:shoply/presentation/widgets/design/filter_chip.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 
 import '../../../screens/offers/offer_test_harness.dart';
@@ -346,7 +347,7 @@ void main() {
   }, afterPump: _shows('2 von 3 Zutaten'));
 
   layoutMatrix(
-    'StoreFilterChip and an OfferRow with plus',
+    'Store chips and an OfferRow with plus',
     (context) {
       return _de(
         Column(
@@ -355,19 +356,18 @@ void main() {
             Wrap(
               spacing: 8,
               children: [
-                StoreFilterChip(
-                  chainId: 'netto-marken-discount',
+                AppFilterChip(
+                  leading: StoreMark.chain('netto-marken-discount'),
                   label: 'Netto',
-                  distance: '1,2 km',
+                  secondaryLabel: '1,2 km',
                   selected: true,
-                  multiple: true,
-                  onTap: () {},
+                  onSelected: (_) {},
                 ),
-                StoreFilterChip(
-                  chainId: 'aldi-sued',
+                AppFilterChip(
+                  leading: StoreMark.chain('aldi-sued'),
                   label: 'Aldi Süd',
                   selected: false,
-                  onTap: () {},
+                  onSelected: (_) {},
                 ),
               ],
             ),

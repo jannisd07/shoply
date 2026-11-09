@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,10 +17,12 @@ import 'package:shoply/presentation/screens/offers/region_screen.dart'
 import 'package:shoply/presentation/screens/offers/store_menu.dart';
 import 'package:shoply/presentation/screens/offers/widgets/offers_page.dart';
 import 'package:shoply/presentation/screens/offers/widgets/region_rows.dart';
-import 'package:shoply/presentation/screens/offers/widgets/store_filter_chip.dart';
+import 'package:shoply/presentation/screens/offers/widgets/store_mark.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
+import 'package:shoply/presentation/widgets/design/filter_chip.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
+import 'package:shoply/presentation/widgets/design/text_field_row.dart';
 
 /// The chip of "Aldi" before the region decides between Nord and Süd.
 const String _kAldi = 'aldi';
@@ -252,21 +255,14 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
           final meters = distances[id];
           final distance = meters == null ? null : formatDistance(meters, lang);
           final name = nameOf(id);
-          return StoreFilterChip(
-            chainId: id == _kAldi
-                ? (zip == null ? 'aldi-sued' : aldiForZip(zip))
-                : id,
+          return AppFilterChip(
+            leading: StoreMark.chain(
+              id == _kAldi ? (zip == null ? 'aldi-sued' : aldiForZip(zip)) : id,
+            ),
             label: name,
-            distance: distance?.shown,
-            semanticLabel: distance == null
-                ? name
-                : context.tr(
-                    'offer_setup_chip_a11y',
-                    params: {'store': name, 'distance': distance.spoken},
-                  ),
+            secondaryLabel: distance?.shown,
             selected: _picked.contains(id),
-            multiple: true,
-            onTap: () => setState(() {
+            onSelected: (_) => setState(() {
               if (!_picked.remove(id)) _picked.add(id);
             }),
           );
@@ -307,7 +303,7 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
               locatingLabel: context.tr('offer_locating_a11y'),
               onTap: () => unawaited(_locate()),
             ),
-            PostcodeFieldRow(
+            TextFieldRow(
               controller: _field,
               focusNode: _focus,
               label: context.tr('offer_postcode_label'),
@@ -315,13 +311,17 @@ class _OffersSetupStepState extends ConsumerState<OffersSetupStep> {
                 'offer_postcode_placeholder',
                 params: {'example': '10437'},
               ),
-              error: error,
-              place: place,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.postalCode],
+              inputFormatters: postcodeInputFormatters,
+              autocorrect: false,
+              errorText: error,
+              hintText: place,
               onChanged: (_) => setState(() {}),
             ),
           ],
         ),
-        PostcodeNote(place: place, error: error, side: AvoSpacing.l),
         if (status != null)
           Padding(
             padding: const EdgeInsets.only(top: AvoSpacing.s),

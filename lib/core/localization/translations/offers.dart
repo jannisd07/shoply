@@ -232,7 +232,6 @@ const Map<String, String> offersEn = {
       'Pick where you usually shop. You can choose more than one.',
   'offer_setup_source_note':
       'Offers come from retailer flyers. Prices as stated by the retailer, without guarantee.',
-  'offer_setup_chip_a11y': '{store}, {distance} away',
   'offer_setup_next': 'Continue',
   'offer_setup_location_off':
       'Location is off. Enter your postcode or allow location in Settings.',
@@ -501,7 +500,6 @@ const Map<String, String> offersDe = {
       'Wähl, wo du meistens einkaufst. Mehrere sind möglich.',
   'offer_setup_source_note':
       'Angebote stammen aus Prospekten der Händler. Preise laut Händler, ohne Gewähr.',
-  'offer_setup_chip_a11y': '{store}, {distance} entfernt',
   'offer_setup_next': 'Weiter',
   'offer_setup_location_off':
       'Standort ist aus. Gib deine Postleitzahl ein oder erlaube ihn in den Einstellungen.',
