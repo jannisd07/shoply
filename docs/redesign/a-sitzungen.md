@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (AB2 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (A12 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -40,12 +40,12 @@ für die nächste Sitzung geben.
 | AB2 Anfragen von B: Listen, Router, Reste aus A5–A8 | erledigt | `ab2-stand.md` |
 | A9 Pro und Paywall | wartet auf den Owner (Free/Pro: Varianten A/B/C in `pro-konzept.md`) | prompt §5 A9, Konzept 18 Kap. 8–9 |
 | A10 App-Icon und Maskottchen | wartet auf den Owner (Maskottchen F-17-11) | prompt §5 A10 |
-| **A12 Aufräumen und Analysen** | **Als Nächstes** (A9/A10 warten weiter auf den Owner) | prompt §5 A12, „Aufräumen“ in a5–a8-stand, „Offen bei A“ in `ab2-stand.md` |
-| A11 Qualität für alle A-Screens | offen (braucht Builds, Platte prüfen) | prompt §5 A11 |
+| A12 Aufräumen und Analysen | erledigt | `a12-stand.md`, `feature-ideen.md` |
+| **A11 Qualität für alle A-Screens** | **Als Nächstes** (A9/A10 warten weiter auf den Owner; braucht Builds, Platte prüfen) | prompt §5 A11, „Offen bei A“ in `ab1-stand.md`, `ab2-stand.md`, `a12-stand.md` |
 | S6 Gegenprüfung von B | offen | prompt §5 A11 „Gegenprüfung“ |
 | S5 Bereiche fertig | offen | prompt §11 |
 
-Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst A12, A11, S6, S5. Fragt die Sitzung den
+Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst A11, S6, S5. Fragt die Sitzung den
 Owner zu Beginn nach A9/A10, nur wenn eins davon „Als Nächstes“ ist.
 
 ### AB1 Anfragen von B: Komponenten und Daten
@@ -81,6 +81,14 @@ A's `settings_search_index.dart` und dessen Test `bSettingsPagesSearchEntries` d
 B-Sitzung klärt das vor dem Merge; die A-Sitzung prüft den Diff (`git diff main...origin/feature/b-settings-a8 --
 lib/presentation/screens/profile test/screens/profile`) und gibt das OK oder bessert nach. B's Übergabe:
 `b-sitzungen.md`.
+
+### A11 Qualität für alle A-Screens
+
+Quellen: prompt §5 A11 und §9, `konzept/20-qualitaet.md`, „Offen bei A“ in `ab1-stand.md`, `ab2-stand.md`,
+`a12-stand.md` (u. a. „Im Simulator ansehen“ aus AB2: Vorschlags-Panel, Listen-Info, Rezept-Zutaten mit Angeboten,
+Rezepte-Tab mit Tipp). Vorher `status-B.md` auf neue Anfragen an A prüfen; die gehen vor. Simulator-Build mit B
+absprechen, vorher `df -h /System/Volumes/Data` (unter 10 GB keine Builds). Erst den Prüfplan schreiben (Screens,
+Zustände, Prüfmatrix, Barrierefreiheit), dann Funde beheben.
 
 ### A12 Aufräumen und Analysen
 
@@ -121,6 +129,8 @@ gehen vor.
 ## Offen beim Owner (gesammelt)
 
 - Free gegen Pro (A9): `pro-konzept.md`.
+- Routine `claude/daily` pausieren (Owner-Entscheidung 09.11.2026, A12).
+- Ideen aus `feature-ideen.md` §5.
 - Server-Entwürfe freigeben: `a7-server-entwurf.sql` (Onboarding-RPC, Backfill; sonst `kOnboardingRedesignCutoff` auf
   den Release-Tag), `a8-server-entwurf.sql` (Konto löschen, Mitteilungen im Konto, `share_presence`, Profilfotos).
 - Domain für Rechtstexte (F18-06), Daten exportieren (F18-07), KI-Einwilligung im Onboarding (F-17-03, F-17-12),
