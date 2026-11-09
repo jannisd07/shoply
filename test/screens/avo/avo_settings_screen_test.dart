@@ -101,6 +101,12 @@ void main() {
     expect(find.text('Up to 24 hours, only on this iPhone'), findsOneWidget);
     expect(find.text('Avo uses Claude by Anthropic.'), findsOneWidget);
     expect(find.text('Privacy'), findsOneWidget);
+    // S6 P3: the link is as large as the sentence before it.
+    expect(
+      tester.getSize(find.text('Privacy')).height,
+      tester.getSize(find.text('Avo uses Claude by Anthropic.')).height,
+    );
+    expect(find.textContaining('This switch only decides'), findsOneWidget);
   });
 
   testWidgets('"Gespräch löschen" asks first, then deletes for good', (

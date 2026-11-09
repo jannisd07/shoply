@@ -11,8 +11,8 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/presentation/providers/avo_consents_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
+import 'package:shoply/presentation/screens/avo/widgets/avo_suggestion_views.dart';
 import 'package:shoply/presentation/screens/profile/settings/widgets/settings_page.dart';
-import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/confirm_dialog.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/row_highlight.dart';
@@ -168,9 +168,9 @@ class _Disclosure extends StatelessWidget {
               color: context.colors.secondaryLabel,
             ),
           ),
-          AppButton.plain(
+          AvoFootnoteLink(
             label: context.tr('avo_set_privacy'),
-            onPressed: onPrivacy,
+            onTap: onPrivacy,
           ),
         ],
       ),

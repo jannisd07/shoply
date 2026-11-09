@@ -228,7 +228,10 @@ class AvoEmptyChat extends StatelessWidget {
                   color: colors.secondaryLabel,
                 ),
               ),
-              _FootnoteLink(label: context.tr('avo_privacy'), onTap: onPrivacy),
+              AvoFootnoteLink(
+                label: context.tr('avo_privacy'),
+                onTap: onPrivacy,
+              ),
             ],
           ),
         ),
@@ -331,8 +334,10 @@ class _HighlightState extends State<_Highlight> {
 }
 
 /// A footnote-sized text link with a 44 pt hit height ("Datenschutz").
-class _FootnoteLink extends StatelessWidget {
-  const _FootnoteLink({required this.label, required this.onTap});
+/// A link in footnote size ("Datenschutz" under a footnote), same size as
+/// the sentence before it, with a 44 pt target.
+class AvoFootnoteLink extends StatelessWidget {
+  const AvoFootnoteLink({super.key, required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
