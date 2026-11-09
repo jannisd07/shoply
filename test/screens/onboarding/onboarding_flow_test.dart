@@ -21,6 +21,8 @@ import 'package:shoply/presentation/screens/onboarding/steps/join_step.dart';
 import 'package:shoply/presentation/screens/onboarding/steps/modules_step.dart';
 import 'package:shoply/presentation/screens/onboarding/steps/region_step.dart';
 import 'package:shoply/presentation/screens/onboarding/steps/welcome_step.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart'
+    show offersKillSwitchOffProvider;
 
 import '../../layout/layout_matrix.dart';
 // The account steps are Teil "Konto"'s; their fake gateway keeps Supabase
@@ -36,10 +38,16 @@ class _Harness {
   bool signedIn = false;
   PendingLink? link;
 
+  /// Teil B's region step has nothing to show (kill switch known off), so
+  /// the flow skips it; false lets B's step show its content.
+  bool offersKillSwitchOff = true;
+
   Widget app(OnboardingEntry entry) => layoutHarness(
     const LayoutCase(width: 390, scale: 1),
     ProviderScope(
       overrides: [
+        if (offersKillSwitchOff)
+          offersKillSwitchOffProvider.overrideWithValue(true),
         ...authOverrides(gateway),
         ...onboardingOverrides(backend: backend, store: store),
         onboardingSessionProvider.overrideWithValue(() => signedIn),
@@ -149,6 +157,28 @@ void main() {
     expect(h.backend.completed, 1);
     expect(OnboardingPrefs.instance.resumeStep, isNull);
     expect(OnboardingPrefs.instance.deviceOnboarded, isTrue);
+  });
+
+  testWidgets('mit Angeboten: die Region kommt, „Weiter“ führt zum Konto', (
+    tester,
+  ) async {
+    final h = _Harness()..offersKillSwitchOff = false;
+    await h.pump(tester);
+    await _tap(tester, 'Get started');
+    await _tap(tester, 'Next');
+
+    // A's frame with Teil B's content (A-O1).
+    expect(find.byType(RegionStep), findsOneWidget);
+    expect(find.text('Offers in your area'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Step \d+ of \d+$')), findsWidgets);
+    expect(find.text('Skip'), findsOneWidget);
+    expect(find.text('AREA'), findsOneWidget);
+    expect(find.text('Use my location'), findsOneWidget);
+    expect(find.text('YOUR STORES'), findsOneWidget);
+
+    await _tap(tester, 'Continue');
+    expect(find.byType(RegionStep), findsNothing);
+    expect(find.byType(AccountStep), findsOneWidget);
   });
 
   testWidgets('mit Kalorien kommt Dein Ziel nach Ernährung', (tester) async {
