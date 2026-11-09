@@ -251,6 +251,9 @@ Unabhängig von A2 und früh einplanen.
 
 ## 7. Arbeitsweise mit ultracode (Workflows)
 
+- **Eine Sitzung je Arbeitspaket** (Owner, 09.11.2026, Wochenlimit): Jede Sitzung bearbeitet genau ein Paket, schreibt
+  das Ergebnis in die Dateien, erinnert den Owner an eine neue Sitzung und gibt ihm den Start-Prompt. Ablauf, Pakete
+  und Start-Prompt: [`a-sitzungen.md`](a-sitzungen.md).
 - **Workflows lohnen sich hier:**
   - viele Screens eines Bereichs umbauen (ein Agent pro Screen)
   - Prüfmatrix über alle Screens

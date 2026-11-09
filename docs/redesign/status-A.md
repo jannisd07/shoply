@@ -4,6 +4,9 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
+09.11.2026: **Eine Sitzung je Arbeitspaket** (Owner, Wochenlimit). Ablauf, offene Pakete und Start-Prompt für die
+nächste Sitzung: [`a-sitzungen.md`](a-sitzungen.md). Als Nächstes: AB1 (Anfragen von B: Komponenten und Daten).
+
 08.11.2026: Teil A läuft jetzt auf Jannis' Mac **im selben Ordner wie B** (`~/Apps/shoply-neu`, auf `main`, kein
 eigener Worktree wegen Speicher). Regeln für beide: kein `git stash`/`checkout`/`switch`/`reset`/`add -A`; nur eigene
 Pfade committen (`git commit -m … -- <pfade>`); abgleichen mit `git fetch && git merge --ff-only origin/main`;
