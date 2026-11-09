@@ -8,6 +8,15 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 aktualisiert am Ende diese Datei und [`b-sitzungen.md`](b-sitzungen.md), pusht, erinnert den Owner an eine neue Sitzung
 und gibt ihm den Start-Prompt für die nächste. Pakete, Stand und „Als Nächstes“ stehen in `b-sitzungen.md`.
 
+2026-11-09 (B8): **Verlauf, Einkauf abschließen und Kosten teilen sind fertig** (Commit mit dieser Zeile): V1
+Einkauf abschließen im Vollbild mit Erfolgsmoment und Rückgängig (A's eigener Erfolgsmoment ist mit A's OK weg, A-V9),
+Verlauf mit Monatsrückblick (frühere Monate Pro, `ProFeatures.stats`), Einkauf-Detail, Betrag, Kosten teilen gleich und
+individuell mit Erinnern, Offene Beträge, Home „Dein November“, „Ausgaben im Vergleich“, „Letzte Einkäufe“ und neu
+`HomeSplitHint`. Alte Verlaufs-Screens, beide Sheets und die Paper-Shims im Verlauf sind gelöscht. Server-Entwürfe
+`b_trip_checkout` und `b_trip_checkout_rls` warten auf den Owner (OPEN-ISSUES: erst auf einem Supabase-Branch testen);
+bis dahin speichert die App auf dem alten Weg. Anfragen an A: 19, 20. Als Nächstes: BS6 (Avo antwortet nicht, Funde
+aus S6, Wünsche aus A9/A9b), dann B7.
+
 2026-11-09 (BAB2): **A's Wünsche aus AB2 und A12 sind erledigt** (Commit mit dieser Zeile): Siri und Widgets in
 `systemSettingsRoutes`, Hinweis, wenn die Kurzbefehle-App nicht aufgeht; Angebots-Pfade aus `RoutePaths`;
 `offerTargetListsProvider` auf A's `listsTodayFirstProvider`, „Neue Liste …“ mit vorausgewähltem Markt; neue

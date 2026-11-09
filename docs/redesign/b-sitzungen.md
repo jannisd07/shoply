@@ -1,6 +1,6 @@
 # Teil B: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (nach BAB2). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (nach B8). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (P0–P2 von B lief in einer Sitzung mit
 weit über einer Million Tokens). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -38,8 +38,9 @@ für die nächste Sitzung geben.
 | BA8 Wünsche von A aus A8 (Einstellungsseiten, Bridge-Schlüssel, Schnittstellen) | erledigt (`c37182f`) | `status-B.md` „Erledigte Anfragen von Teil A“ |
 | BAB1 Auf A's AB1-Komponenten umstellen | erledigt (Commit mit dieser Zeile) | `reports/w9-bab1-report.md`, `w9-bab1-review.md` |
 | BAB2 Wünsche von A aus AB2 und A12 | erledigt (Commit mit dieser Zeile) | `status-B.md` „Erledigte Anfragen von Teil A“ |
-| B7 Wochenplan | angefangen (Zweig `feature/b7-plan`), wartet auf A-P1–A-P4, A-K10 (AB2 oder später) | unten, `b-screens/wochenplan.md` |
-| **B8 Verlauf, Einkauf abschließen, Kosten teilen, Home-Abschnitte** | **Als Nächstes** (B7 wartet noch auf A) | unten, `b-screens/verlauf-kosten.md` |
+| B8 Verlauf, Einkauf abschließen, Kosten teilen, Home-Abschnitte | erledigt (Commit mit dieser Zeile) | `b-screens/verlauf-kosten.md`, Reste unten |
+| **BS6 Avo erreichbar, Funde aus S6, Wünsche aus A9/A9b** | **Als Nächstes** | unten |
+| B7 Wochenplan | angefangen (Zweig `feature/b7-plan`), wartet nicht mehr auf A (A11b `920ba7e`) | unten, `b-screens/wochenplan.md` |
 | B5b Avo: Sprachmodus, „So arbeitet Avo“, Avo-Einstellungen, Foto über `shoply/camera` | offen | `b-screens/avo.md` §8–§10 |
 | B6b Kalorien: Woche, Gewicht, Workouts, Challenges, Ideen, Apple Health, Fotos löschen | offen | `b-screens/kalorien.md` S11, S15–S24 |
 | B4 Artikelbilder | offen (Logik da, Bilder fehlen) | Plan B4 |
@@ -48,7 +49,7 @@ für die nächste Sitzung geben.
 | B10 Qualität, S6 Gegenprüfung von A, Simulator-Durchgang mit Screenshots | offen | Plan P3 B10 |
 | BR Umbenennung „Shoply“ → „Avo“ | ganz am Ende, wenn A und B ruhen | `status-B.md` „Entschieden am 08.11.2026“ |
 
-Reihenfolge: B8 (vorgezogen, weil A-P1–A-P4 und A-K10 bei A noch offen sind), B7 (sobald sie da sind), B5b, B6b, B9, B4, B3b, B10, BR. A's Wünsche an B (status-A, `aN-stand.md` „Von Teil B“)
+Reihenfolge: BS6, B7, B5b, B6b, B9, B4, B3b, B10, BR. A's Wünsche an B (status-A, `aN-stand.md` „Von Teil B“)
 dürfen vorgezogen werden, wenn A darauf wartet.
 
 ### Reste aus BA8, BAB1 und BAB2
@@ -59,12 +60,10 @@ Zwischenspeicher schreiben (Generationszähler pro Dienst); „Widerrufen“ der
 id. Für B9: Siri-Sätze auf dem Gerät prüfen. Aus BAB1: Anfrage 17 (2) an A (`ItemPrice.retailer`-Doku). Aus BAB2:
 Wochenplan-Erinnerung muss beim Planen `NotificationCategory.planReminder` übergeben (B7, es gibt noch keinen Sender);
 die Push-Typen `shopping_started` und `split_reminder` sind in der App zugeordnet, aber der Server sendet sie noch nicht
-(B8). `AppColors`/`PaperColors`/`design_system.dart` hängen nur noch an Kalorien (`challenges`, `weekly_summary`,
-`weight_tracking`, `what_can_i_eat`, `macro_bar`, `weight_chart`, also B6b) und Verlauf (`checkout_flow`,
-`shopping_history_screen`, `split_cost_sheet`, `checkout_store_sheet`, also B8): dort mit auf D2 umstellen, dann A
-Bescheid geben (A löscht die Shims). Aus A11 (`a11-stand.md` „Von Teil B“): `bash tool/design_check.sh B` listet
-B's D2-Regel-Funde (Farbe, Schriftgröße, Dauer, Icon, Haptik, 2 Sheets `checkout_store_sheet`/`split_cost_sheet`), mit
-den Umbauten B6b/B8 abbauen; `integration_test/perf` nie mit gebootetem Simulator laufen lassen (ersetzt die App).
+(Erinnern läuft über das System-Teilen). `AppColors`/`PaperColors`/`design_system.dart` hängen nur noch an Kalorien
+(`challenges`, `weekly_summary`, `weight_tracking`, `what_can_i_eat`, `macro_bar`, `weight_chart`, also B6b); der
+Verlauf ist seit B8 frei davon. `bash tool/design_check.sh B` (A11): Verlauf und Abschluss ohne Funde, keine Sheets
+mehr; Rest mit B6b und BS6 abbauen. `integration_test/perf` nie mit gebootetem Simulator laufen lassen (ersetzt die App).
 Bewusst so gelassen (Review M1, M11, M12): „Antwort anhalten“
 nur bei leerem Feld (Kap. 2.11); S14-Chips ohne Häkchen, VoiceOver „Lidl, 400 m“, Ziehen in S13 nur am Griff (A's
 Komponenten). Nicht umgestellt: alte Material-Screens mit `Icons.*` (eigene Pakete) und Symbole ohne `AvoIcons`-Gegenstück.
@@ -79,21 +78,45 @@ unter dem Großtitel, `ItemRepository.addItems`/`undoAddItems`, Home `HomeCookTo
 Zweig `feature/b7-plan` (auf origin gesichert, `cbc8eeb`): nur Grundlagen (alle `plan_`-Texte DE/EN, Formate, Pfade,
 Ansichtszustand, Store unterscheidet „noch nichts auf dem Gerät“/„Server hat geantwortet“/„je benutzt“, Summierung ohne
 Zielliste und mit „Original verwenden“). Kein Screen gebaut, `plan_routes.dart`, `HomeCookToday` und `b_slots.dart`
-unberührt. **Vorher mit A klären:** Der Rezepte-Tab hat keinen Platz für die Toolbar-Knöpfe, die schwebende Kapsel und
-den grauen Grund des Plans (A-P1–A-P4); A's Menüs haben keine Untermenüs (A-K10); `ModuleGate` zeigt für nicht
-freigegebene Module immer die Fehlerseite, auch mit Debug-Freischaltung, also braucht der Plan einen kleinen B-Wächter.
+unberührt. **A hat geliefert (A11b `920ba7e`):** `buildPlanSegment` ist ein Sliver im `CustomScrollView` (A-P1);
+`buildPlanFloatingBar` sitzt bei `ShellInsets.aboveTabBar` über dem Inhalt, den Platz unten im Sliver lässt B selbst,
+A polstert nur `ShellInsets.bottom` (A-P2); `buildPlanToolbarActions` statt Gespeichert/Mehr (A-P3); Grund
+`background`/`backgroundPlain` mit 200 ms Überblendung, das Segment ist lokaler Zustand, `week`/`day` bleiben in der URL
+(A-P4); `AvoSubmenu(label:, items:, icon:, subtitle:, enabled:, trailing:, trailingLabel:)` als Eintrag in
+`showAvoMenu`, beliebig tief, dazu `showAvoMenu(…, preview:)` (A-K10). Offen bleibt: `ModuleGate` zeigt für nicht
+freigegebene Module immer die Fehlerseite, also braucht der Plan einen kleinen B-Wächter. Pro (A9, Variante B): nur
+„Avo füllt die Woche“ über `ProGate.run(feature: ProFeatures.planSuggestions)`, „N Zutaten auf Wocheneinkauf“ bleibt
+frei ohne Badge. Der Worktree `b5-avo-tab` trägt jetzt B8; `feature/b7-plan` neu auschecken.
 Bericht mit „Stand bei Abbruch“: `reports/w8-plan-report.md`.
 
-### B8 Verlauf, Einkauf abschließen, Kosten teilen (Als Nächstes)
+### BS6 Avo erreichbar, Funde aus S6, Wünsche aus A9/A9b (Als Nächstes)
 
-Spec `b-screens/verlauf-kosten.md`. `openCheckoutFlow` ist heute ein Stub ohne eigene Bestätigung (Host zeigt den
-Erfolgsmoment); B8 baut den Abschluss im Vollbild (atomar `complete_shopping_trip` als Server-Entwurf, Owner wendet an),
-Monatsrückblick, Kosten teilen gleich/individuell mit Erinnern, offene Beträge, Home-Abschnitte `HomeMonthCard`,
-`HomeSpendingComparison`, `HomeRecentTrips`, `HomeSavingsHint`/`HomeSavingsGoal`. Alte Sheets löschen
-(`split_cost_sheet.dart`, `checkout_store_sheet.dart`). „Kosten teilen“ hat bei Avo kein Widerrufen (Owner-Frage).
-Dabei die Verlaufs-Screens von `AppColors`/`PaperColors`/`design_system.dart` auf D2-Tokens umstellen (A12-Wunsch).
-Push-Typen: `expense_split` und `split_reminder` landen schon auf `NotificationCategory.costSplitOpen`
-(`notificationCategoryForPushType` in `fcm_service.dart`); ein Erinnern-Sender nimmt `split_reminder`.
+- **P1 zuerst:** jede Avo-Frage endet mit „Avo ist gerade nicht erreichbar“ (`s6-stand.md` „Von Teil B“ 1). Befund
+  (nur gelesen): `ai` läuft als Version 1 vom 08.11. 21:23 (vor den BA8-Änderungen), `app_flags.ai_enabled` ist an, in
+  `ai_usage_daily_b` stehen insgesamt nur 2 Zeilen, die Aufrufe scheitern also vor der Quote. Der Fehler landet im
+  `default`-Zweig von `avo_status_sections.dart`. Logs sind über die MCP-Tools nicht lesbar: Owner bitten, im Dashboard
+  (Edge Functions → `ai` → Logs) nachzusehen, oder den Fehlercode in der App lesbar loggen (ohne Nutzerdaten). Deploy
+  von `ai` nur nach Owner-Ja.
+- **S6** (`s6-stand.md` „Von Teil B“ 2–10): Avo-Titel doppelt, Fuß/„These switches“ in Avo-Einstellungen,
+  Standort-Symbol statt Hand, `_addRegular` nach `await`, Dauern aus `AvoMotion`, `destructiveFill`, design_check-
+  Einzelfälle, 37 `CupertinoIcons`, Kommentar in `main.dart`.
+- **A9** (`a9-stand.md` „Von Teil B“ 1, 3–5): KI-Limit → `/pro?feature=avo_questions`, `AvoAppKnowledge` aus
+  `ProFeatures.all` („Avo Pro“, keine Preise), Kalorien nicht Pro (`isSubscribedProvider` in
+  `calories_estimate_screen`/`calorie_add_photo`). Punkt 1 (Wochenplan-Pro) gehört zu B7, Punkt 2 ist mit B8 erledigt.
+- **A9b** (`a9b-stand.md` „Von Teil B“): `scheduleProTrialReminder(DateTime trialEndsAt)`/`cancelProTrialReminder()` in
+  `notification_service.dart` (Tag 12, Text dort, Tipp öffnet `shoply://pro`); optional `origin:` für
+  `ProGate.run`/`openPaywall` in `avo_status_sections.dart` und `avo_setting_sections.dart`.
+
+### B8 Reste
+
+Owner: Migrationen `b_trip_checkout` und `b_trip_checkout_rls` erst auf einem Supabase-Branch testen, dann in der
+Reihenfolge aus OPEN-ISSUES anwenden (die RLS-Datei erst, wenn alte Builds weg sind); Frage, ob Home „Ausgaben im
+Vergleich“ auch Pro wird. Folgeaufgaben: dauerhafte Warteschlange für Einkäufe, die offline warten (heute nur
+Arbeitsspeicher, Neuversuch bei Verbindung), Hinweis „Kosten teilen einschalten“, Abschnitt „Geblieben“, Artikelbilder
+im Verlauf (L10, mit B4), A-Bausteine `AmountField` (A-V3), Balkenauswahl (A-V4), Zahler-Zeile (A-V6) ersetzen B's
+Übergangsversionen (status-B 19, 20). Kleinere offene Review-Punkte: `reports/w11-review.md` (M3, M5, M10, M11),
+Rückgängig einer Aufteilung setzt `total_cost_source` immer auf `user`. A räumt `list_shop_saved_*` auf (S5b).
+Nicht auf dem Gerät geprüft: Simulator-Durchgang V1–V12 mit B10.
 
 ### B5b, B6b, B9, B4, B3b, B10, BR
 
