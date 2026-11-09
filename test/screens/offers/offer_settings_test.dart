@@ -22,6 +22,9 @@ import 'package:shoply/presentation/screens/offers/region_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/offers_settings_screen.dart';
 import 'package:shoply/presentation/widgets/deals/offers_setup_step.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/hint_row.dart';
+import 'package:shoply/presentation/widgets/design/status_row.dart';
 
 import 'offer_test_harness.dart';
 
@@ -355,6 +358,22 @@ void main() {
         tester.getSemantics(find.bySemanticsLabel('Region')).value,
         'nicht festgelegt, Warnung',
       );
+      // S6 P3: the postcode hint shows the location glyph, no raised hand.
+      final hint = find.ancestor(
+        of: find.textContaining('Postleitzahl festlegen'),
+        matching: find.byType(HintRow),
+      );
+      expect(hint, findsOneWidget);
+      expect(
+        find.descendant(
+          of: hint,
+          matching: find.byWidgetPredicate(
+            (w) => w is AvoIcon && w.icon == AvoIcons.location,
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(StatusRow), findsNothing);
       handle.dispose();
     });
 

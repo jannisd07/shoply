@@ -22,10 +22,10 @@ import 'package:shoply/presentation/screens/offers/widgets/store_mark.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/presentation/widgets/design/hint_row.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/row_highlight.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
-import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 
 // D2 X-Angebote: market chips in "Meine Märkte".
@@ -44,6 +44,7 @@ const EdgeInsets _kChipArea = EdgeInsets.symmetric(
 const double _kRowIcon = 22; // D2 glyph at the start of a row
 const double _kWarning = 15; // D2 warning glyph before "Nicht festgelegt"
 const double _kChevron = 14; // D2 disclosure chevron
+const double _kHintIcon = 18; // D2 like the hint in the lists
 
 /// Row ids of "Preise & Angebote" (`/settings/offers?row=…`, the settings
 /// search).
@@ -114,11 +115,17 @@ class OffersSettingsScreen extends ConsumerWidget {
         if (regionLoaded && region == null && module)
           Padding(
             padding: const EdgeInsets.only(bottom: AvoSpacing.m),
-            child: StatusRow(
-              kind: StatusKind.permission,
+            // A location glyph, not StatusRow's raised hand, which reads
+            // like "stop" (S6 P3): the same hint as in the lists, no close.
+            child: HintRow(
+              leading: AvoIcon(
+                AvoIcons.location,
+                size: MediaQuery.textScalerOf(context).scale(_kHintIcon),
+                color: context.colors.secondaryLabel,
+              ),
               text: context.tr('offer_hint_set_postcode'),
               actionLabel: context.tr('offer_hint_set_postcode_action'),
-              onAction: () => unawaited(context.push(offersSettingsRegionPath)),
+              onTap: () => unawaited(context.push(offersSettingsRegionPath)),
             ),
           ),
         const SizedBox(height: AvoSpacing.s),
