@@ -1,5 +1,466 @@
+import 'package:shoply/core/modules/app_modules.dart';
+import 'package:shoply/presentation/screens/profile/settings/widgets/settings_page.dart';
 import 'package:shoply/presentation/screens/profile/settings_search_entry.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/routes/route_paths.dart';
+
+// Page titles, used as titles of page hits and as the path of row hits.
+const _modules = 'setp_modules_title';
+const _diet = 'setp_diet_title';
+const _personal = 'setp_personal_title';
+const _lists = 'setp_lists_title';
+const _notifications = 'setp_notif_title';
+const _appearance = 'setp_appearance_title';
+const _language = 'setp_language_title';
+const _help = 'setp_help_title';
+const _legal = 'setp_legal_title';
 
 /// Search entries of the A8 settings pages (Konzept 18 §3.5): every page and
-/// every row a search should find. Filled by the A8 part "Seiten".
-const List<SettingsSearchEntry> settingsPagesSearchEntries = [];
+/// every row a search should find, with the `rowId` the page highlights
+/// (`HighlightableRow`). Titles and search words are translation keys
+/// (`setp_kw_*` hold comma-separated words in both languages).
+///
+/// Rows that only exist while a module is on (module reminders in
+/// Mitteilungen, the offers question in Hilfe) name it in `module`, so the
+/// search hides them while it is off.
+const List<SettingsSearchEntry> settingsPagesSearchEntries = [
+  // ------------------------------------------------------------- Module
+  SettingsSearchEntry(
+    route: RoutePaths.settingsModules,
+    titleKey: _modules,
+    keywordsKeys: ['setp_kw_modules'],
+    icon: SettingsIcons.switches,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsModules,
+    titleKey: 'common_module_offers',
+    pathKeys: [_modules],
+    keywordsKeys: ['setp_kw_modules_offers'],
+    rowId: 'modules.offers',
+    icon: SettingsIcons.switches,
+    offersTerm: true,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsModules,
+    titleKey: 'common_module_avo',
+    pathKeys: [_modules],
+    keywordsKeys: ['setp_kw_modules_avo'],
+    rowId: 'modules.avo',
+    icon: SettingsIcons.switches,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsModules,
+    titleKey: 'common_module_calories',
+    pathKeys: [_modules],
+    keywordsKeys: ['setp_kw_modules_calories'],
+    rowId: 'modules.calories',
+    icon: SettingsIcons.switches,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsModules,
+    titleKey: 'common_module_cost_split',
+    pathKeys: [_modules],
+    keywordsKeys: ['setp_kw_modules_cost_split'],
+    rowId: 'modules.cost_split',
+    icon: SettingsIcons.switches,
+  ),
+  // ------------------------------------------------ Ernährung & Allergien
+  SettingsSearchEntry(
+    route: RoutePaths.settingsDiet,
+    titleKey: _diet,
+    keywordsKeys: ['setp_kw_diet'],
+    icon: SettingsIcons.leaf,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsDiet,
+    titleKey: 'setp_diet_allergies',
+    pathKeys: [_diet],
+    keywordsKeys: ['setp_kw_diet_allergies'],
+    rowId: 'diet.allergies',
+    icon: SettingsIcons.leaf,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsDiet,
+    titleKey: 'setp_diet_diet',
+    pathKeys: [_diet],
+    keywordsKeys: ['setp_kw_diet_diet'],
+    rowId: 'diet.diet',
+    icon: SettingsIcons.leaf,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsDiet,
+    titleKey: 'setp_diet_auto',
+    pathKeys: [_diet],
+    keywordsKeys: ['setp_kw_diet_auto'],
+    rowId: 'diet.auto_adapt',
+    icon: SettingsIcons.leaf,
+  ),
+  // ------------------------------------------------- Persönliche Daten
+  SettingsSearchEntry(
+    route: RoutePaths.settingsPersonal,
+    titleKey: _personal,
+    keywordsKeys: ['setp_kw_personal'],
+    icon: SettingsIcons.personText,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsPersonal,
+    titleKey: 'setp_personal_age',
+    pathKeys: [_personal],
+    keywordsKeys: ['setp_kw_personal_age'],
+    rowId: 'personal.age',
+    icon: SettingsIcons.personText,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsPersonal,
+    titleKey: 'setp_personal_height',
+    pathKeys: [_personal],
+    keywordsKeys: ['setp_kw_personal_height'],
+    rowId: 'personal.height',
+    icon: SettingsIcons.personText,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsPersonal,
+    titleKey: 'setp_personal_gender',
+    pathKeys: [_personal],
+    keywordsKeys: ['setp_kw_personal_gender'],
+    rowId: 'personal.gender',
+    icon: SettingsIcons.personText,
+  ),
+  // ------------------------------------------------------------- Listen
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLists,
+    titleKey: _lists,
+    keywordsKeys: ['setp_kw_lists'],
+    icon: SettingsIcons.checklist,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLists,
+    titleKey: 'setp_lists_images',
+    pathKeys: [_lists],
+    keywordsKeys: ['setp_kw_lists_images'],
+    rowId: 'lists.item_images',
+    icon: SettingsIcons.checklist,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLists,
+    titleKey: 'setp_lists_suggestions',
+    pathKeys: [_lists],
+    keywordsKeys: ['setp_kw_lists_suggestions'],
+    rowId: 'lists.suggestions',
+    icon: SettingsIcons.checklist,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLists,
+    titleKey: 'setp_lists_start',
+    pathKeys: [_lists],
+    keywordsKeys: ['setp_kw_lists_start'],
+    rowId: 'lists.start_list',
+    icon: SettingsIcons.checklist,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLists,
+    titleKey: 'setp_lists_screen_on',
+    pathKeys: [_lists],
+    keywordsKeys: ['setp_kw_lists_screen_on'],
+    rowId: 'lists.keep_screen_on',
+    icon: SettingsIcons.checklist,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLists,
+    titleKey: 'setp_lists_presence',
+    pathKeys: [_lists],
+    keywordsKeys: ['setp_kw_lists_presence'],
+    rowId: 'lists.share_presence',
+    icon: SettingsIcons.checklist,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLists,
+    titleKey: 'setp_lists_order',
+    pathKeys: [_lists],
+    keywordsKeys: ['setp_kw_lists_order'],
+    rowId: 'lists.store_order',
+    icon: SettingsIcons.checklist,
+  ),
+  // -------------------------------------------------------- Mitteilungen
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: _notifications,
+    keywordsKeys: ['setp_kw_notif'],
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_master',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_master'],
+    rowId: 'notifications.master',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_shopping_started',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_shopping_started'],
+    rowId: 'notifications.shopping_started',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_list_changes',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_list_changes'],
+    rowId: 'notifications.list_changes',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_shopping_completed',
+    pathKeys: [_notifications],
+    rowId: 'notifications.shopping_completed',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_invitations',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_invitations'],
+    rowId: 'notifications.invitations',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_restock',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_restock'],
+    rowId: 'notifications.restock',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_cooking_timer',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_cooking_timer'],
+    rowId: 'notifications.cooking_timer',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_plan_reminder',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_plan_reminder'],
+    rowId: 'notifications.plan_reminder',
+    icon: SettingsIcons.bell,
+    module: AppModule.mealPlan,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_dinner_ideas',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_dinner_ideas'],
+    rowId: 'notifications.dinner_ideas',
+    icon: SettingsIcons.bell,
+    module: AppModule.calories,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_cost_split',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_cost_split'],
+    rowId: 'notifications.cost_split',
+    icon: SettingsIcons.bell,
+    module: AppModule.costSplit,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_recipe_likes',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_recipes'],
+    rowId: 'notifications.recipe_likes',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_recipe_comments',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_recipes'],
+    rowId: 'notifications.recipe_comments',
+    icon: SettingsIcons.bell,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsNotifications,
+    titleKey: 'setp_notif_new_recipes',
+    pathKeys: [_notifications],
+    keywordsKeys: ['setp_kw_notif_recipes'],
+    rowId: 'notifications.new_recipes',
+    icon: SettingsIcons.bell,
+  ),
+  // --------------------------------------------------------- Darstellung
+  SettingsSearchEntry(
+    route: RoutePaths.settingsAppearance,
+    titleKey: _appearance,
+    keywordsKeys: ['setp_kw_appearance'],
+    icon: SettingsIcons.appearance,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsAppearance,
+    titleKey: 'setp_appearance_dark',
+    pathKeys: [_appearance],
+    keywordsKeys: ['setp_kw_appearance_dark'],
+    rowId: 'appearance.dark',
+    icon: SettingsIcons.appearance,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsAppearance,
+    titleKey: 'setp_appearance_light',
+    pathKeys: [_appearance],
+    keywordsKeys: ['setp_kw_appearance_light'],
+    rowId: 'appearance.light',
+    icon: SettingsIcons.appearance,
+  ),
+  // ------------------------------------------------------------- Sprache
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLanguage,
+    titleKey: _language,
+    keywordsKeys: ['setp_kw_language'],
+    icon: SettingsIcons.globe,
+  ),
+  // --------------------------------------------------------------- Hilfe
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: _help,
+    keywordsKeys: ['setp_kw_help'],
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_q_share',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_share'],
+    rowId: 'help.faq_share',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_q_shopping',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_shopping'],
+    rowId: 'help.faq_shopping',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_q_category',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_category'],
+    rowId: 'help.faq_category',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_q_offers',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_offers'],
+    rowId: 'help.faq_offers',
+    icon: AvoIcons.questionmarkCircle,
+    offersTerm: true,
+    module: AppModule.offers,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_q_pro',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_pro'],
+    rowId: 'help.faq_pro',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_q_delete',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_delete'],
+    rowId: 'help.faq_delete',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_mail',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_mail'],
+    rowId: 'help.support',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_bug',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_bug'],
+    rowId: 'help.bug',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_rate',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_rate'],
+    rowId: 'help.rate',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_tips_reset',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_tips'],
+    rowId: 'help.tips_reset',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsHelp,
+    titleKey: 'setp_help_guide',
+    pathKeys: [_help],
+    keywordsKeys: ['setp_kw_help_guide'],
+    rowId: 'help.guide',
+    icon: AvoIcons.questionmarkCircle,
+  ),
+  // -------------------------------------------------------- Rechtliches
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLegal,
+    titleKey: _legal,
+    keywordsKeys: ['setp_kw_legal'],
+    icon: SettingsIcons.doc,
+  ),
+  SettingsSearchEntry(
+    route: '${RoutePaths.settingsLegal}/privacy',
+    titleKey: 'setp_legal_privacy',
+    pathKeys: [_legal],
+    keywordsKeys: ['setp_kw_legal_privacy'],
+    icon: SettingsIcons.doc,
+  ),
+  SettingsSearchEntry(
+    route: '${RoutePaths.settingsLegal}/imprint',
+    titleKey: 'setp_legal_imprint',
+    pathKeys: [_legal],
+    keywordsKeys: ['setp_kw_legal_imprint'],
+    icon: SettingsIcons.doc,
+  ),
+  SettingsSearchEntry(
+    route: '${RoutePaths.settingsLegal}/terms',
+    titleKey: 'setp_legal_terms',
+    pathKeys: [_legal],
+    keywordsKeys: ['setp_kw_legal_terms'],
+    icon: SettingsIcons.doc,
+  ),
+  SettingsSearchEntry(
+    route: RoutePaths.settingsLegalSources,
+    titleKey: 'setp_legal_sources',
+    pathKeys: [_legal],
+    keywordsKeys: ['setp_kw_legal_sources'],
+    icon: SettingsIcons.doc,
+  ),
+  SettingsSearchEntry(
+    route: '${RoutePaths.settingsLegal}/licenses',
+    titleKey: 'setp_legal_licenses',
+    pathKeys: [_legal],
+    keywordsKeys: ['setp_kw_legal_licenses'],
+    icon: SettingsIcons.doc,
+  ),
+];
