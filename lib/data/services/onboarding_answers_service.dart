@@ -1,208 +1,438 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shoply/core/constants/diet_preferences.dart';
+import 'package:shoply/data/models/dietary_preference.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
+import 'package:shoply/data/repositories/list_repository.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:shoply/data/services/weight_log_service.dart';
 
-/// The goal-questionnaire answers collected on the onboarding calorie page,
-/// before there is an authenticated user to save them against.
-class OnboardingGoalDraft {
-  final NutritionGoalType goalType;
-  final ActivityLevel activityLevel;
-  final String gender;
-  final int age;
-  final double heightCm;
-  final double currentWeightKg;
-  final double? targetWeightKg;
-  final int? timelineWeeks;
+/// Accounts created before this moment count as set up, even when
+/// `users.onboarding_completed` is still null (Konzept 17 §1.2, §9.6).
+///
+/// Stand-in for the backfill migration (all accounts that exist before the
+/// release get `onboarding_completed = true`) until the owner applies it:
+/// without either, an old account signing in on a new device would be
+/// treated as new and could get its diet overwritten. Set it to the release
+/// day of the new onboarding; once the backfill ran it may stay as it is.
+final DateTime kOnboardingRedesignCutoff = DateTime.utc(2026, 11, 9);
 
+/// What the flow learns right after a sign-in (Konzept 17 §1.2, §5.3).
+enum AccountSetupStatus {
+  /// Not set up yet: the answers from before the account are written into it
+  /// and the flow goes on with Name.
+  isNew,
+
+  /// Set up before: local answers are dropped, the list of today opens.
+  setUp,
+}
+
+/// Decides new or set up without a server change: set up when the flag says
+/// so or when the account is older than [cutoff] (default
+/// [kOnboardingRedesignCutoff]).
+AccountSetupStatus decideAccountStatus({
+  bool? onboardingCompleted,
+  DateTime? createdAt,
+  DateTime? cutoff,
+}) {
+  if (onboardingCompleted == true) return AccountSetupStatus.setUp;
+  final limit = cutoff ?? kOnboardingRedesignCutoff;
+  if (createdAt != null && createdAt.isBefore(limit)) {
+    return AccountSetupStatus.setUp;
+  }
+  return AccountSetupStatus.isNew;
+}
+
+/// Diet chips of the onboarding (Konzept 17 §3.9). The three "frei von" ids
+/// (`gluten_free`, `dairy_free`, `nut_free`) are chosen through allergies
+/// instead (§9.7).
+const List<String> kOnboardingDietIds = [
+  'vegetarian',
+  'vegan',
+  'pescatarian',
+  'low_carb',
+  'keto',
+  'paleo',
+  'halal',
+  'kosher',
+  'low_sodium',
+];
+
+/// Allergy chips shown at once: the 14 EU allergens plus lactose, in the
+/// order of Konzept 17 §3.9.
+const List<AllergyType> kOnboardingAllergies = [
+  AllergyType.gluten,
+  AllergyType.milk,
+  AllergyType.lactose,
+  AllergyType.eggs,
+  AllergyType.peanuts,
+  AllergyType.nuts,
+  AllergyType.soy,
+  AllergyType.fish,
+  AllergyType.crustaceans,
+  AllergyType.molluscs,
+  AllergyType.celery,
+  AllergyType.mustard,
+  AllergyType.sesame,
+  AllergyType.sulfites,
+  AllergyType.lupin,
+];
+
+/// Behind "Weitere anzeigen".
+const List<AllergyType> kOnboardingMoreAllergies = [
+  AllergyType.fructose,
+  AllergyType.histamine,
+  AllergyType.nightshades,
+  AllergyType.corn,
+  AllergyType.yeast,
+];
+
+/// The two columns written for a diet and allergy choice (Konzept 17 §9.7):
+/// a gluten allergy also sets `gluten_free`, milk or lactose `dairy_free`,
+/// tree nuts or peanuts `nut_free`, so recipe filters and swaps keep working.
+({List<String> dietPreferences, List<String> allergies}) mergeDietAndAllergies({
+  required Set<String> diet,
+  required Set<String> allergies,
+}) {
+  final out = <String>{
+    for (final id in diet)
+      if (kDietPreferenceIds.contains(id)) id,
+  };
+  if (allergies.contains(AllergyType.gluten.name)) out.add('gluten_free');
+  if (allergies.contains(AllergyType.milk.name) ||
+      allergies.contains(AllergyType.lactose.name)) {
+    out.add('dairy_free');
+  }
+  if (allergies.contains(AllergyType.nuts.name) ||
+      allergies.contains(AllergyType.peanuts.name)) {
+    out.add('nut_free');
+  }
+  final names = AllergyType.values.map((t) => t.name).toSet();
+  return (
+    dietPreferences: [
+      for (final id in kDietPreferenceIds)
+        if (out.contains(id)) id,
+    ],
+    allergies: [
+      for (final t in AllergyType.values)
+        if (allergies.contains(t.name) && names.contains(t.name)) t.name,
+    ],
+  );
+}
+
+/// Allergy chips implied by old diet values without allergies (Konzept 17
+/// §9.7, for settings that load data saved before the merge).
+Set<String> allergiesImpliedByDiet(Iterable<String> diet) => {
+  if (diet.contains('gluten_free')) AllergyType.gluten.name,
+  if (diet.contains('dairy_free')) AllergyType.lactose.name,
+  if (diet.contains('nut_free')) AllergyType.nuts.name,
+};
+
+/// The answers of "Dein Ziel" (Konzept 17 §3.10), as far as they are known.
+@immutable
+class OnboardingGoalDraft {
   const OnboardingGoalDraft({
-    required this.goalType,
-    required this.activityLevel,
-    required this.gender,
-    required this.age,
-    required this.heightCm,
-    required this.currentWeightKg,
+    this.goalType = NutritionGoalType.loseWeight,
+    this.activityLevel = ActivityLevel.light,
+    this.gender,
+    this.age,
+    this.heightCm,
+    this.currentWeightKg,
     this.targetWeightKg,
-    this.timelineWeeks,
+    this.timelineWeeks = 16,
+    this.customCalories,
   });
 
-  Map<String, dynamic> toJson() => {
-        'goal_type': goalType.dbValue,
-        'activity_level': activityLevel.dbValue,
-        'gender': gender,
-        'age': age,
-        'height_cm': heightCm,
-        'current_weight_kg': currentWeightKg,
-        'target_weight_kg': targetWeightKg,
-        'timeline_weeks': timelineWeeks,
-      };
+  final NutritionGoalType goalType;
+  final ActivityLevel activityLevel;
 
-  factory OnboardingGoalDraft.fromJson(Map<String, dynamic> json) {
+  /// `female`, `male` or `other`; null computes with the average of both
+  /// formulas like "Divers".
+  final String? gender;
+  final int? age;
+  final double? heightCm;
+  final double? currentWeightKg;
+  final double? targetWeightKg;
+  final int timelineWeeks;
+
+  /// "Eigenes Ziel": kcal per day typed by the person.
+  final int? customCalories;
+
+  bool get needsTargetWeight =>
+      goalType == NutritionGoalType.loseWeight ||
+      goalType == NutritionGoalType.gainMuscle;
+
+  /// Enough plausible data for an estimate.
+  bool get isComplete {
+    if (goalType == NutritionGoalType.custom) {
+      final kcal = customCalories;
+      return kcal != null && kcal >= 800 && kcal <= 6000;
+    }
+    final a = age, h = heightCm, w = currentWeightKg;
+    return a != null &&
+        h != null &&
+        w != null &&
+        NutritionGoalCalculator.isPlausibleAge(a) &&
+        NutritionGoalCalculator.isPlausibleHeightCm(h) &&
+        NutritionGoalCalculator.isPlausibleWeightKg(w);
+  }
+
+  /// The estimate through Teil B's stable API; null while incomplete or for
+  /// "Eigenes Ziel".
+  CalculatedTargets? targets() {
+    if (!isComplete || goalType == NutritionGoalType.custom) return null;
+    final target = needsTargetWeight ? targetWeightKg : null;
+    return NutritionGoalCalculator.calculate(
+      goalType: goalType,
+      activityLevel: activityLevel,
+      currentWeightKg: currentWeightKg!,
+      heightCm: heightCm!,
+      age: age!,
+      gender: gender ?? 'other',
+      targetWeightKg: target,
+      timelineWeeks: target == null ? null : timelineWeeks,
+    );
+  }
+
+  OnboardingGoalDraft copyWith({
+    NutritionGoalType? goalType,
+    ActivityLevel? activityLevel,
+    String? gender,
+    int? Function()? age,
+    double? Function()? heightCm,
+    double? Function()? currentWeightKg,
+    double? Function()? targetWeightKg,
+    int? timelineWeeks,
+    int? Function()? customCalories,
+  }) => OnboardingGoalDraft(
+    goalType: goalType ?? this.goalType,
+    activityLevel: activityLevel ?? this.activityLevel,
+    gender: gender ?? this.gender,
+    age: age == null ? this.age : age(),
+    heightCm: heightCm == null ? this.heightCm : heightCm(),
+    currentWeightKg: currentWeightKg == null
+        ? this.currentWeightKg
+        : currentWeightKg(),
+    targetWeightKg: targetWeightKg == null
+        ? this.targetWeightKg
+        : targetWeightKg(),
+    timelineWeeks: timelineWeeks ?? this.timelineWeeks,
+    customCalories: customCalories == null
+        ? this.customCalories
+        : customCalories(),
+  );
+
+  Map<String, Object?> toJson() => {
+    'goal_type': goalType.dbValue,
+    'activity_level': activityLevel.dbValue,
+    'gender': gender,
+    'age': age,
+    'height_cm': heightCm,
+    'current_weight_kg': currentWeightKg,
+    'target_weight_kg': targetWeightKg,
+    'timeline_weeks': timelineWeeks,
+    'custom_calories': customCalories,
+  };
+
+  factory OnboardingGoalDraft.fromJson(Map<String, Object?> json) {
+    NutritionGoalType goal = NutritionGoalType.loseWeight;
+    ActivityLevel activity = ActivityLevel.light;
+    try {
+      goal = NutritionGoalTypeX.fromDb(json['goal_type'] as String? ?? '');
+    } catch (_) {}
+    try {
+      activity = ActivityLevelX.fromDb(json['activity_level'] as String? ?? '');
+    } catch (_) {}
     return OnboardingGoalDraft(
-      goalType: NutritionGoalTypeX.fromDb(json['goal_type'] as String),
-      activityLevel: ActivityLevelX.fromDb(json['activity_level'] as String),
-      gender: json['gender'] as String,
-      age: json['age'] as int,
-      heightCm: (json['height_cm'] as num).toDouble(),
-      currentWeightKg: (json['current_weight_kg'] as num).toDouble(),
+      goalType: goal,
+      activityLevel: activity,
+      gender: json['gender'] as String?,
+      age: (json['age'] as num?)?.toInt(),
+      heightCm: (json['height_cm'] as num?)?.toDouble(),
+      currentWeightKg: (json['current_weight_kg'] as num?)?.toDouble(),
       targetWeightKg: (json['target_weight_kg'] as num?)?.toDouble(),
-      timelineWeeks: json['timeline_weeks'] as int?,
+      timelineWeeks: (json['timeline_weeks'] as num?)?.toInt() ?? 16,
+      customCalories: (json['custom_calories'] as num?)?.toInt(),
     );
   }
 }
 
-/// Bridges the gap between onboarding (which runs before the user has an
-/// account) and the account itself: onboarding answers are stashed locally
-/// as they're collected, then applied to the real `users` /
-/// `nutrition_goals` rows the first time we see an authenticated user on
-/// this device. Idempotent — runs at most once per device via
-/// [_syncedKey], so it never overwrites answers the user later changes
-/// from Profile/goal settings, and it's a safe no-op for anyone who
-/// completed onboarding before this existed (nothing pending to apply).
-class OnboardingAnswersService {
+/// What the flow writes into the account (Konzept 17 §1.2). Every write is a
+/// targeted update of its own columns, never the whole `users` row
+/// (Inventar Bug 15). Overridden in tests.
+abstract interface class OnboardingAccountBackend {
+  /// New or set up (see [decideAccountStatus]). Creates the `users` row when
+  /// it does not exist yet. Throws on network errors.
+  Future<AccountSetupStatus> accountStatus();
+
+  /// `users.diet_preferences` and `users.allergies`.
+  Future<void> saveDiet({
+    required List<String> dietPreferences,
+    required List<String> allergies,
+  });
+
+  /// `nutrition_goals`, the first `weight_logs` entry of the day (upsert, so
+  /// a second call does not add one) and `users.age/height/gender`.
+  Future<void> saveGoal(OnboardingGoalDraft draft);
+
+  /// The legacy server switch for calories when the goal was skipped.
+  Future<void> enableCalorieTracking();
+
+  /// `users.onboarding_completed = true`, at the very end (§1.2).
+  Future<void> markCompleted();
+
+  /// The list to open for a set-up account: the last opened on this device,
+  /// else the first of the account; null without lists.
+  Future<String?> lastListId();
+}
+
+/// The Supabase implementation.
+class OnboardingAnswersService implements OnboardingAccountBackend {
   OnboardingAnswersService._();
   static final OnboardingAnswersService instance = OnboardingAnswersService._();
 
-  static const _syncedKey = 'onb_answers_synced_v1';
-  static const _dietKey = 'onb_pending_diet_preferences';
-  static const _prioritiesKey = 'onb_pending_app_priorities';
-  static const _caloriesOptInKey = 'onb_pending_calories_opt_in';
-  static const _goalDraftKey = 'onb_pending_goal_draft';
-
-  /// Called once, at the end of onboarding, before the user has signed up.
-  Future<void> savePendingAnswers({
-    required List<String> dietPreferences,
-    required List<String> appPriorities,
-    required bool caloriesOptedIn,
-    OnboardingGoalDraft? goalDraft,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_dietKey, dietPreferences);
-    await prefs.setStringList(_prioritiesKey, appPriorities);
-    await prefs.setBool(_caloriesOptInKey, caloriesOptedIn);
-    if (goalDraft != null) {
-      await prefs.setString(_goalDraftKey, jsonEncode(goalDraft.toJson()));
-    } else {
-      await prefs.remove(_goalDraftKey);
-    }
-    // A fresh onboarding run always supersedes anything not yet synced.
-    await prefs.setBool(_syncedKey, false);
+  String _uid() {
+    final id = SupabaseService.instance.currentUser?.id;
+    if (id == null) throw StateError('Not signed in');
+    return id;
   }
 
-  /// Applies any pending onboarding answers to [userId]'s account. Safe to
-  /// call on every app start / auth change — it's a no-op after the first
-  /// successful run (or if this device never collected any answers, e.g.
-  /// existing users who onboarded before this feature shipped). Returns
-  /// true only when it actually wrote something, so callers know whether
-  /// their cached user model is now stale.
-  ///
-  /// [accountCreatedAt] is the `users` row's `created_at`. Onboarding
-  /// answers are collected before any account exists, so they can only
-  /// legitimately belong to an account created in *this* session (a fresh
-  /// signup). If the account we're about to write into already existed —
-  /// e.g. the device's local "synced" flag was wiped by a reinstall, the
-  /// user went through onboarding again, then tapped "Log In" to an
-  /// existing account instead of signing up — applying stale local answers
-  /// would silently overwrite that account's real diet/goal/profile data.
-  /// When omitted, the check is skipped (caller already knows the row is
-  /// new, e.g. it was just inserted).
-  Future<bool> applyPendingAnswersToAccount(
-    String userId, {
-    DateTime? accountCreatedAt,
+  @override
+  Future<AccountSetupStatus> accountStatus() async {
+    final user = SupabaseService.instance.currentUser;
+    if (user == null) throw StateError('Not signed in');
+    final row = await SupabaseService.instance
+        .from('users')
+        .select('onboarding_completed, created_at')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (row == null) {
+      // First sign-in: the row the rest of the flow updates. No name from
+      // the e-mail address (Inventar Bug 13); Name fills it.
+      final now = DateTime.now().toUtc().toIso8601String();
+      await SupabaseService.instance
+          .from('users')
+          .upsert(
+            {
+              'id': user.id,
+              'email': user.email,
+              'auth_provider': user.appMetadata['provider'],
+              'created_at': now,
+              'updated_at': now,
+            },
+            onConflict: 'id',
+            ignoreDuplicates: true,
+          );
+      return decideAccountStatus(createdAt: DateTime.tryParse(user.createdAt));
+    }
+    return decideAccountStatus(
+      onboardingCompleted: row['onboarding_completed'] as bool?,
+      createdAt:
+          DateTime.tryParse(row['created_at'] as String? ?? '') ??
+          DateTime.tryParse(user.createdAt),
+    );
+  }
+
+  @override
+  Future<void> saveDiet({
+    required List<String> dietPreferences,
+    required List<String> allergies,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_syncedKey) ?? false) return false;
+    await SupabaseService.instance
+        .from('users')
+        .update({
+          'diet_preferences': dietPreferences,
+          'allergies': allergies,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', _uid());
+  }
 
-    if (accountCreatedAt != null &&
-        DateTime.now().difference(accountCreatedAt) > const Duration(minutes: 5)) {
-      // Not a fresh signup — this device has nothing legitimate to apply.
-      await prefs.setBool(_syncedKey, true);
-      return false;
+  @override
+  Future<void> saveGoal(OnboardingGoalDraft draft) async {
+    final userId = _uid();
+    final now = DateTime.now();
+    final targets = draft.targets();
+    final custom = draft.goalType == NutritionGoalType.custom;
+    await NutritionGoalService.instance.saveGoal(
+      NutritionGoal(
+        userId: userId,
+        calorieTrackingEnabled: true,
+        goalType: draft.goalType,
+        activityLevel: draft.activityLevel,
+        currentWeightKg: custom ? null : draft.currentWeightKg,
+        targetWeightKg: draft.needsTargetWeight ? draft.targetWeightKg : null,
+        heightCm: custom ? null : draft.heightCm,
+        timelineWeeks: draft.needsTargetWeight && draft.targetWeightKg != null
+            ? draft.timelineWeeks
+            : null,
+        dailyCalorieTarget: custom
+            ? draft.customCalories
+            : targets?.dailyCalorieTarget,
+        proteinTargetG: targets?.proteinTargetG,
+        carbsTargetG: targets?.carbsTargetG,
+        fatTargetG: targets?.fatTargetG,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    if (custom) return;
+    final weight = draft.currentWeightKg;
+    if (weight != null) {
+      await WeightLogService.instance.upsertForDate(
+        weightKg: weight,
+        date: now,
+      );
     }
+    await SupabaseService.instance
+        .from('users')
+        .update({
+          'age': draft.age,
+          'height': draft.heightCm,
+          'height_unit': 'cm',
+          'gender': draft.gender,
+        })
+        .eq('id', userId);
+  }
 
-    final dietPreferences = prefs.getStringList(_dietKey);
-    final appPriorities = prefs.getStringList(_prioritiesKey);
-    final caloriesOptedIn = prefs.getBool(_caloriesOptInKey);
+  @override
+  Future<void> enableCalorieTracking() async {
+    await NutritionGoalService.instance.setTrackingEnabled(true);
+  }
 
-    if (dietPreferences == null && appPriorities == null && caloriesOptedIn == null) {
-      // Nothing was ever collected on this device — mark synced so we
-      // don't keep checking on every auth refresh.
-      await prefs.setBool(_syncedKey, true);
-      return false;
-    }
+  @override
+  Future<void> markCompleted() async {
+    await SupabaseService.instance
+        .from('users')
+        .update({
+          'onboarding_completed': true,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', _uid());
+  }
 
+  @override
+  Future<String?> lastListId() async {
+    final userId = _uid();
     try {
-      await SupabaseService.instance.from('users').update({
-        'diet_preferences': dietPreferences ?? const [],
-        'app_priorities': appPriorities ?? const [],
-        'onboarding_completed': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', userId);
-
-      if (caloriesOptedIn == true) {
-        final draftJson = prefs.getString(_goalDraftKey);
-        if (draftJson != null) {
-          final draft = OnboardingGoalDraft.fromJson(
-            jsonDecode(draftJson) as Map<String, dynamic>,
-          );
-          final targets = NutritionGoalCalculator.calculate(
-            goalType: draft.goalType,
-            activityLevel: draft.activityLevel,
-            currentWeightKg: draft.currentWeightKg,
-            heightCm: draft.heightCm,
-            age: draft.age,
-            gender: draft.gender,
-            targetWeightKg: draft.targetWeightKg,
-            timelineWeeks: draft.timelineWeeks,
-          );
-          final now = DateTime.now();
-          await NutritionGoalService.instance.saveGoal(NutritionGoal(
-            userId: userId,
-            calorieTrackingEnabled: true,
-            goalType: draft.goalType,
-            activityLevel: draft.activityLevel,
-            currentWeightKg: draft.currentWeightKg,
-            targetWeightKg: draft.targetWeightKg,
-            heightCm: draft.heightCm,
-            timelineWeeks: draft.timelineWeeks,
-            dailyCalorieTarget: targets.dailyCalorieTarget,
-            proteinTargetG: targets.proteinTargetG,
-            carbsTargetG: targets.carbsTargetG,
-            fatTargetG: targets.fatTargetG,
-            createdAt: now,
-            updatedAt: now,
-          ));
-          await WeightLogService.instance.logWeight(
-            weightKg: draft.currentWeightKg,
-          );
-          await SupabaseService.instance.from('users').update({
-            'age': draft.age,
-            'height': draft.heightCm,
-            'height_unit': 'cm',
-            'gender': draft.gender,
-          }).eq('id', userId);
-        } else {
-          // Opted in but skipped the goal questions — still flip the
-          // server-side switch so the tab preference survives a reinstall;
-          // the calories dashboard prompts for goal setup separately.
-          await NutritionGoalService.instance.setTrackingEnabled(true);
-        }
-      }
-
-      await prefs.setBool(_syncedKey, true);
-      await prefs.remove(_dietKey);
-      await prefs.remove(_prioritiesKey);
-      await prefs.remove(_caloriesOptInKey);
-      await prefs.remove(_goalDraftKey);
-      return true;
+      final prefs = await SharedPreferences.getInstance();
+      final last = prefs.getString('last_accessed_list_$userId');
+      if (last != null && last.isNotEmpty) return last;
     } catch (e) {
-      debugPrint('⚠️ [OnboardingSync] Failed to apply pending answers: $e');
-      // Leave _syncedKey false — retried on the next auth refresh.
-      return false;
+      debugPrint('⚠️ [Onboarding] Reading the last list failed: $e');
     }
+    final lists = await ListRepository.instance.getUserLists().timeout(
+      const Duration(seconds: 8),
+    );
+    return lists.isEmpty ? null : lists.first.id;
   }
 }
+
+/// Override in tests.
+final onboardingBackendProvider = Provider<OnboardingAccountBackend>(
+  (ref) => OnboardingAnswersService.instance,
+);

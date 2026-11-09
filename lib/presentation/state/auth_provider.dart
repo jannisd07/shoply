@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/services/offline_cache_service.dart';
-import 'package:shoply/data/services/onboarding_answers_service.dart';
 import 'package:shoply/data/services/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shoply/core/services/shared_preferences_provider.dart';
@@ -63,20 +62,9 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
   if (userId == null || authUser == null) return null;
 
   try {
-    var row = await _fetchUserRow(userId) ?? await _createUserRow(authUser);
-
-    // Onboarding (diet preferences, calorie-tracking opt-in, goal answers)
-    // runs before an account exists, so it stashes its answers locally —
-    // this is the first point a real user id exists to apply them to. Runs
-    // at most once per device.
-    final applied = await OnboardingAnswersService.instance
-        .applyPendingAnswersToAccount(
-          userId,
-          accountCreatedAt: DateTime.tryParse(
-            row['created_at'] as String? ?? '',
-          ),
-        );
-    if (applied) row = await _fetchUserRow(userId) ?? row;
+    // The onboarding writes its answers itself, with targeted updates
+    // (Konzept 17 §1.2); there is no time-based sync here any more.
+    final row = await _fetchUserRow(userId) ?? await _createUserRow(authUser);
 
     final model = UserModel.fromJson(row);
     await OfflineCacheService.instance.cacheUserProfile(
@@ -105,17 +93,17 @@ Future<Map<String, dynamic>?> _fetchUserRow(String userId) {
       .maybeSingle();
 }
 
-/// First sign-in: create the `users` row from the auth account.
+/// First sign-in: create the `users` row from the auth account. The name is
+/// only what the account brought (never the part of the e-mail address
+/// before the @, Konzept 17 §3.8, Inventar Bug 13); Name fills it.
 Future<Map<String, dynamic>> _createUserRow(User authUser) {
-  final now = DateTime.now().toIso8601String();
+  final now = DateTime.now().toUtc().toIso8601String();
   return SupabaseService.instance
       .from('users')
       .insert({
         'id': authUser.id,
         'email': authUser.email,
-        'display_name':
-            authUser.userMetadata?['display_name'] ??
-            authUser.email?.split('@')[0],
+        'display_name': authUser.userMetadata?['display_name'],
         'auth_provider': authUser.appMetadata['provider'],
         'created_at': now,
         'updated_at': now,
