@@ -10,7 +10,7 @@ import 'package:shoply/data/services/list_import_service.dart';
 import 'package:shoply/data/services/meal_photo_analysis_service.dart';
 import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_tab_screen.dart';
-import 'package:shoply/presentation/screens/avo/widgets/avo_status_sections.dart';
+import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_user_bubble.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 
@@ -34,6 +34,8 @@ Future<void> _pumpTab(
   Set<AppModule> modules = const {AppModule.calories, AppModule.offers},
   bool offline = false,
   bool subscribed = false,
+  int? Function(String task) proLimit = _limit15,
+  AvoChat? chat,
 }) async {
   await tester.pumpWidget(
     avoHarness(
@@ -46,8 +48,9 @@ Future<void> _pumpTab(
           modules: modules,
           offline: offline,
           subscribed: subscribed,
+          chat: chat,
         ),
-        avoProTaskLimitProvider.overrideWith((ref, task) => 15),
+        avoProTaskLimitProvider.overrideWith((ref, task) => proLimit(task)),
       ],
     ),
   );
@@ -56,6 +59,8 @@ Future<void> _pumpTab(
 
 /// Scrolls [finder] to the middle of the conversation (clear of the head
 /// and the composer) and taps it.
+int? _limit15(String task) => 15;
+
 Future<void> _tapInChat(WidgetTester tester, Finder finder) async {
   await Scrollable.ensureVisible(tester.element(finder), alignment: 0.5);
   await settle(tester);
@@ -216,6 +221,30 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('More photos a day'), findsOneWidget);
+    });
+
+    testWidgets('an unknown Pro photo limit keeps the weekly Pro row unused', (
+      tester,
+    ) async {
+      final backend = FakeAvoBackend()
+        ..mealPhoto = const MealPhotoException('quota_exceeded');
+      final hints = FakeProHints();
+      await _pumpTab(
+        tester,
+        backend,
+        FakePhotoSource(photo: kTinyPng),
+        screen: const AvoScreenContext(screen: 'calories'),
+        // The question limit is known (avo_chat), the photo limit is not.
+        proLimit: (task) => task == 'avo_chat' ? 60 : null,
+        chat: AvoChat(backend, proHints: hints),
+      );
+      await _menu(tester, 'Choose photo');
+      expect(
+        find.text('No more meal photos today. You can add the meal manually.'),
+        findsOneWidget,
+      );
+      expect(find.text('More photos a day'), findsNothing);
+      expect(hints.taken, 0, reason: 'the week\'s showing stays unused');
     });
 
     testWidgets('Pro keeps the limit text, without the Pro row', (

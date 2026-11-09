@@ -286,7 +286,9 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
       photo,
       text: _controller.text,
       offline: ref.read(isOfflineProvider),
-      proHintAllowed: _proHintAllowed,
+      // Free; the chat checks Pro's limit of the photo's own task
+      // (meal_photo / list_import) before it uses the week's Pro row.
+      proHintAllowed: !ref.read(isSubscribedProvider),
     );
     if (turn == null) return;
     _controller.clear();

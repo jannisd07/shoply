@@ -13,6 +13,17 @@ mixin _AvoPhotoTurns on ChangeNotifier {
   /// The week's one showing of the Pro row after a daily limit.
   AvoProHintGate get _photoProHints;
 
+  bool _photoProLimitKnown({required bool meal}) {
+    try {
+      return _photoRef?.read(
+            avoProTaskLimitProvider(avoPhotoTask(meal: meal)),
+          ) !=
+          null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   CancelToken? _photoCancel;
 
   /// Completes on "Stopp": the round ends at once, whatever the read does.
@@ -85,10 +96,15 @@ mixin _AvoPhotoTurns on ChangeNotifier {
     }
     turn.payloads.add(result);
     turn.phase = AvoTurnPhase.done;
-    if (result.card case AvoPhotoErrorCard(code: 'quota_exceeded')) {
+    if (result.card case AvoPhotoErrorCard(code: 'quota_exceeded', :final meal)) {
+      unawaited(AvoHaptics.error());
       // The daily photo limit (A9-3): Free sees the Pro row, as after the
-      // question limit, at most once a week.
-      turn.proHint = turn.proHintAllowed && await _photoProHints.take();
+      // question limit, at most once a week. The week's one showing is only
+      // used when the row can show: Free and Pro's limit of this task known.
+      turn.proHint =
+          turn.proHintAllowed &&
+          _photoProLimitKnown(meal: meal) &&
+          await _photoProHints.take();
       if (_photoGone) return;
     } else if (result.card is AvoPhotoErrorCard) {
       unawaited(AvoHaptics.error());

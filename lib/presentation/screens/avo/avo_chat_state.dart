@@ -1,5 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:shoply/data/services/app_flags_service.dart';
+import 'package:shoply/presentation/providers/app_flags_provider.dart';
 
 /// State of "Widerrufen" on one change card.
 enum AvoUndoPhase { idle, working, undone, changedSince }
@@ -44,3 +48,19 @@ class _PrefsProHintGate implements AvoProHintGate {
 
 /// The gate the app uses (SharedPreferences, this device).
 const AvoProHintGate avoPrefsProHintGate = _PrefsProHintGate();
+
+/// Avo Pro's daily limit of an `ai` task from `app_flags.ai_limits`
+/// (`pro.<task>`); null while unknown.
+final avoProTaskLimitProvider = Provider.family<int?, String>((ref, task) {
+  final limits = ref.watch(
+    appFlagsProvider.select((f) => f.values[AppFlagKeys.aiLimits]),
+  );
+  if (limits is! Map) return null;
+  final pro = limits['pro'];
+  if (pro is! Map) return null;
+  final value = pro[task];
+  return value is num ? value.toInt() : null;
+});
+
+/// The `ai` task whose Pro limit the Pro row after a photo names.
+String avoPhotoTask({required bool meal}) => meal ? 'meal_photo' : 'list_import';

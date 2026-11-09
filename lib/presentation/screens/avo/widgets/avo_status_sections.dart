@@ -8,8 +8,7 @@ import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/core/modules/module_labels.dart';
-import 'package:shoply/data/services/app_flags_service.dart';
-import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
@@ -18,19 +17,6 @@ import 'package:shoply/presentation/widgets/design/pro_gate.dart';
 
 /// The Pro feature id of "more Avo questions a day" (`/pro?feature=`).
 const String avoQuestionsProFeature = ProFeatures.avoQuestions;
-
-/// Avo Pro's daily limit of an `ai` task from `app_flags.ai_limits`
-/// (`pro.<task>`); null while unknown.
-final avoProTaskLimitProvider = Provider.family<int?, String>((ref, task) {
-  final limits = ref.watch(
-    appFlagsProvider.select((f) => f.values[AppFlagKeys.aiLimits]),
-  );
-  if (limits is! Map) return null;
-  final pro = limits['pro'];
-  if (pro is! Map) return null;
-  final value = pro[task];
-  return value is num ? value.toInt() : null;
-});
 
 /// Avo Pro's daily Avo questions (`pro.avo_chat`); null while unknown.
 final avoProQuestionLimitProvider = Provider<int?>(
@@ -47,10 +33,10 @@ class AvoPhotoProRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final limit = ref.watch(
-      avoProTaskLimitProvider(meal ? 'meal_photo' : 'list_import'),
-    );
-    if (limit == null) return const SizedBox.shrink();
+    final limit = ref.watch(avoProTaskLimitProvider(avoPhotoTask(meal: meal)));
+    if (limit == null || ref.watch(isSubscribedProvider)) {
+      return const SizedBox.shrink();
+    }
     return AvoProRow(
       title: context.tr('avo_pro_more_photos_title'),
       subtitle: context.tr(

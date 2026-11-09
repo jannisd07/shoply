@@ -833,7 +833,7 @@ void main() {
       );
       expect(
         describeAvoFailure('quota_exceeded', null),
-        'Answer failed: code=quota_exceeded, http=in stream',
+        'Answer failed: code=quota_exceeded, no status',
       );
     });
 

@@ -109,7 +109,8 @@ List<Widget> _cardSections(
   AvoAppInfoCard() => [avoAppInfoSection(context, card)],
   AvoPhotoErrorCard() => [
     avoPhotoErrorSection(context, s, card, onNewPhoto: onNewPhoto),
-    if (card.code == 'quota_exceeded' && s.turn.proHint && s.proHintAllowed)
+    // proHint is only taken when this row can show (Free, limit known).
+    if (card.code == 'quota_exceeded' && s.turn.proHint)
       AvoPhotoProRow(meal: card.meal),
   ],
   // Standing on their own (choices).

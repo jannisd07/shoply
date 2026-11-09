@@ -44,7 +44,6 @@ const EdgeInsets _kChipArea = EdgeInsets.symmetric(
 const double _kRowIcon = 22; // D2 glyph at the start of a row
 const double _kWarning = 15; // D2 warning glyph before "Nicht festgelegt"
 const double _kChevron = 14; // D2 disclosure chevron
-const double _kHintIcon = 18; // D2 like the hint in the lists
 
 /// Row ids of "Preise & Angebote" (`/settings/offers?row=…`, the settings
 /// search).
@@ -120,7 +119,7 @@ class OffersSettingsScreen extends ConsumerWidget {
             child: HintRow(
               leading: AvoIcon(
                 AvoIcons.location,
-                size: MediaQuery.textScalerOf(context).scale(_kHintIcon),
+                size: MediaQuery.textScalerOf(context).scale(AvoIcon.defaultSize),
                 color: context.colors.secondaryLabel,
               ),
               text: context.tr('offer_hint_set_postcode'),

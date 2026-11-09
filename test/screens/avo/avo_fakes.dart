@@ -388,8 +388,14 @@ class FakeProHints implements AvoProHintGate {
 
   final bool allow;
 
+  /// How often the gate was asked (each ask may use up the week).
+  int taken = 0;
+
   @override
-  Future<bool> take() async => allow;
+  Future<bool> take() async {
+    taken++;
+    return allow;
+  }
 }
 
 List<Override> avoOverrides({

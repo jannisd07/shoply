@@ -943,4 +943,4 @@ Map<String, String> avoProPrice(String productId, String price) => {
 /// never the question, the history or anything else of the person.
 @visibleForTesting
 String describeAvoFailure(String code, int? httpStatus) =>
-    'Answer failed: code=$code, http=${httpStatus ?? 'in stream'}';
+    'Answer failed: code=$code, ${httpStatus == null ? 'no status' : 'http=$httpStatus'}';
