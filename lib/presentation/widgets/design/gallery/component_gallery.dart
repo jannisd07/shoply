@@ -34,6 +34,7 @@ import 'package:shoply/presentation/widgets/design/quick_add_tile.dart';
 import 'package:shoply/presentation/widgets/design/recipe_card.dart';
 import 'package:shoply/presentation/widgets/design/reorderable_section.dart';
 import 'package:shoply/presentation/widgets/design/rolling_number.dart';
+import 'package:shoply/presentation/widgets/design/row_actions.dart';
 import 'package:shoply/presentation/widgets/design/search_field.dart';
 import 'package:shoply/presentation/widgets/design/segmented_control.dart';
 import 'package:shoply/presentation/widgets/design/select_circle.dart';
@@ -1981,6 +1982,45 @@ class _GalleryBodyState extends State<_GalleryBody> {
                   SwipeAction(
                     label: 'Erledigt',
                     onPressed: () => _toast(context, '$name erledigt'),
+                  ),
+                ],
+                child: NavRow(title: name, onTap: _noop),
+              ),
+          ],
+        ),
+      ),
+      _Demo(
+        'RowActions (wischen und lange drücken)',
+        inset: false,
+        child: InsetSection(
+          children: [
+            for (final name in const ['Lidl · 42,80 €', 'Rewe · 18,20 €'])
+              RowActions(
+                trailingActions: [
+                  SwipeAction(
+                    label: 'Löschen',
+                    icon: AvoIcons.trash,
+                    destructive: true,
+                    onPressed: () => _toast(context, '$name gelöscht'),
+                  ),
+                ],
+                menuItems: [
+                  AvoMenuItem(
+                    label: 'Alle wieder auf die Liste',
+                    icon: AvoIcons.cartBadgePlus,
+                    onSelected: () => _toast(context, '$name: auf die Liste'),
+                  ),
+                  AvoMenuItem(
+                    label: 'Kosten teilen',
+                    icon: AvoIcons.eurosignCircle,
+                    onSelected: () => _toast(context, '$name: teilen'),
+                  ),
+                  const AvoMenuDivider(),
+                  AvoMenuItem(
+                    label: 'Löschen',
+                    icon: AvoIcons.trash,
+                    destructive: true,
+                    onSelected: () => _toast(context, '$name gelöscht'),
                   ),
                 ],
                 child: NavRow(title: name, onTap: _noop),

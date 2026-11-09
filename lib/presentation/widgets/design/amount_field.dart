@@ -8,9 +8,6 @@ import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 export 'package:shoply/data/services/trip_split_math.dart' show AmountInput;
 
-/// The large variant never grows past this size (A-V3: at most 51 pt).
-const double _kLargeMaxSize = 51; // D2
-
 /// Space between a row title and the field.
 const double _kLabelGap = AvoSpacing.m; // D2 12
 
@@ -29,7 +26,8 @@ enum AmountFieldSize {
   /// In a row: body 17/22, right aligned, tabular figures.
   compact,
 
-  /// On its own: the large-number style, left aligned, at most 51 pt.
+  /// On its own: [AvoTextStyle.numberXL] (34/41 bold, at most 51 pt), left
+  /// aligned.
   large,
 }
 
@@ -204,14 +202,7 @@ class _AmountFieldState extends State<AmountField> {
     if (widget.size == AmountFieldSize.compact) {
       return context.text(AvoTextStyle.body, color: color, tabular: true);
     }
-    final style = context.text(
-      AvoTextStyle.largeTitle,
-      color: color,
-      tabular: true,
-    );
-    final size = context.typography.sizeOf(AvoTextStyle.largeTitle);
-    if (size <= _kLargeMaxSize) return style;
-    return style.copyWith(fontSize: style.fontSize! * _kLargeMaxSize / size);
+    return context.text(AvoTextStyle.numberXL, color: color);
   }
 
   double _lineHeight(BuildContext context) {
@@ -219,11 +210,7 @@ class _AmountFieldState extends State<AmountField> {
     if (widget.size == AmountFieldSize.compact) {
       return typography.lineHeightOf(AvoTextStyle.body);
     }
-    final size = typography.sizeOf(AvoTextStyle.largeTitle);
-    final line = typography.lineHeightOf(AvoTextStyle.largeTitle);
-    return size <= _kLargeMaxSize
-        ? line
-        : (line * _kLargeMaxSize / size).roundToDouble();
+    return typography.lineHeightOf(AvoTextStyle.numberXL);
   }
 
   @override

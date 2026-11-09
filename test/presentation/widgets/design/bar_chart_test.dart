@@ -581,6 +581,85 @@ void main() {
       });
     });
 
+    group('values: all or none (A-V4)', () {
+      const narrow = LayoutCase(width: 320, scale: 1);
+      List<AvoBarEntry> week(double sunday) => [
+        const AvoBarEntry(label: 'Mo', value: 12),
+        const AvoBarEntry(label: 'Di', value: 48),
+        const AvoBarEntry(label: 'Mi', value: 7),
+        const AvoBarEntry(label: 'Do', value: 31),
+        const AvoBarEntry(label: 'Fr', value: 25),
+        const AvoBarEntry(label: 'Sa', value: 64),
+        AvoBarEntry(label: 'So', value: sunday),
+      ];
+
+      testWidgets('every value fits: all are shown', (tester) async {
+        await _pump(tester, _chart(entries: week(9)), layout: narrow);
+        await tester.pumpAndSettle();
+        for (final text in ['12 €', '48 €', '7 €', '31 €', '25 €', '64 €']) {
+          expect(find.text(text), findsOneWidget);
+        }
+        expect(find.text('9 €'), findsOneWidget);
+      });
+
+      testWidgets('one value too long: none is shown, the height stays', (
+        tester,
+      ) async {
+        await _pump(tester, _chart(entries: week(9)), layout: narrow);
+        await tester.pumpAndSettle();
+        final fitting = tester.getSize(find.byType(AvoBarChart));
+        final tallest = _bars(tester)[5];
+
+        await _pump(tester, _chart(entries: week(64)), layout: narrow);
+        await tester.pumpAndSettle();
+        expect(find.text('64 €'), findsNWidgets(2));
+
+        final handle = tester.ensureSemantics();
+        await _pump(tester, _chart(entries: week(1234567)), layout: narrow);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('€'), findsNothing);
+        // Axis labels stay.
+        expect(find.text('Mo'), findsOneWidget);
+        expect(tester.getSize(find.byType(AvoBarChart)), fitting);
+        // The tallest bar still ends on the shared baseline.
+        expect(_bars(tester)[6].bottom, tallest.bottom);
+        // VoiceOver still reads every value.
+        expect(
+          find.bySemanticsLabel('Sa'),
+          findsOneWidget,
+        );
+        final node = tester.getSemantics(find.bySemanticsLabel('So'));
+        expect(node.value, '1234567 €');
+        handle.dispose();
+      });
+
+      testWidgets('picking another bar does not switch the values', (
+        tester,
+      ) async {
+        var selected = 0;
+        Widget picker(void Function(void Function()) setState) => AvoBarChart(
+          entries: week(9),
+          formatValue: _euro,
+          semanticSummary: _summary,
+          selectedIndex: selected,
+          onSelected: (i) => setState(() => selected = i),
+        );
+        await _pump(
+          tester,
+          StatefulBuilder(builder: (context, setState) => picker(setState)),
+          layout: narrow,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('48 €'), findsOneWidget);
+        await tester.tap(find.text('Sa'));
+        await tester.pumpAndSettle();
+        expect(selected, 5);
+        expect(find.text('48 €'), findsOneWidget);
+        expect(find.text('64 €'), findsOneWidget);
+      });
+    });
+
     testWidgets('labels that do not fit shrink instead of wrapping', (
       tester,
     ) async {

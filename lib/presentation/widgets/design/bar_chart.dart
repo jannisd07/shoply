@@ -108,9 +108,13 @@ class AvoBarEntry {
 ///
 /// Bars grow from zero on the [AvoMotion.digits] spring when the chart
 /// appears and follow value changes from where they are; Reduce Motion
-/// shows them at once. Labels that do not fit their column shrink rather
-/// than wrap. From AX1 on the chart turns into a list (label and value per
-/// row with a small horizontal bar), because axis labels no longer fit.
+/// shows them at once. Values are shown above all bars or above none
+/// (A-V4): when one value does not fit its column at full size (long
+/// amounts, narrow screens, larger text) all of them are left out, their
+/// line stays empty and VoiceOver still reads every value. Axis labels that
+/// do not fit shrink rather than wrap. From AX1 on the chart turns into a
+/// list (label and value per row with a small horizontal bar), because axis
+/// labels no longer fit.
 ///
 /// VoiceOver: one element reads [semanticSummary] ("Ausgaben pro Monat,
 /// November bisher 183 €, 12 % weniger als im Oktober"), then every bar is
@@ -163,7 +167,8 @@ class AvoBarChart extends StatefulWidget {
   /// bars and values; charts with a goal usually set [showValues] to false.
   final double? goal;
 
-  /// Shows each value above its bar (D2). Off for dense charts.
+  /// Shows each value above its bar (D2), as long as every value fits its
+  /// column; otherwise none is shown. Off for dense charts.
   final bool showValues;
 
   /// Height of the tallest bar in points (D2 84; Konzept calories week 120).
@@ -330,6 +335,47 @@ class _AvoBarChartState extends State<AvoBarChart>
     return '${e.spokenLabel}, ${e.semanticValue ?? _valueText(e)}';
   }
 
+  /// Memo of [_valuesFit]: the measurement runs once per input, not once
+  /// per animation frame.
+  Object? _fitKey;
+  bool _fit = true;
+
+  /// Whether every value fits [slot] on one line at full size. Measured in
+  /// the semibold style of the highlighted bar for all of them, so picking
+  /// another bar never switches the values on or off.
+  bool _valuesFit(BuildContext context, double slot) {
+    final style = _valueStyle(context, true);
+    final scaler = MediaQuery.textScalerOf(context);
+    final bold = MediaQuery.boldTextOf(context);
+    final texts = [for (final e in widget.entries) _valueText(e)];
+    final key = Object.hash(
+      Object.hashAll(texts),
+      slot,
+      style.fontSize,
+      scaler,
+      bold,
+    );
+    if (key == _fitKey) return _fit;
+    final measured = bold ? style.copyWith(fontWeight: FontWeight.bold) : style;
+    var fit = true;
+    for (final text in texts) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: measured),
+        textDirection: Directionality.of(context),
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      if (width > slot + 0.5) {
+        fit = false;
+        break;
+      }
+    }
+    _fitKey = key;
+    return _fit = fit;
+  }
+
   Color _barColor(BuildContext context, int i) =>
       _highlighted(i) || widget.tintAllBars
       ? context.colors.chartHighlight
@@ -397,7 +443,10 @@ class _AvoBarChartState extends State<AvoBarChart>
         final valueBlock = widget.showValues
             ? typography.lineHeightOf(AvoTextStyle.caption1) + _kValueGap
             : 0.0;
+        // The value line keeps its height when the values are left out, so
+        // the chart does not jump when an amount gets one digit longer.
         final plotHeight = valueBlock + widget.maxBarHeight;
+        final valuesShown = widget.showValues && _valuesFit(context, slot);
         final goal = _goal;
 
         final columns = <Widget>[
@@ -408,7 +457,7 @@ class _AvoBarChartState extends State<AvoBarChart>
               fraction: _bar(i),
               highlighted: _highlighted(i),
               barColor: _barColor(context, i),
-              showValue: widget.showValues,
+              showValue: valuesShown,
               barWidth: barWidth,
               slot: slot,
               plotHeight: plotHeight,

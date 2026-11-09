@@ -2,6 +2,12 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Zeilen-Aktionen, große Zahl, Diagramm-Werte (Teil A, AB3)
+
+- Neuer Baustein `RowActions`: Wischaktionen, Kontextmenü per Langdruck und VoiceOver-Aktionen für eine Zeile.
+- Neuer Textstil `AvoTextStyle.numberXL` (34/41 Bold, tabellarisch, höchstens 51 pt); `AmountField` groß nutzt ihn.
+- `AvoBarChart` zeigt die Werte über allen Balken oder über keinem.
+
 ## 2026-11-09: Verlauf in Listen und Home, Bausteine für B8 (Teil A, S5b)
 
 - Listen-Übersicht: Gruppe „Verlauf“ mit „Einkäufe“ und „Offene Beträge“; Home zeigt den Kosten-teilen-Hinweis unter

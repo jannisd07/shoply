@@ -4,6 +4,13 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
+09.11.2026 (AB3): B7 und B6b sind noch nicht auf `main`, A10 wartet auf den Owner, also die offenen Wünsche von B:
+`AvoTextStyle.numberXL` (34/41 Bold tabellarisch, höchstens 51 pt), `AvoBarChart` zeigt die Werte für alle Spalten
+oder für keine (A-V4), neuer Baustein `RowActions` für Wischen plus Kontextmenü (A-V17). Entschieden: der
+Rückgängig-Hinweis zählt nicht zum Glas-Budget (A-V15), „Verlauf“ und „Offene Beträge“ behalten den großen Titel
+(A-V21). A-V5, A-V18 und A-V20 waren schon erledigt. Details und Wünsche an B: [`ab3-stand.md`](ab3-stand.md). Als
+Nächstes: S5c, wenn B7 oder B6b auf `main` ist; sonst A10 (Owner) oder neue Wünsche von B.
+
 09.11.2026 (S5b): B8 ist auf `main`, B's Wünsche aus status-B 19/20 sind erledigt: `AmountField` (A-V3),
 `AvoBarChart` mit Auswahl und Tokens `chartBar`/`chartHighlight`/`monthCardGradient` (A-V4), `ValueRow(subtitle:)` und
 `MenuValueRow` (A-V6), Erfolgsmoment ab AX3 ohne Figur (A-V7), `AvoToast.show(onDismissed:)` (A-V24),
@@ -92,6 +99,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A9 Pro und Paywall | **erledigt**: Owner-Variante B, `ProFeatures` mit Katalog, D2-Paywall mit allen Zuständen und Prüfmatrix, Kochmodus-Sperre ab Schritt 2; offen in `a9-stand.md` (→ A9b) | 09.11.2026 | `git log --grep A9` |
 | A9b Pro, Rest | **erledigt**: Zoom-Übergang der Paywall aus dem Element (`ZoomPage`, `ProGate.openPaywall(origin:)`), Preis-Cache, Pro-Hinweis auf der Startseite nach dem ersten Einkauf; Tag-12-Erinnerung als Wunsch an B (`a9b-stand.md`) | 09.11.2026 | `git log --grep A9b` |
 | S5b Nachzug von B (A) | **erledigt**: B's Wünsche nach B8 (A-V3, A-V4, A-V6, A-V7, A-V9-Rest, A-V11–A-V14, A-V19, A-V23, A-V24, `AppFilterChip(trailing:)`), Gegenprüfung B8 ohne Fund; B7/B6b folgen in S5c (`s5b-stand.md`) | 09.11.2026 | `git log --grep S5b` |
+| AB3 Offene Wünsche von B (A) | **erledigt**: `AvoTextStyle.numberXL`, `AvoBarChart` Werte alle oder keine (A-V4), `RowActions` (A-V17), Entscheidungen A-V15 und A-V21 in Konzept 00; A-V5, A-V18, A-V20 belegt (`ab3-stand.md`) | 09.11.2026 | `git log --grep AB3` |
 
 ## Verträge aus S1 (für B verbindlich)
 

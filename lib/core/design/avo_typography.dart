@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-/// The iOS text styles used by D2 (SF Pro), plus two D2-specific ones.
+/// The iOS text styles used by D2 (SF Pro), plus three D2-specific ones.
 enum AvoTextStyle {
   largeTitle,
   title1,
@@ -19,6 +19,11 @@ enum AvoTextStyle {
 
   /// Tab bar labels: 11/13, 500 (600 when selected).
   tabLabel,
+
+  /// The one big figure of a screen (an amount, a month total): 34/41 bold
+  /// with tabular figures. Grows like a large title but stops at 51 pt, so a
+  /// long amount still fits a 320 pt screen at the largest text sizes.
+  numberXL,
 }
 
 /// iOS Dynamic Type content size categories, smallest to largest.
@@ -98,6 +103,7 @@ class AvoTypography {
     AvoTextStyle.caption2: [11, 11, 11, 11, 13, 15, 17, 20, 24, 29, 34, 40],
     AvoTextStyle.sectionCaps: [12, 12, 12, 13, 15, 17, 19, 23, 27, 33, 38, 44],
     AvoTextStyle.tabLabel: [11, 11, 11, 11, 12, 13, 14, 14, 14, 14, 14, 14],
+    AvoTextStyle.numberXL: [31, 32, 33, 34, 36, 38, 40, 44, 48, 51, 51, 51],
   };
 
   /// Line height at the default size (D2), scaled with the size.
@@ -115,6 +121,7 @@ class AvoTypography {
     AvoTextStyle.caption2: 13 / 11,
     AvoTextStyle.sectionCaps: 18 / 13,
     AvoTextStyle.tabLabel: 13 / 11,
+    AvoTextStyle.numberXL: 41 / 34,
   };
 
   static const Map<AvoTextStyle, FontWeight> _weights = {
@@ -131,6 +138,7 @@ class AvoTypography {
     AvoTextStyle.caption2: FontWeight.w500,
     AvoTextStyle.sectionCaps: FontWeight.w600,
     AvoTextStyle.tabLabel: FontWeight.w500,
+    AvoTextStyle.numberXL: FontWeight.w700,
   };
 
   /// Size in points for [style] at this category (what the user sees).
@@ -140,7 +148,8 @@ class AvoTypography {
   double lineHeightOf(AvoTextStyle style) =>
       (sizeOf(style) * _defaultLeading[style]!).roundToDouble();
 
-  /// The text style. [tabular] switches to tabular figures (prices, counts).
+  /// The text style. [tabular] switches to tabular figures (prices, counts);
+  /// [AvoTextStyle.numberXL] always has them.
   TextStyle style(
     AvoTextStyle style, {
     Color? color,
@@ -151,7 +160,10 @@ class AvoTypography {
     var tracking = trackingFor(size);
     if (style == AvoTextStyle.sectionCaps) tracking += 0.3;
     // D2 sets large titles 0.2 pt tighter than the SF table (+0.2 at 34 pt).
-    if (style == AvoTextStyle.largeTitle) tracking -= 0.2;
+    if (style == AvoTextStyle.largeTitle || style == AvoTextStyle.numberXL) {
+      tracking -= 0.2;
+    }
+    final tabularFigures = tabular || style == AvoTextStyle.numberXL;
     return TextStyle(
       inherit: false,
       // CupertinoSystemText/Display make the iOS engine pick SF Pro Text below
@@ -165,7 +177,9 @@ class AvoTypography {
       color: color,
       textBaseline: TextBaseline.alphabetic,
       leadingDistribution: TextLeadingDistribution.even,
-      fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
+      fontFeatures: tabularFigures
+          ? const [FontFeature.tabularFigures()]
+          : null,
       decoration: TextDecoration.none,
     );
   }

@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (S5b erledigt, `s5b-stand.md`). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (AB3 erledigt, `ab3-stand.md`). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -46,7 +46,8 @@ für die nächste Sitzung geben.
 | S6 Gegenprüfung von B | erledigt (B6b/B7/B8 folgen in S5) | `s6-stand.md` |
 | S5 Bereiche fertig | erledigt (A-V9 und Gegenprüfung B6b/B7/B8 folgen in S5b) | `s5-stand.md`, `abschlussbericht-A.md` |
 | S5b Nachzug von B | erledigt (B8 gegengeprüft, Wünsche nach B8 umgesetzt) | `s5b-stand.md`, `s5b-auftrag.md` |
-| **S5c Nachzug von B, Teil 2** | **Als Nächstes**, wenn B7 oder B6b auf `main` ist | unten, `s5b-stand.md` |
+| AB3 Offene Wünsche von B (`numberXL`, A-V4, A-V15, A-V17, A-V21) | erledigt | `ab3-stand.md` |
+| **S5c Nachzug von B, Teil 2** | **Als Nächstes**, wenn B7 oder B6b auf `main` ist | unten, `ab3-stand.md` |
 | A9b Pro, Rest | erledigt (Tag-12-Erinnerung als Wunsch an B) | `a9b-stand.md` |
 
 Reihenfolge: zu Beginn `git fetch origin` und mit `git log origin/main --oneline | grep -E "B7|B6b"` prüfen, ob B
@@ -54,8 +55,10 @@ nachgezogen hat (dann S5c; Achtung, Doku-Commits mit diesen Namen zählen nicht,
 `feature/b7-plan` und B6b; `git merge-base --is-ancestor origin/feature/b7-plan origin/main` hilft), und mit `AskUserQuestion` fragen, ob der Owner A10 (Maskottchen F-17-11: 3D-Figur behalten
 oder neu flach) entschieden hat (dann A10). Erklär dem Owner bei der Frage kurz, worum es geht (er hat am 09.11. „was
 ist das überhaupt“ gefragt). Geht beides nicht: `status-B.md` „Anfragen an Teil A“ und „Von Teil B“-Antworten auf
-neue Wünsche prüfen (A-Paket „AB3“ daraus machen); gibt es keine, dem Owner sagen, dass Teil A auf B oder auf A10
-wartet, und die Sitzung ohne Code beenden.
+neue Wünsche prüfen (A-Paket „AB4“ daraus machen; AB3 hat am 09.11. alle bis dahin offenen erledigt, neu ist nur, was
+in `status-B.md` nach Nr. 20 steht oder in `b-sitzungen.md` als Wunsch an A); gibt es keine, dem Owner sagen, dass
+Teil A auf B oder auf A10 wartet, und die Sitzung ohne Code beenden. **Der Owner startet eine neue A-Sitzung erst,
+wenn B7 oder B6b auf `main` ist, B neue Wünsche gemeldet hat oder er A10 entschieden hat.**
 
 ### AB1 Anfragen von B: Komponenten und Daten
 
@@ -144,12 +147,18 @@ per Nachricht. Dann den Abschlussbericht nachführen. Zeit übrig: Reste aus „
 
 ### S5c Nachzug von B, Teil 2
 
-Quellen: `s5b-stand.md` „Offen bei A“ und „Von Teil B“, `status-B.md` „Anfragen an Teil A“ (Nummern ab 21 und alles
+Quellen: `ab3-stand.md` „Offen bei A“ und „Von Teil B“, `status-B.md` „Anfragen an Teil A“ (Nummern ab 21 und alles
 Neue gehen vor), `b-screens/wochenplan.md` und `b-screens/kalorien.md` „Anfragen an Teil A“. Die neuen B-Screens (B7,
 B6b) wie in S6/S5b gegenprüfen (Prüfmatrix in `test/layout/screens/b/`, `bash tool/design_check.sh B`, keine
 Sheets/Slider, Simulator nach Absprache und Anmeldung des Owners), Funde an B in `s5c-stand.md` „Von Teil B“ und per
-Nachricht. Zeit übrig: Reste aus `s5b-stand.md` „Offen bei A“ (A-V17 Wisch- und Kontextmenü-Baustein, A-V18
-`Avatar`, A-V20 `FullScreenEditor` mit Tastatur-Kapsel, A-V21, `numberXL`). Abschlussbericht nachführen.
+Nachricht. Die alten Wünsche (A-V4, A-V5, A-V15, A-V17, A-V18, A-V20, A-V21, `numberXL`) sind mit AB3 erledigt. Zeit
+übrig: Reste aus `ab3-stand.md` „Offen bei A“ (`ListCard` ab AX1 ohne Cover, Simulator-Punkte). Abschlussbericht
+nachführen.
+
+### AB3 Offene Wünsche von B
+
+Erledigt am 09.11.2026 statt S5c (B7/B6b fehlten, A10 offen, keine neuen Wünsche; Owner-Ja zu AB3). Ergebnis und
+Wünsche an B: `ab3-stand.md`.
 
 ### A9b Pro, Rest
 

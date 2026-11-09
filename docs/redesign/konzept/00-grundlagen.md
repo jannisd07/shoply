@@ -545,6 +545,8 @@ Glas gibt es **nur** hier. Alles andere ist feste Fläche.
 
 Wer ein viertes Glas-Element braucht, muss eines zusammenlegen oder als Fläche zeichnen. Das wird in der Status-Datei begründet.
 
+**Kurze Hinweise zählen nicht mit (Entscheidung A-V15, 09.11.2026).** Der Rückgängig- und Status-Hinweis (`AvoToast`) steht höchstens 4 s (mit VoiceOver bis zum Ende der Ansage) und es gibt nie zwei gleichzeitig. Er darf deshalb neben drei bleibenden Glasflächen erscheinen (Verlauf: Zurück, Filter, Tab-Leiste plus Hinweis). Dasselbe gilt für ein offenes Menü. Alles, was stehen bleibt, zählt.
+
 ---
 
 ## 9. Ikonografie und Bilder
@@ -779,6 +781,7 @@ Schema je Komponente: **Zweck · Anatomie · Varianten · Zustände · Maße/Tok
 - **Varianten:**
   - Tab-Wurzel: großer Titel plus Avatar.
   - Push erste Ebene: großer Titel; tiefere Ebenen: nur Inline-Titel.
+  - Ausnahme (Entscheidung A-V21, 09.11.2026): Eine Seite, die ein eigenes Ziel ist und von mehreren Stellen direkt geöffnet wird, behält den großen Titel in jeder Tiefe. Das sind heute „Verlauf“ und „Offene Beträge“ (Listen-Übersicht, Home, Mitteilung, Avo). Detail- und Unterseiten eines Eintrags (Einkauf, Betrag, Aufteilung) bleiben beim Inline-Titel.
   - Sheet: Inline-Titel mittig, `xmark` links, `checkmark` rechts (getönt), wenn es etwas zu übernehmen gibt (K-30).
   - Foto-Kopf (Rezeptdetail): Leiste transparent über dem Foto, Glas-Variante `clear`, Titel erscheint erst beim Einklappen.
   - **Listen-Umschalter (Tab Liste):** Der Titel ist der Listenname mit `chevron.down` (13 pt Semibold, `labelSecondary`) direkt hinter dem letzten Wort. Tippen: Menü wächst aus dem Titel (12.24) mit allen Listen (Glyph, Name, offene Anzahl rechts, aktuelle Liste mit Häkchen), Trenner, "Neue Liste", "Liste beitreten", "Alle Listen".

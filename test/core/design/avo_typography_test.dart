@@ -32,6 +32,25 @@ void main() {
     expect(ax5.sizeOf(AvoTextStyle.largeTitle), 60);
   });
 
+  test('numberXL is 34/41 bold tabular and stops at 51 pt', () {
+    final t = AvoTypography.forFactor(1.0);
+    expect(t.sizeOf(AvoTextStyle.numberXL), 34);
+    expect(t.lineHeightOf(AvoTextStyle.numberXL), 41);
+    final style = t.style(AvoTextStyle.numberXL);
+    expect(style.fontWeight, FontWeight.w700);
+    expect(style.fontFeatures, const [FontFeature.tabularFigures()]);
+    for (final factor in [2.35, 2.76, 3.118]) {
+      final ax = AvoTypography.forFactor(factor);
+      expect(ax.sizeOf(AvoTextStyle.numberXL), 51, reason: 'factor $factor');
+    }
+    // Up to AX2 it follows the large title.
+    final ax2 = AvoTypography.forFactor(1.94);
+    expect(
+      ax2.sizeOf(AvoTextStyle.numberXL),
+      ax2.sizeOf(AvoTextStyle.largeTitle),
+    );
+  });
+
   testWidgets('rendered size equals the table size under Flutter scaling',
       (tester) async {
     for (final factor in [1.0, 1.35, 2.0, 3.1]) {
