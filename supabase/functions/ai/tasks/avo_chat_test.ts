@@ -552,6 +552,17 @@ Deno.test("the plan, module and workout tools are declared from the first reques
   assertEquals(props.enabled.type, "boolean");
 });
 
+Deno.test("show_settings_link only shows a row to Konto or Konto löschen", () => {
+  for (const variant of ["full", "no_offers"] as const) assert(toolNames(variant).includes("show_settings_link"));
+  const link = avoTools("full").find((tool) => tool.name === "show_settings_link")!;
+  assertEquals(link.strict, false);
+  const props = link.input_schema.properties as Record<string, Record<string, unknown>>;
+  assertEquals(Object.keys(props), ["page"]);
+  assertEquals(props.page.enum, ["account", "account_delete"]);
+  assert(checkToolInput("show_settings_link", { page: "account_delete" }, "full").ok);
+  assertFalse(checkToolInput("show_settings_link", { page: "delete_now" }, "full").ok);
+});
+
 // ---------------------------------------------------------------------------
 // Tool input checks (the app runs the tools; the server only checks)
 

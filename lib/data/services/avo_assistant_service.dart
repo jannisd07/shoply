@@ -463,6 +463,8 @@ class AvoAssistantService {
           return await _toolSetModule(args, ref, payloads);
         case 'get_app_info':
           return _toolAppInfo(args, payloads);
+        case 'show_settings_link':
+          return toolSettingsLink(args, payloads);
         case 'search_offers':
           return await _toolSearchOffers(args, ref, context, payloads);
         case 'get_restock_suggestions':
@@ -706,6 +708,24 @@ class AvoAssistantService {
     'tanz': WorkoutType.dance,
     'danc': WorkoutType.dance,
   };
+
+  /// A row to Konto or Konto löschen (A8, Kap. 16 5.7): the account is
+  /// never changed through Avo, the person acts on that page.
+  @visibleForTesting
+  static Map<String, Object?> toolSettingsLink(
+    Map<String, Object?> args,
+    List<AvoWidgetPayload> payloads,
+  ) {
+    final page = AvoSettingsLink.fromId(args['page'] as String?);
+    if (page == null) return {'error': 'page must be account or account_delete'};
+    payloads.add(AvoWidgetPayload.settingsLinkTo(page));
+    return {
+      'shown': true,
+      'page': page.id,
+      'note': 'A row to that page is shown; nothing changed. The person does '
+          'it there.',
+    };
+  }
 
   @visibleForTesting
   static WorkoutType workoutTypeOf(String activity) {

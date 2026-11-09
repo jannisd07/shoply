@@ -165,6 +165,32 @@ enum AvoPayloadKind {
   /// food log, a module switched): shows nothing, but tells a retry that it
   /// is done ([AvoWidgetPayload.wroteTool]).
   wrote,
+
+  /// A row to a settings page where the person does what Avo never does
+  /// ([AvoWidgetPayload.settingsLink]).
+  settingsLink,
+}
+
+/// Pages Avo links to instead of acting (Kap. 16 5.7: "Konto löschen",
+/// "Abmelden" are never done through Avo).
+enum AvoSettingsLink {
+  /// Konto: sign out, email, password.
+  account('account'),
+
+  /// Konto löschen.
+  accountDelete('account_delete');
+
+  const AvoSettingsLink(this.id);
+
+  /// The id of the `show_settings_link` tool.
+  final String id;
+
+  static AvoSettingsLink? fromId(String? id) {
+    for (final link in values) {
+      if (link.id == id) return link;
+    }
+    return null;
+  }
 }
 
 class AvoWidgetPayload {
@@ -180,6 +206,9 @@ class AvoWidgetPayload {
   final AvoConsentKind? consentKind;
   final AvoListChange? listChange;
   final AppModule? module;
+
+  /// [AvoPayloadKind.settingsLink]: the page.
+  final AvoSettingsLink? settingsLink;
 
   /// [AvoPayloadKind.wrote]: the tool and the list it wrote to, if any.
   final String? wroteTool;
@@ -198,9 +227,14 @@ class AvoWidgetPayload {
     this.consentKind,
     this.listChange,
     this.module,
+    this.settingsLink,
     this.wroteTool,
     this.wroteListName,
   });
+
+  /// A row that opens [page]; nothing is changed.
+  factory AvoWidgetPayload.settingsLinkTo(AvoSettingsLink page) =>
+      AvoWidgetPayload._(kind: AvoPayloadKind.settingsLink, settingsLink: page);
 
   /// [tool] wrote something without a card of its own.
   factory AvoWidgetPayload.wrote(String tool, {String? listName}) =>

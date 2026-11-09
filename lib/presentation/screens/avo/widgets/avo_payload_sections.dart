@@ -69,6 +69,9 @@ List<Widget> _sectionsFor(
       final card = p.card;
       if (card == null) return const [];
       return _cardSections(context, s, p, card, onNewPhoto);
+    case AvoPayloadKind.settingsLink:
+      final page = p.settingsLink;
+      return [if (page != null) avoSettingsLinkSection(context, page)];
     case AvoPayloadKind.pickList:
     case AvoPayloadKind.wrote:
       return const [];

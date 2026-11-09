@@ -94,6 +94,13 @@ class OfferPriceService {
   /// A single key re-extraction shared by all concurrent callers.
   Future<void>? _keysRefresh;
 
+  /// Sign-out: drops the cached searches (they hold what the account looked
+  /// for and its zip code) and forgets running ones.
+  void clearSessionCache() {
+    _searchCache.clear();
+    _inFlight.clear();
+  }
+
   /// Current offers for [query] around [zipCode], in the order of the source
   /// (relevance), grocery chains only; empty when nothing was found or the
   /// request failed. With [chainId] only that market's offers come back.

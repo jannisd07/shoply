@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/core/services/startup_scheduler.dart';
+import 'package:shoply/data/services/account_session_caches.dart';
 import 'package:shoply/data/services/analytics_service.dart';
 import 'package:shoply/data/services/app_flags_service.dart';
 import 'package:shoply/data/services/app_review_service.dart';
@@ -160,6 +161,7 @@ void _listenToAuthChanges(bool isMobile) {
       // user — drop them so the next account never sees this one's data.
       UserCategoryPreferences.instance.clearCache();
       unawaited(OfflineCacheService.instance.clearCache());
+      AccountSessionCaches.clearForSignOut();
     }
 
     if (!isMobile) return;

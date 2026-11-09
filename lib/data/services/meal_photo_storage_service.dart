@@ -126,6 +126,12 @@ class MealPhotoStorageService {
     }
   }
 
+  /// Sign-out: forgets the signed URLs of the account's photos.
+  void clearSignedUrls() {
+    _urls.clear();
+    _signing.clear();
+  }
+
   /// A signed URL for the photo at [path], valid for at least five more
   /// minutes. Callers asking for the same path at the same time share one
   /// request. Null when [path] is no meal photo path or signing fails.

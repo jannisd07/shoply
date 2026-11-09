@@ -388,6 +388,11 @@ const Map<String, String> avoEn = {
   'avo_activity_moderate': 'moderately active',
   'avo_activity_active': 'active',
   'avo_activity_very_active': 'very active',
+  'avo_link_account': 'Account',
+  'avo_link_account_delete': 'Delete account',
+  'avo_link_self_note': 'You can do that yourself under Account.',
+  'avo_link_open_account': 'Open Account',
+  'avo_link_open': 'Open',
 };
 
 const Map<String, String> avoDe = {
@@ -776,4 +781,9 @@ const Map<String, String> avoDe = {
   'avo_activity_moderate': 'mäßig aktiv',
   'avo_activity_active': 'aktiv',
   'avo_activity_very_active': 'sehr aktiv',
+  'avo_link_account': 'Konto',
+  'avo_link_account_delete': 'Konto löschen',
+  'avo_link_self_note': 'Das machst du am besten selbst unter Konto.',
+  'avo_link_open_account': 'Konto öffnen',
+  'avo_link_open': 'Öffnen',
 };

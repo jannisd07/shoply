@@ -31,6 +31,10 @@ class StoreLocatorService {
 
   final Map<String, _CachedStores> _cache = {};
 
+  /// Sign-out: drops the nearby markets, which are keyed by where the
+  /// account was.
+  void clearCache() => _cache.clear();
+
   /// Nearby supermarket branches, sorted closest-first. Returns an empty
   /// list (never throws) when Overpass is unreachable or returns nothing —
   /// callers must treat that the same as "no location data", i.e. just don't

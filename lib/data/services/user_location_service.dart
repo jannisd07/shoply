@@ -176,6 +176,16 @@ class UserLocationService implements RegionLookup {
   @override
   Stream<void> get changes => _changes.stream;
 
+  /// Sign-out: forgets the last fix and the GPS back-off held in memory, so
+  /// the next account starts without this one's location. The stored zip
+  /// code goes with the account-bound preferences (Teil A's sign-out).
+  void clearMemory() {
+    _lastCoords = null;
+    _lastCoordsAt = null;
+    _gpsFailedAt = null;
+    _positionInFlight = null;
+  }
+
   @override
   Future<Region?> getRegion({
     bool allowPermissionPrompt = false,

@@ -18,6 +18,8 @@
 //   added or removed one entry at a time; calorie tracking is set_module.
 // - get_user_profile says whether a postcode is set, never the postcode: the
 //   app runs the offer tools with the region itself.
+// - show_settings_link only shows a row to Konto or Konto löschen (A8): the
+//   account is never changed through Avo.
 //
 // The app runs every tool with the person's own session (RLS); this server
 // never executes one. checkToolInput is the schema check the app relies on
@@ -98,6 +100,8 @@ export const SETTING_KEYS = [
   "diet_remove",
 ] as const;
 export const APP_INFO_TOPICS = ["pro_plan", "my_subscription"] as const;
+/** Pages of Settings where the person does what Avo never does (Kap. 16 5.7). */
+export const SETTINGS_LINK_PAGES = ["account", "account_delete"] as const;
 
 type Schema = Record<string, unknown>;
 
@@ -552,6 +556,15 @@ const ALL_TOOLS: readonly Anthropic.Beta.BetaTool[] = Object.freeze([
       "or Pro feature.",
     strict: false,
     properties: { topic: choice(APP_INFO_TOPICS, "What to look up.") },
+  }),
+  tool({
+    name: "show_settings_link",
+    description: "Show a row that opens the page of Settings where the person does something themselves that you " +
+      "never do. account: signing out, email, password. account_delete: deleting the account. Call it when they " +
+      "ask for one of these, then say in one sentence that they do it there. Nothing changes until they act on " +
+      "that page.",
+    strict: false,
+    properties: { page: choice(SETTINGS_LINK_PAGES, "Which page.") },
   }),
 
   // Deleting

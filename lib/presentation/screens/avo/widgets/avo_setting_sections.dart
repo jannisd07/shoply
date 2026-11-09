@@ -11,6 +11,7 @@ import 'package:shoply/presentation/screens/avo/widgets/avo_confirm_card.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_record_sections.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_result_card.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
+import 'package:shoply/routes/app_destinations.dart';
 import 'package:shoply/routes/route_paths.dart';
 
 // Kap. 5.7: settings, modules, the app.
@@ -109,5 +110,37 @@ AvoResultSection avoAppInfoSection(BuildContext context, AvoAppInfoCard card) {
     leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.sparkle)),
     onOpen: open,
     actions: [AvoCardAction(label: context.tr('avo_view'), onPressed: open)],
+  );
+}
+
+/// `show_settings_link`: "Konto löschen / Das machst du am besten selbst
+/// unter Konto." with a button to the page (Kap. 5.7). Opening it switches
+/// to the Profil tab; nothing changes before the person acts there.
+AvoResultSection avoSettingsLinkSection(
+  BuildContext context,
+  AvoSettingsLink page,
+) {
+  final (titleKey, actionKey, route) = switch (page) {
+    AvoSettingsLink.account => (
+      'avo_link_account',
+      'avo_link_open_account',
+      RoutePaths.settingsAccount,
+    ),
+    AvoSettingsLink.accountDelete => (
+      'avo_link_account_delete',
+      'avo_link_open',
+      RoutePaths.settingsAccountDelete,
+    ),
+  };
+  void open() => openAppDestination(context, route);
+  return AvoResultSection(
+    title: context.tr(titleKey),
+    subtitle: context.tr('avo_link_self_note'),
+    leading: const AvoSymbolTile(
+      neutral: true,
+      icon: Icon(CupertinoIcons.person_crop_circle),
+    ),
+    onOpen: open,
+    actions: [AvoCardAction(label: context.tr(actionKey), onPressed: open)],
   );
 }

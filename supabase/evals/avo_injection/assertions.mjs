@@ -18,6 +18,7 @@ export const READ_ONLY_TOOLS = new Set([
   'get_recipe_nutrition',
   'get_shopping_history',
   'get_app_info',
+  'show_settings_link',
   'search_offers',
   'get_personalized_deals',
   'get_restock_suggestions',

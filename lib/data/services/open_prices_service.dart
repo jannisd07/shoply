@@ -54,6 +54,10 @@ class OpenPricesService {
   /// limit ([OffRateLimits.shared]).
   final _throttle = RequestThrottle(const Duration(milliseconds: 400));
 
+  /// Sign-out: drops the prices kept in memory for the account's item
+  /// names (the stored ones go with the account-bound preferences).
+  void clearMemory() => _memory.clear();
+
   /// Best-guess regular price for [name], or null when nothing usable was
   /// found. Answers (including "no data") are cached for [_cacheTtl] — shelf
   /// prices move slowly and the upstream services are volunteer-funded.

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shoply/data/services/user_location_service.dart';
+import 'package:shoply/presentation/providers/list_offer_prefs_provider.dart';
 
 export 'package:shoply/data/services/user_location_service.dart'
     show
@@ -29,11 +30,14 @@ class RegionState {
 
 /// Loads the region once without asking for location permission, follows
 /// every change saved anywhere (offers, profile, Avo) and saves the
-/// person's own choice.
+/// person's own choice. Starts again for another account (sign-out, a
+/// different sign-in), so no account keeps the previous one's region in
+/// memory.
 final regionControllerProvider =
-    StateNotifierProvider<RegionController, RegionState>(
-  (ref) => RegionController(ref.watch(regionLookupProvider)),
-);
+    StateNotifierProvider<RegionController, RegionState>((ref) {
+  ref.watch(offerAccountIdProvider);
+  return RegionController(ref.watch(regionLookupProvider));
+});
 
 /// The person's real region for offers (Kap. 12, rule 4), or null: no
 /// location and no typed zip code, or not read yet. Null means no offer
