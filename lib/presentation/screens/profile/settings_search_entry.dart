@@ -1,3 +1,4 @@
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 /// One entry of the settings search (Konzept 18 §3.5, E18-12): a page or one
@@ -12,6 +13,9 @@ class SettingsSearchEntry {
     this.rowId,
     this.icon,
     this.offersTerm = false,
+    this.module,
+    this.killSwitchTitleKey,
+    this.killSwitchPathKeys,
   });
 
   /// Route of the page, e.g. `/settings/diet`.
@@ -36,4 +40,15 @@ class SettingsSearchEntry {
   /// An offers term ("Angebot", "Prospekt"): hidden while the offers kill
   /// switch is on (§3.5).
   final bool offersTerm;
+
+  /// The entry belongs to this module's page: hidden while the module is off
+  /// (Konzept 18 Regel 4).
+  final AppModule? module;
+
+  /// Title while the offers kill switch is on ("Märkte" instead of "Preise &
+  /// Angebote", Regel 4); null keeps [titleKey].
+  final String? killSwitchTitleKey;
+
+  /// Path while the offers kill switch is on; null keeps [pathKeys].
+  final List<String>? killSwitchPathKeys;
 }

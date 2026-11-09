@@ -1,7 +1,183 @@
 // Texte des Bereichs "profile" (Teil A), Teil "Wurzel" (Profil, Suche), Deutsch und Englisch.
 // Eigene Datei während A8, damit parallele Arbeiten nicht dieselbe Datei
 // ändern; wird nach A8 zusammengeführt. Präfix: prof_. Neue Texte sagen "Avo", nie "Shoply".
+// Die prof_kw_*-Texte sind kommagetrennte Suchwörter der Einstellungssuche.
 
-const Map<String, String> profileRootEn = {};
+const Map<String, String> profileRootEn = {
+  'prof_search_hint': 'Search settings',
+  'prof_offline': 'Offline. Changes are saved as soon as you’re back online.',
+  'prof_edit_profile': 'Edit profile',
+  'prof_set_name': 'Set your name',
+  'prof_not_loaded': 'Profile not loaded',
+  'prof_pro': 'Avo Pro',
+  'prof_pro_trial': 'Try free for 14 days',
+  'prof_pro_all_benefits': 'See all benefits',
+  'prof_pro_active': 'Active',
+  'prof_pro_pending': 'Waiting for approval',
+  'prof_section_app': 'App',
+  'prof_section_modules': 'Modules',
+  'prof_section_for_you': 'For you',
+  'prof_section_general': 'General',
+  'prof_section_iphone': 'iPhone',
+  'prof_section_help_legal': 'Help and legal',
+  'prof_section_account': 'Account',
+  'prof_row_modules': 'Modules',
+  'prof_row_offers': 'Prices & offers',
+  'prof_row_markets': 'Stores',
+  'prof_row_region': 'Region',
+  'prof_row_favorite_markets': 'Favourite stores',
+  'prof_row_health': 'Calories & health',
+  'prof_row_plan': 'Meal plan',
+  'prof_row_avo': 'Avo',
+  'prof_row_diet': 'Diet & allergies',
+  'prof_row_personal': 'Personal details',
+  'prof_row_lists': 'Lists',
+  'prof_row_notifications': 'Notifications',
+  'prof_row_appearance': 'Appearance',
+  'prof_row_language': 'Language',
+  'prof_row_siri': 'Siri & Shortcuts',
+  'prof_row_widgets': 'Widgets',
+  'prof_row_help': 'Help',
+  'prof_row_legal': 'Legal',
+  'prof_row_account': 'Account',
+  'prof_value_modules_on': '{n} on',
+  'prof_value_on': 'On',
+  'prof_value_off': 'Off',
+  'prof_value_ios_off': 'Off in iOS',
+  'prof_value_allergies_one': '1 allergy',
+  'prof_value_allergies': '{n} allergies',
+  'prof_value_theme_system': 'System',
+  'prof_value_theme_light': 'Light',
+  'prof_value_theme_dark': 'Dark',
+  'prof_value_lang_de': 'Deutsch',
+  'prof_value_lang_en': 'English',
+  'prof_footer': 'Avo',
+  'prof_footer_version': 'Avo · Version {version}',
+  'prof_search_section': 'Settings',
+  'prof_search_none_title': 'No setting for “{query}”.',
+  'prof_search_none_message':
+      'System settings like text size are in the iOS Settings.',
+  'prof_search_open_ios': 'Open iOS Settings',
+  'prof_kw_profile': 'name, photo, profile picture, picture, avatar, email',
+  'prof_kw_pro':
+      'subscription, subscribe, cancel, premium, trial, free, restore purchases, pro',
+  'prof_kw_modules':
+      'tab, tabs, hide, show, features, calories, meal plan, avo, split costs',
+  'prof_kw_markets': 'store, stores, market, markets, detect store',
+  'prof_kw_region': 'region, zip code, postcode, location, town, city',
+  'prof_kw_favorite_markets':
+      'favourite store, favourite stores, favorite store, store, stores, supermarket, shop',
+  'prof_kw_offers':
+      'offer, offers, deals, flyer, leaflet, save, savings, discount, prices',
+  'prof_kw_health': 'calories, apple health, health, goal, water, nutrition',
+  'prof_kw_plan': 'meal plan, week, planning, servings, reminder',
+  'prof_kw_avo': 'assistant, voice, speech, conversation, chat, AI',
+  'prof_kw_diet':
+      'allergy, allergies, intolerance, vegan, vegetarian, lactose, gluten, nut, nuts, peanut, diet, halal, kosher',
+  'prof_kw_personal': 'age, height, gender, body',
+  'prof_kw_lists':
+      'screen on, keep screen on, item pictures, pictures, images, suggestions, maybe also, start, shopping mode',
+  'prof_kw_notifications': 'notification, push, reminder, time, alerts, sound',
+  'prof_kw_appearance': 'dark, light, dark mode, night mode, theme, design',
+  'prof_kw_language': 'German, English, Deutsch, language',
+  'prof_kw_siri': 'Siri, shortcuts, action button, voice command',
+  'prof_kw_widgets': 'widget, home screen, lock screen',
+  'prof_kw_help':
+      'support, contact, bug, report a problem, FAQ, questions, tips, guide, rate',
+  'prof_kw_legal':
+      'privacy, imprint, terms, licences, licenses, data sources, sources',
+  'prof_kw_account':
+      'sign out, log out, sign in, Apple, Google, password, delete account, delete',
+};
 
-const Map<String, String> profileRootDe = {};
+const Map<String, String> profileRootDe = {
+  'prof_search_hint': 'Einstellungen durchsuchen',
+  'prof_offline':
+      'Offline. Änderungen werden gespeichert, sobald du wieder online bist.',
+  'prof_edit_profile': 'Profil bearbeiten',
+  'prof_set_name': 'Namen festlegen',
+  'prof_not_loaded': 'Profil nicht geladen',
+  'prof_pro': 'Avo Pro',
+  'prof_pro_trial': '14 Tage gratis testen',
+  'prof_pro_all_benefits': 'Alle Vorteile ansehen',
+  'prof_pro_active': 'Aktiv',
+  'prof_pro_pending': 'Wartet auf Freigabe',
+  'prof_section_app': 'App',
+  'prof_section_modules': 'Module',
+  'prof_section_for_you': 'Für dich',
+  'prof_section_general': 'Allgemein',
+  'prof_section_iphone': 'iPhone',
+  'prof_section_help_legal': 'Hilfe und Rechtliches',
+  'prof_section_account': 'Konto',
+  'prof_row_modules': 'Module',
+  'prof_row_offers': 'Preise & Angebote',
+  'prof_row_markets': 'Märkte',
+  'prof_row_region': 'Region',
+  'prof_row_favorite_markets': 'Lieblingsmärkte',
+  'prof_row_health': 'Kalorien & Gesundheit',
+  'prof_row_plan': 'Wochenplan',
+  'prof_row_avo': 'Avo',
+  'prof_row_diet': 'Ernährung & Allergien',
+  'prof_row_personal': 'Persönliche Daten',
+  'prof_row_lists': 'Listen',
+  'prof_row_notifications': 'Mitteilungen',
+  'prof_row_appearance': 'Darstellung',
+  'prof_row_language': 'Sprache',
+  'prof_row_siri': 'Siri & Kurzbefehle',
+  'prof_row_widgets': 'Widgets',
+  'prof_row_help': 'Hilfe',
+  'prof_row_legal': 'Rechtliches',
+  'prof_row_account': 'Konto',
+  'prof_value_modules_on': '{n} an',
+  'prof_value_on': 'An',
+  'prof_value_off': 'Aus',
+  'prof_value_ios_off': 'In iOS aus',
+  'prof_value_allergies_one': '1 Allergie',
+  'prof_value_allergies': '{n} Allergien',
+  'prof_value_theme_system': 'System',
+  'prof_value_theme_light': 'Hell',
+  'prof_value_theme_dark': 'Dunkel',
+  'prof_value_lang_de': 'Deutsch',
+  'prof_value_lang_en': 'English',
+  'prof_footer': 'Avo',
+  'prof_footer_version': 'Avo · Version {version}',
+  'prof_search_section': 'Einstellungen',
+  'prof_search_none_title': 'Keine Einstellung zu „{query}“.',
+  'prof_search_none_message':
+      'Systemeinstellungen wie Textgröße findest du in den iOS-Einstellungen.',
+  'prof_search_open_ios': 'iOS-Einstellungen öffnen',
+  'prof_kw_profile':
+      'Name, Anzeigename, Foto, Profilbild, Bild, Avatar, E-Mail',
+  'prof_kw_pro':
+      'Abo, Abonnement, abonnieren, kündigen, Premium, Testphase, gratis, Käufe wiederherstellen, Pro',
+  'prof_kw_modules':
+      'Tab, Tabs, ausblenden, einblenden, Bereiche, Funktionen, Kalorien, Wochenplan, Avo, Kosten teilen',
+  'prof_kw_markets': 'Markt, Märkte, Markt erkennen, Markterkennung',
+  'prof_kw_region': 'Region, PLZ, Postleitzahl, Standort, Ort, Stadt',
+  'prof_kw_favorite_markets':
+      'Lieblingsmarkt, Lieblingsmärkte, Markt, Märkte, Supermarkt, Laden, Filiale',
+  'prof_kw_offers':
+      'Angebot, Angebote, Prospekt, Prospekte, Sparen, Rabatt, Preise, Aktion',
+  'prof_kw_health':
+      'Kalorien, Apple Health, Health, Gesundheit, Ziel, Wasser, Nährwerte',
+  'prof_kw_plan': 'Wochenplan, Woche, Planen, Portionen, Erinnerung',
+  'prof_kw_avo': 'Assistent, Stimme, Sprachausgabe, Gespräch, Chat, KI',
+  'prof_kw_diet':
+      'Allergie, Allergien, Unverträglichkeit, vegan, vegetarisch, Laktose, Gluten, Nuss, Nüsse, Erdnuss, Diät, Ernährung, Halal, Koscher',
+  'prof_kw_personal': 'Alter, Größe, Geschlecht, Körper',
+  'prof_kw_lists':
+      'Bildschirm an, Bildschirm anlassen, Artikelbilder, Bilder, Vorschläge, Vielleicht auch, Start, Einkaufsmodus, Einkaufen',
+  'prof_kw_notifications':
+      'Benachrichtigung, Benachrichtigungen, Push, Erinnerung, Uhrzeit, Hinweise, Ton',
+  'prof_kw_appearance':
+      'dunkel, hell, Dunkelmodus, Nachtmodus, Dark Mode, Thema, Design, Aussehen',
+  'prof_kw_language': 'Deutsch, Englisch, English, Language',
+  'prof_kw_siri': 'Siri, Kurzbefehle, Shortcuts, Action Button, Sprachbefehl',
+  'prof_kw_widgets': 'Widget, Homescreen, Startbildschirm, Sperrbildschirm',
+  'prof_kw_help':
+      'Support, Kontakt, Fehler, Fehler melden, FAQ, Fragen, Tipps, Anleitung, Bewerten, E-Mail',
+  'prof_kw_legal':
+      'Datenschutz, Impressum, AGB, Nutzungsbedingungen, Lizenzen, Datenquellen, Quellen',
+  'prof_kw_account':
+      'Abmelden, Anmelden, Anmeldung, Apple, Google, Passwort, Konto löschen, löschen',
+};
