@@ -244,8 +244,8 @@ Kill-Switch und nie für `mealPlan`, solange er nicht freigegeben ist (dann gibt
 | Menü | Foto aufnehmen · Foto auswählen | Take photo · Choose photo | `avo_photo_take`, `avo_photo_choose` |
 | Sprachmodus | Sprachmodus starten | Start voice mode | `avo_voice_start` |
 | Senden | Senden | Send | `avo_send` |
-| Anhalten | Antwort anhalten | Stop answer | `avo_stop_answer` |
-| Zeichen | Noch {n} Zeichen | {n} characters left | `avo_chars_left` (Plural) |
+| Anhalten | Antwort anhalten | Stop answer | `common_stop_answer` (A, Standard von `AvoComposerField`) |
+| Zeichen | Noch {n} Zeichen | {n} characters left | `common_chars_left` (A, Zähler von `AvoComposerField`) |
 
 ### 2.12 Statuszeile (`StatusRow` von A)
 

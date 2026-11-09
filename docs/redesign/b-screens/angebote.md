@@ -996,7 +996,7 @@ ansehen“ und Kachel (A/B), Hinweis „3 Sachen …“ (`filter=regulars`), S9,
 3. `AvoSearchField` „Angebote suchen“ (12 darunter).
 4. `AppSegmentedControl` „Deine Listen | Oft gekauft“ (12 darunter). Fehlt, wenn „Spar-Hinweise auf der Startseite“ aus
    ist; dann gilt nur „Deine Listen“.
-5. `ChipRow` mit `StoreFilterChip` (Einfachauswahl): erst die Märkte der Listen, dann Lieblingsmärkte. Ohne Auswahl
+5. `SingleChoiceChipRow` (A) mit `StoreMark` als `leading` (Einfachauswahl, `allowDeselect`): erst die Märkte der Listen, dann Lieblingsmärkte. Ohne Auswahl
    gelten alle; erneutes Tippen hebt die Auswahl auf. Märkte filtern nur, sie werden nie gegeneinander gestellt.
 6. Segment „Deine Listen“: eine Sektion pro Liste mit Markt (höchstens die 2 zuletzt geänderten Listen mit offenen
    Artikeln): `SectionCaps` „Wocheneinkauf · Lidl“ mit Anzahl. `OfferRow` voll: Produktname; Unterzeile 1 „Für „Milch“
@@ -1094,9 +1094,9 @@ Daten“ hierher; die Ersatz-PLZ 10115 gibt es nicht mehr.
    Standort. Gespeichert wird nur die Postleitzahl.“ (das ist die Erklärung vor der Systemabfrage, am Ort statt in
    einem zweiten Sheet; Owner-Frage 12); mit Ergebnis „Aktuell: 79098 Freiburg im Breisgau“. Tippen fragt das System
    („Beim Verwenden der App“), ortet mit 3 s Zeitlimit und füllt das Feld; gespeichert wird erst mit „Fertig“.
-3. Gruppe 2: `PostcodeFieldRow` „Postleitzahl“, Platzhalter „z. B. 79098“. Unter der Gruppe die Ortszeile 13/18
-   `secondaryLabel` „79098 · Freiburg im Breisgau“ (lokal aus der PLZ-Tabelle, ohne Tabelle „PLZ 79098“) bzw. die
-   Fehlerzeile mit `exclamationmark.circle` in `destructive`.
+3. Gruppe 2: `TextFieldRow` (A) „Postleitzahl“, Platzhalter „z. B. 79098“. In der Zeile unter dem Feld der Ort als
+   `hintText` „79098 · Freiburg im Breisgau“ (lokal aus der PLZ-Tabelle, ohne Tabelle „PLZ 79098“) bzw. der Fehler
+   als `errorText` in `destructive` (VoiceOver „Fehler: …“).
 4. Nur wenn eine Region gesetzt ist: `DestructiveRow` „Region entfernen“ in eigener Gruppe; ohne Rückfrage, mit
    Rückgängig-Hinweis, der Screen bleibt offen und das Feld wird leer.
 
@@ -1239,9 +1239,8 @@ ohne Markt (K12-03) und die Reihenfolge im Markt-Menü.
 
 **Interaktion.** Tippen auf eine Zeile schaltet hinzu oder weg. Hinzufügen: Zeile wandert ans Ende von „Deine Märkte“
 (`AvoMotion.move`), kein Hinweis. Entfernen: zurück an den alphabetischen Platz, Hinweis
-`offer_toast_favorite_removed`. Umsortieren über den Zieh-Griff oder Langdruck auf die Zeile: die Zeile folgt dem
-Finger 1:1, Nachbarn machen Platz, Einrasten mit `selection`-Haptik. Ab AX1 zusätzlich Kontextmenü „Nach oben“ / „Nach
-unten“.
+`offer_toast_favorite_removed`. Umsortieren über den Zieh-Griff von A's `ReorderableInsetSection` (Halten hebt die Zeile,
+Nachbarn machen Platz, Einrasten mit `selection`-Haptik); „Nach oben“ / „Nach unten“ sind VoiceOver-Aktionen des Griffs.
 
 **Zustände.** Keine gewählt: Satz 17/22 „Noch keine Lieblingsmärkte.“ an Stelle der Gruppe, Fußnote bleibt. Offline:
 gilt sofort lokal. Kill-Switch: Fußnote `offer_favorites_note_stores`. Reduce Motion: Überblenden statt Wandern.
@@ -1254,14 +1253,10 @@ gilt sofort lokal. Kill-Switch: Fußnote `offer_favorites_note_stores`. Reduce M
 | `offer_favorites_note` | Listen ohne festen Markt zeigen Angebote dieser Märkte, in dieser Reihenfolge. | Lists without a fixed store show offers from these stores, in this order. |
 | `offer_favorites_note_stores` | Diese Märkte stehen oben, wenn du für eine Liste einen Markt wählst. | These stores come first when you choose a store for a list. |
 | `offer_favorites_empty` | Noch keine Lieblingsmärkte. | No favourite stores yet. |
-| `offer_favorites_row_a11y` | {store}, Lieblingsmarkt, Platz {n} von {m} | {store}, favourite store, {n} of {m} |
-| `offer_favorites_move_up` | Nach oben | Move up |
-| `offer_favorites_move_down` | Nach unten | Move down |
-| `offer_favorites_reorder_a11y` | Verschieben | Reorder |
 
-**Barrierefreiheit.** Gewählte Zeilen lesen Platz und Anzahl; Aktionen „Nach oben“, „Nach unten“, „Entfernen“; der
-Zieh-Griff ist für VoiceOver ausgeblendet (die Aktionen ersetzen ihn). AX: Zeilen brechen um, Zieh-Griff oben rechts
-bündig zur ersten Textzeile.
+**Barrierefreiheit.** Der Auswahl-Kreis (`SelectCircle`) ist ein Schalter mit dem Marktnamen (aus = entfernen); der
+Zieh-Griff ist ein eigenes Element („Lidl umsortieren“, „Position 1 von 3“) mit „Nach oben“ / „Nach unten“ und Ansage
+nach dem Verschieben. AX: Zeilen brechen um.
 
 **Daten.** Lieblingsmärkte mit Reihenfolge (`offerPrefsProvider`, L4), `store_chain_directory.dart`. Datei
 `lib/presentation/screens/offers/favorite_markets_screen.dart`.
@@ -1280,12 +1275,12 @@ einkaufst. Dafür brauchen wir deine Region.“ Nur bei Modul an und Kill-Switch
 **Aufbau (B-Inhalt).**
 
 1. `SectionCaps` „Region“ + Gruppe: `UseLocationRow` mit Unterzeile `offer_setup_location_sub` (Erklärung am Ort; der
-   Tipp löst direkt die Systemabfrage aus), darunter `PostcodeFieldRow` mit Platzhalter „z. B. 10437“. Unter der
-   Gruppe die Ortszeile „10437 Berlin“.
-2. `SectionCaps` „Deine Märkte“ + weiße Gruppe mit `StoreFilterChip`s (Mehrfachauswahl, `Wrap`, Abstand 8): ohne
+   Tipp löst direkt die Systemabfrage aus), darunter `TextFieldRow` (A) mit Platzhalter „z. B. 10437“, Ort bzw.
+   Fehler in der Zeile („10437 Berlin“).
+2. `SectionCaps` „Deine Märkte“ + weiße Gruppe mit `AppFilterChip`s (A, `leading: StoreMark`, Mehrfachauswahl, `Wrap`, Abstand 8): ohne
    Standort in fester Reihenfolge Lidl, Aldi, REWE, Edeka, Kaufland, Netto, PENNY; mit PLZ wird „Aldi“ zu „Aldi Nord“
-   bzw. „Aldi Süd“; mit Standort stehen die nächsten Märkte vorn mit Entfernung („Lidl · 400 m“). Gewählt: Häkchen und
-   `chipSelected`. Fußnote `offer_setup_stores_note`.
+   bzw. „Aldi Süd“; mit Standort stehen die nächsten Märkte vorn mit Entfernung („Lidl · 400 m“). Gewählt:
+   `chipSelected` (A's Chip hat kein Häkchen). Fußnote `offer_setup_stores_note`.
 3. Fußnote `offer_setup_source_note`.
 4. Hauptaktion „Weiter“ (`AppButton.primary`, schwebend unten): speichert Region und Märkte, ruft `onDone`. Ob B oder A
    diesen Knopf zeichnet, klärt Anfrage A-O1; Vorschlag: B, weil nur B weiß, wann alles gespeichert ist.
@@ -1313,11 +1308,9 @@ Chip gewählt ist. Keine Haptik.
 | `offer_setup_stores` | Deine Märkte | Your stores |
 | `offer_setup_stores_note` | Wähl, wo du meistens einkaufst. Mehrere sind möglich. | Pick where you usually shop. You can choose more than one. |
 | `offer_setup_source_note` | Angebote stammen aus Prospekten der Händler. Preise laut Händler, ohne Gewähr. | Offers come from retailer flyers. Prices as stated by the retailer, without guarantee. |
-| `offer_setup_chip_distance` | {store} · {distance} | {store} · {distance} |
-| `offer_setup_chip_a11y` | {store}, {distance} entfernt | {store}, {distance} away |
 | `offer_setup_next` | Weiter | Continue |
 
-**Barrierefreiheit.** Chips als Umschalter („Lidl, 400 Meter entfernt, ausgewählt“); Reihenfolge Region, Feld,
+**Barrierefreiheit.** Chips als Schaltflächen mit Auswahl-Zustand („Lidl, 400 m, ausgewählt“); Reihenfolge Region, Feld,
 Ortszeile, Märkte, Fußnoten, Weiter. AX: Beschriftung über dem Feld ab AX1; bei 320/L zwei bis drei Chips pro Zeile,
 ab AX3 ein Chip pro Zeile; `StoreMark` bis AX2.
 

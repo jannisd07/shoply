@@ -230,5 +230,8 @@ Offen:
       `ItemRow(…, trailing: ItemOfferBadge(listId: listId, item: item, compact: shopping),
       trailingSemanticsLabel: o?.semanticsLabel, trailingActions: o?.actions ?? const {},
       contextMenuItems: [...eigeneEinträge, ...?o?.menuItems])`.
+    - **A-D1 Doku:** `ItemPrice.retailer` (`item_batch.dart`) ist der Händlername in Verzeichnis-Schreibweise („Lidl“,
+      „Aldi Süd“), nicht die Ketten-ID; das lesen Kassenzettel-Verlauf, Markterkennung und `isOfferPriceTaken`. Bitte
+      den Doc-Kommentar so ändern.
     - **A-C7 Modul aus:** `ModuleGate` für `AppModule.offers` mit
       `showModuleOffAlert(…, body: context.tr('offer_module_off_body'))`.
