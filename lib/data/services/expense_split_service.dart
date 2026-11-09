@@ -55,6 +55,15 @@ abstract interface class SplitBackend {
   /// Fallback: deletes split rows by id.
   Future<void> deleteSplits(List<String> ids);
 
+  /// `clear_trip_split` (W11): removes every share of a trip and puts its
+  /// amount and payer back, in one transaction.
+  Future<void> clearSplitRpc({
+    required String historyId,
+    required double? totalCost,
+    required String? paidByUserId,
+    required String? paidByName,
+  });
+
   /// Sets the paid state of one row and returns it.
   Future<Map<String, dynamic>> updatePaid(String splitId, bool isPaid);
 
@@ -197,12 +206,38 @@ class ExpenseSplitService {
     );
   }
 
-  /// Removes every share of [historyId] ("Widerrufen" of a first split in
-  /// V7). Uses the row delete that the later RLS migration revokes; then
-  /// only `undo_shopping_trip` removes a split (see OPEN-ISSUES).
-  Future<void> clearSplit(String historyId) async {
+  /// Removes every share of [historyId] and restores the trip's amount
+  /// ([totalCents], null for none) and payer ("Widerrufen" of a first split
+  /// in V7, which also wrote `total_cost`). Uses the server function
+  /// `clear_trip_split`; while it is missing, the row delete and update
+  /// (which the later RLS migration revokes). Throws when nothing could be
+  /// undone.
+  Future<void> clearSplit(
+    String historyId, {
+    required int? totalCents,
+    String? paidByUserId,
+    String? paidByName,
+  }) async {
+    final total = totalCents == null ? null : centsToEuros(totalCents);
+    try {
+      await _backend.clearSplitRpc(
+        historyId: historyId,
+        totalCost: total,
+        paidByUserId: paidByUserId,
+        paidByName: paidByName,
+      );
+      return;
+    } catch (e) {
+      if (!isMissingServerFeature(e)) rethrow;
+      debugPrint('⚠️ [SPLIT] clear_trip_split missing, using row writes');
+    }
     final ids = await _backend.splitIds(historyId);
     if (ids.isNotEmpty) await _backend.deleteSplits(ids);
+    await _backend.updateTripPayment(historyId, {
+      'total_cost': total,
+      'paid_by_user_id': paidByUserId,
+      'paid_by_name': paidByName,
+    });
   }
 
   Future<List<ExpenseSplit>> getSplitsForHistory(String historyId) async {
@@ -461,6 +496,22 @@ class SupabaseSplitBackend implements SplitBackend {
   @override
   Future<void> deleteSplits(List<String> ids) =>
       _db.from('expense_splits').delete().inFilter('id', ids);
+
+  @override
+  Future<void> clearSplitRpc({
+    required String historyId,
+    required double? totalCost,
+    required String? paidByUserId,
+    required String? paidByName,
+  }) => _db.rpc<dynamic>(
+    'clear_trip_split',
+    params: {
+      'p_trip_id': historyId,
+      'p_total_cost': totalCost,
+      'p_paid_by_user_id': paidByUserId,
+      'p_paid_by_name': paidByName,
+    },
+  );
 
   @override
   Future<Map<String, dynamic>> updatePaid(String splitId, bool isPaid) => _db

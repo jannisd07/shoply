@@ -76,6 +76,21 @@ class FakeSplitBackend implements SplitBackend {
   Future<void> deleteSplits(List<String> ids) async =>
       log.add('delete ${ids.join(',')}');
 
+  /// Set: `clear_trip_split` refuses with this error.
+  Object? clearError;
+
+  @override
+  Future<void> clearSplitRpc({
+    required String historyId,
+    required double? totalCost,
+    required String? paidByUserId,
+    required String? paidByName,
+  }) async {
+    log.add('clear $totalCost');
+    if (rpcMissing) throw _missing;
+    if (clearError != null) throw clearError!;
+  }
+
   @override
   Future<Map<String, dynamic>> updatePaid(String splitId, bool isPaid) async {
     if (failPaid) throw Exception('offline');
@@ -149,6 +164,28 @@ void main() {
     expect(splits, hasLength(3));
     expect(splits.first.isPaid, isTrue, reason: "the payer's own share");
     expect(splits[1].isPaid, isFalse);
+  });
+
+  test('I3: clearing a first split restores the amount via clear_trip_split', () async {
+    final backend = FakeSplitBackend();
+    await ExpenseSplitService.withBackend(backend).clearSplit('trip', totalCents: 1000);
+    expect(backend.log, ['clear 10.0']);
+  });
+
+  test('I3: without clear_trip_split the rows go and the amount comes back', () async {
+    final backend = FakeSplitBackend(rpcMissing: true);
+    await ExpenseSplitService.withBackend(backend).clearSplit('trip', totalCents: null);
+    expect(backend.log, ['clear null', 'select', 'delete old1,old2', 'trip']);
+  });
+
+  test('I3: a refusal of clear_trip_split is thrown, nothing else runs', () async {
+    final backend = FakeSplitBackend()
+      ..clearError = const PostgrestException(message: 'not a member', code: '42501');
+    await expectLater(
+      ExpenseSplitService.withBackend(backend).clearSplit('trip', totalCents: 1000),
+      throwsA(isA<PostgrestException>()),
+    );
+    expect(backend.log, ['clear 10.0']);
   });
 
   test('setPaid never throws: null when it was not saved', () async {

@@ -60,6 +60,7 @@ const Map<String, String> historyEn = {
   'hist_saved_toast': 'Trip saved',
   'hist_saved_undone': 'Trip undone. The items are checked off again.',
   'hist_undo_failed': "Couldn't undo. The trip stays in your history.",
+  'hist_split_undo_failed': "Couldn't undo the split.",
   'hist_location_title': 'Find your store by location?',
   'hist_location_body':
       '{app} checks your location once when you finish shopping and looks up nearby stores on OpenStreetMap. You can turn this off in Settings.',
@@ -75,6 +76,7 @@ const Map<String, String> historyEn = {
   'hist_month_spend_label': 'Spending per month',
   'hist_month_trips_label': 'Trips per month',
   'hist_month_running': '{month} so far',
+  'hist_bar_running': 'so far',
   'hist_month_coverage': 'from {n} of {m} trips',
   'hist_month_less': '{amount} less than in {prev}',
   'hist_month_more': '{amount} more than in {prev}',
@@ -318,6 +320,7 @@ const Map<String, String> historyDe = {
   'hist_saved_toast': 'Einkauf gespeichert',
   'hist_saved_undone': 'Einkauf widerrufen. Die Artikel sind wieder abgehakt.',
   'hist_undo_failed': 'Widerrufen hat nicht geklappt. Der Einkauf bleibt im Verlauf.',
+  'hist_split_undo_failed': 'Widerrufen hat nicht geklappt.',
   'hist_location_title': 'Markt per Standort erkennen?',
   'hist_location_body':
       '{app} fragt beim Abschluss einmal deinen Standort ab und sucht Märkte in der Nähe über OpenStreetMap. Ausschalten kannst du das in den Einstellungen.',
@@ -331,6 +334,7 @@ const Map<String, String> historyDe = {
   'hist_month_spend_label': 'Ausgaben pro Monat',
   'hist_month_trips_label': 'Einkäufe pro Monat',
   'hist_month_running': '{month}, bisher',
+  'hist_bar_running': 'bisher',
   'hist_month_coverage': 'aus {n} von {m} Einkäufen',
   'hist_month_less': '{amount} weniger als im {prev}',
   'hist_month_more': '{amount} mehr als im {prev}',

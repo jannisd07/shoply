@@ -28,6 +28,26 @@ import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 // V13). Everything is optimistic: the row changes at once, a failure brings
 // it back with a toast and the error haptic.
 
+/// One trip that is not in the local history: read once from the server
+/// (a notification on a cold start, a link); null when gone.
+final tripLookupProvider = FutureProvider.autoDispose
+    .family<ShoppingHistory?, String>((ref, tripId) async {
+      if (isLocalTripId(tripId)) return null;
+      final trip = await ref.read(shoppingHistoryServiceProvider).getTrip(tripId);
+      if (trip != null) ref.read(tripHistoryProvider.notifier).upsert(trip);
+      return trip;
+    });
+
+/// V5–V7 for a trip that does not exist (any more): to the history, which
+/// says "Dieser Einkauf wurde gelöscht." (§1.2). `go`, so no blank page of
+/// the gone trip stays below, wherever it was opened from.
+void leaveGoneTrip(BuildContext context) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) return;
+    GoRouter.of(context).go(historyLocation(tripGone: true));
+  });
+}
+
 /// Whether the signed-in person finished [trip] (amount, market, delete).
 bool isOwnTrip(WidgetRef ref, ShoppingHistory trip) {
   final me = ref.read(authUserIdProvider);

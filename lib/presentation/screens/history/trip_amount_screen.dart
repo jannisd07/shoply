@@ -19,6 +19,7 @@ import 'package:shoply/presentation/state/trip_history_provider.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/full_screen_editor.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
+import 'package:shoply/presentation/widgets/design/skeleton.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/routes/app_branch.dart';
 
@@ -121,6 +122,7 @@ class TripAmountScreen extends ConsumerStatefulWidget {
 }
 
 class _TripAmountScreenState extends ConsumerState<TripAmountScreen> {
+  bool _gone = false;
   AmountInput? _input;
   final FocusNode _focus = FocusNode(debugLabel: 'TripAmount');
   bool _bounced = false;
@@ -163,7 +165,16 @@ class _TripAmountScreenState extends ConsumerState<TripAmountScreen> {
     final trip = ref.watch(historyTripProvider(widget.tripId));
     final title = context.tr('hist_amount_title');
     if (trip == null) {
-      return FullScreenEditor(title: title, child: const SizedBox.shrink());
+      // Not in the local history: read it once; gone → the history (§1.2).
+      final lookup = ref.watch(tripLookupProvider(widget.tripId));
+      if (!_gone && !lookup.isLoading && lookup.valueOrNull == null) {
+        _gone = true;
+        leaveGoneTrip(context);
+      }
+      return FullScreenEditor(
+        title: title,
+        child: const SkeletonSection(rows: 1, withImage: false),
+      );
     }
     if (!isOwnTrip(ref, trip)) {
       _bounce(trip);

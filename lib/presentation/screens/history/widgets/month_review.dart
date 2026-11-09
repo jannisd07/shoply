@@ -108,12 +108,47 @@ class SpendingBars extends StatelessWidget {
       for (var i = 0; i < months.length; i++)
         '${spokenMonth(i)} ${spokenValue(months[i])}',
     ].join('. ');
-    final chart = AvoBarChart(
+    final bars = AvoBarChart(
       entries: entries,
       formatValue: format,
       semanticSummary: summary,
       highlightIndex: selected,
       missingText: '',
+    );
+    // The running month gets a second axis line "bisher" (V4 4, V10 3,
+    // honesty rule §5 row 4); VoiceOver already says it with the month.
+    final chart = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        bars,
+        ExcludeSemantics(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final n = months.length;
+              final bar = math.max(
+                0.0,
+                math.min(_kBarWidth, (constraints.maxWidth - (n - 1) * _kMinBarGap) / n),
+              );
+              // Centred under the last bar while it fits, else flush end.
+              return Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: bar),
+                  child: Text(
+                    context.tr('hist_bar_running'),
+                    textAlign: TextAlign.center,
+                    style: context.text(
+                      AvoTextStyle.caption2,
+                      color: context.colors.secondaryLabel,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
     final pick = onSelected;
     if (pick == null) return chart;
@@ -446,7 +481,7 @@ class MonthReview extends StatelessWidget {
               ),
               if (comparison != null)
                 Text.rich(
-                  _comparisonSpan(context, comparison, diff!, lang),
+                  comparisonSpan(context, comparison, diff!, lang),
                   style: context.text(
                     AvoTextStyle.footnote,
                     color: colors.secondaryLabel,
@@ -489,7 +524,7 @@ class MonthReview extends StatelessWidget {
   }
 
   /// The amount in the comparison is 600, in `tint` when less (never red).
-  static InlineSpan _comparisonSpan(
+  static InlineSpan comparisonSpan(
     BuildContext context,
     String text,
     int diff,

@@ -18,9 +18,12 @@ import 'package:shoply/routes/route_paths.dart';
 // avo_routes.dart; paths in docs/redesign/b-screens/verlauf-kosten.md §1.
 
 /// V4 "Verlauf" at RoutePaths.history, a push in the Listen tab; `?list=`
-/// sets the filter.
+/// sets the filter, `?gone=1` says the opened trip was deleted.
 Widget buildHistoryRoot(BuildContext context, GoRouterState state) =>
-    HistoryScreen(listId: state.uri.queryParameters['list']);
+    HistoryScreen(
+      listId: state.uri.queryParameters['list'],
+      tripGone: state.uri.queryParameters['gone'] == '1',
+    );
 
 /// A full-screen page above the tab bar (V6, V7): pushed from the right,
 /// a cross-fade with Reduce Motion.

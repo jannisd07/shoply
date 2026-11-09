@@ -24,7 +24,6 @@ import 'package:shoply/presentation/state/expense_split_provider.dart';
 import 'package:shoply/presentation/state/history_view_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
-import 'package:shoply/presentation/state/shopping_history_provider.dart';
 import 'package:shoply/presentation/state/trip_history_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avatar.dart';
@@ -42,16 +41,6 @@ const double _kItemRowMin = 60; // D2 article row
 const double _kShareRowMin = 60; // D2
 const double _kPillPadV = 3; // D2 offer pill 3 × 8
 const double _kPillPadH = AvoSpacing.s; // D2
-
-/// One trip that is not in the local history: read once from the server
-/// (a notification on a cold start, a link); null when gone.
-final tripLookupProvider = FutureProvider.autoDispose
-    .family<ShoppingHistory?, String>((ref, tripId) async {
-      if (isLocalTripId(tripId)) return null;
-      final trip = await ref.read(shoppingHistoryServiceProvider).getTrip(tripId);
-      if (trip != null) ref.read(tripHistoryProvider.notifier).upsert(trip);
-      return trip;
-    });
 
 /// V5 "Einkauf-Detail" (`/history/:tripId`): what was in the trip, and is
 /// everything settled (money, buying again)?
@@ -92,18 +81,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
   void _leaveGone() {
     if (_left) return;
     _left = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final router = GoRouter.of(context);
-      if (router.canPop()) {
-        router.pop();
-        AvoToast.show(context, message: context.tr('hist_trip_gone'));
-      } else {
-        router.go(historyLocation());
-        // The history shows the toast for a link that leads nowhere.
-        AvoToast.show(context, message: context.tr('hist_trip_gone'));
-      }
-    });
+    leaveGoneTrip(context);
   }
 
   @override

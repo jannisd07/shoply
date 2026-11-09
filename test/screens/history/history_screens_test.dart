@@ -1,5 +1,7 @@
 // W11 (B8b): V4 Verlauf, V5 Einkauf-Detail, V6 Betrag, V7 Kosten teilen,
 // V8 Offene Beträge, with their states (verlauf-kosten.md V4–V8, V13).
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,6 +44,7 @@ void main() {
       expect(historyChildRouteRegistered(historyAmountChildPath), isTrue);
       expect(historyLocation(listId: 'l1'), '/history?list=l1');
       expect(splitsLocation(done: true), '/splits?done=1');
+      expect(historyLocation(tripGone: true), '/history?gone=1');
     });
   });
 
@@ -274,6 +277,29 @@ void main() {
     });
   });
 
+  group('I4 unknown trip', () {
+    for (final path in ['/history/gone/amount', '/history/gone/split']) {
+      testWidgets('$path: to the history with the toast', (tester) async {
+        final world = HistoryWorld(prefs: prefs, trips: trips);
+        final router = await pumpHistory(tester, path, await world.overrides());
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Dieser Einkauf wurde gelöscht.'), findsOneWidget);
+        expect(find.text('NOVEMBER'), findsOneWidget);
+        expect(router.routerDelegate.currentConfiguration.uri.toString(), '/history?gone=1');
+      });
+    }
+
+    testWidgets('opened from V4: back on V4 (not a blank page), toast once', (tester) async {
+      final world = HistoryWorld(prefs: prefs, trips: trips);
+      final router = await pumpHistory(tester, '/history', await world.overrides());
+      unawaited(router.push('/history/gone'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Dieser Einkauf wurde gelöscht.'), findsOneWidget);
+      expect(find.text('NOVEMBER'), findsOneWidget);
+    });
+  });
+
   group('V6 Betrag', () {
     testWidgets('saves the typed amount and closes with undo', (tester) async {
       final world = HistoryWorld(prefs: prefs, trips: trips);
@@ -377,6 +403,34 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('ohne Konto'), findsOneWidget);
       expect(find.text('3,34\u00a0€'), findsOneWidget);
+    });
+
+    testWidgets('I3: undo of a first split restores the amount; a refusal says so', (tester) async {
+      for (final refuse in [false, true]) {
+        SharedPreferences.setMockInitialValues({});
+        final world = HistoryWorld(
+          prefs: await SharedPreferences.getInstance(),
+          trips: [histTrip('t1', histNow, cost: 10)],
+        );
+        if (refuse) {
+          world.splitBackend.clearError = Exception('42501');
+        }
+        final router = await pumpHistory(tester, '/history/t1', await world.overrides());
+        router.push(historySplitLocation('t1'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Aufteilung speichern'));
+        await tester.pumpAndSettle();
+        expect(find.text('Aufteilung gespeichert'), findsOneWidget);
+        await tester.tap(find.text('Widerrufen'));
+        await tester.pumpAndSettle();
+        expect(world.splitBackend.log, contains('clear 10.0'));
+        expect(
+          find.text('Widerrufen hat nicht geklappt.'),
+          refuse ? findsOneWidget : findsNothing,
+        );
+        if (refuse) expect(find.text('Erneut versuchen'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      }
     });
 
     testWidgets('module off: the alert comes first', (tester) async {

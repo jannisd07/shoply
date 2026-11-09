@@ -11,6 +11,8 @@ import 'package:shoply/data/models/shopping_history.dart';
 import 'package:shoply/data/services/expense_split_service.dart';
 import 'package:shoply/data/services/trip_money_format.dart';
 import 'package:shoply/data/services/trip_split_math.dart';
+import 'package:shoply/presentation/screens/history/history_actions.dart'
+    show leaveGoneTrip, tripLookupProvider;
 import 'package:shoply/presentation/screens/history/trip_amount_screen.dart'
     show tripContextLine;
 import 'package:shoply/presentation/screens/history/widgets/amount_field.dart';
@@ -94,6 +96,7 @@ class SplitEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _SplitEditorScreenState extends ConsumerState<SplitEditorScreen> {
+  bool _gone = false;
   List<_Person>? _people;
   int _payer = 0;
   bool _equal = true;
@@ -380,6 +383,12 @@ class _SplitEditorScreenState extends ConsumerState<SplitEditorScreen> {
     final trip = ref.watch(historyTripProvider(widget.tripId));
     final title = context.tr('hist_split_title');
     if (trip == null) {
+      // Not in the local history: read it once; gone → the history (§1.2).
+      final lookup = ref.watch(tripLookupProvider(widget.tripId));
+      if (!_gone && !lookup.isLoading && lookup.valueOrNull == null) {
+        _gone = true;
+        leaveGoneTrip(context);
+      }
       return FullScreenEditor(title: title, child: const SkeletonSection(rows: 3, withImage: false));
     }
     final splitsAsync = ref.watch(tripSplitsProvider(trip.id));
@@ -700,7 +709,14 @@ Future<void> _restore(
   final service = container.read(expenseSplitServiceProvider);
   try {
     if (before.isEmpty) {
-      await service.clearSplit(trip.id);
+      // A first split also wrote the amount and payer (save_trip_split):
+      // put them back with the shares (I3).
+      await service.clearSplit(
+        trip.id,
+        totalCents: trip.totalCostCents,
+        paidByUserId: trip.paidByUserId,
+        paidByName: trip.paidByName,
+      );
     } else {
       final total = before.fold<int>(0, (a, s) => a + s.amountCents);
       await service.saveSplit(
@@ -730,6 +746,15 @@ Future<void> _restore(
   } catch (e) {
     debugPrint('❌ [SPLIT] Undo failed: ${e.runtimeType}');
     unawaited(AvoHaptics.error());
+    final c = rootNavigatorKey.currentContext;
+    if (c != null && c.mounted) {
+      AvoToast.show(
+        c,
+        message: c.tr('hist_split_undo_failed'),
+        actionLabel: c.tr('common_try_again'),
+        onAction: () => unawaited(_restore(container, trip, before)),
+      );
+    }
   } finally {
     container.invalidate(tripSplitsProvider(trip.id));
     unawaited(container.read(openSharesProvider.notifier).refresh());

@@ -184,10 +184,12 @@ final class ManyBalancesHint extends HomeSplitHintData {
   final OpenBalancesSummary summary;
 }
 
-/// A trip of the last 7 days on a shared list, not split yet.
+/// A trip of the last 7 days on a shared list, not split yet, with the
+/// list's other members (never empty; "" for a member without a name).
 final class ShareTripHint extends HomeSplitHintData {
-  const ShareTripHint(this.trip);
+  const ShareTripHint(this.trip, this.others);
   final ShoppingHistory trip;
+  final List<String> others;
 }
 
 /// Per-account dismissals of the Home hints (rule 15): "Einkauf teilen"
@@ -274,7 +276,16 @@ final homeSplitHintProvider = Provider<HomeSplitHintData?>((ref) {
     if (isLocalTripId(t.id) || t.listId == null) continue;
     if (!shared.contains(t.listId) || split.contains(t.id)) continue;
     if (dismissals.tripDismissed(t.id)) continue;
-    return ShareTripHint(t);
+    // Decide here, so HasContent and the widget always agree (§3.1): no
+    // hint until the members are known, none without another member.
+    final members = ref.watch(splitMembersProvider(t.listId!));
+    if (members == null) return null;
+    final others = [
+      for (final m in members)
+        if (m.userId != me) m.name,
+    ];
+    if (others.isEmpty) continue;
+    return ShareTripHint(t, others);
   }
   return null;
 });

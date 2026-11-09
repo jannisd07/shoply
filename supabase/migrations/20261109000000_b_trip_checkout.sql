@@ -561,6 +561,48 @@ $$;
 revoke execute on function public.set_trip_store(uuid, text) from public, anon;
 grant execute on function public.set_trip_store(uuid, text) to authenticated;
 
+-- ------------------------------------------------------------------ W11
+-- "Widerrufen" of a first split (V7): removes every share of the trip and
+-- puts back the amount and payer that save_trip_split overwrote, in one
+-- transaction. Needed because the later _rls migration revokes the direct
+-- delete on expense_splits. Same access rule as save_trip_split.
+create or replace function public.clear_trip_split(
+  p_trip_id uuid,
+  p_total_cost numeric,
+  p_paid_by_user_id uuid,
+  p_paid_by_name text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is null then
+    raise exception 'not authenticated' using errcode = '28000';
+  end if;
+  if not public.trip_b_can_access_trip(p_trip_id) then
+    raise exception 'not a member' using errcode = '42501';
+  end if;
+  if p_total_cost is not null and (p_total_cost < 0 or p_total_cost > 100000) then
+    raise exception 'invalid amount' using errcode = '22023';
+  end if;
+  perform 1 from public.shopping_history where id = p_trip_id for update;
+
+  delete from public.expense_splits where history_id = p_trip_id;
+
+  update public.shopping_history
+  set total_cost = p_total_cost,
+      total_cost_source = case when p_total_cost is null then null else 'user' end,
+      paid_by_user_id = p_paid_by_user_id,
+      paid_by_name = left(p_paid_by_name, 80)
+  where id = p_trip_id;
+end;
+$$;
+
+revoke execute on function public.clear_trip_split(uuid, numeric, uuid, text) from public, anon;
+grant execute on function public.clear_trip_split(uuid, numeric, uuid, text) to authenticated;
+
 -- ------------------------------------------------------------------ L8
 -- The tightened policies and grants are in 20261109000100_b_trip_checkout_rls.sql
 -- and are applied LATER, once every build in use saves splits through

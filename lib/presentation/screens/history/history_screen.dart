@@ -72,13 +72,22 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     _timer = Timer(historyFirstLoadTimeout, () {
       if (mounted) setState(() => _timedOut = true);
     });
-    if (widget.tripGone) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          AvoToast.show(context, message: context.tr('hist_trip_gone'));
-        }
-      });
-    }
+    if (widget.tripGone) _sayTripGone();
+  }
+
+  @override
+  void didUpdateWidget(HistoryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // V4 was already below the gone trip: same state, new `?gone=1`.
+    if (widget.tripGone && !oldWidget.tripGone) _sayTripGone();
+  }
+
+  void _sayTripGone() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        AvoToast.show(context, message: context.tr('hist_trip_gone'));
+      }
+    });
   }
 
   @override

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shoply/core/services/shared_preferences_provider.dart';
 import 'package:shoply/presentation/state/history_view_provider.dart';
+import 'package:shoply/presentation/state/trip_history_provider.dart' show SplitMember;
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 
 import '../screens/history/history_test_harness.dart';
@@ -93,5 +94,37 @@ void main() {
     await c.read(splitHintDismissalsProvider)!.dismissTrip('t2');
     c.read(splitHintRevisionProvider.notifier).state++;
     expect(c.read(homeSplitHintProvider), isNull);
+  });
+
+  test('I1: no share hint while the members load or without another member', () async {
+    for (final members in <List<SplitMember>?>[
+      null,
+      const [SplitMember(userId: 'me', name: 'Jannis')],
+    ]) {
+      SharedPreferences.setMockInitialValues({});
+      final c = await make(
+        HistoryWorld(
+          prefs: await SharedPreferences.getInstance(),
+          trips: [histTrip('t2', histNow)],
+          lists: [histList('l1', 'Wocheneinkauf')],
+          membersOfList: members,
+        ),
+      );
+      expect(c.read(homeSplitHintProvider), isNull, reason: '$members');
+      expect(c.read(homeSplitHintHasContentProvider), isFalse);
+    }
+  });
+
+  test('I1: the share hint carries the other members', () async {
+    final c = await make(
+      HistoryWorld(
+        prefs: prefs,
+        trips: [histTrip('t2', histNow)],
+        lists: [histList('l1', 'Wocheneinkauf')],
+      ),
+    );
+    final hint = c.read(homeSplitHintProvider)! as ShareTripHint;
+    expect(hint.others, ['Lena']);
+    expect(c.read(homeSplitHintHasContentProvider), isTrue);
   });
 }

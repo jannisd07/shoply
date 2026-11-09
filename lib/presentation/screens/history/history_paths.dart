@@ -67,10 +67,11 @@ const String historyAmountChildPath = ':tripId/amount';
 String historyAmountLocation(String tripId) =>
     '${RoutePaths.history}/${Uri.encodeComponent(tripId)}/amount';
 
-/// V4 with a list filter: `/history?list=<listId>`.
-String historyLocation({String? listId}) => Uri(
+/// V4 with a list filter: `/history?list=<listId>`; [tripGone] (`gone=1`)
+/// after an unknown trip, so V4 says "Dieser Einkauf wurde gelöscht.".
+String historyLocation({String? listId, bool tripGone = false}) => Uri(
   path: RoutePaths.history,
-  queryParameters: {'list': ?listId},
+  queryParameters: {'list': ?listId, if (tripGone) 'gone': '1'},
 ).toString().replaceFirst(RegExp(r'\?$'), '');
 
 /// V8 "Offene Beträge": `/splits`, `?done=1` unfolds "Erledigt".

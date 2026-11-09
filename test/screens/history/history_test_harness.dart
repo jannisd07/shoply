@@ -191,7 +191,8 @@ class HistoryWorld {
   /// False: no answer yet (first load without cache).
   final bool synced;
   final bool failRefresh;
-  final List<SplitMember> membersOfList;
+  /// Null: the members are still loading.
+  final List<SplitMember>? membersOfList;
 
   late final FakeTripBackend tripBackend = synced
       ? FakeTripBackend()

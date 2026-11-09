@@ -13,7 +13,6 @@ import 'package:shoply/presentation/screens/history/history_format.dart';
 import 'package:shoply/presentation/screens/history/history_paths.dart';
 import 'package:shoply/presentation/screens/history/widgets/month_review.dart';
 import 'package:shoply/presentation/screens/history/widgets/trip_row.dart';
-import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/history_view_provider.dart';
 import 'package:shoply/presentation/state/trip_history_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
@@ -244,8 +243,8 @@ class HomeSpendingComparison extends ConsumerWidget {
                     const SizedBox(width: AvoSpacing.xxs),
                   ],
                   Expanded(
-                    child: Text(
-                      line,
+                    child: Text.rich(
+                      MonthReview.comparisonSpan(context, line, diff, lang),
                       style: context.text(AvoTextStyle.footnote, color: colors.secondaryLabel),
                     ),
                   ),
@@ -354,7 +353,6 @@ class HomeSplitHint extends ConsumerWidget {
     if (hint == null) return const SizedBox.shrink();
     final colors = context.colors;
     final lang = Localizations.localeOf(context).languageCode;
-    final me = ref.watch(authUserIdProvider);
     final leading = AvoIcon(AvoIcons.eurosignCircle, size: 20, color: colors.secondaryLabel); // D2
     void dismiss() => unawaited(dismissSplitHint(ref, hint));
     switch (hint) {
@@ -410,14 +408,10 @@ class HomeSplitHint extends ConsumerWidget {
           onDismiss: dismiss,
           dismissLabel: context.tr('hist_hint_dismiss'),
         );
-      case ShareTripHint(:final trip):
-        final members = trip.listId == null ? null : ref.watch(splitMembersProvider(trip.listId!));
-        final others = [
-          for (final m in members ?? const <SplitMember>[])
-            if (m.userId != me) m.name.isEmpty ? context.tr('hist_member_unknown') : m.name,
-        ];
-        if (others.isEmpty) return const SizedBox.shrink();
-        final names = others.join(', ');
+      case ShareTripHint(:final trip, :final others):
+        final names = [
+          for (final n in others) n.isEmpty ? context.tr('hist_member_unknown') : n,
+        ].join(', ');
         final cents = trip.totalCostCents;
         final now = ref.watch(historyClockProvider)();
         final day = relativeDay(
