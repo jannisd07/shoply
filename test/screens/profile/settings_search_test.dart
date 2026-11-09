@@ -10,6 +10,8 @@ import 'package:shoply/presentation/screens/profile/profile_root_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/data/notification_settings.dart';
 import 'package:shoply/presentation/screens/profile/settings_search_entry.dart';
 import 'package:shoply/presentation/screens/profile/settings_search_index.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart'
+    show bSettingsSearchEntries;
 import 'package:shoply/routes/areas/profile_routes.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -43,11 +45,11 @@ final Set<String> _allRoutes = {
   RoutePaths.settingsAvo,
 };
 
-/// The root's own entries and B's page entries, so the tests do not depend
-/// on what the page parts register.
+/// The root's own entries and Teil B's page entries (not its rows), so the
+/// tests do not depend on what the page parts register.
 final List<SettingsSearchEntry> _rootEntries = [
   ...profileRootSearchEntries,
-  ...bSettingsPagesSearchEntries,
+  ...bSettingsSearchEntries.where((e) => e.rowId == null),
 ];
 
 const _rows = [

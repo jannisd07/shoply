@@ -113,3 +113,7 @@ export 'package:shoply/presentation/providers/account_status_provider.dart'
         subscriptionRenewsOnProvider;
 export 'package:shoply/presentation/providers/presence_provider.dart'
     show sharePresenceProvider;
+
+// Settings search: Teil B's pages and rows (A8), for `settings_search_index`.
+export 'package:shoply/presentation/screens/system/b_settings_search.dart'
+    show bSettingsSearchEntries;

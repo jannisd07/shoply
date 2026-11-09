@@ -15,6 +15,7 @@ import 'package:shoply/presentation/screens/offers/region_screen.dart';
 import 'package:shoply/presentation/screens/offers/store_picker_screen.dart';
 import 'package:shoply/presentation/screens/offers/weekly_offers_screen.dart';
 import 'package:shoply/presentation/screens/profile/settings/offers_settings_screen.dart';
+import 'package:shoply/presentation/screens/system/b_settings_route.dart';
 import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/module_gate.dart';
 import 'package:shoply/routes/route_error_screen.dart';
@@ -120,18 +121,12 @@ final List<RouteBase> offersRootRoutes = [
 /// content with the module and the kill switch (S12), region and favourite
 /// markets are core.
 final List<RouteBase> offersSettingsRoutes = [
-  GoRoute(
-    path: 'offers',
-    builder: (context, state) => const OffersSettingsScreen(),
+  bSettingsRoute(
+    'offers',
+    (_) => const OffersSettingsScreen(),
     routes: [
-      GoRoute(
-        path: 'region',
-        builder: (context, state) => const RegionScreen(),
-      ),
-      GoRoute(
-        path: 'markets',
-        builder: (context, state) => const FavoriteMarketsScreen(),
-      ),
+      bSettingsRoute('region', (_) => const RegionScreen()),
+      bSettingsRoute('markets', (_) => const FavoriteMarketsScreen()),
     ],
   ),
 ];

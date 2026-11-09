@@ -20,6 +20,7 @@ import 'package:shoply/presentation/screens/calories/calories_manual_screen.dart
 import 'package:shoply/presentation/screens/calories/calories_photo_screen.dart';
 import 'package:shoply/presentation/screens/calories/calories_recipe_screen.dart';
 import 'package:shoply/presentation/screens/calories/calories_scan_screen.dart';
+import 'package:shoply/presentation/screens/calories/calories_settings_screen.dart';
 import 'package:shoply/presentation/screens/calories/challenges_screen.dart';
 import 'package:shoply/presentation/screens/calories/weekly_summary_screen.dart';
 import 'package:shoply/presentation/screens/calories/weight_tracking_screen.dart';
@@ -27,6 +28,7 @@ import 'package:shoply/presentation/screens/calories/what_can_i_eat_screen.dart'
 import 'package:shoply/presentation/screens/calories/widgets/calorie_amount_food.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_flow_scaffold.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart';
+import 'package:shoply/presentation/screens/system/b_settings_route.dart';
 import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/module_gate.dart';
@@ -207,6 +209,14 @@ final List<RouteBase> caloriesSettingsRoutes = [
   GoRoute(
     path: 'health/goals',
     builder: (context, state) => const ModuleGate(module: AppModule.calories, child: CaloriesGoalsScreen()),
+  ),
+  // "Kalorien & Gesundheit" (S23); `?row=` highlights a row. A sibling of
+  // `health/goals`, so a link straight to the goals asks only once when the
+  // module is off.
+  bSettingsRoute(
+    'health',
+    (row) => CaloriesSettingsScreen(highlightRowId: row),
+    module: AppModule.calories,
   ),
 ];
 

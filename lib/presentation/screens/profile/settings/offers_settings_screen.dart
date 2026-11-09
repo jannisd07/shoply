@@ -23,6 +23,7 @@ import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
+import 'package:shoply/presentation/widgets/design/row_highlight.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
@@ -43,6 +44,17 @@ const EdgeInsets _kChipArea = EdgeInsets.symmetric(
 const double _kRowIcon = 22; // D2 glyph at the start of a row
 const double _kWarning = 15; // D2 warning glyph before "Nicht festgelegt"
 const double _kChevron = 14; // D2 disclosure chevron
+
+/// Row ids of "Preise & Angebote" (`/settings/offers?row=…`, the settings
+/// search).
+abstract final class OffersSettingsRows {
+  static const module = 'offers.module';
+  static const detect = 'offers.detect';
+  static const region = 'offers.region';
+
+  /// One of the "Anzeigen" switches (`offers.itemOffers`, …).
+  static String surface(OfferSurface s) => 'offers.${s.name}';
+}
 
 /// The lists whose offers the person hid, with their names, in the order
 /// of the lists ("Ausgeblendet für"); override in tests.
@@ -85,13 +97,16 @@ class OffersSettingsScreen extends ConsumerWidget {
     final regionLoaded = ref.watch(regionLoadedProvider);
     final hiddenLists = ref.watch(offerHiddenListsShownProvider);
 
-    ToggleRow surface(String key, OfferSurface s, {String? subtitle}) =>
-        ToggleRow(
-          title: context.tr(key),
-          subtitle: subtitle,
-          value: prefs?.isOn(s) ?? true,
-          enabled: prefs != null,
-          onChanged: (on) => unawaited(notifier.setSurface(s, on)),
+    Widget surface(String key, OfferSurface s, {String? subtitle}) =>
+        HighlightableRow(
+          id: OffersSettingsRows.surface(s),
+          child: ToggleRow(
+            title: context.tr(key),
+            subtitle: subtitle,
+            value: prefs?.isOn(s) ?? true,
+            enabled: prefs != null,
+            onChanged: (on) => unawaited(notifier.setSurface(s, on)),
+          ),
         );
 
     final children = <Widget>[
@@ -109,14 +124,17 @@ class OffersSettingsScreen extends ConsumerWidget {
         const SizedBox(height: AvoSpacing.s),
         InsetSection(
           children: [
-            ToggleRow(
-              title: context.tr('common_module_offers'),
-              subtitle: context.tr('offer_settings_master_sub'),
-              value: module,
-              onChanged: (on) => unawaited(
-                ref
-                    .read(appModulesProvider.notifier)
-                    .setEnabled(AppModule.offers, on),
+            HighlightableRow(
+              id: OffersSettingsRows.module,
+              child: ToggleRow(
+                title: context.tr('common_module_offers'),
+                subtitle: context.tr('offer_settings_master_sub'),
+                value: module,
+                onChanged: (on) => unawaited(
+                  ref
+                      .read(appModulesProvider.notifier)
+                      .setEnabled(AppModule.offers, on),
+                ),
               ),
             ),
           ],
@@ -151,29 +169,35 @@ class OffersSettingsScreen extends ConsumerWidget {
             favorites: favorites,
             onTap: () => unawaited(context.push(offersSettingsMarketsPath)),
           ),
-          ToggleRow(
-            title: context.tr('offer_settings_detect'),
-            value: prefs?.detectStore ?? true,
-            enabled: prefs != null,
-            onChanged: (on) => unawaited(notifier.setDetectStore(on)),
+          HighlightableRow(
+            id: OffersSettingsRows.detect,
+            child: ToggleRow(
+              title: context.tr('offer_settings_detect'),
+              value: prefs?.detectStore ?? true,
+              enabled: prefs != null,
+              onChanged: (on) => unawaited(notifier.setDetectStore(on)),
+            ),
           ),
         ],
       ),
       const SizedBox(height: AvoSpacing.section),
       InsetSection(
         children: [
-          _RegionRow(
-            title: context.tr(
-              remote
-                  ? 'offer_settings_region'
-                  : 'offer_settings_location_stores',
+          HighlightableRow(
+            id: OffersSettingsRows.region,
+            child: _RegionRow(
+              title: context.tr(
+                remote
+                    ? 'offer_settings_region'
+                    : 'offer_settings_location_stores',
+              ),
+              subtitle: remote
+                  ? null
+                  : context.tr('offer_settings_location_stores_sub'),
+              value: region == null ? null : regionText(region),
+              known: !regionLoaded || region != null,
+              onTap: () => unawaited(context.push(offersSettingsRegionPath)),
             ),
-            subtitle: remote
-                ? null
-                : context.tr('offer_settings_location_stores_sub'),
-            value: region == null ? null : regionText(region),
-            known: !regionLoaded || region != null,
-            onTap: () => unawaited(context.push(offersSettingsRegionPath)),
           ),
         ],
       ),

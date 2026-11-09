@@ -6,6 +6,8 @@ import 'package:shoply/presentation/screens/profile/account/account_search.dart'
 import 'package:shoply/presentation/screens/profile/profile_root_pages.dart';
 import 'package:shoply/presentation/screens/profile/settings/settings_pages_search.dart';
 import 'package:shoply/presentation/screens/profile/settings_search_entry.dart';
+import 'package:shoply/presentation/widgets/slots/b_slots.dart'
+    show bSettingsSearchEntries;
 import 'package:shoply/routes/route_paths.dart';
 
 /// Search entries of the profile root itself: Profil bearbeiten, Avo Pro and
@@ -33,80 +35,13 @@ final List<SettingsSearchEntry> profileRootSearchEntries = [
       ),
 ];
 
-/// Page entries of Teil B's settings pages (Preise & Angebote with Region
-/// and Lieblingsmärkte, Kalorien & Gesundheit, Wochenplan, Avo, Siri,
-/// Widgets): route, title and a few search words, no rows. One place on purpose: Teil B replaces this list with its own,
-/// row-level entries later. Each one shows only while its route exists and
-/// its module is on.
-const List<SettingsSearchEntry> bSettingsPagesSearchEntries = [
-  // Markets stay findable under the kill switch, as "Märkte".
-  SettingsSearchEntry(
-    route: RoutePaths.settingsOffers,
-    titleKey: 'prof_row_offers',
-    killSwitchTitleKey: 'prof_row_markets',
-    keywordsKeys: ['prof_kw_markets'],
-    icon: ProfileIcons.offers,
-  ),
-  // Offers words ("Angebot", "Prospekt") never lead anywhere under the kill
-  // switch (§3.5).
-  SettingsSearchEntry(
-    route: RoutePaths.settingsOffers,
-    titleKey: 'prof_row_offers',
-    keywordsKeys: ['prof_kw_offers'],
-    icon: ProfileIcons.offers,
-    offersTerm: true,
-  ),
-  SettingsSearchEntry(
-    route: RoutePaths.settingsOffersRegion,
-    titleKey: 'prof_row_region',
-    pathKeys: ['prof_row_offers'],
-    killSwitchPathKeys: ['prof_row_markets'],
-    keywordsKeys: ['prof_kw_region'],
-  ),
-  SettingsSearchEntry(
-    route: RoutePaths.settingsOffersMarkets,
-    titleKey: 'prof_row_favorite_markets',
-    pathKeys: ['prof_row_offers'],
-    killSwitchPathKeys: ['prof_row_markets'],
-    keywordsKeys: ['prof_kw_favorite_markets'],
-  ),
-  SettingsSearchEntry(
-    route: RoutePaths.settingsHealth,
-    titleKey: 'prof_row_health',
-    keywordsKeys: ['prof_kw_health'],
-    module: AppModule.calories,
-  ),
-  SettingsSearchEntry(
-    route: RoutePaths.settingsPlan,
-    titleKey: 'prof_row_plan',
-    keywordsKeys: ['prof_kw_plan'],
-    module: AppModule.mealPlan,
-  ),
-  SettingsSearchEntry(
-    route: RoutePaths.settingsAvo,
-    titleKey: 'prof_row_avo',
-    keywordsKeys: ['prof_kw_avo'],
-    module: AppModule.avo,
-  ),
-  SettingsSearchEntry(
-    route: RoutePaths.settingsSiri,
-    titleKey: 'prof_row_siri',
-    keywordsKeys: ['prof_kw_siri'],
-  ),
-  SettingsSearchEntry(
-    route: RoutePaths.settingsWidgets,
-    titleKey: 'prof_row_widgets',
-    keywordsKeys: ['prof_kw_widgets'],
-  ),
-];
-
 /// Every entry of the settings search. The pages' own entries come first,
 /// so a page that describes itself wins over the root's short entry.
 List<SettingsSearchEntry> allSettingsSearchEntries() => [
   ...settingsPagesSearchEntries,
   ...accountSearchEntries,
   ...profileRootSearchEntries,
-  ...bSettingsPagesSearchEntries,
+  ...bSettingsSearchEntries,
 ];
 
 /// What the search has to know about the app right now.

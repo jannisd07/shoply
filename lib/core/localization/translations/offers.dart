@@ -263,6 +263,8 @@ const Map<String, String> offersEn = {
   'flyer_title': 'Your flyer',
   'flyer_subtitle': '{count} things you buy regularly are on offer right now.',
   'flyer_section_savings': 'saves {amount} €',
+  'offer_kw_show': 'offers, savings, show, hide offers, flyer',
+  'offer_kw_detect': 'detect store, store, market, location, automatic',
 };
 
 const Map<String, String> offersDe = {
@@ -531,4 +533,6 @@ const Map<String, String> offersDe = {
   'flyer_subtitle':
       '{count} Sachen, die du regelmäßig kaufst, sind gerade im Angebot.',
   'flyer_section_savings': 'spart {amount} €',
+  'offer_kw_show': 'Angebote, Ersparnis, anzeigen, Angebote ausblenden, Prospekt',
+  'offer_kw_detect': 'Markt erkennen, Markt, Laden, Standort, automatisch',
 };

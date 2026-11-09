@@ -118,6 +118,10 @@ class AvoChat extends ChangeNotifier with _AvoCardActions, _AvoPhotoTurns {
 
   List<AvoTurn> get turns => List.unmodifiable(_turns);
   bool get isEmpty => _turns.isEmpty;
+
+  /// Something of a conversation is kept: turns, or a "Neues Gespräch" that
+  /// can still be undone.
+  bool get hasConversation => _turns.isNotEmpty || _cleared != null;
   bool get isWorking => _active != null;
   @override
   AvoTurn? get latest => _turns.isEmpty ? null : _turns.last;
@@ -453,6 +457,23 @@ class AvoChat extends ChangeNotifier with _AvoCardActions, _AvoPhotoTurns {
     _cleared = List.of(_turns);
     _turns.clear();
     _askedContext = null;
+    notifyListeners();
+  }
+
+  /// "Gespräch löschen" (Einstellungen › Avo, Kap. 16 §11.2): stops a
+  /// running answer and forgets the conversation for good, without undo.
+  /// An answer that is still finishing may reach the service conversation,
+  /// so the next question resets it once more.
+  void deleteConversation() {
+    final running = _active != null;
+    stop();
+    _turns.clear();
+    _cleared = null;
+    _askedContext = null;
+    _lastActivity = null;
+    _forgetCards();
+    _backend.reset();
+    _resetPending = running;
     notifyListeners();
   }
 
