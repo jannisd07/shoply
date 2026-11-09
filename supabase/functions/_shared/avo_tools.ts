@@ -86,7 +86,6 @@ export const MODULE_IDS = ["offers", "meal_plan", "calories", "avo", "cost_split
 export const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
 export const SETTING_KEYS = [
   "theme_mode",
-  "accent_color",
   "language",
   "notifications",
   "display_name",
@@ -98,6 +97,26 @@ export const SETTING_KEYS = [
   "allergies_remove",
   "diet_add",
   "diet_remove",
+  "recipes_auto_adapt",
+  "show_item_images",
+  "suggestions_enabled",
+  "start_list",
+  "keep_screen_on",
+  "share_presence",
+  "notif_shopping_started",
+  "notif_list_changes",
+  "notif_shopping_completed",
+  "notif_invitations",
+  "notif_restock",
+  "notif_cooking_timer",
+  "notif_plan_reminder",
+  "notif_dinner_ideas",
+  "notif_cost_split_open",
+  "notif_recipe_likes",
+  "notif_recipe_comments",
+  "notif_new_recipes",
+  "notif_time_restock",
+  "notif_time_dinner",
 ] as const;
 export const APP_INFO_TOPICS = ["pro_plan", "my_subscription"] as const;
 /** Pages of Settings where the person does what Avo never does (Kap. 16 5.7). */
@@ -538,10 +557,16 @@ const ALL_TOOLS: readonly Anthropic.Beta.BetaTool[] = Object.freeze([
   tool({
     name: "update_setting",
     description: "Change one setting right away; the app shows Undo. Keys: theme_mode (light, dark, system), " +
-      "accent_color (hex like #1F7A3A), language (de, en, system), notifications (true, false), display_name, " +
+      "language (de, en, system), notifications (true, false: all notifications), display_name, " +
       "age, gender, height_cm, zip_code (5-digit postcode; an empty string removes it). allergies_add, " +
       "allergies_remove, diet_add and diet_remove change exactly one entry; the app asks the person to confirm " +
-      "before an allergy is removed.",
+      "before an allergy is removed. true or false: recipes_auto_adapt (recipes swap what does not fit the diet), " +
+      "show_item_images, suggestions_enabled (suggestions at the end of a list), keep_screen_on (while " +
+      "shopping), share_presence (others see that the person is shopping), and the single notifications " +
+      "notif_shopping_started, notif_list_changes, notif_shopping_completed, notif_invitations, notif_restock, " +
+      "notif_cooking_timer, notif_plan_reminder, notif_dinner_ideas, notif_cost_split_open, notif_recipe_likes, " +
+      "notif_recipe_comments, notif_new_recipes. notif_time_restock and notif_time_dinner take a time like 18:30. " +
+      "start_list takes a list name, or last for the list used last.",
     strict: true,
     properties: {
       key: choice(SETTING_KEYS, "Which setting."),

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    show WidgetRef;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/user_model.dart';
 import 'package:shoply/data/services/mascot_notification_service.dart';
 import 'package:shoply/data/services/notification_preferences_service.dart';
 import 'package:shoply/data/services/user_location_service.dart';
 import 'package:shoply/data/services/user_service.dart';
+import 'package:shoply/presentation/providers/app_flags_provider.dart';
+import 'package:shoply/presentation/screens/lists/widgets/all_lists_data.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/list_preferences.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/notification_settings.dart';
+import 'package:shoply/presentation/screens/profile/settings/data/profile_settings.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/language_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
@@ -19,6 +24,10 @@ class SettingChangeResult {
   final String newValue;
   final String? error;
 
+  /// Translation key of the setting's name on the answer card; null shows
+  /// [displayName] (the English name the model reads).
+  final String? labelKey;
+
   const SettingChangeResult({
     required this.success,
     required this.key,
@@ -26,6 +35,7 @@ class SettingChangeResult {
     required this.newValue,
     this.oldValue,
     this.error,
+    this.labelKey,
   });
 
   Map<String, Object?> toJson() => {
@@ -47,11 +57,46 @@ class AvoSettingsBridge {
   final WidgetRef ref;
   AvoSettingsBridge(this.ref);
 
-  /// Supported setting keys. Kept in sync with the `update_setting` tool
-  /// schema in AvoAssistantService.
-  static const supportedKeys = <String>[
+  /// Switches of Einstellungen › Mitteilungen, by key (`notif_<name>`).
+  static const notificationKeys = <String, NotificationSetting>{
+    'notif_shopping_started': NotificationSetting.shoppingStarted,
+    'notif_list_changes': NotificationSetting.listChanges,
+    'notif_shopping_completed': NotificationSetting.shoppingCompleted,
+    'notif_invitations': NotificationSetting.invitations,
+    'notif_restock': NotificationSetting.restock,
+    'notif_cooking_timer': NotificationSetting.cookingTimer,
+    'notif_plan_reminder': NotificationSetting.planReminder,
+    'notif_dinner_ideas': NotificationSetting.dinnerIdeas,
+    'notif_cost_split_open': NotificationSetting.costSplitOpen,
+    'notif_recipe_likes': NotificationSetting.recipeLikes,
+    'notif_recipe_comments': NotificationSetting.recipeComments,
+    'notif_new_recipes': NotificationSetting.newRecipes,
+  };
+
+  /// Reminder times ("H:MM") of Einstellungen › Mitteilungen.
+  static const notificationTimeKeys = <String, NotificationTimeSlot>{
+    'notif_time_restock': NotificationTimeSlot.restock,
+    'notif_time_dinner': NotificationTimeSlot.dinnerIdeas,
+  };
+
+  /// Switches of Einstellungen › Listen and Ernährung (A8, Konzept 18 §5).
+  static const _flagKeys = <String>[
+    'recipes_auto_adapt',
+    'show_item_images',
+    'suggestions_enabled',
+    'keep_screen_on',
+    'share_presence',
+  ];
+
+  /// `module_<id>` for every released module (`module_calories`, …); the
+  /// same switch as Einstellungen › Module and the `set_module` tool.
+  static String moduleKey(AppModule module) => 'module_${module.storageKey}';
+
+  /// Supported setting keys. The `update_setting` tool schema
+  /// (`supabase/functions/_shared/avo_tools.ts`, `SETTING_KEYS`) offers all
+  /// of them except the module keys, which Avo switches with `set_module`.
+  static final supportedKeys = <String>[
     'theme_mode',
-    'accent_color',
     'language',
     'notifications',
     'display_name',
@@ -63,6 +108,12 @@ class AvoSettingsBridge {
     'gender',
     'height_cm',
     'zip_code',
+    ..._flagKeys,
+    'start_list',
+    ...notificationKeys.keys,
+    ...notificationTimeKeys.keys,
+    for (final m in AppModule.values)
+      if (m.released) moduleKey(m),
   ];
 
   /// Apply a settings change. Returns a structured result suitable for
@@ -72,8 +123,6 @@ class AvoSettingsBridge {
       switch (key) {
         case 'theme_mode':
           return await _setThemeMode(value);
-        case 'accent_color':
-          return await _setAccentColor(value);
         case 'language':
           return await _setLanguage(value);
         case 'notifications':
@@ -168,7 +217,55 @@ class AvoSettingsBridge {
             readCurrent: (u) =>
                 u.height == null ? null : '${u.height!.round()} cm',
           );
+        case 'recipes_auto_adapt':
+          return await _setFlag(
+            key: key,
+            displayName: 'Adapt recipes automatically',
+            value: value,
+            current: ref.read(recipeAutoAdaptProvider),
+            write: (on) => ref.read(recipeAutoAdaptProvider.notifier).set(on),
+          );
+        case 'show_item_images':
+          return await _setListPreference(
+            key,
+            'Item images',
+            value,
+            read: (p) => p.showItemImages,
+            apply: (p, on) => p.copyWith(showItemImages: on),
+          );
+        case 'suggestions_enabled':
+          return await _setListPreference(
+            key,
+            'Suggestions at the end of a list',
+            value,
+            read: (p) => p.suggestions,
+            apply: (p, on) => p.copyWith(suggestions: on),
+          );
+        case 'keep_screen_on':
+          return await _setListPreference(
+            key,
+            'Keep the screen on while shopping',
+            value,
+            read: (p) => p.keepScreenOn,
+            apply: (p, on) => p.copyWith(keepScreenOn: on),
+          );
+        case 'share_presence':
+          return await _setListPreference(
+            key,
+            'Show others that I am shopping',
+            value,
+            read: (p) => p.sharePresence,
+            apply: (p, on) => p.copyWith(sharePresence: on),
+          );
+        case 'start_list':
+          return await _setStartList(value);
         default:
+          final setting = notificationKeys[key];
+          if (setting != null) return await _setNotification(key, setting, value);
+          final slot = notificationTimeKeys[key];
+          if (slot != null) return await _setNotificationTime(key, slot, value);
+          final module = _moduleOfKey(key);
+          if (module != null) return await _setModule(key, module, value);
           return SettingChangeResult(
             success: false,
             key: key,
@@ -223,39 +320,6 @@ class AvoSettingsBridge {
       displayName: 'Theme',
       oldValue: _themeModeLabel(current),
       newValue: _themeModeLabel(mode),
-    );
-  }
-
-  Future<SettingChangeResult> _setAccentColor(Object? value) async {
-    final hex = value?.toString().replaceAll('#', '').trim() ?? '';
-    if (hex.length != 6) {
-      return SettingChangeResult(
-        success: false,
-        key: 'accent_color',
-        displayName: 'Accent color',
-        newValue: '$value',
-        error: 'Accent color must be a 6-character hex like "007AFF"',
-      );
-    }
-    final colorValue = int.tryParse('FF$hex', radix: 16);
-    if (colorValue == null) {
-      return SettingChangeResult(
-        success: false,
-        key: 'accent_color',
-        displayName: 'Accent color',
-        newValue: '$value',
-        error: 'Invalid hex color',
-      );
-    }
-    final newColor = Color(colorValue);
-    final current = ref.read(accentColorProvider);
-    await ref.read(accentColorProvider.notifier).setAccentColor(newColor);
-    return SettingChangeResult(
-      success: true,
-      key: 'accent_color',
-      displayName: 'Accent color',
-      oldValue: '#${current.value.toRadixString(16).substring(2).toUpperCase()}',
-      newValue: '#${hex.toUpperCase()}',
     );
   }
 
@@ -423,15 +487,193 @@ class AvoSettingsBridge {
     );
   }
 
+  // ── A8 keys: lists, recipes, notifications, modules ───────────────
+
+  /// The card's name of [key] (`avo_setkey_<key>`).
+  static String labelKeyOf(String key) => 'avo_setkey_$key';
+
+  SettingChangeResult _invalidBool(String key, String displayName, Object? v) =>
+      SettingChangeResult(
+        success: false,
+        key: key,
+        displayName: displayName,
+        newValue: '$v',
+        error: '$key must be true or false',
+      );
+
+  Future<SettingChangeResult> _setFlag({
+    required String key,
+    required String displayName,
+    required Object? value,
+    required bool current,
+    required Future<void> Function(bool on) write,
+  }) async {
+    final on = _parseBool(value);
+    if (on == null) return _invalidBool(key, displayName, value);
+    await write(on);
+    return SettingChangeResult(
+      success: true,
+      key: key,
+      displayName: displayName,
+      oldValue: _onOff(current),
+      newValue: _onOff(on),
+      labelKey: labelKeyOf(key),
+    );
+  }
+
+  Future<SettingChangeResult> _setListPreference(
+    String key,
+    String displayName,
+    Object? value, {
+    required bool Function(ListPreferences p) read,
+    required ListPreferences Function(ListPreferences p, bool on) apply,
+  }) {
+    final prefs = ref.read(listPreferencesProvider);
+    return _setFlag(
+      key: key,
+      displayName: displayName,
+      value: value,
+      current: read(prefs),
+      write: (on) => ref
+          .read(listPreferencesProvider.notifier)
+          .update(apply(ref.read(listPreferencesProvider), on)),
+    );
+  }
+
+  /// "Liste beim Start": a list by name or id, or the last used one
+  /// (`last`, empty).
+  Future<SettingChangeResult> _setStartList(Object? value) async {
+    const key = 'start_list';
+    const displayName = 'List at start';
+    final wanted = value?.toString().trim() ?? '';
+    final lists = ref.read(allListsSourceProvider).valueOrNull ?? const [];
+    final pinnedId = ref.read(pinnedListProvider).listId;
+    String nameOf(String? id) =>
+        lists.where((l) => l.id == id).firstOrNull?.name ?? 'last used list';
+    final last = wanted.isEmpty ||
+        const {'last', 'last used list', 'zuletzt', 'none', 'null'}.contains(wanted.toLowerCase());
+    final match = last
+        ? null
+        : lists
+              .where(
+                (l) =>
+                    l.id == wanted ||
+                    l.name.trim().toLowerCase() == wanted.toLowerCase(),
+              )
+              .firstOrNull;
+    if (!last && match == null) {
+      return SettingChangeResult(
+        success: false,
+        key: key,
+        displayName: displayName,
+        newValue: wanted,
+        error: 'No list "$wanted". Lists: '
+            '${lists.map((l) => l.name).join(', ')}; or "last" for the list '
+            'used last',
+      );
+    }
+    final old = pinnedId == null ? 'last used list' : nameOf(pinnedId);
+    await ref.read(pinnedListProvider.notifier).pin(match?.id);
+    return SettingChangeResult(
+      success: true,
+      key: key,
+      displayName: displayName,
+      oldValue: old,
+      newValue: match?.name ?? 'last used list',
+      labelKey: labelKeyOf(key),
+    );
+  }
+
+  Future<SettingChangeResult> _setNotification(
+    String key,
+    NotificationSetting setting,
+    Object? value,
+  ) {
+    final state = ref.read(notificationSettingsProvider);
+    return _setFlag(
+      key: key,
+      displayName: 'Notifications: ${setting.name}',
+      value: value,
+      current: state.isOn(setting),
+      write: (on) => ref
+          .read(notificationSettingsProvider.notifier)
+          .setEnabled(setting, on),
+    );
+  }
+
+  Future<SettingChangeResult> _setNotificationTime(
+    String key,
+    NotificationTimeSlot slot,
+    Object? value,
+  ) async {
+    final displayName = 'Reminder time: ${slot.name}';
+    final time = ReminderTime.parse(value?.toString().trim());
+    if (time == null) {
+      return SettingChangeResult(
+        success: false,
+        key: key,
+        displayName: displayName,
+        newValue: '$value',
+        error: '$key must be a time like "18:30"',
+      );
+    }
+    final current = ref.read(notificationSettingsProvider).timeOf(slot);
+    await ref.read(notificationSettingsProvider.notifier).setTime(slot, time);
+    return SettingChangeResult(
+      success: true,
+      key: key,
+      displayName: displayName,
+      oldValue: current.storage,
+      newValue: time.storage,
+      labelKey: labelKeyOf(key),
+    );
+  }
+
+  static AppModule? _moduleOfKey(String key) {
+    for (final m in AppModule.values) {
+      if (moduleKey(m) == key) return m;
+    }
+    return null;
+  }
+
+  Future<SettingChangeResult> _setModule(
+    String key,
+    AppModule module,
+    Object? value,
+  ) async {
+    final displayName = 'Module ${module.storageKey}';
+    final killSwitch =
+        module == AppModule.offers && ref.read(offersKillSwitchOffProvider);
+    if (!module.released || killSwitch) {
+      return SettingChangeResult(
+        success: false,
+        key: key,
+        displayName: displayName,
+        newValue: '$value',
+        error: 'This module is not available',
+      );
+    }
+    return _setFlag(
+      key: key,
+      displayName: displayName,
+      value: value,
+      current: ref.read(moduleEnabledProvider(module)),
+      write: (on) =>
+          ref.read(appModulesProvider.notifier).setEnabled(module, on),
+    );
+  }
+
+  static String _onOff(bool on) => on ? 'on' : 'off';
+
   // ── Helpers ─────────────────────────────────────────────────────────
 
   static bool? _parseBool(Object? v) {
     if (v is bool) return v;
     final s = v?.toString().toLowerCase().trim();
-    if (s == 'true' || s == 'on' || s == 'yes' || s == 'enable' ||
-        s == 'enabled' || s == '1') return true;
-    if (s == 'false' || s == 'off' || s == 'no' || s == 'disable' ||
-        s == 'disabled' || s == '0') return false;
+    const yes = {'true', 'on', 'yes', 'enable', 'enabled', '1', 'an', 'ja'};
+    const no = {'false', 'off', 'no', 'disable', 'disabled', '0', 'aus', 'nein'};
+    if (yes.contains(s)) return true;
+    if (no.contains(s)) return false;
     return null;
   }
 

@@ -86,7 +86,6 @@ AvoResultSection avoSettingFailedSection(
 String avoSettingName(BuildContext context, String key) => context.tr(
   switch (key) {
     'theme_mode' => 'avo_set_appearance',
-    'accent_color' => 'avo_set_accent',
     'language' => 'avo_set_language',
     'notifications' => 'avo_set_notifications',
     'zip_code' => 'avo_set_region',

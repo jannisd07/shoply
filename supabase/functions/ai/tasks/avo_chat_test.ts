@@ -552,6 +552,20 @@ Deno.test("the plan, module and workout tools are declared from the first reques
   assertEquals(props.enabled.type, "boolean");
 });
 
+Deno.test("update_setting offers the A8 keys, no accent colour and no module keys", () => {
+  const update = avoTools("full").find((tool) => tool.name === "update_setting")!;
+  const props = update.input_schema.properties as Record<string, Record<string, unknown>>;
+  const keys = props.key.enum as string[];
+  assertFalse(keys.includes("accent_color"));
+  for (const key of ["recipes_auto_adapt", "show_item_images", "suggestions_enabled", "start_list", "keep_screen_on",
+    "share_presence", "notif_dinner_ideas", "notif_time_restock", "notif_time_dinner"]) {
+    assert(keys.includes(key), key);
+  }
+  // Modules are switched with set_module only.
+  assertFalse(keys.some((key) => key.startsWith("module_")));
+  assertFalse((update.description ?? "").includes("accent_color"));
+});
+
 Deno.test("show_settings_link only shows a row to Konto or Konto löschen", () => {
   for (const variant of ["full", "no_offers"] as const) assert(toolNames(variant).includes("show_settings_link"));
   const link = avoTools("full").find((tool) => tool.name === "show_settings_link")!;

@@ -7,6 +7,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/core/modules/module_labels.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
+import 'package:shoply/data/services/avo_settings_bridge.dart';
 import 'package:shoply/presentation/screens/avo/avo_card_format.dart';
 import 'package:shoply/presentation/screens/avo/avo_chat.dart';
 import 'package:shoply/presentation/screens/avo/avo_l10n.dart';
@@ -324,7 +325,12 @@ String _value(BuildContext context, String key, String? raw) {
     case 'height_cm':
       return '$raw cm';
     default:
-      return raw;
+      return switch (raw) {
+        'on' => context.tr('avo_value_on'),
+        'off' => context.tr('avo_value_off'),
+        'last used list' => context.tr('avo_value_last_list'),
+        _ => raw,
+      };
   }
 }
 
@@ -379,7 +385,6 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
       'avo_set_appearance',
       const Icon(CupertinoIcons.circle_lefthalf_fill),
     ),
-    'accent_color' => ('avo_set_accent', const Icon(CupertinoIcons.paintbrush)),
     'language' => ('avo_set_language', const Icon(CupertinoIcons.globe)),
     'notifications' => (
       'avo_set_notifications',
@@ -394,8 +399,12 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
     _ => ('avo_set_generic', const AvoIcon(avoTogglesIcon)),
   };
   final value = _value(context, r.key, r.value);
+  // The A8 keys name themselves (`avo_setkey_<key>`).
+  final ownName = AvoSettingsBridge.labelKeyOf(r.key);
+  final named = context.tr(ownName);
+  final title = named == ownName ? context.tr(titleKey) : named;
   return (
-    title: context.tr(titleKey),
+    title: title,
     subtitle: r.previous == null && r.key == 'zip_code'
         ? value
         : context.tr(

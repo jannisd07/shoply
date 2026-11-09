@@ -36,6 +36,27 @@ extension AvoSettingTools on AvoAssistantService {
       payloads.add(AvoWidgetPayload.card(AvoSettingFailedCard(key)));
       return await _withPostcodeState(result.key, result.toJson());
     }
+    final labelKey = result.labelKey;
+    if (labelKey != null) {
+      // A8 keys (Listen, Mitteilungen, Module …): the bridge knows the
+      // values before and after; "Widerrufen" sets the old one again.
+      final before = result.oldValue;
+      final after = result.newValue;
+      payloads.add(
+        AvoWidgetPayload.record(
+          AvoSettingRecord(
+            tool: 'update_setting',
+            key: key,
+            value: after,
+            previous: before,
+            undo: before != null && before != after
+                ? () => _undoBridgeSetting(ref, key, before)
+                : null,
+          ),
+        ),
+      );
+      return await _withPostcodeState(result.key, result.toJson());
+    }
     final now = await _settingValue(ref, key);
     final entry = value?.toString().trim() ?? '';
     final changed = now != previous;
@@ -75,9 +96,6 @@ extension AvoSettingTools on AvoAssistantService {
     switch (key) {
       case 'theme_mode':
         return ref.read(themeModeProvider).name;
-      case 'accent_color':
-        final c = ref.read(accentColorProvider);
-        return '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
       case 'language':
         return ref.read(languageProvider.notifier).savedSetting;
       case 'zip_code':
@@ -97,6 +115,21 @@ extension AvoSettingTools on AvoAssistantService {
       'diet_add' || 'diet_remove' => text(user.dietPreferences.join(', ')),
       _ => null,
     };
+  }
+
+  /// "Widerrufen" on a card of an A8 setting: sets [before] again.
+  Future<AvoUndoResult> _undoBridgeSetting(
+    WidgetRef ref,
+    String key,
+    String before,
+  ) async {
+    try {
+      final result = await AvoSettingsBridge(ref).update(key, before);
+      return result.success ? AvoUndoResult.undone : AvoUndoResult.failed;
+    } catch (e) {
+      debugPrint('❌ [AVO] Setting not set back: ${e.runtimeType}');
+      return AvoUndoResult.failed;
+    }
   }
 
   /// "Widerrufen" on a setting card: sets the old value again, but only
