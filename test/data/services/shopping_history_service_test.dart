@@ -88,6 +88,13 @@ class FakeTripBackend implements TripHistoryBackend {
   Future<void> insertTripItems(List<Map<String, dynamic>> rows) async =>
       insertedItems.addAll(rows);
 
+  /// Ids a member unchecked meanwhile (server state).
+  final uncheckedOnServer = <String>{};
+
+  @override
+  Future<Set<String>> checkedItemIds(String listId, List<String> itemIds) async =>
+      {for (final id in itemIds) if (!uncheckedOnServer.contains(id)) id};
+
   @override
   Future<void> removeListItems(String listId, List<String> itemIds) async =>
       removed.addAll(itemIds);
@@ -284,6 +291,28 @@ void main() {
         request(items: [item('a', price: 1, old: 2, retailer: 'REWE')]),
       );
       expect(backend.insertedItems.single['price_retailer'], 'REWE');
+    });
+
+    test('an item a member unchecked meanwhile stays on the list (I1)', () async {
+      final backend = FakeTripBackend(rpcMissing: true)..uncheckedOnServer.add('b');
+      final saved = await ShoppingHistoryService(
+        backend: backend,
+      ).completeTrip(request()) as CheckoutSaved;
+      expect(backend.removed, ['a']);
+      expect(backend.insertedItems.map((r) => r['name']), ['Item a']);
+      expect(backend.insertedTrips.single['total_items'], 1);
+      expect(saved.restoreItems.map((i) => i.id), ['a']);
+    });
+
+    test('everything taken back meanwhile: nothing saved', () async {
+      final backend = FakeTripBackend(rpcMissing: true)
+        ..uncheckedOnServer.addAll(['a', 'b']);
+      expect(
+        await ShoppingHistoryService(backend: backend).completeTrip(request()),
+        isA<CheckoutNothingChecked>(),
+      );
+      expect(backend.insertedTrips, isEmpty);
+      expect(backend.removed, isEmpty);
     });
 
     test('a list that is gone saves nothing', () async {

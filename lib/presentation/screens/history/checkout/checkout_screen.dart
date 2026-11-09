@@ -39,7 +39,6 @@ import 'package:shoply/routes/route_paths.dart';
 const int _kMaxChipsBeforeHere = 4; // D2: at most four market chips
 const int _kMaxNames = 3; // "Brokkoli, Gouda und 4 weitere"
 const int _kAmountCheckCents = 100000; // "Stimmt der Betrag?" above 1.000 €
-const Duration _kRejectWait = Duration(seconds: 2); // see _save
 
 /// What V1 hands back to `openCheckoutFlow` when a trip was saved (or is on
 /// its way): everything V3 and the split step need.
@@ -127,7 +126,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   String get _lang => Localizations.localeOf(context).languageCode;
 
-  bool get _dirty => !_amount.isEmpty || _touchedStore;
+  String? _initialChain;
+
+  /// A typed amount, or a market other than the one V1 opened with.
+  bool get _dirty => !_amount.isEmpty || (_touchedStore && _chain != _initialChain);
 
   void _choose(String? chainId, {String source = 'user'}) {
     setState(() {
@@ -235,7 +237,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       result = CheckoutPending(localTripId: localId);
     } else {
       result = await pending.timeout(
-        _kRejectWait,
+        checkoutRejectWait,
         onTimeout: () => CheckoutPending(localTripId: localId),
       );
     }
@@ -328,9 +330,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     // Preselection: decided once, from local data, never changed later by
     // itself. The location only adds the "(hier)" chip, and picks it only
     // while nothing is chosen and the person has not tapped anything.
-    if (!_preselected && preselection != null && !_touchedStore) {
+    if (!_preselected &&
+        preselection != null &&
+        !_touchedStore &&
+        _source != 'location') {
       _preselected = true;
       _chain = preselection.chainId;
+      _initialChain = _chain;
       _source = preselection.source;
     }
     if (!_touchedStore &&
@@ -339,6 +345,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         here != null &&
         StoreChainDirectory.byId(here) != null) {
       _chain = here;
+      _initialChain = here;
       _source = 'location';
     }
 

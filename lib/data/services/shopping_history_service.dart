@@ -55,7 +55,12 @@ abstract interface class TripHistoryBackend {
   /// Fallback: inserts `shopping_history_items` rows.
   Future<void> insertTripItems(List<Map<String, dynamic>> rows);
 
-  /// Fallback: removes the finished items from the list.
+  /// Fallback: which of [itemIds] are still checked on [listId] on the
+  /// server (a member may have taken one back meanwhile).
+  Future<Set<String>> checkedItemIds(String listId, List<String> itemIds);
+
+  /// Fallback: removes the finished items from the list, only while they
+  /// are still checked.
   Future<void> removeListItems(String listId, List<String> itemIds);
 
   /// Fallback undo: puts [items] back on [listId], checked.
@@ -168,7 +173,7 @@ class ShoppingHistoryService {
 
   Future<CheckoutResult> _completeLegacy(
     CheckoutRequest request,
-    List<ShoppingItemModel> items,
+    List<ShoppingItemModel> snapshot,
     String? chainId,
     double? totalCost,
     String userId,
@@ -176,6 +181,16 @@ class ShoppingHistoryService {
     if (!await _backend.listExists(request.listId)) {
       return const CheckoutListGone();
     }
+    // Only what is still checked on the server goes into the trip (I1): an
+    // item a member took back stays on the list.
+    final stillChecked = await _backend.checkedItemIds(request.listId, [
+      for (final item in snapshot) item.id,
+    ]);
+    final items = [
+      for (final item in snapshot)
+        if (stillChecked.contains(item.id)) item,
+    ];
+    if (items.isEmpty) return const CheckoutNothingChecked();
     final name = await _backend.currentUserName();
     final completedAt = DateTime.now();
     // Today's schema has no store column: the market goes into the items'
@@ -293,8 +308,8 @@ class ShoppingHistoryService {
       if (listId != null && saved.restoreItems.isNotEmpty) {
         await _backend.restoreListItems(listId, saved.restoreItems);
       }
-      await _backend.deleteTrip(saved.trip.id);
-      return UndoTripResult.undone;
+      final deleted = await _backend.deleteTrip(saved.trip.id);
+      return deleted ? UndoTripResult.undone : UndoTripResult.refused;
     } catch (e) {
       debugPrint('❌ [HISTORY] Undo failed: ${e.runtimeType}');
       return UndoTripResult.failed;
@@ -444,7 +459,20 @@ class SupabaseTripHistoryBackend implements TripHistoryBackend {
         .from('shopping_items')
         .delete()
         .eq('list_id', listId)
+        .eq('is_checked', true)
         .inFilter('id', itemIds);
+  }
+
+  @override
+  Future<Set<String>> checkedItemIds(String listId, List<String> itemIds) async {
+    if (itemIds.isEmpty) return const {};
+    final rows = await _db
+        .from('shopping_items')
+        .select('id')
+        .eq('list_id', listId)
+        .eq('is_checked', true)
+        .inFilter('id', itemIds);
+    return {for (final row in rows) row['id'] as String};
   }
 
   @override

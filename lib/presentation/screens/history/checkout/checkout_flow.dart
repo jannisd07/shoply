@@ -31,7 +31,8 @@ final checkoutRunnerProvider = Provider<CheckoutRunner>(
 /// "Einkauf abschließen" for [listId] (contract `b_slots.dart`): pushes
 /// `/checkout/:listId` (V1). The future ends only when the whole chain is
 /// over (V1, the success moment V3, an optional split V7) and is true when
-/// a trip was saved; then the host ends the shopping mode. The undo toast
+/// a trip was saved or is queued (offline, slow network: it waits with the
+/// sync mark in the history); then the host ends the shopping mode. The undo toast
 /// "Einkauf gespeichert · Widerrufen" follows right after.
 Future<bool> openCheckoutFlow(BuildContext context, String listId) {
   final container = ProviderScope.containerOf(context, listen: false);
@@ -131,6 +132,10 @@ void showCheckoutUndoToast(
   final undoneText = context.tr('hist_saved_undone');
   final failedText = context.tr('hist_undo_failed');
   final voiceOver = MediaQuery.accessibleNavigationOf(context);
+  // Without VoiceOver the toast is gone after its fixed 4 s, so the pushes
+  // may go then. With VoiceOver it pauses while focused (A's AvoToast has no
+  // dismissal callback yet, A-V24): only the hold ends the wait there.
+  // "Widerrufen" itself stays valid on the server for 15 minutes.
   AvoToast.show(
     context,
     message: context.tr('hist_saved_toast'),
@@ -150,10 +155,11 @@ void showCheckoutUndoToast(
       }());
     },
   );
-  // The toast stays 4 s (10 s with VoiceOver); then the pushes may go.
-  Timer(Duration(seconds: voiceOver ? 11 : 5), () {
-    if (!undone) controller.release(tripId);
-  });
+  if (!voiceOver) {
+    Timer(checkoutToastGone, () {
+      if (!undone) controller.release(tripId);
+    });
+  }
 }
 
 /// A [WidgetRef] over the provider container of a plain [BuildContext], so

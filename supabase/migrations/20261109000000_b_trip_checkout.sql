@@ -1,4 +1,4 @@
--- Teil B, Paket B8 (verlauf-kosten.md §7, L1, L2, L5, L6, L8): finishing a
+-- Teil B, Paket B8 (verlauf-kosten.md §7, L1, L2, L5, L6): finishing a
 -- shopping trip atomically, its undo, the trip's market and amount source,
 -- and saving a cost split in one transaction.
 --
@@ -164,11 +164,9 @@ begin
   end if;
 
   select sl.name into v_list_name from public.shopping_lists sl where sl.id = p_list_id;
-  if v_list_name is null then
+  -- A list one cannot see is "gone" too, so nobody can probe list ids.
+  if v_list_name is null or not public.trip_b_can_access_list(p_list_id) then
     return jsonb_build_object('status', 'list_gone');
-  end if;
-  if not public.trip_b_can_access_list(p_list_id) then
-    raise exception 'not a member' using errcode = '42501';
   end if;
 
   -- Serialise checkouts of the same list: the second one sees the first.
@@ -176,7 +174,7 @@ begin
 
   select count(*) into v_count
   from public.shopping_items si
-  where si.list_id = p_list_id and si.id = any(p_checked_item_ids);
+  where si.list_id = p_list_id and si.id = any(p_checked_item_ids) and si.is_checked;
 
   if v_count = 0 then
     select sh.id, sh.completed_by_name into v_other
@@ -217,10 +215,10 @@ begin
   select v_trip, si.name, si.quantity, si.unit, coalesce(si.category_id, si.category),
          si.price, si.price_retailer, si.price_old_value, si.id, to_jsonb(si)
   from public.shopping_items si
-  where si.list_id = p_list_id and si.id = any(p_checked_item_ids);
+  where si.list_id = p_list_id and si.id = any(p_checked_item_ids) and si.is_checked;
 
   delete from public.shopping_items si
-  where si.list_id = p_list_id and si.id = any(p_checked_item_ids);
+  where si.list_id = p_list_id and si.id = any(p_checked_item_ids) and si.is_checked;
 
   update public.shopping_lists set updated_at = now() where id = p_list_id;
 
@@ -275,8 +273,11 @@ begin
     return jsonb_build_object('status', 'split_by_other');
   end if;
 
+  -- Items go back only to a list the caller may still use (the trip's
+  -- list_id is not trusted on its own, see the grants in _rls.sql).
   if v_trip.list_id is not null
-     and exists (select 1 from public.shopping_lists sl where sl.id = v_trip.list_id) then
+     and exists (select 1 from public.shopping_lists sl where sl.id = v_trip.list_id)
+     and public.trip_b_can_access_list(v_trip.list_id) then
     insert into public.shopping_items
     select (jsonb_populate_record(
               null::public.shopping_items,
@@ -329,12 +330,48 @@ declare
   v_name text;
   v_is_payer boolean;
   v_id uuid;
+  v_trip_list uuid;
+  v_trip_user uuid;
 begin
   if v_user is null then
     raise exception 'not authenticated' using errcode = '28000';
   end if;
   if not public.trip_b_can_access_trip(p_trip_id) then
     raise exception 'not a member' using errcode = '42501';
+  end if;
+  -- One save at a time per trip.
+  select sh.list_id, sh.user_id into v_trip_list, v_trip_user
+  from public.shopping_history sh
+  where sh.id = p_trip_id
+  for update;
+  -- Payer and participants with an account must belong to the trip: the
+  -- person who finished it, the list owner or a member of the list.
+  -- Name-only persons (no account) are always allowed.
+  if exists (
+    select 1
+    from (
+      select nullif(s->>'user_id', '')::uuid as uid from jsonb_array_elements(p_shares) s
+      union all
+      select p_paid_by_user_id
+    ) people
+    where people.uid is not null
+      and people.uid is distinct from v_trip_user
+      and not exists (
+        select 1 from public.shopping_lists sl
+        where sl.id = v_trip_list and sl.owner_id = people.uid
+      )
+      and not exists (
+        select 1 from public.list_members lm
+        where lm.list_id = v_trip_list and lm.user_id = people.uid
+      )
+  ) then
+    raise exception 'not a member of the list' using errcode = '42501';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_shares) s
+    where s->>'amount' is null or jsonb_typeof(s->'amount') <> 'number'
+  ) then
+    raise exception 'share without amount' using errcode = '22023';
   end if;
   if p_split_mode not in ('equal', 'custom') then
     raise exception 'invalid mode' using errcode = '22023';
@@ -444,6 +481,7 @@ begin
   if p_total_cost is not null and (p_total_cost < 0 or p_total_cost > 100000) then
     raise exception 'invalid amount' using errcode = '22023';
   end if;
+  perform 1 from public.shopping_history where id = p_trip_id for update;
 
   update public.shopping_history
   set total_cost = p_total_cost,
@@ -454,7 +492,9 @@ begin
   select count(*) into v_n from public.expense_splits
   where history_id = p_trip_id and split_mode = 'equal';
 
-  if p_total_cost is not null and v_n > 0 then
+  -- Only a split that is equal as a whole is recomputed; a custom one stays.
+  if p_total_cost is not null and v_n > 0
+     and v_n = (select count(*) from public.expense_splits where history_id = p_trip_id) then
     with ranked as (
       select es.id, es.amount as old_amount, es.user_id, es.participant_name,
              (row_number() over (order by es.position, es.created_at) - 1)::integer as pos
@@ -490,40 +530,9 @@ revoke execute on function public.set_trip_amount(uuid, numeric) from public, an
 grant execute on function public.set_trip_amount(uuid, numeric) to authenticated;
 
 -- ------------------------------------------------------------------ L8
--- expense_splits: rows are written only through save_trip_split /
--- set_trip_amount / undo_shopping_trip (SECURITY DEFINER). People change
--- only the paid state, and only the participant, the payer or the person
--- who finished the trip. Reading stays: participant, trip owner, members.
-
-drop policy if exists "Trip owner or list members can insert splits" on public.expense_splits;
-drop policy if exists "Trip owner or list members can delete splits" on public.expense_splits;
-drop policy if exists "Trip owner, list members or the participant can update splits" on public.expense_splits;
-drop policy if exists "Participant, payer or trip owner can mark splits paid" on public.expense_splits;
-
-create policy "Participant, payer or trip owner can mark splits paid"
-  on public.expense_splits
-  for update
-  to authenticated
-  using (
-    (select auth.uid()) = user_id
-    or exists (
-      select 1 from public.shopping_history sh
-      where sh.id = expense_splits.history_id
-        and ((select auth.uid()) = sh.user_id or (select auth.uid()) = sh.paid_by_user_id)
-    )
-  )
-  with check (
-    (select auth.uid()) = user_id
-    or exists (
-      select 1 from public.shopping_history sh
-      where sh.id = expense_splits.history_id
-        and ((select auth.uid()) = sh.user_id or (select auth.uid()) = sh.paid_by_user_id)
-    )
-  );
-
-revoke insert, delete, update on table public.expense_splits from anon, authenticated;
-grant select on table public.expense_splits to authenticated;
-grant update (is_paid, paid_at) on table public.expense_splits to authenticated;
+-- The tightened policies and grants are in 20261109000100_b_trip_checkout_rls.sql
+-- and are applied LATER, once every build in use saves splits through
+-- save_trip_split (see OPEN-ISSUES). open_split_shares() can go now.
 
 -- Open shares that involve the caller ("Offene Beträge", V8): unpaid shares
 -- the caller owes on trips someone else paid, unpaid shares others owe on

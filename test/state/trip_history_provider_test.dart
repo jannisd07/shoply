@@ -175,6 +175,49 @@ void main() {
     expect(backend.undoCalls, hasLength(1), reason: 'the late save is undone');
   });
 
+  test('undo with the local id after a late save undoes the server trip (C1)', () async {
+    final backend = SlowBackend();
+    final c = controller(backend);
+    await pumpEventQueue();
+    // V1 closed after its 2 s wait: the toast holds the local id.
+    final future = c.checkout(request());
+    final localId = c.state.trips.first.id;
+    backend.gate.complete();
+    expect(await future, isA<CheckoutSaved>());
+    expect(c.state.trips.single.id, 'trip-1');
+
+    expect(await c.undo(localId), UndoTripResult.undone);
+    expect(backend.undoCalls.single, ('trip-1', 'tok'));
+    expect(c.state.trips, isEmpty);
+  });
+
+  test('a toast gone before the save releases the push once saved', () async {
+    final backend = SlowBackend();
+    final sent = <String>[];
+    final c = TripHistoryController(
+      service: ShoppingHistoryService(backend: backend),
+      userId: 'me',
+      cache: cache,
+      pushes: _queue(prefs, sent),
+    );
+    await pumpEventQueue();
+    final future = c.checkout(
+      CheckoutRequest(
+        listId: 'l1',
+        listName: 'WG',
+        checkedItems: [item('a')],
+        notifyUserIds: const ['lena'],
+      ),
+    );
+    final localId = c.state.trips.first.id;
+    c.release(localId);
+    backend.gate.complete();
+    await future;
+    await pumpEventQueue();
+    expect(sent, hasLength(1));
+    expect(c.savedCheckout('trip-1'), isNotNull, reason: 'undo stays possible');
+  });
+
   test('a refused undo keeps the trip', () async {
     final backend = FakeTripBackend()..undoStatus = 'split_by_other';
     final c = controller(backend);

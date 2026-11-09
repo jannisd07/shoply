@@ -28,8 +28,22 @@ const String localTripPrefix = 'local-';
 bool isLocalTripId(String tripId) => tripId.startsWith(localTripPrefix);
 
 /// How long trip pushes wait at most for "Widerrufen" (the chain V1 → V3 →
-/// V7 can take a while; the toast releases them earlier).
+/// V7 can take a while; the toast releases them earlier). With VoiceOver the
+/// toast can stay as long as its focus rests on it, so only this hold ends
+/// the wait there (A-V24 asks for a dismissal callback).
 const Duration tripPushHold = Duration(minutes: 2);
+
+/// How long V1 waits online for a synchronous "no" (list gone, a member was
+/// faster) before it closes and the save continues behind the history row.
+const Duration checkoutRejectWait = Duration(seconds: 2);
+
+/// When the undo toast is surely gone without VoiceOver (A's toast stays 4 s
+/// and pauses only for VoiceOver focus): then the pushes may go.
+const Duration checkoutToastGone = Duration(seconds: 5);
+
+/// The server accepts "Widerrufen" this long (`undo_expires_at`, 15 min),
+/// longer than any client window, so a late tap never fails for time.
+const Duration tripUndoServerWindow = Duration(minutes: 15);
 
 // ------------------------------------------------------------------ trips
 
@@ -130,6 +144,13 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
   final Map<String, CheckoutRequest> _requests = {};
   final Map<String, CheckoutSaved> _saved = {};
   final Set<String> _cancelled = {};
+
+  /// Local id → server id once a late answer saved the trip, so the toast
+  /// bound to the local id still undoes and releases the right trip.
+  final Map<String, String> _localToServer = {};
+
+  /// Trips whose toast is gone before they were saved: release at once.
+  final Set<String> _releasedEarly = {};
   int _localSeq = 0;
 
   /// The saved checkout of [tripId] while its undo is possible.
@@ -253,16 +274,24 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
       if (result is CheckoutSaved) {
         _requests.remove(localId);
         _saved[result.trip.id] = result;
+        _localToServer[localId] = result.trip.id;
+        final releaseNow = _releasedEarly.remove(localId);
         if (request.notifyUserIds.isNotEmpty) {
           unawaited(
             holdTripPush(
-              trip: result.trip,
-              recipients: request.notifyUserIds,
-              actorName: request.actorName,
-              languageCode: pushLanguageCode(),
-            ).catchError((Object e) {
-              debugPrint('⚠️ [HISTORY] Trip push not queued: ${e.runtimeType}');
-            }),
+                  trip: result.trip,
+                  recipients: request.notifyUserIds,
+                  actorName: request.actorName,
+                  languageCode: pushLanguageCode(),
+                )
+                .then((_) {
+                  if (releaseNow) release(result.trip.id);
+                })
+                .catchError((Object e) {
+                  debugPrint(
+                    '⚠️ [HISTORY] Trip push not queued: ${e.runtimeType}',
+                  );
+                }),
           );
         }
         state = state.copyWith(
@@ -295,7 +324,9 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
 
   /// "Widerrufen" (V3): takes the trip back, with a split saved in the same
   /// chain, and drops its pushes. A trip still on its way is cancelled.
-  Future<UndoTripResult> undo(String tripId) async {
+  Future<UndoTripResult> undo(String requestedId) async {
+    // A late server answer replaced the local entry: undo the saved trip.
+    final tripId = _localToServer[requestedId] ?? requestedId;
     if (isLocalTripId(tripId)) {
       if (state.sending.contains(tripId)) _cancelled.add(tripId);
       _drop(tripId);
@@ -308,6 +339,7 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
       // Only now: a refused undo keeps the trip, and its push still goes.
       unawaited(_pushes?.cancel(tripId));
       _saved.remove(tripId);
+      _localToServer.remove(requestedId);
       if (mounted) remove(tripId);
     }
     return result;
@@ -397,9 +429,15 @@ class TripHistoryController extends StateNotifier<TripHistoryState> {
     );
   }
 
-  /// The undo window of [tripId] is over: its pushes go out now.
-  void release(String tripId) {
-    _saved.remove(tripId);
+  /// The undo toast of [tripId] is gone: its pushes go out now. A trip
+  /// still on its way releases them as soon as it is saved. "Widerrufen"
+  /// stays possible on the server ([tripUndoServerWindow]).
+  void release(String requestedId) {
+    final tripId = _localToServer[requestedId] ?? requestedId;
+    if (isLocalTripId(tripId)) {
+      _releasedEarly.add(tripId);
+      return;
+    }
     unawaited(_pushes?.release(tripId));
   }
 

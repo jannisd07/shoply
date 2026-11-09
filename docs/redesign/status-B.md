@@ -190,6 +190,8 @@ nutzen beide direkt.
     - **Neu A-V23:** `ItemRepository.removeItems(listId, ids)` ohne Push pro Artikel. Nur der Rückfall ohne Migration
       löscht die abgehakten Artikel heute selbst in einem Aufruf (wie vorher `shopping_trip_completion.dart`).
     - `AppFilterChip` ohne `trailing`: „Anderer Markt …“ zeigt kein `chevron.right` 11 (Spec V1 Punkt 3).
+    - **Neu A-V24:** `AvoToast.show(onDismissed:)` (wenn der Hinweis geht, auch nach VoiceOver-Pause). Mit VoiceOver
+      gibt B die Mitteilungen „… hat eingekauft“ heute erst nach 2 min frei, weil das Ende des Hinweises unbekannt ist.
 
 ## Erledigte Anfragen von Teil A
 
