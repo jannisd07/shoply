@@ -22,6 +22,8 @@ import 'package:shoply/data/services/calorie_write_queue.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/data/services/food_log_service.dart';
 import 'package:shoply/data/services/health_sync_service.dart';
+import 'package:shoply/data/services/meal_photo_cleanup.dart';
+import 'package:shoply/data/services/meal_photo_storage_service.dart';
 import 'package:shoply/data/services/native/health_channel.dart';
 import 'package:shoply/data/services/nutrition_goal_service.dart';
 import 'package:shoply/data/services/open_food_facts_service.dart';
@@ -495,6 +497,31 @@ Future<void> setHealthConnected(WidgetRef ref, bool connected) async {
   await prefs.setBool(_healthConnectedKey, connected);
 }
 
+/// The private meal photo bucket (`meal-photos`); override in tests.
+final mealPhotoStorageProvider = Provider<MealPhotoStorageService>((ref) => MealPhotoStorageService.instance);
+
+/// How long a deleted entry's photo waits for "Widerrufen" before it is
+/// deleted from the bucket; override in tests.
+final mealPhotoDeleteDelayProvider = Provider<Duration>((ref) => const Duration(seconds: 10));
+
+/// Deletes the photos of deleted entries after the undo window (per
+/// account, kept on the device until done).
+final mealPhotoCleanupProvider = Provider<MealPhotoCleanup?>((ref) {
+  final userId = ref.watch(authUserIdProvider);
+  final prefs = ref.watch(calorieSharedPreferencesProvider).valueOrNull;
+  if (userId == null || prefs == null) return null;
+  final storage = ref.watch(mealPhotoStorageProvider);
+  final cleanup = MealPhotoCleanup(
+    prefs: prefs,
+    userId: userId,
+    delete: storage.deletePhoto,
+    undoWindow: ref.watch(mealPhotoDeleteDelayProvider),
+  );
+  unawaited(cleanup.resume());
+  ref.onDispose(cleanup.dispose);
+  return cleanup;
+});
+
 /// The one place that changes diary data: updates the local day at once,
 /// queues the server write and mirrors it to Apple Health. Deletes return
 /// the removed row for "Widerrufen"; Health deletes wait for the undo
@@ -572,7 +599,30 @@ class CalorieDiary {
       (d) => d.copyWith(entries: d.entries.where((e) => e.id != entry.id).toList()),
     );
     unawaited(_health?.scheduleDelete(HealthSyncIds.food(entry.id)));
+    // The photo goes too, once "Widerrufen" is no longer possible.
+    final photo = MealPhotoStorageService.pathOf(entry.photoPath ?? entry.photoUrl);
+    if (photo != null) unawaited(_ref.read(mealPhotoCleanupProvider)?.schedule(photo));
     return entry;
+  }
+
+  /// Uploads [photo] for the just logged [saved] entry and adds its path,
+  /// in the background and independent of the screen that logged it. When
+  /// the entry is gone by then (undone), the uploaded photo is deleted.
+  /// Never throws; logging never waits for it.
+  Future<void> attachPhoto(FoodLogEntry saved, Uint8List photo) async {
+    final storage = _ref.read(mealPhotoStorageProvider);
+    try {
+      final path = await storage.uploadPhoto(photo);
+      if (path == null) return;
+      final current = _ref.read(calorieDayProvider(saved.dateKey)).day?.entries.where((e) => e.id == saved.id).firstOrNull;
+      if (current == null) {
+        await storage.deletePhoto(path);
+        return;
+      }
+      await updateFood(current, current.copyWith(photoPath: path));
+    } catch (e) {
+      debugPrint('⚠️ [CalorieDiary] Attaching a photo failed: ${e is CalorieDataException ? e.code.name : e.runtimeType}');
+    }
   }
 
   /// "Widerrufen" after [deleteFood].
@@ -589,6 +639,8 @@ class CalorieDiary {
           entries: insertByCreation(d.entries.where((e) => e.id != entry.id).toList(), entry, (e) => e.createdAt),
         ));
     unawaited(_health?.foodRestored(entry));
+    final photo = MealPhotoStorageService.pathOf(entry.photoPath ?? entry.photoUrl);
+    if (photo != null) unawaited(_ref.read(mealPhotoCleanupProvider)?.cancel(photo));
   }
 
   // Water

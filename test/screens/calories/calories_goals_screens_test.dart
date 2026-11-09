@@ -86,6 +86,22 @@ void main() {
       semantics.dispose();
     });
 
+    testWidgets('no goal of 0: under 500 kcal or 250 ml is refused in place', (tester) async {
+      final env = await CalorieTestEnv.create();
+      await pumpCalories(tester, const CaloriesGoalsScreen(), overrides: env.overrides(goalValue: _goal()));
+      await settleFrames(tester);
+
+      await tester.tap(find.text('Calories'));
+      await settleFrames(tester);
+      await tester.enterText(find.byType(EditableText).first, '0');
+      await settleFrames(tester);
+      expect(find.text('Enter at least 500 kcal.'), findsOneWidget);
+      await tester.tap(find.text('Calories'));
+      await settleFrames(tester);
+      expect(env.remote.goals, isEmpty);
+      expect(find.text('2,000 kcal'), findsOneWidget);
+    });
+
     testWidgets('under 1,200 kcal: the warning; macros that do not add up: the footnote', (tester) async {
       final env = await CalorieTestEnv.create();
       await pumpCalories(tester, const CaloriesGoalsScreen(), overrides: env.overrides(goalValue: _goal(kcal: 1100)));

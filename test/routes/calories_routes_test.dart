@@ -13,6 +13,7 @@ import 'package:shoply/presentation/screens/calories/calories_diary_screen.dart'
 import 'package:shoply/presentation/screens/calories/calories_entry_screen.dart';
 import 'package:shoply/presentation/screens/calories/calories_manual_screen.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_amount_food.dart';
+import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/routes/areas/calories_routes.dart';
 
 import '../screens/calories/calorie_fakes.dart';
@@ -137,5 +138,14 @@ void main() {
     await tester.tap(find.text('Haferflocken'));
     await settleFrames(tester);
     expect(tester.widget<CaloriesEntryScreen>(find.byType(CaloriesEntryScreen)).entryId, 'e1');
+  });
+
+  testWidgets('/calories/add?tab=barcode opens the barcode segment', (tester) async {
+    final env = await CalorieTestEnv.create();
+    final router = await pumpCaloriesFlow(tester, overrides: env.overrides());
+    router.push('/calories/add?tab=barcode');
+    await settleFrames(tester);
+    expect(tester.widget<CaloriesAddScreen>(find.byType(CaloriesAddScreen)).tab, CalorieInputMethod.barcode);
+    expect(find.text('Open camera'), findsOneWidget);
   });
 }

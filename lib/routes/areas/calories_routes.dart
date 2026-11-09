@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:shoply/core/design/design.dart';
+import 'package:shoply/core/utils/number_parsing.dart';
 import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/models/calorie_day.dart';
 import 'package:shoply/data/models/food_log_entry.dart';
@@ -26,6 +27,7 @@ import 'package:shoply/presentation/screens/calories/what_can_i_eat_screen.dart'
 import 'package:shoply/presentation/screens/calories/widgets/calorie_amount_food.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_flow_scaffold.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart';
+import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/routes/app_branch.dart';
 import 'package:shoply/routes/module_gate.dart';
 import 'package:shoply/routes/route_paths.dart';
@@ -80,7 +82,13 @@ final List<RouteBase> caloriesRootRoutes = [
     path: '${RoutePaths.calories}/add',
     pageBuilder: (context, state) {
       final m = _mealAndDate(state);
-      return _fullScreenPage(context, state, CaloriesAddScreen(meal: m.meal, dateKey: m.dateKey), flow: true);
+      final tab = CalorieInputMethod.values.where((t) => t.name == state.uri.queryParameters['tab']).firstOrNull;
+      return _fullScreenPage(
+        context,
+        state,
+        CaloriesAddScreen(meal: m.meal, dateKey: m.dateKey, tab: tab),
+        flow: true,
+      );
     },
   ),
   GoRoute(
@@ -157,7 +165,7 @@ final List<RouteBase> caloriesRootRoutes = [
         CaloriesRecipeScreen(
           recipeId: state.pathParameters['recipeId']!,
           recipe: extra is Recipe ? extra : null,
-          servings: double.tryParse(q['servings'] ?? ''),
+          servings: parseLocaleDouble(q['servings'] ?? ''),
           // The plan day may lie ahead; the screen logs today then.
           planDateKey: date != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ? date : null,
           meal: mealFromQuery(q['meal']),

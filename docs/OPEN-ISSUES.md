@@ -79,6 +79,7 @@ Stand: 2026-11-08.
 | Standort-Abfrage | Text in `Info.plist` (`NSLocationWhenInUseUsageDescription`) wie in angebote.md Owner-Frage 10 setzen: „Avo nutzt deinen Standort, um deine Postleitzahl für Angebote zu finden und den Markt vorzuschlagen, in dem du gerade bist.“ |
 | Angebots-Einstellungen pro Konto | Schalter „Angebote an Artikeln / Vorschläge beim Tippen / Ersparnis in der Liste“, „Diese Woche ausblenden“, „Nicht dieses Angebot“ und ausgeblendete Listen liegen pro Konto, aber nur auf diesem Gerät (ein zweites Gerät kennt sie nicht). Migration `user_offer_prefs` (angebote.md Owner-Frage 14) freigeben? |
 | Essensfotos und Anthropic | S3/S4/S5 sagen „Das Foto wird nur für die Schätzung verwendet und privat gespeichert.“ Passt das zur Aufbewahrung bei der Claude-API (kalorien.md §7.3)? Sonst den Satz anpassen lassen. |
+| „Alle Essensfotos löschen“ | Fotos eines gelöschten Eintrags werden jetzt gelöscht. Ein Knopf für alle Essensfotos kommt erst mit S23 (Einstellungen „Kalorien & Gesundheit“); bis dahin verspricht kein Text diese Einstellung. Löscht Avo einen Eintrag, bleibt sein Foto noch liegen (Avo löscht direkt über den Service). |
 
 ## 5. Bekannte Restarbeiten im Code (kann Claude machen)
 

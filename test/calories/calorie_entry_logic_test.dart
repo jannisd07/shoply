@@ -13,6 +13,7 @@ import 'package:shoply/data/models/food_product.dart';
 import 'package:shoply/data/models/nutrition_goal.dart';
 import 'package:shoply/data/models/user_food.dart';
 import 'package:shoply/data/services/allergen_matcher.dart';
+import 'package:shoply/data/services/meal_photo_storage_service.dart';
 import 'package:shoply/data/services/open_food_facts_service.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_amount_food.dart';
 import 'package:shoply/presentation/screens/calories/widgets/goal_form.dart';
@@ -81,6 +82,127 @@ void main() {
       });
       expect(await c.read(calorieBarcodeLookupProvider)('4000000000099'), isNull);
       expect(await c.read(calorieBarcodeLookupProvider)('4000000000082'), isNull);
+    });
+  });
+
+  group('own foods stay inside the user_food checks', () {
+    test('values per 100 g over the limits make no own food', () {
+      // 500 kcal in 50 g would be 1.000 kcal per 100 g.
+      expect(UserFood.fromEntry(food('a', 'Käsebrötchen', 500, quantity: 50, unit: 'g'), id: ''), isNull);
+      // 30 g protein in 20 g would be 150 g per 100 g.
+      expect(UserFood.fromEntry(food('b', 'Pulver', 80, quantity: 20, unit: 'g', protein: 30), id: ''), isNull);
+      final ok = UserFood.fromEntry(food('c', 'Skyr', 130, quantity: 250, unit: 'g', protein: 27, carbs: 10, fat: 1), id: '')!;
+      expect(ok.fitsServer, isTrue);
+    });
+
+    test('a barcode the table does not take is dropped; long names are cut', () {
+      final entry = FoodLogEntry(
+        id: 'x',
+        userId: kUser,
+        loggedDate: DateTime(2026, 11, 7),
+        mealType: MealType.lunch,
+        foodName: 'N' * 250,
+        quantity: 100,
+        unit: 'g',
+        calories: 100,
+        barcode: 'abc123',
+        createdAt: DateTime(2026, 11, 7),
+      );
+      final own = UserFood.fromEntry(entry, id: '')!;
+      expect(own.barcode, isNull);
+      expect(own.name.length, 200);
+      expect(UserFood.validBarcode('4000000000099'), '4000000000099');
+      expect(UserFood.validBarcode('12345'), isNull);
+    });
+
+    test('save never queues a row the server rejects', () async {
+      final env = await CalorieTestEnv.create();
+      final c = ProviderContainer(overrides: env.overrides());
+      addTearDown(c.dispose);
+      await c.read(calorieSharedPreferencesProvider.future);
+      final bad = UserFood(id: '', userId: '', name: 'Zu dicht', kcal100: 1000, createdAt: DateTime(2026));
+      expect(await c.read(userFoodsProvider.notifier).save(bad), isNull);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(env.remote.userFoods, isEmpty);
+      expect(c.read(userFoodsProvider), isEmpty);
+    });
+
+    test('a refresh drops stored foods the server no longer has (deleted elsewhere)', () async {
+      final stored = jsonEncode([
+        UserFood(id: 'gone', userId: kUser, name: 'Alt', kcal100: 50, createdAt: DateTime(2026)).toJson(),
+      ]);
+      final env = await CalorieTestEnv.create(extraPrefs: {'cal_user_foods_v1_$kUser': stored});
+      final c = ProviderContainer(overrides: env.overrides(userFoods: [
+        UserFood(id: 'kept', userId: kUser, name: 'Neu', kcal100: 60, createdAt: DateTime(2026)),
+      ]));
+      addTearDown(c.dispose);
+      await c.read(calorieSharedPreferencesProvider.future);
+      c.read(userFoodsProvider);
+      await c.read(userFoodsProvider.notifier).ready;
+      expect(c.read(userFoodsProvider).map((f) => f.id), ['kept']);
+    });
+  });
+
+  group('photos of deleted entries', () {
+    Future<(ProviderContainer, FakeMealPhotoBucket)> setUpDiary() async {
+      final env = await CalorieTestEnv.create();
+      final bucket = FakeMealPhotoBucket();
+      final c = ProviderContainer(overrides: env.overrides(bucket: bucket, photoDeleteDelay: const Duration(milliseconds: 40)));
+      addTearDown(c.dispose);
+      await c.read(calorieSharedPreferencesProvider.future);
+      await c.read(calorieBackendProvider.future);
+      return (c, bucket);
+    }
+
+    FoodLogEntry withPhoto() => FoodLogEntry(
+          id: '',
+          userId: '',
+          loggedDate: DateTime(2026, 11, 7),
+          mealType: MealType.lunch,
+          origin: FoodEntryOrigin.photo,
+          foodName: 'Dal',
+          calories: 470,
+          photoPath: '$kUser/p1.jpg',
+          createdAt: kNow,
+        );
+
+    test('deleting an entry deletes its photo once the undo window has passed', () async {
+      final (c, bucket) = await setUpDiary();
+      final diary = c.read(calorieDiaryProvider);
+      final saved = await diary.addFood(withPhoto());
+      await diary.deleteFood(saved);
+      expect(bucket.removed, isEmpty, reason: 'still inside the undo window');
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(bucket.removed, ['$kUser/p1.jpg']);
+    });
+
+    test('"Widerrufen" keeps the photo', () async {
+      final (c, bucket) = await setUpDiary();
+      final diary = c.read(calorieDiaryProvider);
+      final saved = await diary.addFood(withPhoto());
+      await diary.deleteFood(saved);
+      await diary.restoreFood(saved);
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(bucket.removed, isEmpty);
+    });
+
+    test('a delete that came due while the app was closed runs at the next start', () async {
+      final env = await CalorieTestEnv.create(extraPrefs: {
+        'cal_photo_pending_deletes_v1_$kUser': jsonEncode({'$kUser/old.jpg': DateTime(2026, 1, 1).toIso8601String()}),
+      });
+      final bucket = FakeMealPhotoBucket();
+      final c = ProviderContainer(overrides: env.overrides(bucket: bucket));
+      addTearDown(c.dispose);
+      await c.read(calorieSharedPreferencesProvider.future);
+      c.read(mealPhotoCleanupProvider);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(bucket.removed, ['$kUser/old.jpg']);
+    });
+
+    test('never another person\'s folder', () async {
+      final storage = MealPhotoStorageService(bucket: FakeMealPhotoBucket(), currentUserId: () => kUser);
+      expect(await storage.deletePhoto('someone-else/p.jpg'), isFalse);
+      expect(await storage.deletePhoto('$kUser/p.jpg'), isTrue);
     });
   });
 

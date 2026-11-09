@@ -33,6 +33,8 @@ class CalorieAmountFood {
     this.portion,
     this.initialAmount,
     this.fromOpenFoodFacts = false,
+    this.estimated = false,
+    this.confidence,
   });
 
   /// The route id: barcode, `own:<id>` or `recent:<entry id>`.
@@ -64,10 +66,17 @@ class CalorieAmountFood {
   /// Values and photo come from Open Food Facts (attribution, product page).
   final bool fromOpenFoodFacts;
 
+  /// The numbers came from an AI estimate (an earlier entry): the new entry
+  /// stays "geschätzt" with the same level.
+  final bool estimated;
+  final EstimateConfidence? confidence;
+
   bool get perPortion => portion != null;
   bool get hasNutrition => perPortion || kcal100 != null;
   String get baseUnit => liquid ? 'ml' : 'g';
 
+  /// [origin] is how it was found: `search` by name, `barcode` by code (own
+  /// foods too).
   factory CalorieAmountFood.fromProduct(FoodProduct p, {required FoodEntryOrigin origin}) {
     final own = p.barcode.startsWith('own:');
     return CalorieAmountFood(
@@ -76,7 +85,7 @@ class CalorieAmountFood {
       brand: p.brand,
       imageUrl: p.imageUrl,
       barcode: own ? null : p.barcode,
-      origin: own ? FoodEntryOrigin.manual : origin,
+      origin: origin,
       kcal100: p.caloriesPer100g,
       protein100: p.proteinPer100g,
       carbs100: p.carbsPer100g,
@@ -88,11 +97,13 @@ class CalorieAmountFood {
     );
   }
 
-  factory CalorieAmountFood.fromUserFood(UserFood f) => CalorieAmountFood(
+  /// An own food found by name (S3 "Eigene").
+  factory CalorieAmountFood.fromUserFood(UserFood f, {FoodEntryOrigin origin = FoodEntryOrigin.search}) =>
+      CalorieAmountFood(
         id: 'own:${f.id}',
         name: f.name,
         barcode: f.barcode,
-        origin: FoodEntryOrigin.manual,
+        origin: origin,
         kcal100: f.kcal100.round(),
         protein100: f.protein100,
         carbs100: f.carbs100,
@@ -122,6 +133,8 @@ class CalorieAmountFood {
         fat100: per(e.fatG),
         liquid: unit == 'ml',
         initialAmount: e.quantity,
+        estimated: e.estimated,
+        confidence: e.confidence,
       );
     }
     return CalorieAmountFood(
@@ -215,8 +228,8 @@ class CalorieAmountFood {
       carbsG: n.carbs,
       fatG: n.fat,
       barcode: barcode,
-      estimated: p?.estimated ?? false,
-      confidence: p?.confidence,
+      estimated: p?.estimated ?? estimated,
+      confidence: p?.confidence ?? confidence,
       loggedTime: FoodLogTime.of(now),
       createdAt: now,
     );

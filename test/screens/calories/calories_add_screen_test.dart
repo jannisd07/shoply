@@ -435,6 +435,37 @@ void main() {
       expect(visited.last, '/calories/add/manual?meal=lunch&barcode=4000000000099');
     });
 
+    testWidgets('the iPhone number pad has no return key: "Search" submits, from 8 digits on', (tester) async {
+      final env = await CalorieTestEnv.create(extraPrefs: {'cal_input_method_v1_$kUser': 'barcode'});
+      final visited = await pumpCalories(
+        tester,
+        const CaloriesAddScreen(),
+        overrides: env.overrides(offProducts: {'4056489123453': offProduct('4056489123453', 'Skyr Natur')}),
+      );
+      await settle(tester);
+      final search = find.byKey(const ValueKey('cal-barcode-search'));
+
+      await tester.enterText(find.byKey(const ValueKey('cal-barcode-field')), '405648');
+      await settle(tester);
+      await tester.tap(search);
+      await settle(tester);
+      expect(visited, isEmpty, reason: 'off below 8 digits');
+
+      await tester.enterText(find.byKey(const ValueKey('cal-barcode-field')), '4056489123453');
+      await settle(tester);
+      await tester.tap(search);
+      await settle(tester);
+      expect(visited.last, '/calories/add/food/4056489123453?meal=lunch');
+    });
+
+    testWidgets('?tab=barcode opens that segment without changing the remembered one', (tester) async {
+      final env = await CalorieTestEnv.create();
+      await pumpCalories(tester, const CaloriesAddScreen(tab: CalorieInputMethod.barcode), overrides: env.overrides());
+      await settle(tester);
+      expect(find.text('Open camera'), findsOneWidget);
+      expect(env.prefs.getString('cal_input_method_v1_$kUser'), isNull);
+    });
+
     testWidgets('a number with a wrong check digit says so under the field', (tester) async {
       final env = await CalorieTestEnv.create(extraPrefs: {'cal_input_method_v1_$kUser': 'barcode'});
       await pumpCalories(tester, const CaloriesAddScreen(), overrides: env.overrides());

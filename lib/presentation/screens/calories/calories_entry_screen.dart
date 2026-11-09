@@ -25,6 +25,7 @@ import 'package:shoply/presentation/widgets/design/avo_menu.dart';
 import 'package:shoply/presentation/widgets/design/glass_icon_button.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
+import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/presentation/widgets/design/undo_toast.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -90,6 +91,7 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
     _original = e;
     _name.text = e.foodName;
     _quantity.text = context.amount(e.quantity);
+    _lastQuantity = e.quantity;
     _kcal.text = '${e.calories}';
     _protein.text = e.proteinG == null ? '' : context.amount(_round1(e.proteinG!));
     _carbs.text = e.carbsG == null ? '' : context.amount(_round1(e.carbsG!));
@@ -162,28 +164,59 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
       a.dateKey != b.dateKey ||
       a.loggedTime != b.loggedTime;
 
-  /// Saves on the way out; the toast in the diary offers "Widerrufen".
-  void _save() {
+  bool _saving = false;
+  bool _saveFailed = false;
+
+  /// Something differs from the entry as it was opened.
+  bool get _changed {
     final o = _original;
     final edited = _edited;
-    if (_gone || _closing || o == null || edited == null || !_differs(o, edited)) return;
-    _closing = true;
-    final diary = ref.read(calorieDiaryProvider);
-    unawaited(diary.updateFood(o, edited).then<void>((_) {}, onError: (Object e) {
-      debugPrint('❌ [CalorieEntry] Saving failed: ${calorieErrorKind(e)}');
-    }));
-    AvoToast.show(
-      context,
-      message: context.tr('cal_entry_changed'),
-      actionLabel: context.tr('common_undo'),
-      onAction: () => diary.updateFood(edited, o),
-    );
+    return o != null && edited != null && _differs(o, edited);
   }
 
-  /// Amount changed: kcal and macros follow in proportion.
+  /// Saves on the way out; the toast in the diary offers "Widerrufen". A
+  /// failed save keeps the screen open with "Nicht gespeichert." and retry.
+  Future<bool> _saveBeforeLeave() async {
+    final o = _original;
+    final edited = _edited;
+    if (_gone || o == null || edited == null || !_differs(o, edited)) return true;
+    if (_saving) return false;
+    setState(() => _saving = true);
+    final diary = ref.read(calorieDiaryProvider);
+    final message = context.tr('cal_entry_changed');
+    final undo = context.tr('common_undo');
+    try {
+      await diary.updateFood(o, edited);
+    } catch (e) {
+      debugPrint('❌ [CalorieEntry] Saving failed: ${calorieErrorKind(e)}');
+      if (mounted) {
+        unawaited(AvoHaptics.error());
+        setState(() {
+          _saving = false;
+          _saveFailed = true;
+        });
+      }
+      return false;
+    }
+    _closing = true;
+    if (mounted) {
+      AvoToast.show(context, message: message, actionLabel: undo, onAction: () => diary.updateFood(edited, o));
+    }
+    return true;
+  }
+
+  Future<void> _retrySave() async {
+    if (await _saveBeforeLeave() && mounted) CalorieFlowScaffold.leave(context);
+  }
+
+  /// The amount the numbers last matched; typed or stepped amounts scale
+  /// the numbers from here.
+  double? _lastQuantity;
+
   void _scaleTo(double next) {
-    final previous = _quantityInput.value;
-    if (previous == null || previous <= 0 || next <= 0) return;
+    final previous = _lastQuantity;
+    if (previous == null || previous <= 0 || next <= 0 || next == previous) return;
+    _lastQuantity = next;
     final f = next / previous;
     final kcal = _kcalInput.value;
     if (kcal != null) _kcal.text = '${(kcal * f).round()}';
@@ -315,8 +348,17 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
       title: const SizedBox.shrink(),
       trailing: trailing,
       canLeave: _valid,
-      onLeave: _save,
+      beforeLeave: _changed ? _saveBeforeLeave : null,
       children: [
+        if (_saveFailed) ...[
+          StatusRow(
+            kind: StatusKind.failed,
+            text: context.tr('cal_not_saved_status'),
+            actionLabel: context.tr('retry'),
+            onAction: _retrySave,
+          ),
+          const SizedBox(height: AvoSpacing.s),
+        ],
         Padding(
           padding: const EdgeInsets.fromLTRB(AvoSpacing.screen, 0, AvoSpacing.screen, AvoSpacing.l),
           child: Semantics(
@@ -331,6 +373,7 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
         InsetSection(children: [
           CalorieFieldRow(
             label: context.tr('cal_name'),
+            maxLength: kCalorieNameMaxLength,
             controller: _name,
             number: false,
             error: _name.text.trim().isEmpty ? context.tr('cal_name_required') : null,
@@ -346,7 +389,11 @@ class _CaloriesEntryScreenState extends ConsumerState<CaloriesEntryScreen> {
                 controller: _quantity,
                 unit: context.entryUnitLabel(o),
                 error: err(_quantity, _quantityInput),
-                onChanged: (_) => setState(() {}),
+                // Typed like stepped: kcal and macros follow.
+                onChanged: (_) => setState(() {
+                  final v = _quantityInput.value;
+                  if (v != null && v > 0) _scaleTo(v);
+                }),
               ),
               stepper: CalorieStepper(
                 value: quantity,

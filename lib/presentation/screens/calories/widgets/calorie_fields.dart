@@ -13,6 +13,9 @@ const double _kLabelShare = 0.45;
 /// Share of the field area its unit may take.
 const double _kUnitShare = 0.5;
 
+/// Longest name the diary and own foods keep (`user_food.name`: 1–200).
+const int kCalorieNameMaxLength = 200;
+
 /// Digits, one decimal mark and both separators (comma and point): every
 /// number field takes "450", "450,5" and "450.5" (`kalorien.md` §3.3).
 final List<TextInputFormatter> calorieNumberFormatters = [
@@ -48,6 +51,7 @@ class CalorieFieldRow extends StatelessWidget {
     this.autofocus = false,
     this.fieldKey,
     this.enabled = true,
+    this.maxLength,
   });
 
   final String label;
@@ -76,6 +80,9 @@ class CalorieFieldRow extends StatelessWidget {
   final Key? fieldKey;
   final bool enabled;
 
+  /// Longest text the field takes (names: 200, the limit of the tables).
+  final int? maxLength;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -101,6 +108,7 @@ class CalorieFieldRow extends StatelessWidget {
       textCapitalization: number ? TextCapitalization.none : TextCapitalization.sentences,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
+      maxLength: maxLength,
       maxLines: number ? 1 : null,
       minLines: 1,
     );

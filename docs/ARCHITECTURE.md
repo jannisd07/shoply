@@ -130,8 +130,21 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 - **KI-Schätzungen:** Foto über `mealPhotoAnalyzerProvider` (Task `meal_photo`), Text über
   `calorieNutritionEstimatorProvider` (Task `nutrition_estimate`, S8 und S10). Nichts wird ohne Prüfung gespeichert;
   Einträge behalten `estimated` und `confidence`. `quota_exceeded` merkt sich den Tag (`caloriePhotoLimitReachedProvider`),
-  S3 zeigt dann das Tageslimit. Das Foto wird nach dem Eintragen im Hintergrund in `meal-photos` hochgeladen und der
-  Pfad nachgetragen, nur wenn der Eintrag noch da ist.
+  S3 zeigt dann das Tageslimit (für `nutrition_estimate` ebenso, `calorieTextEstimateLimitReachedProvider`). Das Foto
+  lädt `CalorieDiary.attachPhoto` nach dem Eintragen im Hintergrund in `meal-photos` hoch und trägt den Pfad nach; das
+  läuft im Provider, nicht im Screen, der da schon geschlossen ist. Ist der Eintrag inzwischen weg (Rückgängig), wird
+  das hochgeladene Foto gleich wieder gelöscht.
+- **Fotos löschen:** `CalorieDiary.deleteFood` plant das Löschen des Fotos nach dem Rückgängig-Fenster (10 s,
+  `MealPhotoCleanup`, auf dem Gerät gemerkt, beim nächsten Start nachgeholt); „Widerrufen“ hebt es auf. Gelöscht wird
+  nur im eigenen Ordner `<uid>/`. Ein „Alle Essensfotos löschen“ gibt es erst mit S23.
+- **Eigene Lebensmittel und die DB-Prüfungen:** `UserFood.fitsServer` spiegelt die Checks von `user_food` (Name 1–200,
+  kcal 0–900 und Makros 0–100 pro 100 g, Portion/Packung > 0, Strichcode 6–14 Ziffern). `UserFood.fromEntry` und
+  `UserFoodsNotifier.save` legen nichts an, was der Server dauerhaft ablehnen würde; S8 sagt es vorher. Lokal gemerkte
+  Lebensmittel, die der Server nicht mehr kennt, verschwinden beim Abgleich (außer sie warten noch in der
+  Warteschlange).
+- **Dateien:** `state/calorie_entry_provider.dart` exportiert `calorie_camera_provider.dart`,
+  `calorie_food_provider.dart`, `calorie_ai_provider.dart` und `calorie_person_provider.dart`; S3 besteht aus
+  `calories_add_screen.dart` und den Segmenten `widgets/calorie_add_search|photo|barcode.dart`.
 - **Lokal zuerst:** Jeder Tag ist ein `calorieDayProvider(dateKey)` (`state/nutrition_provider.dart`). Er startet mit
   dem Tag aus `CalorieDayStore` (SharedPreferences, heute und 14 Tage davor), fragt danach den Server und führt die
   Antwort mit der Schreib-Warteschlange zusammen (`mergeServerDay`). Der Server kann den Tag lesen, bevor ein

@@ -405,6 +405,7 @@ class _AddComponentRowState extends State<AddComponentRow> {
       children: [
         CalorieFieldRow(
           label: context.tr('cal_name'),
+          maxLength: kCalorieNameMaxLength,
           controller: _name,
           number: false,
           autofocus: true,

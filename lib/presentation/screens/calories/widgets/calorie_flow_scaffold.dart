@@ -95,6 +95,7 @@ class CalorieFlowScaffold extends StatelessWidget {
     this.leadingLabel,
     this.scrollController,
     this.canLeave = true,
+    this.beforeLeave,
   });
 
   final CalorieFlowLeading leading;
@@ -129,6 +130,10 @@ class CalorieFlowScaffold extends StatelessWidget {
   /// field already says what is wrong.
   final bool canLeave;
 
+  /// Runs before the screen is left (S9 saves here); false keeps it open.
+  /// While set, the swipe back waits for it too.
+  final Future<bool> Function()? beforeLeave;
+
   /// Leaves the screen: back to where it was opened, or Home when it was the
   /// first route (deep link). A pop reports itself to [onLeave] through the
   /// pop scope; going Home calls it here.
@@ -147,6 +152,9 @@ class CalorieFlowScaffold extends StatelessWidget {
       unawaited(AvoHaptics.error());
       return;
     }
+    final before = beforeLeave;
+    if (before != null && !await before()) return;
+    if (!context.mounted) return;
     final texts = discard;
     if (texts != null) {
       final ok = await showAvoConfirm(
@@ -195,7 +203,7 @@ class CalorieFlowScaffold extends StatelessWidget {
     final safeBottom = MediaQuery.paddingOf(context).bottom;
 
     return PopScope<Object?>(
-      canPop: discard == null && canLeave,
+      canPop: discard == null && canLeave && beforeLeave == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           onLeave?.call();

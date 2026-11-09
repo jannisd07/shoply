@@ -35,6 +35,9 @@ const double _kMinServings = 0.5;
 const double _kMaxServings = 20;
 const double _kServingStep = 0.5;
 
+/// `MAX_TEXT_CHARS` of the `ai` function's input check.
+const int _kMaxEstimateText = 4000;
+
 /// Path segment for a recipe that has no id yet (draft, imported).
 const String kUnsavedRecipeId = 'draft';
 
@@ -150,7 +153,12 @@ class _CaloriesRecipeScreenState extends ConsumerState<CaloriesRecipeScreen> {
       for (final i in recipe.ingredients) '- ${i.amount} ${i.unit} ${i.name}'.trim(),
     ].join('\n');
     try {
-      final e = await ref.read(calorieNutritionEstimatorProvider)(text, servings: recipe.defaultServings);
+      // Per serving even when the recipe names none; the server takes at most
+      // 4.000 characters.
+      final e = await ref.read(calorieNutritionEstimatorProvider)(
+        text.length > _kMaxEstimateText ? text.substring(0, _kMaxEstimateText) : text,
+        servings: recipe.defaultServings > 0 ? recipe.defaultServings : 1,
+      );
       if (!mounted) return;
       setState(() {
         _estimating = false;
@@ -160,6 +168,12 @@ class _CaloriesRecipeScreenState extends ConsumerState<CaloriesRecipeScreen> {
     } on ClaudeException catch (e) {
       debugPrint('⚠️ [CalorieRecipe] Estimate failed: ${e.code}');
       if (!mounted) return;
+      if (e.code == 'quota_exceeded') {
+        // A retry cannot work today: the limit sentence instead.
+        ref.read(calorieTextEstimateLimitReachedProvider.notifier).markReached();
+        setState(() => _estimating = false);
+        return;
+      }
       unawaited(AvoHaptics.error());
       setState(() {
         _estimating = false;
@@ -234,6 +248,7 @@ class _CaloriesRecipeScreenState extends ConsumerState<CaloriesRecipeScreen> {
     final today = ref.watch(calorieTodayKeyProvider);
     final offline = ref.watch(isOfflineProvider);
     final aiOn = ref.watch(aiRemoteEnabledProvider);
+    final estimateLimit = ref.watch(calorieTextEstimateLimitReachedProvider);
     final per = _perServing;
     final kcal = per.kcal;
     double? s(double? v) => v == null ? null : v * _servings;
@@ -301,7 +316,15 @@ class _CaloriesRecipeScreenState extends ConsumerState<CaloriesRecipeScreen> {
             padding: const EdgeInsets.fromLTRB(AvoSpacing.screen + AvoSpacing.l, AvoSpacing.l, AvoSpacing.screen, 0),
             child: Text(context.tr('cal_recipe_no_nutrition'), style: context.text(AvoTextStyle.subhead)),
           ),
-          if (!offline && aiOn)
+          if (estimateLimit && !offline && aiOn)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AvoSpacing.screen + AvoSpacing.l, AvoSpacing.s, AvoSpacing.screen, 0),
+              child: Text(
+                context.tr('cal_estimate_limit'),
+                style: context.text(AvoTextStyle.footnote, color: colors.secondaryLabel),
+              ),
+            )
+          else if (!offline && aiOn)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AvoSpacing.screen),
               child: Align(
@@ -322,7 +345,7 @@ class _CaloriesRecipeScreenState extends ConsumerState<CaloriesRecipeScreen> {
               actionLabel: context.tr('retry'),
               onAction: _runEstimate,
             ),
-          if (offline || !aiOn || _estimate != null || _estimateFailed)
+          if (offline || !aiOn || estimateLimit || _estimate != null || _estimateFailed)
             InsetSection(children: [
               CalorieFieldRow(
                 label: context.tr('cal_kcal_per_serving_field'),

@@ -239,6 +239,7 @@ class CalorieTestEnv {
     UserModel? user,
     Future<Recipe> Function(String id)? recipeLoader,
     FakeMealPhotoBucket? bucket,
+    Duration photoDeleteDelay = const Duration(milliseconds: 300),
   }) {
     final g = identical(goalValue, _defaultGoal) ? goal() : goalValue as NutritionGoal?;
     final photos = bucket ?? FakeMealPhotoBucket();
@@ -264,6 +265,7 @@ class CalorieTestEnv {
       calorieUserProfileProvider.overrideWith((ref) async => user),
       calorieProfileWriterProvider.overrideWithValue(({required int age, required double heightCm, required String gender}) async {}),
       calorieRecipeLoaderProvider.overrideWithValue(recipeLoader ?? (id) async => throw StateError('no recipe $id')),
+      mealPhotoDeleteDelayProvider.overrideWithValue(photoDeleteDelay),
       mealPhotoStorageProvider.overrideWithValue(
         MealPhotoStorageService(bucket: photos, currentUserId: () => kUser, newFileId: () => 'photo1'),
       ),
@@ -377,9 +379,25 @@ class FakeCalorieCamera implements CalorieCamera {
 /// The private photo bucket in memory.
 class FakeMealPhotoBucket implements MealPhotoBucket {
   final Map<String, Uint8List> files = {};
+  final List<String> removed = [];
+
+  /// Holds an upload back (a slow network) until completed.
+  Completer<void>? uploadGate;
 
   @override
-  Future<void> upload(String path, Uint8List bytes, {required String contentType}) async => files[path] = bytes;
+  Future<void> upload(String path, Uint8List bytes, {required String contentType}) async {
+    final gate = uploadGate;
+    if (gate != null) await gate.future;
+    files[path] = bytes;
+  }
+
+  @override
+  Future<void> remove(List<String> paths) async {
+    removed.addAll(paths);
+    for (final p in paths) {
+      files.remove(p);
+    }
+  }
 
   @override
   Future<String> createSignedUrl(String path, Duration expiresIn) async => 'https://example.invalid/$path';

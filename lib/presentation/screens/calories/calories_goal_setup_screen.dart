@@ -11,6 +11,7 @@ import 'package:shoply/presentation/screens/calories/widgets/calorie_entry_actio
 import 'package:shoply/presentation/screens/calories/widgets/calorie_flow_scaffold.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_nutrition_row.dart';
+import 'package:shoply/presentation/screens/calories/widgets/calorie_timing.dart';
 import 'package:shoply/presentation/screens/calories/widgets/goal_form.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/calorie_entry_provider.dart';
@@ -18,9 +19,6 @@ import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/rolling_number.dart';
-
-/// The result is announced after this much calm (S14 Barrierefreiheit).
-const Duration _kAnnounceAfter = Duration(seconds: 1);
 
 /// The inline title becomes "Ziel · 2.000 kcal" once the result scrolled
 /// away.
@@ -94,7 +92,7 @@ class _CaloriesGoalSetupScreenState extends ConsumerState<CaloriesGoalSetupScree
   void _changed(GoalDraft draft) {
     setState(() => _draft = draft);
     _announce?.cancel();
-    _announce = Timer(_kAnnounceAfter, () {
+    _announce = Timer(CalorieTiming.announceAfter, () {
       final r = _draft?.result;
       if (!mounted || r == null) return;
       unawaited(SemanticsService.sendAnnouncement(

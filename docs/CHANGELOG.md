@@ -24,6 +24,9 @@ sind `weekly_deals_screen.dart`, `zip_code_sheet.dart`, die alte Rezept-Angebots
 - **Fehler behoben:** Ein hängender Abruf blockiert das Tagebuch nicht mehr (Zeitlimit 20 s); Open Food Facts meldet
   Netzfehler, statt „nichts gefunden“ zu zeigen; kein englisches „Unknown product“ mehr.
 - Weg: `goal_setup_screen.dart` (mit `Slider`), `log_recipe.dart`, 16 alte Texte.
+- **Nachbesserung:** Das Essensfoto wird jetzt wirklich am Eintrag gespeichert (vorher ging der Pfad verloren, sobald
+  der Screen zu war), und mit dem Eintrag gelöscht. Die Nummer unter dem Strichcode lässt sich mit „Suchen“ abschicken
+  (der Ziffernblock hat keine Return-Taste). Eigene Lebensmittel halten die Grenzen der Datenbank ein.
 
 ## 2026-11-08: Avo-Tab im D2-Design (Teil B, B5 W1)
 

@@ -39,7 +39,6 @@ const double _kCardVertical = 14; // D2
 const double _kPillInset = 12; // D2
 const double _kHeart = 20; // D2
 const double _kProblemGlyph = 48; // D2 questionmark.circle
-const int _kProPhotosPerDay = 15; // app_flags.ai_limits pro meal_photo
 
 /// What went wrong, as the screen shows it.
 enum _Problem { noFood, unreadable, refused, failed, offline, quota, aiOff }
@@ -223,27 +222,16 @@ class _CaloriesEstimateScreenState extends ConsumerState<CaloriesEstimateScreen>
       loggedTime: FoodLogTime.of(now),
       createdAt: now,
     );
+    final diary = ref.read(calorieDiaryProvider);
     final saved = await logNewFood(context, ref, entry);
     if (!mounted) return;
     if (saved == null) {
       setState(() => _logging = false);
       return;
     }
-    if (_keepPhoto) unawaited(_attachPhoto(ref, saved, widget.photo));
+    // The diary uploads and attaches the photo; it outlives this screen.
+    if (_keepPhoto) unawaited(diary.attachPhoto(saved, widget.photo));
     popCalorieFlow(context);
-  }
-
-  /// Uploads the photo in the background and adds its path to the entry,
-  /// unless the entry is gone by then (undone). Never blocks logging.
-  static Future<void> _attachPhoto(WidgetRef ref, FoodLogEntry saved, Uint8List photo) async {
-    final storage = ref.read(mealPhotoStorageProvider);
-    final diary = ref.read(calorieDiaryProvider);
-    final path = await storage.uploadPhoto(photo);
-    if (path == null) return;
-    final day = ref.read(calorieDayProvider(saved.dateKey)).day;
-    final current = day?.entries.where((x) => x.id == saved.id).firstOrNull;
-    if (current == null) return;
-    await diary.updateFood(current, current.copyWith(photoPath: path));
   }
 
   void _newPhoto() => context.pushReplacement(Uri(
@@ -273,6 +261,8 @@ class _CaloriesEstimateScreenState extends ConsumerState<CaloriesEstimateScreen>
     final e = _estimate;
     final problem = _problem;
     ref.watch(calorieAllergiesProvider);
+    // Allergies that arrive after the estimate still warn once.
+    ref.listen(calorieAllergiesProvider, (_, __) => _warnOnce());
     final allergies = _allergies;
     final health = ref.watch(calorieHealthWritesProvider);
     final aiOn = ref.watch(aiRemoteEnabledProvider);
@@ -446,6 +436,7 @@ class _CaloriesEstimateScreenState extends ConsumerState<CaloriesEstimateScreen>
         ? CupertinoTextField(
             controller: _nameController,
             autofocus: true,
+            maxLength: kCalorieNameMaxLength,
             decoration: null,
             padding: EdgeInsets.zero,
             style: titleStyle,
@@ -545,7 +536,7 @@ class _CaloriesEstimateScreenState extends ConsumerState<CaloriesEstimateScreen>
             context,
             pro
                 ? context.tr('cal_photo_limit_pro')
-                : context.tr('cal_photo_limit_free', params: {'pro': AppBrand.proName, 'n': '$_kProPhotosPerDay'}),
+                : context.tr('cal_photo_limit_free', params: {'pro': AppBrand.proName, 'n': '${ref.watch(caloriePhotosPerDayProProvider)}'}),
           ),
           _centredButton(AppButton.primary(label: context.tr('cal_manual_row'), onPressed: _manual)),
           if (!pro)

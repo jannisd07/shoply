@@ -17,8 +17,8 @@ Stand im Code (2026-11-07), beim Redesign umbauen:
 
 | Art | Dateien |
 |---|---|
-| Hereingleitende Panels (17 Aufrufe) | `lists/widgets/`: `zip_code_sheet`, `checkout_store_sheet`, `list_detail_menu`, `list_price_summary_bar`, `import_review_sheet`, `item_offer_sheet` · `lists/category_order_screen` · `home/weekly_deals_screen` · `recipes/recipe_detail_screen`, `recipes/cooking_mode_screen`, `recipes/widgets/select_list_bottom_sheet` · `history/widgets/split_cost_sheet` · `calories/widgets/log_recipe_sheet`, `food_entry_sheet` · `profile/profile_screen` · `core/widgets/design_system.dart` · `data/services/contextual_prompt_service.dart` |
-| Schieberegler | `calories/goal_setup_screen.dart`, `onboarding/widgets/onboarding_goal_page.dart` |
+| Hereingleitende Panels (17 Aufrufe) | `lists/widgets/`: `zip_code_sheet`, `checkout_store_sheet`, `list_detail_menu`, `list_price_summary_bar`, `import_review_sheet`, `item_offer_sheet` · `lists/category_order_screen` · `home/weekly_deals_screen` · `recipes/recipe_detail_screen`, `recipes/cooking_mode_screen`, `recipes/widgets/select_list_bottom_sheet` · `history/widgets/split_cost_sheet` · `profile/profile_screen` · `core/widgets/design_system.dart` · `data/services/contextual_prompt_service.dart` |
+| Schieberegler | keine mehr: `calories/goal_setup_screen.dart` (B6, 09.11.2026) und `onboarding/widgets/onboarding_goal_page.dart` (A7) sind entfernt |
 
 ## Gewählte Richtung: D2 "Glas"
 

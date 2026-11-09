@@ -165,4 +165,65 @@ void main() {
     await settleFrames(tester);
     expect(find.byType(CaloriesManualScreen), findsNothing);
   });
+
+  testWidgets('a barcode from the link that is no real code is dropped', (tester) async {
+    final env = await CalorieTestEnv.create();
+    await pumpCalories(tester, const CaloriesManualScreen(name: 'Riegel', barcode: '12ab'), overrides: env.overrides());
+    await settleFrames(tester);
+    final container = _container(tester);
+
+    await tester.enterText(_field(1), '200');
+    await settleFrames(tester);
+    await tester.tap(find.text('Log'));
+    await settleFrames(tester);
+    expect(container.read(calorieDayProvider(kToday)).day!.entries.single.barcode, isNull);
+  });
+
+  testWidgets('values too dense for an own food: the screen says so, logs, and keeps no own food', (tester) async {
+    final env = await CalorieTestEnv.create();
+    await pumpCalories(tester, const CaloriesManualScreen(name: 'Käsebrötchen'), overrides: env.overrides());
+    await settleFrames(tester);
+    final container = _container(tester);
+
+    await tester.enterText(_field(1), '500');
+    await tester.enterText(_field(5), '50');
+    await settleFrames(tester);
+    await tester.ensureVisible(find.text('g').last);
+    await tester.tap(find.text('g').last);
+    await settleFrames(tester);
+    expect(find.text('Per 100 g that would be over 900 kcal or over 100 g of a nutrient. It\'s logged, but not saved as your own food.'),
+        findsOneWidget);
+
+    await tester.tap(find.text('Log'));
+    await settleFrames(tester);
+    expect(container.read(calorieDayProvider(kToday)).day!.entries.single.calories, 500);
+    expect(container.read(userFoodsProvider), isEmpty);
+    expect(env.remote.userFoods, isEmpty);
+  });
+
+  testWidgets('the daily estimate limit: the sentence instead of a retry that cannot work', (tester) async {
+    final env = await CalorieTestEnv.create();
+    await pumpCalories(
+      tester,
+      const CaloriesManualScreen(name: 'Brot'),
+      overrides: env.overrides(estimator: (String text, {int? servings}) async => throw const ClaudeException('quota_exceeded')),
+    );
+    await settleFrames(tester);
+
+    await tester.tap(find.text('Estimate calories'));
+    await settleFrames(tester);
+    expect(find.text('You\'ve used today\'s estimates. They\'re back tomorrow.'), findsOneWidget);
+    expect(find.text('Estimate calories'), findsNothing);
+    expect(find.text('Retry'), findsNothing);
+    expect(env.prefs.getString('cal_text_estimate_limit_v1_$kUser'), kToday);
+  });
+
+  testWidgets('names stop at 200 characters', (tester) async {
+    final env = await CalorieTestEnv.create();
+    await pumpCalories(tester, const CaloriesManualScreen(), overrides: env.overrides());
+    await settleFrames(tester);
+    await tester.enterText(_field(0), 'x' * 260);
+    await settleFrames(tester);
+    expect(tester.widget<EditableText>(_field(0)).controller.text.length, 200);
+  });
 }

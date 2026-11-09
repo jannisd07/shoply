@@ -30,6 +30,10 @@ const int _kLowKcal = 1200;
 /// Macros that miss the kcal goal by more than this share get a footnote.
 const double _kMacroTolerance = 0.1;
 const double _kTitleGap = AvoSpacing.s; // D2
+
+/// The lowest goals S13 takes (the warning under 1.200 kcal stays).
+const double _kMinKcal = 500;
+const double _kMinWaterMl = 250;
 const double _kWarningGlyph = 17; // D2
 const double _kRowMinHeight = 52; // D2 X-Profil `.row`
 const double _kRowVertical = 9; // D2
@@ -268,6 +272,17 @@ class _CaloriesGoalsScreenState extends ConsumerState<CaloriesGoalsScreen> {
                 _ => 5,
               },
               max: field == _Field.kcal ? 10000 : (field == _Field.water ? 6000 : 1000),
+              // A goal of 0 kcal or 0 ml is no goal.
+              min: switch (field) {
+                _Field.kcal => _kMinKcal,
+                _Field.water => _kMinWaterMl,
+                _ => 0,
+              },
+              minError: switch (field) {
+                _Field.kcal => context.tr('cal_goal_min_kcal', params: {'kcal': context.kcal(_kMinKcal)}),
+                _Field.water => context.tr('cal_goal_min_water', params: {'amount': context.liters(_kMinWaterMl.round())}),
+                _ => null,
+              },
               open: _open == field,
               onToggle: () => _toggle(goal, field),
               onChanged: (v) => setState(() => _draft[field] = v),
@@ -376,6 +391,8 @@ class _GoalValueRow extends StatefulWidget {
     required this.unit,
     required this.step,
     required this.max,
+    this.min = 0,
+    this.minError,
     required this.open,
     required this.onToggle,
     required this.onChanged,
@@ -388,6 +405,10 @@ class _GoalValueRow extends StatefulWidget {
   final String unit;
   final double step;
   final double max;
+  final double min;
+
+  /// Said under the field for a value below [min].
+  final String? minError;
   final bool open;
   final VoidCallback onToggle;
   final ValueChanged<double> onChanged;
@@ -399,6 +420,9 @@ class _GoalValueRow extends StatefulWidget {
 class _GoalValueRowState extends State<_GoalValueRow> {
   final _field = TextEditingController();
   bool _invalid = false;
+  bool _low = false;
+
+  String? get _error => _invalid ? context.tr('cal_number_invalid') : (_low ? widget.minError : null);
 
   @override
   void didUpdateWidget(_GoalValueRow oldWidget) {
@@ -417,8 +441,12 @@ class _GoalValueRowState extends State<_GoalValueRow> {
 
   void _typed(String text) {
     final input = parseCalorieNumber(text, integer: true, required: true, max: widget.max);
-    setState(() => _invalid = !input.isValid);
-    if (input.isValid) widget.onChanged(input.value!);
+    final low = input.isValid && input.value! < widget.min;
+    setState(() {
+      _invalid = !input.isValid;
+      _low = low;
+    });
+    if (input.isValid && !low) widget.onChanged(input.value!);
   }
 
   @override
@@ -466,7 +494,7 @@ class _GoalValueRowState extends State<_GoalValueRow> {
     final field = MergeSemantics(
       child: Semantics(
         label: widget.label,
-        hint: _invalid ? context.tr('cal_number_invalid') : null,
+        hint: _error,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
           child: CupertinoTextField(
@@ -491,7 +519,7 @@ class _GoalValueRowState extends State<_GoalValueRow> {
     final stepper = CalorieStepper(
       value: value ?? 0,
       step: widget.step,
-      min: 0,
+      min: widget.min,
       max: widget.max,
       semanticLabel: widget.label,
       spokenValue: widget.spoken,
@@ -525,11 +553,11 @@ class _GoalValueRowState extends State<_GoalValueRow> {
                   ],
                 ),
         ),
-        if (_invalid)
+        if (_error case final error?)
           Padding(
             padding: const EdgeInsets.fromLTRB(AvoSpacing.l, 0, AvoSpacing.l, AvoSpacing.m),
             child: Text(
-              context.tr('cal_number_invalid'),
+              error,
               style: context.text(AvoTextStyle.footnote, color: colors.destructive),
             ),
           ),

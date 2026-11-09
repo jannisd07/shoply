@@ -10,6 +10,7 @@ import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/user_food.dart';
 import 'package:shoply/data/services/claude_service.dart';
 import 'package:shoply/data/services/connectivity_service.dart';
+import 'package:shoply/data/services/native/barcode_scanner_channel.dart';
 import 'package:shoply/presentation/providers/app_flags_provider.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_entry_actions.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_fields.dart';
@@ -45,7 +46,14 @@ class CaloriesManualScreen extends ConsumerStatefulWidget {
 }
 
 class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
-  late final _name = TextEditingController(text: widget.name?.trim() ?? '');
+  late final _name = TextEditingController(text: _cut(widget.name?.trim() ?? ''));
+
+  /// A barcode from the route (`?barcode=`, Avo, deep links) only when it is
+  /// a real EAN-8, EAN-13 or UPC-A; anything else is dropped.
+  late final String? _barcode = BarcodeScannerChannel.normalizeGtin(widget.barcode ?? '');
+
+  static String _cut(String name) =>
+      name.length > kCalorieNameMaxLength ? name.substring(0, kCalorieNameMaxLength) : name;
   final _kcal = TextEditingController();
   final _protein = TextEditingController();
   final _carbs = TextEditingController();
@@ -92,6 +100,20 @@ class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
     return e != null && _kcalInput.value?.round() == e.kcal;
   }
 
+  /// With this amount in g or ml the values per 100 g would leave what an own
+  /// food may hold (over 900 kcal or 100 g of a nutrient): it is logged, but
+  /// not remembered, and the screen says so before.
+  bool get _tooDenseForOwnFood {
+    final amount = _amountInput.value;
+    final unit = _unit;
+    final kcal = _kcalInput.value;
+    if (amount == null || amount <= 0 || kcal == null) return false;
+    if (unit != _ManualUnit.g && unit != _ManualUnit.ml) return false;
+    final f = 100 / amount;
+    final macros = [_protein, _carbs, _fat].map((c) => _grams(c).value).whereType<double>();
+    return kcal * f > UserFood.maxKcal100 || macros.any((m) => m * f > UserFood.maxMacro100);
+  }
+
   String? _errorOf(TextEditingController c, CalorieNumberInput input) =>
       c.text.trim().isNotEmpty && !input.isValid ? context.tr('cal_number_invalid') : null;
 
@@ -119,6 +141,12 @@ class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
     } on ClaudeException catch (e) {
       debugPrint('⚠️ [CalorieManual] Estimate failed: ${e.code}');
       if (!mounted) return;
+      if (e.code == 'quota_exceeded') {
+        // A retry cannot work today: the limit sentence instead.
+        ref.read(calorieTextEstimateLimitReachedProvider.notifier).markReached();
+        setState(() => _estimating = false);
+        return;
+      }
       unawaited(AvoHaptics.error());
       setState(() {
         _estimating = false;
@@ -163,7 +191,7 @@ class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
       proteinG: _grams(_protein).value,
       carbsG: _grams(_carbs).value,
       fatG: _grams(_fat).value,
-      barcode: widget.barcode,
+      barcode: _barcode,
       estimated: estimated,
       confidence: estimated ? _estimate!.confidence : null,
       loggedTime: FoodLogTime.of(now),
@@ -187,7 +215,8 @@ class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
     final today = ref.watch(calorieTodayKeyProvider);
     final offline = ref.watch(isOfflineProvider);
     final aiOn = ref.watch(aiRemoteEnabledProvider);
-    final canEstimate = !offline && aiOn;
+    final estimateLimit = ref.watch(calorieTextEstimateLimitReachedProvider);
+    final canEstimate = !offline && aiOn && !estimateLimit;
     final shownDate = switch (_dateKey) {
       final k? when k.compareTo(today) < 0 => k,
       _ => today,
@@ -217,6 +246,7 @@ class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
         InsetSection(children: [
           CalorieFieldRow(
             label: context.tr('cal_name'),
+            maxLength: kCalorieNameMaxLength,
             controller: _name,
             number: false,
             placeholder: context.tr('cal_name_placeholder'),
@@ -234,6 +264,8 @@ class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
             onChanged: (_) => setState(() {}),
           ),
         ]),
+        if (estimateLimit && aiOn && !offline)
+          _EstimateLimitLine(text: context.tr('cal_estimate_limit')),
         if (canEstimate && _nameValid) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(AvoSpacing.screen, AvoSpacing.s, AvoSpacing.screen, 0),
@@ -311,6 +343,8 @@ class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
                 ),
               ),
             ),
+            if (_tooDenseForOwnFood)
+              CalorieGroupNote(text: context.tr('cal_own_food_limits'), color: colors.secondaryLabel, liveRegion: true),
           ],
         ),
         const SizedBox(height: AvoSpacing.section),
@@ -325,4 +359,17 @@ class _CaloriesManualScreenState extends ConsumerState<CaloriesManualScreen> {
       ],
     );
   }
+}
+
+/// "Für heute sind die Schätzungen aufgebraucht …" in place of the button.
+class _EstimateLimitLine extends StatelessWidget {
+  const _EstimateLimitLine({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(AvoSpacing.screen + AvoSpacing.l, AvoSpacing.s, AvoSpacing.screen, 0),
+        child: Text(text, style: context.text(AvoTextStyle.footnote, color: context.colors.secondaryLabel)),
+      );
 }

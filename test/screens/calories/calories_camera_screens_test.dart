@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:shoply/data/services/native/barcode_scanner_channel.dart';
 import 'package:shoply/data/services/native/meal_camera_channel.dart';
+import 'package:shoply/data/services/native/native_channel_errors.dart';
 import 'package:shoply/presentation/screens/calories/calories_amount_screen.dart';
 import 'package:shoply/presentation/screens/calories/calories_estimate_screen.dart';
 import 'package:shoply/presentation/screens/calories/calories_manual_screen.dart';
@@ -190,6 +191,13 @@ void main() {
       expect(find.byType(CaloriesEstimateScreen), findsOneWidget);
     });
 
+    testWidgets('the camera fails to start: says so and offers the photos', (tester) async {
+      final env = await CalorieTestEnv.create();
+      await _open(tester, '/calories/add/photo', env.overrides(camera: _FailingCamera()));
+      expect(find.text('The camera couldn\'t start.'), findsOneWidget);
+      expect(find.text('Choose from Photos'), findsOneWidget);
+    });
+
     testWidgets('closed in the camera: back', (tester) async {
       final env = await CalorieTestEnv.create();
       await _open(tester, '/calories/add/photo', env.overrides(camera: FakeCalorieCamera()));
@@ -203,4 +211,11 @@ void main() {
       expect(camera.photos, 1);
     });
   });
+}
+
+/// A camera whose native screen fails to start.
+class _FailingCamera extends FakeCalorieCamera {
+  @override
+  Future<MealPhotoResult> takePhoto(MealCameraLabels labels) async =>
+      throw const NativeChannelException(NativeErrorCode.failed, 'start');
 }

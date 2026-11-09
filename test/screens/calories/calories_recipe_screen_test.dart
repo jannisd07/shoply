@@ -10,6 +10,7 @@ import 'package:shoply/data/models/food_log_entry.dart';
 import 'package:shoply/data/models/nutrition_info.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/presentation/screens/calories/calories_recipe_screen.dart';
+import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 
 import 'calorie_fakes.dart';
@@ -142,5 +143,40 @@ void main() {
     await settleFrames(tester);
     expect(find.text('Couldn\'t load the recipe.'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
+  });
+
+  testWidgets('the estimate asks per serving even without servings, and at most 4.000 characters', (tester) async {
+    final env = await CalorieTestEnv.create();
+    String? sent;
+    int? sentServings;
+    final router = await pumpCaloriesFlow(
+      tester,
+      overrides: env.overrides(estimator: (String text, {int? servings}) async {
+        sent = text;
+        sentServings = servings;
+        return const CalorieNutritionEstimate(kcal: 300, confidence: EstimateConfidence.low);
+      }),
+      initial: '/recipes',
+    );
+    final long = Recipe(
+      id: 'r2',
+      name: 'Eintopf',
+      description: '',
+      imageUrl: '',
+      prepTimeMinutes: 1,
+      cookTimeMinutes: 1,
+      defaultServings: 0,
+      ingredients: [for (var i = 0; i < 400; i++) Ingredient(name: 'Zutat Nummer $i', amount: 1, unit: 'g')],
+      instructions: const [],
+      authorId: 'a',
+      authorName: 'Avo',
+      createdAt: DateTime(2026, 11, 1),
+    );
+    router.push('/calories/add/recipe/r2', extra: long);
+    await settleFrames(tester);
+    await tester.tap(find.text('Estimate calories'));
+    await settleFrames(tester);
+    expect(sent!.length, lessThanOrEqualTo(4000));
+    expect(sentServings, 1);
   });
 }

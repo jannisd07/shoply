@@ -41,6 +41,11 @@ class _FakeClaude extends ClaudeService {
 
 class _FakeBucket implements MealPhotoBucket {
   final List<({String path, String contentType, int bytes})> uploads = [];
+  final List<String> removed = [];
+
+  @override
+  Future<void> remove(List<String> paths) async => removed.addAll(paths);
+
   final List<({String path, Duration expiresIn})> signs = [];
   Object? uploadError;
   Object? signError;

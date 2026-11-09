@@ -22,6 +22,7 @@ import 'package:shoply/presentation/screens/calories/widgets/calorie_format.dart
 import 'package:shoply/presentation/screens/calories/widgets/calorie_meal_date_rows.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_nutrition_row.dart';
 import 'package:shoply/presentation/screens/calories/widgets/calorie_stepper.dart';
+import 'package:shoply/presentation/screens/calories/widgets/calorie_timing.dart';
 import 'package:shoply/presentation/state/calorie_entry_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
@@ -34,9 +35,6 @@ import 'package:shoply/routes/route_paths.dart';
 /// Product header image (D2: 64 pt, radius 14).
 const double _kProductImage = 64; // D2
 const double _kProductRadius = 14; // D2
-
-/// "Änderung angesagt nach 1 s Ruhe" (S7 Barrierefreiheit).
-const Duration _kAnnounceAfter = Duration(seconds: 1);
 
 /// The amount field: up to the largest Open Food Facts packs.
 const double _kMaxAmount = 5000;
@@ -174,7 +172,7 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
   void _changed() {
     setState(() {});
     _announce?.cancel();
-    _announce = Timer(_kAnnounceAfter, _announceNutrition);
+    _announce = Timer(CalorieTiming.announceAfter, _announceNutrition);
   }
 
   void _announceNutrition() {
@@ -239,8 +237,10 @@ class _CaloriesAmountScreenState extends ConsumerState<CaloriesAmountScreen> {
             UserFood(
               id: '',
               userId: '',
-              name: food.name,
-              barcode: code,
+              name: food.name.trim().length > UserFood.maxNameLength
+                  ? food.name.trim().substring(0, UserFood.maxNameLength)
+                  : food.name.trim(),
+              barcode: UserFood.validBarcode(code),
               kcal100: per100.kcal.toDouble(),
               protein100: per100.protein,
               carbs100: per100.carbs,

@@ -181,4 +181,59 @@ void main() {
     expect(container.read(userFoodsProvider).single.name, 'Haferflocken');
     expect(find.text('Saved as your own food'), findsOneWidget);
   });
+
+  testWidgets('a typed amount scales kcal and macros like the stepper', (tester) async {
+    final env = await _env();
+    final container = await _pump(tester, env, 'e1');
+
+    await tester.enterText(find.byType(EditableText).at(1), '120');
+    await settleFrames(tester);
+    expect(find.text('440'), findsOneWidget, reason: '220 kcal × 120 / 60');
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await settleFrames(tester);
+    final saved = container.read(calorieDayProvider(kToday)).day!.entries.firstWhere((e) => e.id == 'e1');
+    expect(saved.quantity, 120);
+    expect(saved.calories, 440);
+    expect(saved.proteinG, 40);
+  });
+
+  testWidgets('saving fails: "Not saved." with retry, the screen stays open', (tester) async {
+    final env = await _env();
+    var fail = true;
+    await pumpCalories(
+      tester,
+      const CaloriesEntryScreen(entryId: 'e1', dateKey: kToday),
+      overrides: [
+        ...env.overrides(),
+        calorieDiaryProvider.overrideWith((ref) => _FlakyDiary(ref, () => fail)),
+      ],
+    );
+    await settleFrames(tester);
+
+    await tester.tap(find.bySemanticsLabel('Increase'));
+    await settleFrames(tester);
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await settleFrames(tester);
+    expect(find.byType(CaloriesEntryScreen), findsOneWidget);
+    expect(find.text('Not saved.'), findsOneWidget);
+
+    fail = false;
+    await tester.tap(find.text('Retry'));
+    await settleFrames(tester);
+    expect(find.byType(CaloriesEntryScreen), findsNothing);
+    expect(find.text('Entry changed'), findsOneWidget);
+  });
+}
+
+/// Saving an edit fails while [fails] says so.
+class _FlakyDiary extends CalorieDiary {
+  _FlakyDiary(super.ref, this.fails);
+
+  final bool Function() fails;
+
+  @override
+  Future<FoodLogEntry> updateFood(FoodLogEntry previous, FoodLogEntry changed) async {
+    if (fails()) throw const CalorieDataException(CalorieErrorCode.notSignedIn);
+    return super.updateFood(previous, changed);
+  }
 }

@@ -32,18 +32,52 @@ class UserFood extends Equatable {
     required this.createdAt,
   });
 
+  /// Limits of the `user_food` checks (B6 migration): a row outside them is
+  /// rejected by the server for good.
+  static const int maxNameLength = 200;
+  static const double maxKcal100 = 900;
+  static const double maxMacro100 = 100;
+  static final RegExp _barcode = RegExp(r'^[0-9]{6,14}$');
+
+  /// A barcode the table takes, or null.
+  static String? validBarcode(String? code) {
+    final c = code?.trim();
+    return c != null && _barcode.hasMatch(c) ? c : null;
+  }
+
+  /// Fits every check of `user_food`: name 1–200 characters, kcal 0–900 and
+  /// macros 0–100 per 100 g, serving and pack above 0, barcode 6–14 digits.
+  bool get fitsServer {
+    final n = name.trim();
+    bool macro(double? v) => v == null || (v >= 0 && v <= maxMacro100);
+    return n.isNotEmpty &&
+        n.length <= maxNameLength &&
+        kcal100 >= 0 &&
+        kcal100 <= maxKcal100 &&
+        macro(protein100) &&
+        macro(carbs100) &&
+        macro(fat100) &&
+        (servingG == null || servingG! > 0) &&
+        (packageG == null || packageG! > 0) &&
+        (barcode == null || validBarcode(barcode) != null);
+  }
+
   /// From a logged entry whose amount is in g or ml; null otherwise (a
-  /// "Stück"/"Portion" entry has no per-100 g basis).
+  /// "Stück"/"Portion" entry has no per-100 g basis) and when the values per
+  /// 100 g leave the table's limits (500 kcal in 50 g would be 1.000 kcal per
+  /// 100 g). A barcode the table does not take is dropped; the name is cut
+  /// to 200 characters.
   static UserFood? fromEntry(FoodLogEntry entry, {required String id}) {
     final unit = entry.unit?.toLowerCase();
     if ((unit != 'g' && unit != 'ml') || entry.quantity <= 0) return null;
     final factor = 100 / entry.quantity;
     double? per100(double? v) => v == null ? null : v * factor;
-    return UserFood(
+    final name = entry.foodName.trim();
+    final food = UserFood(
       id: id,
       userId: entry.userId,
-      name: entry.foodName,
-      barcode: entry.barcode,
+      name: name.length > maxNameLength ? name.substring(0, maxNameLength) : name,
+      barcode: validBarcode(entry.barcode),
       kcal100: entry.calories * factor,
       protein100: per100(entry.proteinG),
       carbs100: per100(entry.carbsG),
@@ -51,6 +85,7 @@ class UserFood extends Equatable {
       servingG: entry.quantity,
       createdAt: entry.createdAt,
     );
+    return food.fitsServer ? food : null;
   }
 
   int caloriesFor(double grams) => (kcal100 * grams / 100).round();

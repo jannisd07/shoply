@@ -11,6 +11,9 @@ abstract interface class MealPhotoBucket {
 
   /// A link to [path] that works for [expiresIn] without signing in.
   Future<String> createSignedUrl(String path, Duration expiresIn);
+
+  /// Deletes the objects at [paths].
+  Future<void> remove(List<String> paths);
 }
 
 class _SupabaseMealPhotoBucket implements MealPhotoBucket {
@@ -30,6 +33,9 @@ class _SupabaseMealPhotoBucket implements MealPhotoBucket {
   @override
   Future<String> createSignedUrl(String path, Duration expiresIn) =>
       _files.createSignedUrl(path, expiresIn.inSeconds);
+
+  @override
+  Future<void> remove(List<String> paths) => _files.remove(paths);
 }
 
 class _SignedUrl {
@@ -101,6 +107,22 @@ class MealPhotoStorageService {
     } catch (e) {
       debugPrint('⚠️ [MEAL_PHOTO] Upload failed: $e');
       return null;
+    }
+  }
+
+  /// Deletes the photo at [path] from the bucket (an entry was deleted, or
+  /// it was undone before its photo arrived). Only the signed-in person's
+  /// own folder; true when it is gone. Never throws.
+  Future<bool> deletePhoto(String path) async {
+    final userId = _currentUserId();
+    if (userId == null || !_isPhotoPath(path) || !path.startsWith('$userId/')) return false;
+    _urls.remove(path);
+    try {
+      await _bucket.remove([path]);
+      return true;
+    } catch (e) {
+      debugPrint('⚠️ [MEAL_PHOTO] Deleting a photo failed: ${e.runtimeType}');
+      return false;
     }
   }
 

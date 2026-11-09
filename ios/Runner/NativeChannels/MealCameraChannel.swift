@@ -145,20 +145,24 @@ enum MealPhotoEncoding {
 }
 
 /// The system photo picker (no photo library permission needed), full
-/// screen with a cross-fade.
+/// screen with a cross-fade. Alone (S3) it closes itself; inside the camera
+/// ([dismissOnPick] false) a picked photo closes the camera, which takes the
+/// picker with it, so two dismissals never overlap.
 @MainActor
 final class MealPhotoPicker: NSObject, PHPickerViewControllerDelegate {
   let controller: PHPickerViewController
+  private let dismissOnPick: Bool
   private let onFinish: (Data?) -> Void
   private var finished = false
 
-  init(onFinish: @escaping (Data?) -> Void) {
+  init(dismissOnPick: Bool = true, onFinish: @escaping (Data?) -> Void) {
     var configuration = PHPickerConfiguration()
     configuration.filter = .images
     configuration.selectionLimit = 1
     controller = PHPickerViewController(configuration: configuration)
     controller.modalPresentationStyle = .fullScreen
     controller.modalTransitionStyle = .crossDissolve
+    self.dismissOnPick = dismissOnPick
     self.onFinish = onFinish
     super.init()
     controller.delegate = self
@@ -166,14 +170,21 @@ final class MealPhotoPicker: NSObject, PHPickerViewControllerDelegate {
 
   nonisolated func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
     MainActor.assumeIsolated {
-      let provider = results.first?.itemProvider
-      picker.presentingViewController?.dismiss(animated: true)
-      guard let provider, provider.canLoadObject(ofClass: UIImage.self) else {
+      guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
+        // Cancelled or nothing readable: back to where it was opened.
+        picker.presentingViewController?.dismiss(animated: true)
         return finish(nil)
       }
+      if dismissOnPick { picker.presentingViewController?.dismiss(animated: true) }
       provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
         let data = (object as? UIImage).flatMap(MealPhotoEncoding.jpeg(from:))
-        DispatchQueue.main.async { self?.finish(data) }
+        DispatchQueue.main.async {
+          guard let self else { return }
+          if data == nil, !self.dismissOnPick {
+            picker.presentingViewController?.dismiss(animated: true)
+          }
+          self.finish(data)
+        }
       }
     }
   }
@@ -208,6 +219,9 @@ final class MealCameraViewController: UIViewController, AVCapturePhotoCaptureDel
   private var flashOn = false
   private var capturing = false
   private var finished = false
+  /// The camera could not start; reported once the screen is up, never
+  /// during the presentation (a dismiss then would be ignored).
+  private var startFailed = false
 
   static var backCamera: AVCaptureDevice? {
     AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
@@ -307,6 +321,10 @@ final class MealCameraViewController: UIViewController, AVCapturePhotoCaptureDel
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    if startFailed {
+      close(.failed("The camera could not start"))
+      return
+    }
     UIAccessibility.post(notification: .screenChanged, argument: closeButton)
   }
 
@@ -325,7 +343,7 @@ final class MealCameraViewController: UIViewController, AVCapturePhotoCaptureDel
 
   private func configureSession() {
     guard let device = Self.backCamera, let input = try? AVCaptureDeviceInput(device: device) else {
-      close(.failed("The camera could not start"))
+      startFailed = true
       return
     }
     let session = self.session
@@ -383,7 +401,7 @@ final class MealCameraViewController: UIViewController, AVCapturePhotoCaptureDel
 
   private func openLibrary() {
     guard !finished else { return }
-    let picker = MealPhotoPicker { [weak self] data in
+    let picker = MealPhotoPicker(dismissOnPick: false) { [weak self] data in
       guard let self else { return }
       self.picker = nil
       if let data { self.close(.picked(data)) }
@@ -397,12 +415,10 @@ final class MealCameraViewController: UIViewController, AVCapturePhotoCaptureDel
     finished = true
     let session = self.session
     sessionQueue.async { if session.isRunning { session.stopRunning() } }
-    let onFinish = self.onFinish
-    if let presenter = presentingViewController {
-      presenter.dismiss(animated: true) { onFinish(outcome) }
-    } else {
-      onFinish(outcome)
-    }
+    // Answer first: the channel must never stay "busy" because a dismiss
+    // was ignored (for example while a presentation is still running).
+    onFinish(outcome)
+    presentingViewController?.dismiss(animated: true)
   }
 
   // MARK: Drawing

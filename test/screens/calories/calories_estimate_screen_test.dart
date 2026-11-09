@@ -77,6 +77,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Keep photo in diary'), findsOneWidget);
+    expect(find.text('The photo is stored privately. Deleting the entry deletes the photo too.'), findsOneWidget);
+    expect(find.textContaining('Settings'), findsNothing, reason: 'no promise of a setting that does not exist');
     expect(find.text('Also saved to Apple Health'), findsNothing, reason: 'Health is not connected');
     semantics.dispose();
   });
@@ -117,6 +119,40 @@ void main() {
     expect(entry.photoPath, '$kUser/photo1.jpg');
     expect(bucket.files.keys, ['$kUser/photo1.jpg']);
     expect(find.text('Spaghetti Bolognese logged'), findsOneWidget);
+  });
+
+  testWidgets('a slow upload still attaches the photo after the screen is gone', (tester) async {
+    final env = await CalorieTestEnv.create();
+    final bucket = FakeMealPhotoBucket()..uploadGate = Completer<void>();
+    await _pump(tester, env, result: photoEstimate(), bucket: bucket);
+    final container = _container(tester);
+
+    await tester.tap(find.text('Log'));
+    await settleFrames(tester);
+    expect(find.byType(CaloriesEstimateScreen), findsNothing);
+    expect(container.read(calorieDayProvider(kToday)).day!.entries.single.photoPath, isNull);
+
+    bucket.uploadGate!.complete();
+    await settleFrames(tester);
+    expect(container.read(calorieDayProvider(kToday)).day!.entries.single.photoPath, '$kUser/photo1.jpg');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('undone before the upload finished: the uploaded photo is deleted again', (tester) async {
+    final env = await CalorieTestEnv.create();
+    final bucket = FakeMealPhotoBucket()..uploadGate = Completer<void>();
+    await _pump(tester, env, result: photoEstimate(), bucket: bucket);
+    final container = _container(tester);
+
+    await tester.tap(find.text('Log'));
+    await settleFrames(tester);
+    await tester.tap(find.text('Undo'));
+    await settleFrames(tester);
+    bucket.uploadGate!.complete();
+    await settleFrames(tester);
+    expect(container.read(calorieDayProvider(kToday)).day!.entries, isEmpty);
+    expect(bucket.removed, ['$kUser/photo1.jpg']);
+    expect(bucket.files, isEmpty);
   });
 
   testWidgets('"Keep photo" off: nothing is uploaded', (tester) async {
