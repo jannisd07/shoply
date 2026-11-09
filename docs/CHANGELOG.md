@@ -2,6 +2,16 @@
 
 Größere Änderungen am Repo, neueste oben. Kleine Fixes stehen nur in der Git-Historie.
 
+## 2026-11-09: Qualität der A-Screens, erster Teil (Teil A, A11)
+
+- Prüfmatrix für die noch fehlenden A-Screens: Rezepte-Tab, Alle Rezepte, Kategorie, Bibliothek, Home als Ganzes,
+  Einkaufsmodus-Hülle, E-Mail-Code-Seite (zusammen über 600 Fälle mit Zuständen und Touch-Zielen).
+- `tool/design_check.sh` prüft die D2-Regeln; A-Dateien sind sauber.
+- Messtests `integration_test/perf/` für das echte iPhone im Profile-Modus.
+- Fehler behoben: Angebotspille gehört in Liste und Einkaufsmodus zur Zeile (VoiceOver, Menü), Rezeptdetail beachtet
+  „Rezepte automatisch anpassen“, Home lud nach Kontowechsel doppelt, Onboarding-Hinweis lag im Verlauf der
+  Aktionsleiste; Glas-Ersatz und Dialoge nehmen die Farbtokens (auch „Kontrast erhöhen“).
+
 ## 2026-11-09: Aufräumen und Feature-Analyse (Teil A, A12)
 
 - 13 tote Dateien gelöscht (u. a. `paper_widgets.dart`, `app_text_styles.dart`, altes `common/empty_state.dart`,

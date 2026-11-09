@@ -260,3 +260,13 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 
 iOS ist die Hauptplattform. `android/`, `macos/` und `web/` (Deep-Link-Seite und AASA) sind noch im Repo;
 `linux/` und `windows/` sind entfernt. In-App-Käufe gibt es nur auf iOS.
+
+## Prüfen
+
+- `dart analyze` (0 Errors, 0 Warnings) und `flutter test`. Jeder Screen und jede Komponente hat einen Test mit
+  `layoutMatrix` aus `test/layout/layout_matrix.dart` (320–440 pt, Textgröße ×1,0–×3,1, fett, dunkel, Kontrast).
+- `bash tool/design_check.sh A` (bzw. `B`): D2-Regeln in Screens und Widgets (keine festen Farben, Schriftgrößen,
+  Animationsdauern, Material-Icons, direkte Haptik, keine Sheets oder Slider). Ausnahmen stehen im Skript;
+  gewollte Einzelfälle tragen `// D2`, `// brand data` oder `// design-check: ok <Grund>`.
+- Leistung: `integration_test/perf/` (S1 Liste scrollen, S2 Abhaken in Serie, S5 Rezepte-Tab) nur am echten iPhone
+  mit `flutter drive --profile`, Anleitung im README dort. Nie im Simulator: das ersetzt die installierte App.

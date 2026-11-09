@@ -91,8 +91,7 @@ class LiquidGlassContainer extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: borderRadius,
-            // D2 glass tokens: they follow the app's own light/dark choice
-            // and Increase Contrast (Theme.of is not set under CupertinoApp).
+            // D2 glass tokens: light, dark and Increase Contrast.
             color: colors.glassFill,
             border: Border.all(color: colors.glassBorder, width: 0.5),
           ),

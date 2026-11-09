@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (A12 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (A11 Teil 1 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -41,11 +41,12 @@ für die nächste Sitzung geben.
 | A9 Pro und Paywall | wartet auf den Owner (Free/Pro: Varianten A/B/C in `pro-konzept.md`) | prompt §5 A9, Konzept 18 Kap. 8–9 |
 | A10 App-Icon und Maskottchen | wartet auf den Owner (Maskottchen F-17-11) | prompt §5 A10 |
 | A12 Aufräumen und Analysen | erledigt | `a12-stand.md`, `feature-ideen.md` |
-| **A11 Qualität für alle A-Screens** | **Als Nächstes** (A9/A10 warten weiter auf den Owner; braucht Builds, Platte prüfen) | prompt §5 A11, „Offen bei A“ in `ab1-stand.md`, `ab2-stand.md`, `a12-stand.md` |
+| A11 Qualität, Teil 1 | erledigt | `a11-pruefplan.md`, `a11-stand.md` |
+| **A11b Qualität, Teil 2** | **Als Nächstes** (vorher: Owner im Simulator angemeldet? Platte ≥ 10 GB?) | „Offen bei A“ in `a11-stand.md` |
 | S6 Gegenprüfung von B | offen | prompt §5 A11 „Gegenprüfung“ |
 | S5 Bereiche fertig | offen | prompt §11 |
 
-Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst A11, S6, S5. Fragt die Sitzung den
+Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst A11b, S6, S5. Fragt die Sitzung den
 Owner zu Beginn nach A9/A10, nur wenn eins davon „Als Nächstes“ ist.
 
 ### AB1 Anfragen von B: Komponenten und Daten
@@ -91,6 +92,16 @@ Rezepte-Tab mit Tipp). Vorher `status-B.md` auf neue Anfragen an A prüfen; die 
 `trailingActions`, `contextMenuItems`; genauer Aufruf in status-B 17). 17 (2) ist mit A12 erledigt, 17 (3) entfällt. Simulator-Build mit B
 absprechen, vorher `df -h /System/Volumes/Data` (unter 10 GB keine Builds). Erst den Prüfplan schreiben (Screens,
 Zustände, Prüfmatrix, Barrierefreiheit), dann Funde beheben.
+
+### A11b Qualität, Teil 2
+
+Quellen: „Offen bei A“ und „Braucht den Owner“ in `a11-stand.md`, `a11-pruefplan.md` §2. Vorher `status-B.md` auf neue
+Anfragen an A prüfen; die gehen vor. Zu Beginn fragen, ob der Owner im Simulator (iPhone 17) angemeldet ist; ohne
+Anmeldung nur die Code-Punkte. Reihenfolge: Simulator-Rundgang (Screenshots nach `abnahme/a11/`, Funde beheben),
+Flows Hinzufügen und Teilen mit `idiotensicher-testen`, fehlende `AvoIcons`-Glyphen für die 30 `CupertinoIcons`-Stellen
+(`bash tool/design_check.sh A` zeigt sie), Fehlerzustand der Entwürfe. **Nie** `flutter test integration_test/…` mit
+gebootetem Simulator (ersetzt die App, meldet ab). Platte: unter 15 GB keine Worktrees, unter 10 GB keine Builds,
+`build/` nach dem Rundgang löschen.
 
 ### A12 Aufräumen und Analysen
 

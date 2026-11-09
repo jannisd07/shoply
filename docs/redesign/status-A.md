@@ -58,6 +58,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | AB1 Anfragen von B: Komponenten und Daten | **erledigt** (A-C1, A-C2, A-C3, A-C5, A-C7, A-C8, A-C9, A-D1, Composer, AppButton-Varianten, NavRow, Avatar xl, Suche mit Mikrofon, Toast mit Ziel, Symbole); API in `ab1-stand.md` | 09.11.2026 | `f259477`, `git log --grep AB1` |
 | AB2 Anfragen von B: Listen, Router, Reste | **erledigt** (A-C4, A-L1–A-L4, A-R1–A-R3, status-B 15/16, Listen-Schalter, Mitteilungs-Kategorien, T6/T7, A-C6, `ThemeMode.system`); offen in `ab2-stand.md` | 09.11.2026 | `git log --grep AB2` |
 | A12 Aufräumen und Analysen | **erledigt** (13 tote Dateien, tote Symbole, 543 ungenutzte Textschlüssel, Paper-Reste bis auf die Paywall, `feature-ideen.md`, `claude/daily` pausieren); Wünsche an B in `a12-stand.md` | 09.11.2026 | `git log --grep A12` |
+| A11 Qualität, Teil 1 | **erledigt**: Prüfmatrix für alle A-Screens (außer Paywall), `tool/design_check.sh` (A: 0 Funde), Messtests `integration_test/perf/`, status-B 17 (1), 4 Fehler behoben; Simulator nur bis zur Abmeldung; Rest in `a11-stand.md` (→ A11b) | 09.11.2026 | `git log --grep A11` |
 | S5 Bereiche fertig (A) | offen | | |
 | S6 Gegenprüfung (A prüft B) | offen | | |
 
@@ -215,6 +216,7 @@ Provider in `lib/presentation/widgets/slots/b_slots.dart`; Stufe 2: Home-Abschni
 | 3 | `owner.sh`: `lib/presentation/screens/system/*` und `evals/*` gehören B | siehe `git log --grep "B request 3"` |
 | 4 | `ItemRepository` kategorisiert lokal sofort (`categorizeLocal`), verfeinert im Hintergrund (`refineCategory`, `categorizeBatch`); kein A-Code nutzt mehr `GeminiCategorizationService`. Profil ohne `userZipCodeProvider` | `356168d`, `0c034cd` |
 | 5 (Teil) | Remount-Schlüssel `ValueKey(themeMode-language)` in `app.dart` entfernt; synchroner Redirect folgt mit B3 | siehe `git log --grep "no app remount"` |
+| 17 (1) | `itemOfferRowExtras` in Liste und Einkaufsmodus an `ItemRow` (Einkaufsmodus: Menü „Bearbeiten“/„Angebot ansehen“); 17 A-D1 stand schon | `004b3fd` |
 
 ## Fragen an den Owner
 
