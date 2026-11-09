@@ -121,6 +121,15 @@ export 'package:shoply/presentation/providers/account_status_provider.dart'
 export 'package:shoply/presentation/providers/presence_provider.dart'
     show sharePresenceProvider;
 
+// History (B8, A-V12): the list overview rows "Einkäufe" and "Offene
+// Beträge", synchronous from the local history.
+export 'package:shoply/presentation/state/trip_history_provider.dart'
+    show
+        HistoryEntrySummary,
+        OpenBalancesSummary,
+        historyEntrySummaryProvider,
+        openBalancesSummaryProvider;
+
 // Settings search: Teil B's pages and rows (A8), for `settings_search_index`.
 export 'package:shoply/presentation/screens/system/b_settings_search.dart'
     show bSettingsSearchEntries;

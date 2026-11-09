@@ -104,14 +104,15 @@ class _SpringCollapseState extends State<SpringCollapse>
     if (widget.visible) _last = widget.child;
     if (oldWidget.visible == widget.visible) return;
     final target = widget.visible ? 1.0 : 0.0;
+    final TickerFuture run;
     if (context.reduceMotion) {
-      _controller.animateTo(
+      run = _controller.animateTo(
         target,
         duration: AvoMotion.fadeReduced,
         curve: Curves.easeInOut,
       );
     } else {
-      _controller.animateWith(
+      run = _controller.animateWith(
         SpringSimulation(
           AvoMotion.standard,
           _controller.value,
@@ -120,6 +121,13 @@ class _SpringCollapseState extends State<SpringCollapse>
         ),
       );
     }
+    // A spring ends within its tolerance; land exactly, so a hidden child
+    // really leaves the tree.
+    run.whenCompleteOrCancel(() {
+      if (mounted && !_controller.isAnimating) {
+        setState(() => _controller.value = target);
+      }
+    });
   }
 
   @override
@@ -137,7 +145,7 @@ class _SpringCollapseState extends State<SpringCollapse>
       animation: _controller,
       builder: (context, _) {
         final t = _controller.value.clamp(0.0, 1.0);
-        if (t == 0 && !widget.visible) return const SizedBox.shrink();
+        if (!widget.visible && t <= 0.001) return const SizedBox.shrink();
         return ClipRect(
           child: Align(
             alignment: Alignment.topCenter,

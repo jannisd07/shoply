@@ -169,6 +169,28 @@ nutzen beide direkt.
       `unnecessary_import`, beides kommt jetzt aus `b_slots.dart`).
     - Ohne Nutzer, also löschbar: `screens/home/widgets/nudge_card.dart`, `data/models/recommendation_item.dart`.
 
+19. **Nach W10 (B8a, Einkauf abschließen V1–V3, `feature/b8-history`):**
+    - **A-V9 (dringend, sonst doppelter Erfolgsmoment):** `openCheckoutFlow` zeigt V3 (`showSuccessMoment` mit
+      „9 Artikel bei Lidl · ca. 3,20 € …“) und danach den Hinweis „Einkauf gespeichert · Widerrufen“ selbst. In
+      `shopping_mode_screen.dart` `_finish` und `list_detail_screen.dart` `_checkout` den eigenen
+      `showSuccessMoment(...)` streichen (nur noch `TipEvent.tripCompleted` notieren und schließen); Schlüssel
+      `list_shop_saved_*` entfallen dann. Bei 0 abgehakten Artikeln `openCheckoutFlow` nicht aufrufen.
+    - **A-V9 Rest:** `screens/lists/shopping_trip_completion.dart` hat keinen Aufrufer mehr (Alert „Einkauf
+      abschließen?“, Sheet, Snackbar): löschen. Danach löscht B `screens/lists/widgets/checkout_store_sheet.dart`
+      (Bottom-Sheet, Verstoß gegen die feste Regel; heute nur noch von dieser Datei importiert) und die Schlüssel
+      `complete_shopping_question`, `complete_shopping_checked_message`, `shopping_complete_push_*`, falls frei.
+    - **A-V3:** `AmountField` (kompakt/groß, Locale-Eingabe, Cent). Bis dahin nutzt B `HistoryAmountField` in
+      `screens/history/widgets/amount_field.dart`; Regel `parseAmountCents` in `data/services/trip_split_math.dart`.
+    - **A-V11:** `navigation_service.dart`: Push-Typen `shopping_complete` und `expense_split` tragen jetzt
+      `history_id`; Tippen soll `historyTripLocation(historyId)` (`/history/:tripId`, ab W11) öffnen.
+    - **A-V12:** Listen-Übersicht „Verlauf“: `historyEntrySummaryProvider` (`HistoryEntrySummary{month,
+      tripsThisMonth, hasTrips}`, synchron) und `openBalancesSummaryProvider` (`OpenBalancesSummary?{openCount,
+      owedToMeCents, iOweCents, totalOpenCents, people}`, null bei Modul aus) aus
+      `presentation/state/trip_history_provider.dart`; Export in `b_slots.dart` ist ergänzt.
+    - **Neu A-V23:** `ItemRepository.removeItems(listId, ids)` ohne Push pro Artikel. Nur der Rückfall ohne Migration
+      löscht die abgehakten Artikel heute selbst in einem Aufruf (wie vorher `shopping_trip_completion.dart`).
+    - `AppFilterChip` ohne `trailing`: „Anderer Markt …“ zeigt kein `chevron.right` 11 (Spec V1 Punkt 3).
+
 ## Erledigte Anfragen von Teil A
 
 - **AB2 und A12 „Von Teil B“** (Commit mit dieser Zeile): `/settings/siri` und `/settings/widgets` liegen in

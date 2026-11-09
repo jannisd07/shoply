@@ -32,6 +32,7 @@ import 'package:shoply/presentation/widgets/design/full_screen_editor.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
 import 'package:shoply/presentation/widgets/design/settings_rows.dart';
 import 'package:shoply/presentation/widgets/design/skeleton.dart';
+import 'package:shoply/presentation/widgets/design/status_row.dart';
 import 'package:shoply/routes/route_paths.dart';
 
 // V1 layout (verlauf-kosten.md V1, D2 X-Einkaufsmodus).
@@ -122,6 +123,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   bool _saving = false;
   _Blocked? _blocked;
   bool _hintMarked = false;
+  bool _saveFailed = false;
 
   String get _lang => Localizations.localeOf(context).languageCode;
 
@@ -190,7 +192,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   Future<void> _save(List<ShoppingItemModel> checked, String listName) async {
     if (_saving || _amount.isInvalid) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveFailed = false;
+    });
     final members = ref.read(splitMembersProvider(widget.listId)) ?? const [];
     final me = ref.read(authUserIdProvider);
     final mine = members.where((m) => m.userId == me).firstOrNull;
@@ -247,6 +252,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         setState(() {
           _saving = false;
           _blocked = const _ListGone();
+        });
+        return;
+      case CheckoutPending(failed: true, :final localTripId):
+        // Online and refused at once (server error): nothing is saved and
+        // the items stay checked. V1 stays open, saying so, and the next
+        // tap tries again (no second entry in the history).
+        unawaited(controller.undo(localTripId));
+        unawaited(AvoHaptics.error());
+        setState(() {
+          _saving = false;
+          _saveFailed = true;
         });
         return;
       case CheckoutNothingChecked():
@@ -413,6 +429,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     final amountCents = _amount.cents;
     final children = <Widget>[
+      if (_saveFailed)
+        Padding(
+          padding: const EdgeInsets.only(bottom: AvoSpacing.m),
+          child: StatusRow(
+            kind: StatusKind.failed,
+            text: context.tr('common_not_saved'),
+          ),
+        ),
       _Summary(listName: listName, checked: checked, open: open),
       InsetSection(
         header: context.tr('hist_checkout_where'),
@@ -447,11 +471,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             title: context.tr('hist_checkout_amount'),
             placeholder: context.tr('hist_checkout_amount_placeholder'),
             languageCode: _lang,
-            semanticHint: context.tr(
-              splitShown
-                  ? 'hist_checkout_amount_note_split'
-                  : 'hist_checkout_amount_note',
-            ),
+            // VoiceOver hears the error on the field itself (WCAG 3.3.1).
+            semanticHint: _amount.isInvalid
+                ? context.tr('hist_amount_invalid')
+                : context.tr(
+                    splitShown
+                        ? 'hist_checkout_amount_note_split'
+                        : 'hist_checkout_amount_note',
+                  ),
             onChanged: (input) => setState(() => _amount = input),
           ),
         ],
