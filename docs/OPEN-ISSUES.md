@@ -77,9 +77,13 @@ Stand: 2026-11-08.
 | PLZ-Tabelle (Ort zur Postleitzahl) | Ohne Tabelle zeigt „Region“ für eine getippte PLZ nur „PLZ 79098“ (den Ort gibt es nur über den Standort), und „Diese Postleitzahl kennen wir nicht.“ prüft nur Zone 00 und 99999. Quelle und Lizenz einer offenen PLZ-Liste wählen (angebote.md Owner-Frage 11, Lücke L10)? |
 | Angebote für Listen ohne Markt | Laut Spec zeigen Listen ohne festen Markt die Angebote der Lieblingsmärkte in deren Reihenfolge (K12-03, Owner-Frage 7). Die Daten dafür (Abgleich über mehrere Märkte pro Artikel) sind noch nicht gebaut: solche Listen zeigen keine Angebote, und „Lieblingsmärkte“ sagt deshalb nur „Diese Märkte stehen oben, wenn du für eine Liste einen Markt wählst.“ Als Nächstes bauen? |
 | Standort-Abfrage | Text in `Info.plist` (`NSLocationWhenInUseUsageDescription`) wie in angebote.md Owner-Frage 10 setzen: „Avo nutzt deinen Standort, um deine Postleitzahl für Angebote zu finden und den Markt vorzuschlagen, in dem du gerade bist.“ |
-| Angebots-Einstellungen pro Konto | Schalter „Angebote an Artikeln / Vorschläge beim Tippen / Ersparnis in der Liste“, „Diese Woche ausblenden“, „Nicht dieses Angebot“ und ausgeblendete Listen liegen pro Konto, aber nur auf diesem Gerät (ein zweites Gerät kennt sie nicht). Migration `user_offer_prefs` (angebote.md Owner-Frage 14) freigeben? |
 | Essensfotos und Anthropic | S3/S4/S5 sagen „Das Foto wird nur für die Schätzung verwendet und privat gespeichert.“ Passt das zur Aufbewahrung bei der Claude-API (kalorien.md §7.3)? Sonst den Satz anpassen lassen. |
 | „Alle Essensfotos löschen“ | Fotos eines gelöschten Eintrags werden jetzt gelöscht. Ein Knopf für alle Essensfotos kommt erst mit S23 (Einstellungen „Kalorien & Gesundheit“); bis dahin verspricht kein Text diese Einstellung. |
+| Avo: Menge der Essens-Schätzung | Bis B6's Mengen-Eingabe (Vollbild) da ist, nur ganze Portionen (Stepper 1–10) in der Karte. So lassen oder auf B6 warten? |
+| Avo: Rezept auf die Liste ohne Angebotspreise | Avo hängt beim Rezept auf die Liste keine Angebotspreise mehr an (vorher eine Suche über alle Märkte, Plan 8). Bestätigen? |
+| Avo schaltet sich selbst aus | „Schalte Avo aus“ wirkt nach dem Ende der Antwort, danach Toast „Avo ausgeschaltet · Widerrufen“. So gewollt? |
+| Avo: Kosten teilen ohne Widerrufen | „Teilen“ auf Avos Vorschau ersetzt eine frühere Aufteilung (die Karte sagt, wessen „bezahlt“ zurückgesetzt wird); zurück geht es noch nicht. Rückweg bauen (`ExpenseSplitService` stellt alte Anteile wieder her) oder so lassen? |
+| Fotoauswahl als System-Blatt | „Foto auswählen“ zeigt Apples Fotoauswahl (PHPicker) als Blatt, das von unten hereinfährt; die Kamera kommt bildschirmfüllend, ebenfalls von unten. Beides steuert iOS (image_picker), A's Zettel-Import macht es genauso. Hinnehmen oder die Vollbild-Kamera aus B6 (Kalorien, jetzt auf main) auch für Avo nutzen? |
 
 ## 5. Bekannte Restarbeiten im Code (kann Claude machen)
 

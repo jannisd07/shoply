@@ -336,7 +336,7 @@ final class AvoPlanTakenCard extends AvoCardData {
     required this.recipeId,
     required this.recipeName,
     required this.servings,
-    required this.plannedName,
+    required this.plannedNames,
     required this.plannedEntryIds,
   });
 
@@ -345,9 +345,36 @@ final class AvoPlanTakenCard extends AvoCardData {
   final String recipeName;
   final int servings;
 
-  /// What is planned on [day] already, and its entries (for "Ersetzen").
-  final String plannedName;
+  /// Everything planned on [day] already, and its entries: "Ersetzen"
+  /// takes all of them out, so the question names all of them.
+  final List<String> plannedNames;
   final List<String> plannedEntryIds;
+}
+
+/// `split_trip_cost` (Kap. 5.2): the split as a preview, nothing saved
+/// until "Teilen". Names what it replaces, with who had paid.
+final class AvoSplitPreviewCard extends AvoCardData {
+  const AvoSplitPreviewCard({
+    required this.historyId,
+    required this.tripDate,
+    required this.total,
+    required this.totalFromTrip,
+    required this.shares,
+    this.replaces = const [],
+    this.yourUserId,
+  });
+
+  final String historyId;
+  final DateTime tripDate;
+  final double total;
+
+  /// The trip's own recorded total (else the one the person said).
+  final bool totalFromTrip;
+  final List<AvoShare> shares;
+
+  /// The split in place now; "Teilen" replaces it.
+  final List<({String name, bool paid})> replaces;
+  final String? yourUserId;
 }
 
 /// `search_offers`: this week's offers at the list's market, in the

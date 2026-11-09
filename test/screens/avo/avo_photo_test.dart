@@ -9,7 +9,6 @@ import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/services/list_import_service.dart';
 import 'package:shoply/data/services/meal_photo_analysis_service.dart';
 import 'package:shoply/presentation/providers/avo_screen_context_provider.dart';
-import 'package:shoply/presentation/screens/avo/avo_photo_source.dart';
 import 'package:shoply/presentation/screens/avo/avo_tab_screen.dart';
 import 'package:shoply/presentation/screens/avo/widgets/avo_user_bubble.dart';
 import 'package:shoply/presentation/widgets/design/status_row.dart';
@@ -197,13 +196,9 @@ void main() {
     expect(find.text('Take photo'), findsOneWidget);
   });
 
-  testWidgets('the camera explains itself before the system asks', (
-    tester,
-  ) async {
-    final photos = FakePhotoSource(
-      access: AvoCameraAccess.notAsked,
-      photo: kTinyPng,
-    );
+  testWidgets('the camera explains itself once, before the first system '
+      'prompt', (tester) async {
+    final photos = FakePhotoSource(photo: kTinyPng, explained: false);
     await _pumpTab(tester, FakeAvoBackend(), photos);
     await _menu(tester, 'Take photo');
     expect(find.text('Photo for Avo'), findsOneWidget);
@@ -211,20 +206,24 @@ void main() {
     await tester.tap(find.text('Not now'));
     await settle(tester);
     expect(photos.takes, 0);
+    expect(photos.explained, isFalse, reason: 'asked again next time');
 
     await _menu(tester, 'Take photo');
     await tester.tap(find.text('Continue'));
     await settle(tester);
     expect(photos.takes, 1);
+    expect(photos.explained, isTrue);
     expect(find.text('What should I do with this photo?'), findsOneWidget);
+
+    // Once explained, the camera opens at once.
+    await _menu(tester, 'Take photo');
+    expect(find.text('Photo for Avo'), findsNothing);
+    expect(photos.takes, 2);
   });
 
-  testWidgets('camera off: the status row with Settings and "choose a photo '
-      'instead"', (tester) async {
-    final photos = FakePhotoSource(
-      access: AvoCameraAccess.denied,
-      photo: kTinyPng,
-    );
+  testWidgets('camera off (image_picker said camera_access_denied): the '
+      'status row with Settings and "choose a photo instead"', (tester) async {
+    final photos = FakePhotoSource(photo: kTinyPng, denied: true);
     await _pumpTab(tester, FakeAvoBackend(), photos);
     await _menu(tester, 'Take photo');
     expect(find.byType(StatusRow), findsOneWidget);
@@ -246,7 +245,7 @@ void main() {
     expect(find.text('What should I do with this photo?'), findsNothing);
   });
 
-  testWidgets('"Stopp" while a meal is read drops the estimate', (
+  testWidgets('"Stopp" while a meal is read ends the round at once', (
     tester,
   ) async {
     final backend = FakeAvoBackend()
@@ -260,8 +259,12 @@ void main() {
       screen: const AvoScreenContext(screen: 'calories'),
     );
     await _menu(tester, 'Choose photo');
+    expect(find.text('Estimating the meal'), findsOneWidget);
     await tester.tap(find.text('Stop'));
     await settle(tester);
+    // Stopped before the estimate arrives.
+    expect(find.text('Stopped.'), findsOneWidget);
+    expect(find.text('Estimating the meal'), findsNothing);
     backend.releasePhoto();
     await settle(tester);
     expect(find.text('Stopped.'), findsOneWidget);

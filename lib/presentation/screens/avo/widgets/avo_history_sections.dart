@@ -48,7 +48,14 @@ List<Widget> avoTripsSections(
       title: context.tr('avo_card_trips'),
       leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.clock)),
       onOpen: () => openAppDestination(context, AppDestinations.history),
-      details: [for (final t in trips.take(8)) _TripRow(trip: t)],
+      details: [
+        for (var i = 0; i < trips.length && i < 8; i++)
+          _TripRow(
+            trip: trips[i],
+            open: s.chat.isTripOpen(p, i),
+            onToggle: () => s.chat.toggleTrip(p, i),
+          ),
+      ],
       actions: [
         if (card.listId != null &&
             listName != null &&
@@ -71,22 +78,23 @@ List<Widget> avoTripsSections(
 }
 
 /// One trip: list, "Sa., 31. Okt. · 14 Artikel · 42,80 €" (the amount only
-/// when it was recorded); a tap shows its items.
-class _TripRow extends StatefulWidget {
-  const _TripRow({required this.trip});
+/// when it was recorded); a tap shows its items. Unfolded is kept in the
+/// conversation.
+class _TripRow extends StatelessWidget {
+  const _TripRow({
+    required this.trip,
+    required this.open,
+    required this.onToggle,
+  });
 
   final ShoppingHistory trip;
-
-  @override
-  State<_TripRow> createState() => _TripRowState();
-}
-
-class _TripRowState extends State<_TripRow> {
-  bool _open = false;
+  final bool open;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
-    final t = widget.trip;
+    final t = trip;
+    final open = this.open;
     final colors = context.colors;
     final cost = t.totalCost;
     final meta = [
@@ -103,13 +111,13 @@ class _TripRowState extends State<_TripRow> {
     return Semantics(
       container: true,
       button: t.items.isNotEmpty,
-      expanded: t.items.isEmpty ? null : _open,
-      label: _open ? '${t.listName}, $meta. $items' : '${t.listName}, $meta',
-      onTap: t.items.isEmpty ? null : _toggle,
+      expanded: t.items.isEmpty ? null : open,
+      label: open ? '${t.listName}, $meta. $items' : '${t.listName}, $meta',
+      onTap: t.items.isEmpty ? null : onToggle,
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: t.items.isEmpty ? null : _toggle,
+        onTap: t.items.isEmpty ? null : onToggle,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: AvoSizes.hitTarget),
           child: Padding(
@@ -123,7 +131,7 @@ class _TripRowState extends State<_TripRow> {
               children: [
                 Text(t.listName, style: context.text(AvoTextStyle.body)),
                 Text(meta, style: secondary),
-                if (_open)
+                if (open)
                   Padding(
                     padding: const EdgeInsets.only(top: AvoSpacing.xs),
                     child: Text(items, style: secondary),
@@ -135,8 +143,61 @@ class _TripRowState extends State<_TripRow> {
       ),
     );
   }
+}
 
-  void _toggle() => setState(() => _open = !_open);
+/// `split_trip_cost` (Kap. 5.2): the split before anything is saved, with
+/// what it replaces; only "Teilen" saves it, then its result row.
+List<Widget> avoSplitPreviewSections(
+  BuildContext context,
+  AvoCardScope s,
+  AvoWidgetPayload p,
+  AvoSplitPreviewCard card,
+) {
+  if (s.chat.recordOf(p) != null) {
+    return [AvoRecordSection(payload: p, scope: s)];
+  }
+  final shares = [
+    for (final sh in card.shares)
+      '${sh.isYou ? context.tr('avo_you') : sh.name} ${avoEuro(context, sh.amount)}',
+  ].join(' · ');
+  final total = avoEuro(context, card.total);
+  final paid = [
+    for (final r in card.replaces)
+      if (r.paid) r.name,
+  ];
+  final stale = s.chat.isSplitStale(p);
+  final working = s.chat.isCardWorking(p);
+  return [
+    AvoResultSection(
+      title: context.tr(
+        'avo_rec_split_title',
+        params: {'date': avoDay(context, card.tripDate)},
+      ),
+      subtitle: context.tr(
+        card.totalFromTrip ? 'avo_split_preview' : 'avo_split_preview_said',
+        params: {'shares': shares, 'total': total},
+      ),
+      leading: const AvoSymbolTile(icon: AvoIcon(AvoIcons.people)),
+      footnote: stale
+          ? context.tr('avo_confirm_expired')
+          : card.replaces.isEmpty
+          ? null
+          : paid.isEmpty
+          ? context.tr('avo_split_replaces')
+          : context.tr(
+              'avo_split_replaces_paid',
+              params: {'names': paid.join(', ')},
+            ),
+      actions: [
+        if (!stale)
+          AvoCardAction(
+            label: context.tr('avo_split_action'),
+            working: working,
+            onPressed: working || s.offline ? null : () => s.chat.splitTrip(p),
+          ),
+      ],
+    ),
+  ];
 }
 
 /// `get_restock_suggestions`: "Vielleicht auch", each row with a dashed

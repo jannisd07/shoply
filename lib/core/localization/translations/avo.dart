@@ -350,6 +350,15 @@ const Map<String, String> avoEn = {
   'avo_import_unreadable': "Couldn't read",
   'avo_import_add': 'Add {n}',
   'avo_import_which_list': 'Which list?',
+  // Fix-Runde 1 (W1b): Kosten teilen als Vorschau, Plan, Einstellung
+  'avo_split_preview': 'Split: {shares} · total {total}',
+  'avo_split_preview_said': 'Split: {shares} · total {total}, as you said',
+  'avo_split_replaces': 'Replaces the earlier split.',
+  'avo_split_replaces_paid': 'Replaces the earlier split. "Paid" for {names} will be reset.',
+  'avo_split_action': 'Split',
+  'avo_and': 'and',
+  'avo_plan_taken_many': '{recipe} are already planned for {day}.',
+  'avo_set_generic': 'Setting',
 };
 
 const Map<String, String> avoDe = {
@@ -700,4 +709,13 @@ const Map<String, String> avoDe = {
   'avo_import_unreadable': 'Nicht erkannt',
   'avo_import_add': '{n} hinzufügen',
   'avo_import_which_list': 'Auf welche Liste?',
+  // Fix-Runde 1 (W1b): Kosten teilen als Vorschau, Plan, Einstellung
+  'avo_split_preview': 'Teilen: {shares} · gesamt {total}',
+  'avo_split_preview_said': 'Teilen: {shares} · gesamt {total}, wie gesagt',
+  'avo_split_replaces': 'Ersetzt die Aufteilung von vorher.',
+  'avo_split_replaces_paid': 'Ersetzt die Aufteilung von vorher. „Bezahlt“ bei {names} wird zurückgesetzt.',
+  'avo_split_action': 'Teilen',
+  'avo_and': 'und',
+  'avo_plan_taken_many': 'Am {day} stehen schon {recipe}.',
+  'avo_set_generic': 'Einstellung',
 };

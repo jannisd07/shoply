@@ -251,7 +251,7 @@ final _reads = [
       recipeId: 'r',
       recipeName: 'Ofengemüse',
       servings: 2,
-      plannedName: 'Linsencurry mit Spinat',
+      plannedNames: const ['Linsencurry mit Spinat', 'Gurkensalat'],
       plannedEntryIds: const ['e'],
     ),
   ),

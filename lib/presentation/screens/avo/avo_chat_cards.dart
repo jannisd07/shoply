@@ -67,6 +67,8 @@ mixin _AvoCardActions on ChangeNotifier {
     _deselected.clear();
     _importLists.clear();
     _photoChoices.clear();
+    _stale.clear();
+    _openRows.clear();
   }
 
   /// The change a card shows: after "Erneut versuchen" on its failed part
@@ -197,6 +199,44 @@ mixin _AvoCardActions on ChangeNotifier {
       _tapRecords[p] = record;
       notifyListeners();
     }
+  }
+
+  // ---------------------------------------------------------------- split
+
+  /// The split preview is out of date (trip or split changed since).
+  bool isSplitStale(AvoWidgetPayload p) => _stale.contains(p);
+  final Set<AvoWidgetPayload> _stale = {};
+
+  /// "Teilen" on a split preview: the only way a split is saved.
+  Future<void> splitTrip(AvoWidgetPayload p) async {
+    final card = p.card;
+    if (card is! AvoSplitPreviewCard ||
+        _tapRecords.containsKey(p) ||
+        _stale.contains(p)) {
+      return;
+    }
+    var stale = false;
+    final record = await _cardWrite(p, (ref) async {
+      final r = await _cardBackend.splitTrip(ref, card);
+      if (r == null) stale = true;
+      return r;
+    });
+    if (_cardsGone) return;
+    if (record != null) _tapRecords[p] = record;
+    if (stale) _stale.add(p);
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------ trip rows
+
+  /// Unfolded trip rows of a trips card (kept here, so scrolling never
+  /// folds them).
+  bool isTripOpen(AvoWidgetPayload p, int row) => _openRows.contains((p, row));
+  final Set<(AvoWidgetPayload, int)> _openRows = {};
+
+  void toggleTrip(AvoWidgetPayload p, int row) {
+    if (!_openRows.remove((p, row))) _openRows.add((p, row));
+    notifyListeners();
   }
 
   // -------------------------------------------------------------- allergy

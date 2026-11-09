@@ -383,7 +383,8 @@ AvoRecordHead _settingHead(BuildContext context, AvoSettingRecord r) {
     'age' => ('avo_set_age', const AvoIcon(AvoIcons.person)),
     'gender' => ('avo_set_gender', const AvoIcon(AvoIcons.person)),
     'height_cm' => ('avo_set_height', const AvoIcon(AvoIcons.person)),
-    _ => ('avo_set_name', const AvoIcon(AvoIcons.person)),
+    'display_name' || 'name' => ('avo_set_name', const AvoIcon(AvoIcons.person)),
+    _ => ('avo_set_generic', const Icon(CupertinoIcons.gear)),
   };
   final value = _value(context, r.key, r.value);
   return (

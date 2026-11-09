@@ -271,6 +271,23 @@ class FakeAvoBackend implements AvoBackend {
     );
   }
 
+  /// [splitTrip] answers null (the card is out of date).
+  bool splitStale = false;
+
+  @override
+  Future<AvoSplitRecord?> splitTrip(
+    WidgetRef ref,
+    AvoSplitPreviewCard card,
+  ) async {
+    cardWrites.add('split:${card.historyId}:${card.total}');
+    if (splitStale) return null;
+    return AvoSplitRecord(
+      tool: 'split_trip_cost',
+      tripDate: card.tripDate,
+      shares: card.shares,
+    );
+  }
+
   @override
   Future<AvoSettingRecord> removeAllergy(WidgetRef ref, String allergen) async {
     cardWrites.add('allergy:$allergen');
@@ -477,32 +494,46 @@ bool avoStatusInConversation(WidgetTester tester) => find
 
 // ------------------------------------------------- W1b: cards and photos
 
-/// A photo source without the camera: [access] and the next photo.
+/// A photo source without the camera: whether the camera was explained,
+/// what the next pick brings ([photo], or [denied] like image_picker's
+/// `camera_access_denied`).
 class FakePhotoSource implements AvoPhotoSource {
-  FakePhotoSource({this.access = AvoCameraAccess.granted, this.photo});
+  FakePhotoSource({this.photo, this.denied = false, this.explained = true});
 
-  AvoCameraAccess access;
   Uint8List? photo;
+  bool denied;
+  bool explained;
   int takes = 0;
   int chooses = 0;
   int settings = 0;
 
+  AvoPick get _next => denied
+      ? (outcome: AvoPickOutcome.denied, photo: null)
+      : photo == null
+      ? (outcome: AvoPickOutcome.cancelled, photo: null)
+      : (outcome: AvoPickOutcome.photo, photo: photo);
+
   @override
-  Future<AvoCameraAccess> cameraAccess() async => access;
+  Future<bool> cameraExplained() async => explained;
+
+  @override
+  Future<void> markCameraExplained() async => explained = true;
 
   @override
   Future<void> openSettings() async => settings++;
 
   @override
-  Future<Uint8List?> take() async {
+  Future<AvoPick> take() async {
     takes++;
-    return photo;
+    return _next;
   }
 
   @override
-  Future<Uint8List?> choose() async {
+  Future<AvoPick> choose() async {
     chooses++;
-    return photo;
+    return photo == null
+        ? (outcome: AvoPickOutcome.cancelled, photo: null)
+        : (outcome: AvoPickOutcome.photo, photo: photo);
   }
 }
 

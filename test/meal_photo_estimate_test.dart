@@ -47,6 +47,7 @@ class _FakeBucket implements MealPhotoBucket {
   Future<void> remove(List<String> paths) async => removed.addAll(paths);
 
   final List<({String path, Duration expiresIn})> signs = [];
+  final List<String> removed = [];
   Object? uploadError;
   Object? signError;
   Completer<void>? signGate;
@@ -66,6 +67,9 @@ class _FakeBucket implements MealPhotoBucket {
     _n++;
     return 'https://project.test/storage/v1/object/sign/meal-photos/$path?token=t$_n';
   }
+
+  @override
+  Future<void> remove(String path) async => removed.add(path);
 }
 
 Uint8List _jpeg() => Uint8List.fromList(img.encodeJpg(img.Image(width: 8, height: 8)));
@@ -294,6 +298,16 @@ void main() {
       expect(path, 'u1/f1.jpg');
       expect(bucket.uploads.single.path, 'u1/f1.jpg');
       expect(bucket.uploads.single.contentType, 'image/jpeg');
+    });
+
+    test('deletePhoto removes only a photo in the own folder (W1b undo)', () async {
+      await service().deletePhoto('u1/f1.jpg');
+      await service().deletePhoto('u2/f9.jpg');
+      await service().deletePhoto('https://evil.test/x.jpg');
+      expect(bucket.removed, ['u1/f1.jpg']);
+      userId = null;
+      await service().deletePhoto('u1/f1.jpg');
+      expect(bucket.removed, ['u1/f1.jpg']);
     });
 
     test('uploadPhoto names a PNG as PNG', () async {

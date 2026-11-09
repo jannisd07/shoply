@@ -284,6 +284,84 @@ void main() {
       expect(backend.recordUndos, 1);
     });
 
+    testWidgets('a split is only a preview until "Teilen"; it names what it '
+        'replaces and who had paid (I1)', (tester) async {
+      final card = AvoWidgetPayload.card(
+        AvoSplitPreviewCard(
+          historyId: 't1',
+          tripDate: DateTime(2026, 10, 31),
+          total: 42.8,
+          totalFromTrip: true,
+          yourUserId: 'u1',
+          shares: const [
+            (name: 'Jannis', amount: 21.4, isYou: true),
+            (name: 'Lena', amount: 21.4, isYou: false),
+          ],
+          replaces: const [(name: 'Lena', paid: true)],
+        ),
+      );
+      final backend = FakeAvoBackend([AvoScript(payloads: [card])]);
+      await tester.pumpWidget(
+        avoHarness(
+          const SingleChildScrollView(child: AvoRounds()),
+          avoCardOverrides(backend: backend),
+        ),
+      );
+      await settle(tester);
+      expect(
+        find.text('Split: you €21.40 · Lena €21.40 · total €42.80'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Replaces the earlier split. "Paid" for Lena will be reset.'),
+        findsOneWidget,
+      );
+      expect(backend.cardWrites, isEmpty, reason: 'nothing before the tap');
+      await tester.tap(find.text('Split'));
+      await settle(tester);
+      expect(backend.cardWrites, ['split:t1:42.8']);
+      expect(find.text('Split: you €21.40 · Lena €21.40'), findsOneWidget);
+      expect(find.text('Undo'), findsNothing, reason: 'no way back yet (L9)');
+    });
+
+    testWidgets('a split card that is out of date says so and offers nothing', (
+      tester,
+    ) async {
+      final backend =
+          FakeAvoBackend([
+              AvoScript(
+                payloads: [
+                  AvoWidgetPayload.card(
+                    AvoSplitPreviewCard(
+                      historyId: 't1',
+                      tripDate: DateTime(2026, 10, 31),
+                      total: 30,
+                      totalFromTrip: false,
+                      yourUserId: 'u1',
+                      shares: const [
+                        (name: 'J', amount: 15, isYou: true),
+                        (name: 'Lena', amount: 15, isYou: false),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ])
+            ..splitStale = true;
+      await tester.pumpWidget(
+        avoHarness(
+          const SingleChildScrollView(child: AvoRounds()),
+          avoCardOverrides(backend: backend),
+        ),
+      );
+      await settle(tester);
+      expect(find.textContaining('as you said'), findsOneWidget);
+      await tester.tap(find.text('Split'));
+      await settle(tester);
+      expect(find.text('This request has expired. Ask again.'), findsOneWidget);
+      expect(find.text('Split'), findsNothing);
+    });
+
     testWidgets('no trips yet', (tester) async {
       await _pump(tester, [
         AvoWidgetPayload.card(const AvoTripsCard([])),
@@ -413,6 +491,33 @@ void main() {
       expect(find.text('Nothing planned for today.'), findsOneWidget);
     });
 
+    testWidgets('kcal in plan rows only with the calories module (M4)', (
+      tester,
+    ) async {
+      final card = AvoWidgetPayload.card(
+        AvoPlanCard(
+          from: DateTime(2026, 11, 9),
+          days: 7,
+          lines: [
+            (
+              entryId: 'e',
+              day: DateTime(2026, 11, 11),
+              recipeId: 'r',
+              name: 'Linsencurry',
+              servings: 2,
+              imageUrl: null,
+              kcal: 610,
+            ),
+          ],
+        ),
+      );
+      await _pump(tester, [card]);
+      expect(find.text('Wed, Nov 11 · 2 servings · 610 kcal'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await _pump(tester, [card], modules: const {AppModule.mealPlan});
+      expect(find.text('Wed, Nov 11 · 2 servings'), findsOneWidget);
+    });
+
     testWidgets('a day that has a recipe asks first; "Ersetzen" plans with '
         'undo', (tester) async {
       final backend = FakeAvoBackend([
@@ -424,7 +529,7 @@ void main() {
                 recipeId: 'r',
                 recipeName: 'Ofengemüse',
                 servings: 2,
-                plannedName: 'Linsencurry',
+                plannedNames: const ['Linsencurry'],
                 plannedEntryIds: const ['e1'],
               ),
             ),

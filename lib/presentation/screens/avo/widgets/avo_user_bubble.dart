@@ -17,7 +17,6 @@ const Radius _tail = Radius.circular(6); // D2 small corner bottom right
 const double _photoWidth = 200; // D2 Kap. 2.2: photo 4:3, 200 wide
 const double _photoAspect = 4 / 3; // D2
 const double _photoRadius = 20; // D2 card radius
-const Duration _photoFade = Duration(milliseconds: 200); // Kap. 7.4 fade in
 
 /// The person's question: a green bubble on the right, white 17/22 text.
 ///
@@ -202,7 +201,8 @@ class _Photo extends StatelessWidget {
                   // VoiceOver hears the photo while it fades in, too.
                   alwaysIncludeSemantics: true,
                   opacity: frame == null ? 0 : 1,
-                  duration: context.reduceMotion ? Duration.zero : _photoFade,
+                  // Kap. 7.4: the photo appears as a short cross-fade.
+                  duration: AvoMotion.fadeReduced,
                   child: child,
                 ),
           errorBuilder: (context, _, _) =>

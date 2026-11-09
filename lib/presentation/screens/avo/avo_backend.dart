@@ -77,6 +77,10 @@ abstract interface class AvoBackend {
   /// "Übernehmen" on a goal preview.
   Future<AvoGoalRecord> applyGoal(WidgetRef ref, AvoGoalPreviewCard preview);
 
+  /// "Teilen" on a split preview; null when the trip or its split changed
+  /// since the card was made.
+  Future<AvoSplitRecord?> splitTrip(WidgetRef ref, AvoSplitPreviewCard card);
+
   /// "Entfernen" on the allergy safety card.
   Future<AvoSettingRecord> removeAllergy(WidgetRef ref, String allergen);
 
@@ -185,7 +189,11 @@ class AssistantAvoBackend implements AvoBackend {
 
   @override
   Future<AvoGoalRecord> applyGoal(WidgetRef ref, AvoGoalPreviewCard preview) =>
-      _service.applyGoalForAvo(ref, preview.goal, previous: preview.previous);
+      _service.applyGoalForAvo(ref, preview.goal);
+
+  @override
+  Future<AvoSplitRecord?> splitTrip(WidgetRef ref, AvoSplitPreviewCard card) =>
+      _service.splitTripForAvo(ref, card);
 
   @override
   Future<AvoSettingRecord> removeAllergy(WidgetRef ref, String allergen) =>

@@ -113,6 +113,9 @@ class AvoChat extends ChangeNotifier with _AvoCardActions, _AvoPhotoTurns {
   @override
   WidgetRef? get _photoRef => _ref;
 
+  @override
+  DateTime _photoNow() => _now();
+
   List<AvoTurn> get turns => List.unmodifiable(_turns);
   bool get isEmpty => _turns.isEmpty;
   bool get isWorking => _active != null;

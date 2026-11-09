@@ -104,12 +104,19 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
   `AvoListChanges.addBatch` (`ItemRepository.addItems`, gleiche Zusammenführung wie „Zutaten auf die Liste“).
   Was erst ein Tipp der Person schreibt, schreibt der Dienst nie selbst: `log_food` zeigt nur die Schätzung
   („Eintragen“), `setup_nutrition_goal` mit bestehendem Ziel die Vorschau („Übernehmen“), `allergies_remove` die
-  Sicherheits-Rückfrage, `add_to_plan` auf belegtem Tag „Dazulegen / Ersetzen“. Avo schaltet sich selbst erst nach
-  dem Ende der Antwort aus. Die Karten liegen nach Bereich in `screens/avo/widgets/avo_*_sections.dart`.
+  Sicherheits-Rückfrage, `add_to_plan` auf belegtem Tag „Dazulegen / Ersetzen“, `setup_nutrition_goal` immer die
+  Vorschau, `split_trip_cost` die Aufteilung zum „Teilen“. Diese Entscheidungen sind reine Funktionen in
+  `avo_tool_gates.dart` (getestet). Avo schaltet sich selbst erst nach dem Ende der Antwort aus. Die Karten liegen
+  nach Bereich in `screens/avo/widgets/avo_*_sections.dart`, die Werkzeuge nach Bereich in den Teil-Dateien
+  `lib/data/services/avo_tools_*.dart` (Erweiterungen des Dienstes).
+- Jedes Werkzeug-Ergebnis geht durch `avoConsentFilter` (`avo_consent_filter.dart`): ohne „Kalorien, Gewicht und
+  Ziele“ keine Summen, Ziele, Gewichte, Alter oder Größe, ohne „Ernährung und Allergien“ keine Allergien und keine
+  Ernährung; die Postleitzahl nie (nur, ob eine gesetzt ist).
 - Foto an Avo (`AvoChat.sendPhoto`, `avo_chat_photo.dart`): Das Foto bleibt auf dem Gerät im Gespräch und geht nie
   in den `avo_chat`-Verlauf. Kontext Kalorien = Essen (`meal_photo`), Liste/Einkaufsmodus = Zettel (`list_import`),
-  sonst fragt die Runde. Kamera und Fotoauswahl über `avoPhotoSourceProvider` (`image_picker`,
-  `permission_handler`); vor der Systemabfrage erklärt Dialog 11.3. Erst „Eintragen“ lädt ein Essensfoto in den
+  sonst fragt die Runde. Kamera und Fotoauswahl über `avoPhotoSourceProvider` (`image_picker`; „Kamera ist aus“
+  kommt aus dessen Fehler `camera_access_denied`, nicht aus permission_handler, dessen Kamera-Prüfung im Podfile
+  nicht einkompiliert ist); Dialog 11.3 erklärt einmal pro Installation vor der ersten Systemabfrage. Erst „Eintragen“ lädt ein Essensfoto in den
   privaten Bucket `meal-photos` (`MealPhotoStorageService`, Pfad `<uid>/…`).
 - Die Sitzung setzt sich bei Account-Wechsel selbst zurück, der Verlauf wird auf die letzten 10 Nutzerzüge gekürzt.
 - Schreibende Tools (Artikel hinzufügen, abhaken, Rezept auf Liste) gehen über `ItemRepository` und schicken

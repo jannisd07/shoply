@@ -96,3 +96,10 @@ String avoWorkoutName(BuildContext context, WorkoutType type) =>
 /// Today, for "Heute: …".
 bool avoIsToday(DateTime date, DateTime now) =>
     date.year == now.year && date.month == now.month && date.day == now.day;
+
+/// "Linsencurry", "Linsencurry und Salat", "A, B und C".
+String avoAnd(BuildContext context, List<String> names) {
+  if (names.length <= 1) return names.join();
+  final and = context.tr('avo_and');
+  return '${names.sublist(0, names.length - 1).join(', ')} $and ${names.last}';
+}

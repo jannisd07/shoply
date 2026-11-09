@@ -83,10 +83,11 @@ List<Widget> _cardSections(
   VoidCallback? onNewPhoto,
 ) => switch (card) {
   AvoTripsCard() => avoTripsSections(context, s, p, card),
+  AvoSplitPreviewCard() => avoSplitPreviewSections(context, s, p, card),
   AvoRestockCard() => [avoRestockSection(context, s, p, card)],
   AvoRecipesCard() => [AvoRecipesSection(card: card)],
   AvoRecipeNutritionCard() => [avoRecipeNutritionSection(context, card)],
-  AvoPlanCard() => [avoPlanSection(context, card)],
+  AvoPlanCard() => [AvoPlanSection(card: card)],
   AvoOfferSearchCard() => [AvoOfferSearchSection(card: card)],
   AvoOfferSetupCard() => [AvoOfferSetupSection(card: card)],
   AvoDealsCard() => [AvoDealsSection(card: card)],

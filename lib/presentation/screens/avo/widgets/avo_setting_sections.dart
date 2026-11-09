@@ -84,7 +84,8 @@ String avoSettingName(BuildContext context, String key) => context.tr(
     'height_cm' => 'avo_set_height',
     'allergies_add' || 'allergies_remove' => 'avo_set_allergies',
     'diet_add' || 'diet_remove' => 'avo_set_diet',
-    _ => 'avo_set_name',
+    'display_name' || 'name' => 'avo_set_name',
+    _ => 'avo_set_generic',
   },
 );
 

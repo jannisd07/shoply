@@ -1,7 +1,9 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/core/modules/app_modules.dart';
 import 'package:shoply/data/services/avo_assistant_service.dart';
 import 'package:shoply/presentation/screens/avo/avo_card_format.dart';
 import 'package:shoply/presentation/screens/avo/avo_l10n.dart';
@@ -17,8 +19,26 @@ import 'package:shoply/routes/app_destinations.dart';
 const double _recipeImage = 56; // D2
 
 /// `get_plan`: "Heute: Ofengemüse mit Feta", or the days with their
-/// recipes; empty: "Heute ist nichts geplant.".
-AvoResultSection avoPlanSection(BuildContext context, AvoPlanCard card) {
+/// recipes; empty: "Heute ist nichts geplant.". kcal only with the calories
+/// module.
+class AvoPlanSection extends ConsumerWidget {
+  const AvoPlanSection({super.key, required this.card});
+
+  final AvoPlanCard card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => _planSection(
+    context,
+    card,
+    kcal: ref.watch(moduleEnabledProvider(AppModule.calories)),
+  );
+}
+
+AvoResultSection _planSection(
+  BuildContext context,
+  AvoPlanCard card, {
+  required bool kcal,
+}) {
   final now = DateTime.now();
   final oneDay = card.days == 1;
   void open() => openAppDestination(context, AppDestinations.plan);
@@ -50,7 +70,7 @@ AvoResultSection avoPlanSection(BuildContext context, AvoPlanCard card) {
           meta: [
             avoDay(context, l.day),
             avoTrCount(context, 'avo_card_servings', l.servings),
-            if (l.kcal != null) '${avoInt(context, l.kcal!)} kcal',
+            if (kcal && l.kcal != null) '${avoInt(context, l.kcal!)} kcal',
           ].join(' · '),
           imageUrl: l.imageUrl,
           onTap: l.recipeId == null
@@ -108,10 +128,10 @@ class AvoPlanChoice extends StatelessWidget {
       children: [
         AvoQuestionText(
           text: context.tr(
-            'avo_plan_taken',
+            card.plannedNames.length > 1 ? 'avo_plan_taken_many' : 'avo_plan_taken',
             params: {
               'day': avoWeekday(context, card.day),
-              'recipe': card.plannedName,
+              'recipe': avoAnd(context, card.plannedNames),
             },
           ),
         ),

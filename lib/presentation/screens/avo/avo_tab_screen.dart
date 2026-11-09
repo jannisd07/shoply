@@ -242,17 +242,13 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
   /// "Neues Foto" on a photo Avo could not read.
   void _photoMenuFromCard() => _photoMenu();
 
-  /// The camera: first the app's own explanation when the system has not
-  /// asked yet (dialog 11.3), then the system camera.
+  /// The camera: once per install the app's own explanation first (dialog
+  /// 11.3, before the system asks for the first time), then the system
+  /// camera. A camera the person turned off shows "Kamera ist aus".
   Future<void> _takePhoto() async {
     final source = ref.read(avoPhotoSourceProvider);
-    final access = await source.cameraAccess();
-    if (!mounted) return;
-    if (access == AvoCameraAccess.denied) {
-      setState(() => _cameraDenied = true);
-      return;
-    }
-    if (access == AvoCameraAccess.notAsked) {
+    if (!await source.cameraExplained()) {
+      if (!mounted) return;
       final go = await showAvoConfirm(
         context,
         title: context.tr('avo_camera_title'),
@@ -262,23 +258,24 @@ class _AvoTabScreenState extends ConsumerState<AvoTabScreen>
         destructive: false,
       );
       if (!go || !mounted) return;
+      await source.markCameraExplained();
     }
-    final photo = await source.take();
-    if (!mounted) return;
-    if (photo == null) {
-      // Declined in the system prompt: say how to allow it.
-      if (await source.cameraAccess() == AvoCameraAccess.denied && mounted) {
-        setState(() => _cameraDenied = true);
-      }
-      return;
-    }
-    _sendPhoto(photo);
+    _usePick(await source.take());
   }
 
-  Future<void> _choosePhoto() async {
-    final photo = await ref.read(avoPhotoSourceProvider).choose();
-    if (photo == null || !mounted) return;
-    _sendPhoto(photo);
+  Future<void> _choosePhoto() async =>
+      _usePick(await ref.read(avoPhotoSourceProvider).choose());
+
+  void _usePick(AvoPick pick) {
+    if (!mounted) return;
+    switch (pick.outcome) {
+      case AvoPickOutcome.photo:
+        _sendPhoto(pick.photo!);
+      case AvoPickOutcome.denied:
+        setState(() => _cameraDenied = true);
+      case AvoPickOutcome.cancelled:
+        break;
+    }
   }
 
   /// The photo goes out with what is in the composer as its note.

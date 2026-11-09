@@ -8,8 +8,12 @@ mixin _AvoPhotoTurns on ChangeNotifier {
   AvoBackend get _photoBackend;
   bool get _photoGone;
   AvoScreenContext? _readContext();
+  DateTime _photoNow();
 
   CancelToken? _photoCancel;
+
+  /// Completes on "Stopp": the round ends at once, whatever the read does.
+  Completer<void>? _photoStop;
 
   /// The context says what a photo is: on the calories screen a meal (with
   /// the module on), on a list or in shopping mode a shopping note.
@@ -34,6 +38,9 @@ mixin _AvoPhotoTurns on ChangeNotifier {
   void _stopPhoto() {
     _photoCancel?.cancel();
     _photoCancel = null;
+    final stop = _photoStop;
+    _photoStop = null;
+    if (stop != null && !stop.isCompleted) stop.complete();
   }
 
   /// Reads [turn]'s photo and adds its card. Without an intent the round
@@ -58,14 +65,18 @@ mixin _AvoPhotoTurns on ChangeNotifier {
     );
     notifyListeners();
 
-    final AvoWidgetPayload result;
-    if (intent == AvoPhotoIntent.meal) {
-      result = await _readMeal(turn, photo);
-    } else {
-      result = await _readNote(photo);
-    }
+    final stop = _photoStop = Completer<void>();
+    final read = intent == AvoPhotoIntent.meal
+        ? _readMeal(turn, photo)
+        : _readNote(photo);
+    // "Stopp" ends the round now; a late estimate is dropped.
+    final result = await Future.any<AvoWidgetPayload?>([
+      read,
+      stop.future.then((_) => null),
+    ]);
+    if (identical(_photoStop, stop)) _photoStop = null;
     if (_photoGone) return;
-    if (stopped()) {
+    if (result == null || stopped()) {
       turn.phase = AvoTurnPhase.stopped;
       return;
     }
@@ -95,7 +106,7 @@ mixin _AvoPhotoTurns on ChangeNotifier {
           carbsG: e.carbsG,
           fatG: e.fatG,
           confidence: e.confidence,
-          meal: avoMealAt(DateTime.now()),
+          meal: avoMealAt(_photoNow()),
           grams: grams > 0 ? grams : null,
           photo: photo,
           allergens: _allergensIn(e),
