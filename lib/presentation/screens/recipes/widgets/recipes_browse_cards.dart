@@ -8,6 +8,8 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/services/allergen_matcher.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
+import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_adaptation.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/recipe_card.dart';
 
 // D2-Rezepte grid: two columns 12 apart, rows 20 apart.
@@ -70,14 +72,11 @@ String? recipeHeroMeta(
   bool showCalories = false,
   bool adapted = false,
 }) {
-  final String? diet;
-  if (hasRecipeLabel(recipe, 'vegan')) {
-    diet = context.tr('recipe_browse_meta_vegan');
-  } else if (hasRecipeLabel(recipe, 'vegetarian')) {
-    diet = context.tr('recipe_browse_meta_vegetarian');
-  } else {
-    diet = null;
-  }
+  final diet = switch (recipeShownDiet(recipe)) {
+    RecipeDiet.vegan => context.tr('recipe_browse_meta_vegan'),
+    RecipeDiet.vegetarian => context.tr('recipe_browse_meta_vegetarian'),
+    _ => null,
+  };
   final parts = [
     ?recipeTimeText(context, recipe.totalTimeMinutes),
     if (recipe.ratingCount > 0)
@@ -188,10 +187,10 @@ class RecipeFitBadge extends StatelessWidget {
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
             child: ExcludeSemantics(
-              child: Icon(
+              child: AvoIcon(
                 warning
-                    ? CupertinoIcons.exclamationmark_triangle_fill
-                    : CupertinoIcons.leaf_arrow_circlepath,
+                    ? AvoIcons.exclamationmarkTriangleFill
+                    : AvoIcons.leafArrowCirclepath,
                 size: size,
                 color: color,
               ),

@@ -5,6 +5,7 @@ import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/screens/recipes/recipes_home_data.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_browse_cards.dart';
 import 'package:shoply/data/models/recipe.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/avatar.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
@@ -118,7 +119,7 @@ class RecipesBrowseSearch extends StatelessWidget {
                         onDismissed: (_) => onRemoveRecent(r),
                         child: NavRow(
                           title: r,
-                          leading: const _RowIcon(CupertinoIcons.clock),
+                          leading: const _RowIcon(AvoIcons.clock),
                           onTap: () => onRecent(r),
                         ),
                       ),
@@ -343,11 +344,11 @@ double _iconBox(BuildContext context) =>
 class _RowIcon extends StatelessWidget {
   const _RowIcon(this.icon);
 
-  final IconData icon;
+  final AvoIconData icon;
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
-    child: Icon(
+    child: AvoIcon(
       icon,
       size: _iconBox(context),
       color: context.colors.secondaryLabel,

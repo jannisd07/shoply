@@ -202,7 +202,7 @@ class CookingTopBar extends StatelessWidget {
                 ),
                 const SizedBox(width: _itemGap),
                 GlassIconButton(
-                  icon: const Icon(CupertinoIcons.list_bullet),
+                  icon: const AvoIcon(AvoIcons.listBullet),
                   semanticLabel: context.tr('recipe_cook_overview'),
                   onPressed: onOverview,
                 ),
@@ -449,8 +449,8 @@ class _CookingTimerCapsuleState extends State<CookingTimerCapsule>
             mainAxisSize: MainAxisSize.min,
             children: [
               finished
-                  ? Icon(
-                      CupertinoIcons.checkmark_circle_fill,
+                  ? AvoIcon(
+                      AvoIcons.checkmarkCircleFill,
                       size: _capsuleIcon,
                       color: colors.label,
                     )

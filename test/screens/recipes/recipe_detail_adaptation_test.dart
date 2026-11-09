@@ -183,6 +183,27 @@ void main() {
       expect(breaksRecipeDiet('Hafermilch', RecipeDiet.vegan), isFalse);
     });
 
+    test('shown diet: the label only while no ingredient breaks it', () {
+      Recipe labelled(List<String> labels, List<String> names) =>
+          _recipe([for (final n in names) _i(n)]).copyWith(labels: labels);
+      expect(
+        recipeShownDiet(labelled(['vegan'], ['Eigelb', 'Senf', 'Dill'])),
+        RecipeDiet.vegetarian,
+        reason: 'egg yolk: never vegan, still vegetarian',
+      );
+      expect(
+        recipeShownDiet(labelled(['Vegan'], ['Hafermilch', 'Mehl'])),
+        RecipeDiet.vegan,
+      );
+      expect(recipeShownDiet(labelled(['vegetarian'], ['Speck'])), isNull);
+      expect(
+        recipeShownDiet(labelled(['non-vegan'], ['Mehl'])),
+        isNull,
+        reason: 'exact labels only',
+      );
+      expect(recipeShownDiet(labelled([], ['Mehl'])), isNull);
+    });
+
     test('steps name the substitute instead of the original', () {
       final recipe = _recipe(
         [_i('Speck', 100, 'g'), _i('Zwiebel')],

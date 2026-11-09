@@ -231,8 +231,12 @@ class RecipeDraftsContent extends StatelessWidget {
     required this.confirmDiscard,
     required this.onDiscard,
     this.onWrite,
+    this.onRetry,
   });
 
+  /// [LibraryPhase.error]: the last load failed; the drafts shown (if any)
+  /// are the ones from before, and a row offers "Erneut versuchen" instead
+  /// of the empty state claiming there are none (A11b).
   final LibraryPhase phase;
   final List<RecipeDraft> drafts;
   final DateTime now;
@@ -247,8 +251,19 @@ class RecipeDraftsContent extends StatelessWidget {
   /// "Rezept schreiben" in the empty state.
   final VoidCallback? onWrite;
 
+  /// "Erneut versuchen" after a failed load.
+  final VoidCallback? onRetry;
+
   @override
   Widget build(BuildContext context) {
+    final failed = phase == LibraryPhase.error;
+    final status = LibraryStatus(
+      failed: failed,
+      hasContent: drafts.isNotEmpty,
+      onRetry: onRetry,
+      failedKey: 'recipe_lib_drafts_load_failed',
+    );
+    if (drafts.isEmpty && failed) return status;
     if (drafts.isEmpty) {
       if (phase == LibraryPhase.loading) {
         return Padding(
@@ -269,13 +284,19 @@ class RecipeDraftsContent extends StatelessWidget {
         onAction: onWrite,
       );
     }
-    return Padding(
-      padding: const EdgeInsets.only(top: _kGroupTop),
-      child: InsetSection(
-        separatorIndent: ListRow.separatorIndent,
-        footer: context.tr('recipe_lib_drafts_footer'),
-        children: [for (final d in drafts) _draftRow(context, d)],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        status,
+        Padding(
+          padding: const EdgeInsets.only(top: _kGroupTop),
+          child: InsetSection(
+            separatorIndent: ListRow.separatorIndent,
+            footer: context.tr('recipe_lib_drafts_footer'),
+            children: [for (final d in drafts) _draftRow(context, d)],
+          ),
+        ),
+      ],
     );
   }
 

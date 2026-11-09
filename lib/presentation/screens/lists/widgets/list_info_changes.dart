@@ -66,7 +66,10 @@ List<ListChange> bundleChanges(List<ListActivity> activities) {
           a.userId == previous.userId &&
           previous.timestamp.difference(a.timestamp).abs() <=
               kListChangeBundle) {
-        out[out.length - 1] = ListChange(first: previous, count: last.count + 1);
+        out[out.length - 1] = ListChange(
+          first: previous,
+          count: last.count + 1,
+        );
         continue;
       }
     }
@@ -158,7 +161,7 @@ String listChangeTime(BuildContext context, DateTime time, DateTime now) {
   final days = today.difference(day).inDays;
   if (days == 0) return DateFormat.Hm(locale).format(local);
   if (days == 1) return context.tr('yesterday');
-  return DateFormat.MMMd(locale).format(local);
+  return listDate(context, local, now);
 }
 
 /// The section title of a day in "Alle Änderungen": "Heute", "Gestern",

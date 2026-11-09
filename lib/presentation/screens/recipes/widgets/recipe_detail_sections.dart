@@ -4,6 +4,7 @@ import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipe_detail_texts.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/servings_stepper.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/app_button.dart';
 import 'package:shoply/presentation/widgets/design/empty_state.dart';
 import 'package:shoply/presentation/widgets/design/inset_section.dart';
@@ -59,15 +60,15 @@ class RecipeAllergenNotice extends StatelessWidget {
                   height: lineHeight,
                   child: Center(
                     widthFactor: 1,
-                    child: Icon(
+                    child: AvoIcon(
                       switch (line.kind) {
                         RecipeNoticeKind.allergen =>
-                          CupertinoIcons.exclamationmark_triangle_fill,
+                          AvoIcons.exclamationmarkTriangleFill,
                         RecipeNoticeKind.adapted =>
-                          CupertinoIcons.leaf_arrow_circlepath,
-                        RecipeNoticeKind.diet => CupertinoIcons.info_circle,
+                          AvoIcons.leafArrowCirclepath,
+                        RecipeNoticeKind.diet => AvoIcons.infoCircle,
                         RecipeNoticeKind.unchecked =>
-                          CupertinoIcons.question_circle,
+                          AvoIcons.questionmarkCircle,
                       },
                       size: symbolSize,
                       color: line.kind == RecipeNoticeKind.allergen
@@ -309,8 +310,8 @@ class _IngredientRow extends StatelessWidget {
           if (line.adapted) ...[
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
-              child: Icon(
-                CupertinoIcons.arrow_right_arrow_left,
+              child: AvoIcon(
+                AvoIcons.arrowRightArrowLeft,
                 size: glyph,
                 color: colors.secondaryLabel,
               ),
@@ -331,8 +332,8 @@ class _IngredientRow extends StatelessWidget {
             const TextSpan(text: ' '),
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
-              child: Icon(
-                CupertinoIcons.exclamationmark_triangle_fill,
+              child: AvoIcon(
+                AvoIcons.exclamationmarkTriangleFill,
                 size: glyph,
                 color: colors.destructive,
               ),
@@ -341,8 +342,8 @@ class _IngredientRow extends StatelessWidget {
             const TextSpan(text: ' '),
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
-              child: Icon(
-                CupertinoIcons.question_circle,
+              child: AvoIcon(
+                AvoIcons.questionmarkCircle,
                 size: glyph,
                 color: colors.secondaryLabel,
               ),
@@ -672,9 +673,7 @@ class RecipeDetailProblem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return EmptyState(
-      icon: Icon(
-        gone ? CupertinoIcons.book : CupertinoIcons.exclamationmark_circle,
-      ),
+      icon: AvoIcon(gone ? AvoIcons.book : AvoIcons.exclamationmarkCircle),
       title: context.tr(
         gone ? 'recipe_detail_gone_title' : 'recipe_detail_failed_title',
       ),

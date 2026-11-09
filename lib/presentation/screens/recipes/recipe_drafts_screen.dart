@@ -29,6 +29,7 @@ class RecipeDraftsScreen extends ConsumerStatefulWidget {
 class _RecipeDraftsScreenState extends ConsumerState<RecipeDraftsScreen>
     with LibraryAvoContext {
   List<RecipeDraft>? _drafts;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -39,10 +40,20 @@ class _RecipeDraftsScreenState extends ConsumerState<RecipeDraftsScreen>
   Future<void> _load() async {
     try {
       final drafts = await ref.read(recipeLibraryActionsProvider).drafts();
-      if (mounted) setState(() => _drafts = drafts);
+      if (mounted) {
+        setState(() {
+          _drafts = drafts;
+          _failed = false;
+        });
+      }
     } catch (e) {
       debugPrint('❌ [RECIPE_DRAFTS] Load failed: $e');
-      if (mounted) setState(() => _drafts ??= const []);
+      if (mounted) {
+        setState(() {
+          _drafts ??= const [];
+          _failed = true;
+        });
+      }
     }
   }
 
@@ -111,13 +122,18 @@ class _RecipeDraftsScreenState extends ConsumerState<RecipeDraftsScreen>
       slivers: [
         SliverToBoxAdapter(
           child: RecipeDraftsContent(
-            phase: drafts == null ? LibraryPhase.loading : LibraryPhase.ready,
+            phase: drafts == null
+                ? LibraryPhase.loading
+                : _failed
+                ? LibraryPhase.error
+                : LibraryPhase.ready,
             drafts: drafts ?? const [],
             now: DateTime.now(),
             onContinue: _continue,
             confirmDiscard: _confirmDiscard,
             onDiscard: _discard,
             onWrite: _write,
+            onRetry: _load,
           ),
         ),
       ],

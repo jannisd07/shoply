@@ -451,6 +451,23 @@ bool breaksRecipeDiet(String name, RecipeDiet diet) {
       tokens.any((t) => t.contains('honig') || t == 'honey');
 }
 
+/// The diet a recipe is shown with ("vegan", "vegetarisch"): its exact
+/// label, but only while no ingredient breaks it. Labels come from the
+/// author or a model; an egg yolk in a "vegan" sauce never shows as vegan
+/// (A11b). A vegan label that fails can still show as vegetarian.
+RecipeDiet? recipeShownDiet(Recipe recipe) {
+  bool has(String label) =>
+      recipe.labels.any((l) => l.trim().toLowerCase() == label);
+  bool fits(RecipeDiet diet) =>
+      !recipe.ingredients.any((i) => breaksRecipeDiet(i.name, diet));
+  final vegan = has('vegan');
+  if (vegan && fits(RecipeDiet.vegan)) return RecipeDiet.vegan;
+  if ((vegan || has('vegetarian')) && fits(RecipeDiet.vegetarian)) {
+    return RecipeDiet.vegetarian;
+  }
+  return null;
+}
+
 const _uncheckedParts = [
   'gewurzmischung', 'gewurzzubereitung', 'wurzmischung', 'pesto', 'bruhe', //
   'fond', 'bouillon', 'sosse', 'sauce', 'paste', 'dressing', 'mischung',

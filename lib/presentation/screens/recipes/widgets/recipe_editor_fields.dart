@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:shoply/core/design/design.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 /// Vertical text padding of a 44 pt row at the default size: (44 - 22) / 2.
 const double kEditorRowVertical = 11;
@@ -104,8 +105,8 @@ class RecipeEditorError extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: AvoSpacing.xxs),
-            child: Icon(
-              CupertinoIcons.exclamationmark_circle,
+            child: AvoIcon(
+              AvoIcons.exclamationmarkCircle,
               size: iconSize,
               color: colors.destructive,
             ),

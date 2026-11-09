@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
@@ -277,8 +276,7 @@ class _ListSettingsScreenState extends ConsumerState<ListSettingsScreen> {
     List<ListMember> members,
   ) {
     if (list == null) return null;
-    final locale = Localizations.localeOf(context).toLanguageTag();
-    final date = DateFormat.MMMd(locale).format(list.createdAt.toLocal());
+    final date = listDate(context, list.createdAt);
     ListMember? owner;
     for (final m in members) {
       if (m.userId == list.ownerId) owner = m;

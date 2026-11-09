@@ -569,8 +569,8 @@ class _GenderRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: AvoSpacing.xs),
-        Icon(
-          CupertinoIcons.chevron_up_chevron_down,
+        AvoIcon(
+          AvoIcons.chevronUpChevronDown,
           size: 13,
           color: colors.secondaryLabel,
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:shoply/data/models/recipe.dart';
 import 'package:shoply/data/models/recipe_draft.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/author_avatar.dart';
@@ -8,6 +9,7 @@ import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_data
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_mine.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_saved.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/recipes_library_scaffold.dart';
+import 'package:shoply/presentation/widgets/design/empty_state.dart';
 
 import '../../layout/layout_matrix.dart';
 
@@ -322,6 +324,50 @@ void main() {
     cases: _stateCases,
     scrollable: true,
   );
+
+  layoutMatrix(
+    'RecipeDraftsContent failed',
+    (context) => RecipeDraftsContent(
+      phase: LibraryPhase.error,
+      drafts: const [],
+      now: _now,
+      onContinue: (_) {},
+      confirmDiscard: (_) async => true,
+      onDiscard: (_) {},
+      onWrite: () {},
+      onRetry: () {},
+    ),
+    cases: _stateCases,
+    scrollable: true,
+  );
+
+  testWidgets('drafts: a failed load says so instead of "no drafts"', (
+    tester,
+  ) async {
+    var retried = 0;
+    await tester.pumpWidget(
+      layoutHarness(
+        const LayoutCase(width: 390, scale: 1),
+        SingleChildScrollView(
+          child: RecipeDraftsContent(
+            phase: LibraryPhase.error,
+            drafts: const [],
+            now: _now,
+            onContinue: (_) {},
+            confirmDiscard: (_) async => true,
+            onDiscard: (_) {},
+            onWrite: () {},
+            onRetry: () => retried++,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Drafts couldn\'t be loaded.'), findsOneWidget);
+    expect(find.byType(EmptyState), findsNothing);
+    await tester.tap(find.text('Try again'));
+    expect(retried, 1);
+  });
 
   layoutMatrix(
     'LibraryStatus and AuthorAvatar',

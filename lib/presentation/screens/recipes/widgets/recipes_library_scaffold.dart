@@ -223,9 +223,13 @@ class LibraryStatus extends StatelessWidget {
     this.failed = false,
     this.hasContent = true,
     this.onRetry,
+    this.failedKey = 'recipe_lib_load_failed',
   });
 
   final bool offline;
+
+  /// Text key of the failed row ("Entwürfe konnten nicht geladen werden.").
+  final String failedKey;
 
   /// The last load failed.
   final bool failed;
@@ -248,7 +252,7 @@ class LibraryStatus extends StatelessWidget {
     } else {
       row = StatusRow(
         kind: StatusKind.sectionError,
-        text: context.tr('recipe_lib_load_failed'),
+        text: context.tr(failedKey),
         actionLabel: onRetry == null ? null : context.tr('common_try_again'),
         onAction: onRetry,
       );
@@ -486,8 +490,8 @@ class LibraryAllergenBadge extends StatelessWidget {
               height: context.typography.lineHeightOf(AvoTextStyle.footnote),
               child: Center(
                 widthFactor: 1,
-                child: Icon(
-                  CupertinoIcons.exclamationmark_triangle_fill,
+                child: AvoIcon(
+                  AvoIcons.exclamationmarkTriangleFill,
                   size: size,
                   color: colors.destructive,
                 ),

@@ -147,8 +147,8 @@ class _PhotoArea extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          CupertinoIcons.camera,
+                        AvoIcon(
+                          AvoIcons.camera,
                           size: _cameraGlyph,
                           color: colors.secondaryLabel,
                         ),
@@ -413,8 +413,8 @@ class _IngredientRow extends StatelessWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: AvoSpacing.xxs),
-                  child: Icon(
-                    CupertinoIcons.question_circle,
+                  child: AvoIcon(
+                    AvoIcons.questionmarkCircle,
                     size: context.typography.sizeOf(AvoTextStyle.subhead),
                     color: colors.secondaryLabel,
                   ),

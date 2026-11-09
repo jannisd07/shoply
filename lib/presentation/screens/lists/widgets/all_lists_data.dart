@@ -260,8 +260,18 @@ String relativeListTime(BuildContext context, DateTime time, DateTime now) {
   if (days < 7) {
     return context.tr('list_ov_time_days', params: {'n': '$days'});
   }
+  return listDate(context, local, now);
+}
+
+/// A day as "14. Okt." in this year and "14. Okt. 2025" in an earlier one,
+/// so a list "seit 9. Nov." is never read as this year's (A11b).
+String listDate(BuildContext context, DateTime time, [DateTime? now]) {
+  final local = time.toLocal();
   final locale = Localizations.localeOf(context).toLanguageTag();
-  return DateFormat.MMMd(locale).format(local);
+  final year = (now ?? DateTime.now()).year;
+  return local.year == year
+      ? DateFormat.MMMd(locale).format(local)
+      : DateFormat.yMMMd(locale).format(local);
 }
 
 /// "12 Artikel" / "1 Artikel".

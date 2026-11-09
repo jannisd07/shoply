@@ -439,7 +439,7 @@ class RecipesBrowsePage extends StatelessWidget {
                 if (current != null && onSort != null)
                   Builder(
                     builder: (anchor) => GlassIconButton(
-                      icon: const Icon(CupertinoIcons.arrow_up_arrow_down),
+                      icon: const AvoIcon(AvoIcons.arrowUpArrowDown),
                       semanticLabel:
                           '${context.tr('recipe_browse_sort')}, '
                           '${recipeSortLabel(context, current)}',

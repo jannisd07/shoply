@@ -32,6 +32,7 @@ import 'package:shoply/presentation/screens/lists/widgets/list_maybe_also.dart';
 import 'package:shoply/presentation/screens/onboarding/onboarding_steps.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/state/items_provider.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 import 'package:shoply/presentation/widgets/design/add_item_accessory.dart';
 import 'package:shoply/presentation/widgets/design/avo_figure.dart';
 import 'package:shoply/presentation/widgets/design/avo_menu.dart';
@@ -1015,7 +1016,7 @@ class _ListDetailScreenState extends ConsumerState<ListDetailScreen>
       return [
         SliverToBoxAdapter(
           child: EmptyState(
-            icon: const Icon(CupertinoIcons.list_bullet),
+            icon: const AvoIcon(AvoIcons.listBullet),
             title: context.tr('list_detail_empty_title'),
             message: context.tr('list_detail_empty_message'),
             actionLabel: context.tr('list_detail_menu_import'),

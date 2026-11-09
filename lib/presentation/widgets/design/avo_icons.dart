@@ -696,6 +696,64 @@ abstract final class AvoIcons {
     AvoIconPath('M7.5 9.2 12 4.7l4.5 4.5M7.5 14.8l4.5 4.5 4.5-4.5'),
   ], strokeWidth: 2.2);
 
+  // Added for A11b: the last CupertinoIcons in A's screens, drawn on the
+  // same 24 grid in the D2 style (round caps, stroke 1.8 to 2).
+
+  /// SF Symbol `star` (ratings, 14 to 28 pt, stroke 1.8). The filled
+  /// variant is `star.fill`.
+  static const star = AvoIconData([
+    AvoIconPath(
+      'M12 3.3l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.7l-5.2 2.8 1-5.9-4.3-4.1'
+      ' 5.9-.8z',
+      filledStyle: AvoIconStyle.fillAndStroke,
+    ),
+  ]);
+
+  /// SF Symbol `info.circle` (diet notes, 16 to 18 pt, stroke 2).
+  static const infoCircle = AvoIconData([
+    AvoIconCircle(12, 12, 9),
+    AvoIconPath('M12 11v5.5'),
+    AvoIconCircle(12, 7.8, 1.1, style: AvoIconStyle.fill),
+  ], strokeWidth: 2);
+
+  /// SF Symbol `book`: an open book (recipe gone, 28 to 44 pt, stroke 1.8).
+  static const book = AvoIconData([
+    AvoIconPath(
+      'M12 6.5C10.3 5.2 7.8 4.5 4 4.5v13c3.8 0 6.3.7 8 2 1.7-1.3 4.2-2 8-2'
+      'v-13c-3.8 0-6.3.7-8 2zM12 6.5v13',
+    ),
+  ]);
+
+  /// SF Symbol `bell` (notification explainer, 28 to 44 pt, stroke 1.8).
+  static const bell = AvoIconData([
+    AvoIconPath('M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.8h-15z'),
+    AvoIconPath('M10 20.5a2 2 0 0 0 4 0'),
+  ]);
+
+  /// SF Symbol `arrow.up.arrow.down`: sort (toolbar 22 pt, stroke 1.8).
+  static const arrowUpArrowDown = AvoIconData([
+    AvoIconPath('M8 20V4M4.5 7.5 8 4l3.5 3.5M16 4v16M12.5 16.5 16 20l3.5-3.5'),
+  ]);
+
+  /// SF Symbol `arrow.right.arrow.left`: a substitute ("statt Feta"),
+  /// 14 to 16 pt, stroke 2.
+  static const arrowRightArrowLeft = AvoIconData([
+    AvoIconPath('M4 8h16M16.5 4.5 20 8l-3.5 3.5M20 16H4M7.5 12.5 4 16l3.5 3.5'),
+  ], strokeWidth: 2);
+
+  /// SF Symbol `leaf.arrow.circlepath`: a recipe adapted to the diet
+  /// (16 to 20 pt, stroke 1.8).
+  static const leafArrowCirclepath = AvoIconData([
+    AvoIconPath(
+      'M19.5 12a7.5 7.5 0 0 1-12.8 5.3M4.5 12a7.5 7.5 0 0 1 12.8-5.3',
+    ),
+    AvoIconPath('M17.6 3.4v3.4h-3.4M6.4 20.6v-3.4h3.4'),
+    AvoIconPath(
+      'M15 9c-3.4 0-5.8 1.6-5.8 4.4 0 .5.1 1 .3 1.3.4.1.8.2 1.2.2 2.5 0 4.3-2'
+      ' 4.3-5.9zM9.2 15.2c1-1.5 2.1-2.6 3.5-3.5',
+    ),
+  ]);
+
   /// Every icon by name, for the component gallery and tests.
   static const Map<String, AvoIconData> all = {
     'home': home,
@@ -759,6 +817,13 @@ abstract final class AvoIcons {
     'listBullet': listBullet,
     'arrowDown': arrowDown,
     'chevronUpChevronDown': chevronUpChevronDown,
+    'star': star,
+    'infoCircle': infoCircle,
+    'book': book,
+    'bell': bell,
+    'arrowUpArrowDown': arrowUpArrowDown,
+    'arrowRightArrowLeft': arrowRightArrowLeft,
+    'leafArrowCirclepath': leafArrowCirclepath,
   };
 }
 

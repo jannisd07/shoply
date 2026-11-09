@@ -535,10 +535,9 @@ class _RatingRow extends StatelessWidget {
                     child: SizedBox.square(
                       dimension: AvoSizes.hitTarget,
                       child: Center(
-                        child: Icon(
-                          star <= rating
-                              ? CupertinoIcons.star_fill
-                              : CupertinoIcons.star,
+                        child: AvoIcon(
+                          AvoIcons.star,
+                          filled: star <= rating,
                           size: _starSize,
                           color: star <= rating
                               ? colors.tint

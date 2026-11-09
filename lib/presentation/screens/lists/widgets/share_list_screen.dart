@@ -36,9 +36,7 @@ const String _kIntroSeenKey = 'list_share_notif_intro_seen_v1';
 /// Whether "Liste teilen" starts with the notification explanation
 /// (Konzept 11 §9.3: once, only while the system prompt was never shown).
 /// Overridden in tests.
-final shareNotificationIntroProvider = FutureProvider<bool>((
-  ref,
-) async {
+final shareNotificationIntroProvider = FutureProvider<bool>((ref) async {
   final prefs = await SharedPreferences.getInstance();
   if (prefs.getBool(_kIntroSeenKey) ?? false) return false;
   return !(prefs.getBool(NotificationPermissionService.promptedKey) ?? false);
@@ -47,22 +45,21 @@ final shareNotificationIntroProvider = FutureProvider<bool>((
 /// Asks for notifications ("Mitteilungen erlauben"). Overridden in tests.
 final shareNotificationRequestProvider = Provider<Future<bool> Function()>(
   (ref) =>
-      () => NotificationPermissionService.instance.requestIfUseful(
-        'list_shared',
-      ),
+      () =>
+          NotificationPermissionService.instance.requestIfUseful('list_shared'),
 );
 
 /// Opens the system share sheet. Overridden in tests.
 final shareSheetProvider =
     Provider<Future<void> Function(String text, String subject, Rect origin)>(
-      (ref) => (text, subject, origin) =>
-          Share.share(text, subject: subject, sharePositionOrigin: origin),
+      (ref) =>
+          (text, subject, origin) =>
+              Share.share(text, subject: subject, sharePositionOrigin: origin),
     );
 
 /// "482 913": a code in two groups of three.
-String groupShareCode(String code) => code.length == 6
-    ? '${code.substring(0, 3)} ${code.substring(3)}'
-    : code;
+String groupShareCode(String code) =>
+    code.length == 6 ? '${code.substring(0, 3)} ${code.substring(3)}' : code;
 
 /// The invitation text: sentence, link, and the code for "Liste beitreten"
 /// (no emoji, Konzept 11 §9.1).
@@ -447,8 +444,8 @@ class _NotificationIntro extends StatelessWidget {
         children: [
           const SizedBox(height: AvoSpacing.xxl),
           ExcludeSemantics(
-            child: Icon(
-              CupertinoIcons.bell,
+            child: AvoIcon(
+              AvoIcons.bell,
               size: _kBellSize,
               color: colors.secondaryLabel,
             ),

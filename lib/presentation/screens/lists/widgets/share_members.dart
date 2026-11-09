@@ -2,11 +2,11 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
+import 'package:shoply/presentation/screens/lists/widgets/all_lists_data.dart';
 import 'package:shoply/presentation/widgets/design/avatar.dart';
 
 /// One member of a list (`list_members` with the joined `users` row).
@@ -65,15 +65,20 @@ final listMembersProvider = FutureProvider.family<List<ListMember>, String>((
 });
 
 /// Owner first, then alphabetically (case-insensitive).
-List<ListMember> sortMembers(List<ListMember> members) => [...members]
-  ..sort((a, b) {
-    if (a.isOwner != b.isOwner) return a.isOwner ? -1 : 1;
-    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-  });
+List<ListMember> sortMembers(List<ListMember> members) =>
+    [...members]..sort((a, b) {
+      if (a.isOwner != b.isOwner) return a.isOwner ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
 
 /// The members except [currentUserId].
-List<ListMember> otherMembers(List<ListMember> members, String? currentUserId) =>
-    [for (final m in members) if (m.userId != currentUserId) m];
+List<ListMember> otherMembers(
+  List<ListMember> members,
+  String? currentUserId,
+) => [
+  for (final m in members)
+    if (m.userId != currentUserId) m,
+];
 
 /// A member's name for display; "Jemand" when there is none.
 String memberName(BuildContext context, ListMember member) =>
@@ -112,10 +117,9 @@ String? memberSubtitle(
   if (member.isOwner) return context.tr('list_ov_creator');
   final joined = member.joinedAt;
   if (joined == null) return null;
-  final locale = Localizations.localeOf(context).toLanguageTag();
   return context.tr(
     'list_ov_joined_on',
-    params: {'date': DateFormat.MMMd(locale).format(joined.toLocal())},
+    params: {'date': listDate(context, joined)},
   );
 }
 

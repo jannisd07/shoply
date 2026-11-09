@@ -25,6 +25,7 @@ const Map<String, String> recipesLibraryEn = {
   'recipe_lib_ago_year_one': '1 year ago',
   'recipe_lib_ago_years': '{n} years ago',
   'recipe_lib_load_failed': 'Recipes couldn\'t be loaded.',
+  'recipe_lib_drafts_load_failed': 'Drafts couldn\'t be loaded.',
   'recipe_lib_offline': 'Offline. You\'re seeing what was loaded last.',
   'recipe_lib_offline_empty':
       'Offline. More appears here once you\'re back online.',
@@ -158,6 +159,7 @@ const Map<String, String> recipesLibraryDe = {
   'recipe_lib_ago_year_one': 'vor 1 Jahr',
   'recipe_lib_ago_years': 'vor {n} Jahren',
   'recipe_lib_load_failed': 'Rezepte konnten nicht geladen werden.',
+  'recipe_lib_drafts_load_failed': 'Entwürfe konnten nicht geladen werden.',
   'recipe_lib_offline': 'Offline. Du siehst den zuletzt geladenen Stand.',
   'recipe_lib_offline_empty':
       'Offline. Sobald du wieder online bist, erscheint hier mehr.',

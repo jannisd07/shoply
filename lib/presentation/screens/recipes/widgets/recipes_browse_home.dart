@@ -351,10 +351,7 @@ class RecipesBrowseContent extends StatelessWidget {
           ),
           child: HintRow(
             text: context.tr('recipe_browse_diet_hint'),
-            leading: Icon(
-              CupertinoIcons.leaf_arrow_circlepath,
-              color: colors.tint,
-            ),
+            leading: AvoIcon(AvoIcons.leafArrowCirclepath, color: colors.tint),
             actionLabel: context.tr('recipe_browse_diet_hint_action'),
             onTap: onDietHint,
             onDismiss: onDismissDietHint,

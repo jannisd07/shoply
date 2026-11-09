@@ -344,7 +344,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   List<String> _metaParts(Recipe recipe, String language) {
     String tr(String key, Map<String, String> params) =>
         context.tr(key, params: params);
-    final labels = recipe.labels.map((l) => l.toLowerCase()).toList();
+    final diet = recipeShownDiet(recipe);
     return [
       if (recipe.totalTimeMinutes > 0)
         formatRecipeTime(recipe.totalTimeMinutes, tr),
@@ -356,9 +356,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
             'count': '${recipe.ratingCount}',
           },
         ),
-      if (labels.any((l) => l.contains('vegan')))
+      if (diet == RecipeDiet.vegan)
         context.tr('recipe_detail_vegan')
-      else if (labels.any((l) => l.contains('vegetar')))
+      else if (diet == RecipeDiet.vegetarian)
         context.tr('recipe_detail_vegetarian'),
     ];
   }

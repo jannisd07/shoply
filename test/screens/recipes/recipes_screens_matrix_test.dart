@@ -364,8 +364,8 @@ void main() {
       'loading': _library(load: _Load.never),
       'error': _library(load: _Load.fails),
     },
-    // Drafts live on the device: a failed read shows "no drafts".
-    shows: const {'error': 'empty'},
+    // A failed read says so with "Erneut versuchen", not "no drafts"
+    // (A11b).
   );
 
   _libraryMatrix(

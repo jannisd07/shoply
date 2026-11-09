@@ -57,7 +57,9 @@ class _Category {
 
   String name(BuildContext context) =>
       custom?.name ??
-      Categories.getById(id).getName(Localizations.localeOf(context).languageCode);
+      Categories.getById(
+        id,
+      ).getName(Localizations.localeOf(context).languageCode);
 }
 
 /// "Reihenfolge im Markt" (Konzept 11 §12.1): every category of the list in
@@ -128,9 +130,7 @@ class _CategoryOrderScreenState extends ConsumerState<CategoryOrderScreen> {
   /// the moved row's gap, as `onReorderItem` reports them).
   void _reorder(int oldIndex, int newIndex) {
     final items = [...?_items];
-    if (oldIndex == newIndex ||
-        newIndex < 0 ||
-        newIndex >= items.length) {
+    if (oldIndex == newIndex || newIndex < 0 || newIndex >= items.length) {
       return;
     }
     AvoHaptics.selection();
@@ -240,7 +240,10 @@ class _CategoryOrderScreenState extends ConsumerState<CategoryOrderScreen> {
     final cover = route is PageRoute && route.fullscreenDialog;
     final ax = context.isAccessibilityText;
     final intro = store == null
-        ? context.tr('list_ov_order_for_list', params: {'list': widget.listName})
+        ? context.tr(
+            'list_ov_order_for_list',
+            params: {'list': widget.listName},
+          )
         : context.tr(
             'list_ov_order_for_store',
             params: {'store': store.name, 'list': widget.listName},
@@ -260,9 +263,7 @@ class _CategoryOrderScreenState extends ConsumerState<CategoryOrderScreen> {
       ),
       if (items != null)
         SliverPadding(
-          padding: EdgeInsets.symmetric(
-            horizontal: ax ? 0 : AvoSpacing.screen,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: ax ? 0 : AvoSpacing.screen),
           sliver: SliverReorderableList(
             itemCount: items.length,
             onReorderItem: _reorder,
@@ -305,9 +306,7 @@ class _CategoryOrderScreenState extends ConsumerState<CategoryOrderScreen> {
                       size: _kSymbolSize,
                     ),
               open: counts[items[index].id] ?? 0,
-              onTap: items[index].isCustom
-                  ? () => _edit(items[index])
-                  : null,
+              onTap: items[index].isCustom ? () => _edit(items[index]) : null,
               onMove: (delta) => _reorder(index, index + delta),
             ),
           ),
@@ -458,8 +457,8 @@ class _OrderRow extends StatelessWidget {
       child: SizedBox.square(
         dimension: AvoSizes.hitTarget,
         child: Center(
-          child: Icon(
-            CupertinoIcons.line_horizontal_3,
+          child: AvoIcon(
+            AvoIcons.line3Horizontal,
             size: 20,
             color: colors.secondaryLabel,
           ),

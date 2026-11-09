@@ -551,8 +551,8 @@ class _ValueRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: AvoSpacing.xs),
-        Icon(
-          CupertinoIcons.chevron_up_chevron_down,
+        AvoIcon(
+          AvoIcons.chevronUpChevronDown,
           size: context.typography.sizeOf(AvoTextStyle.footnote),
           color: colors.tint,
         ),
@@ -675,8 +675,8 @@ class _PickRow extends StatelessWidget {
             const TextSpan(text: ' '),
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
-              child: Icon(
-                CupertinoIcons.exclamationmark_triangle_fill,
+              child: AvoIcon(
+                AvoIcons.exclamationmarkTriangleFill,
                 size: context.typography.sizeOf(AvoTextStyle.subhead),
                 color: colors.destructive,
               ),

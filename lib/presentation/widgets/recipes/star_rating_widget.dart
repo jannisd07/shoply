@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/localization/localization_helper.dart';
+import 'package:shoply/presentation/widgets/design/avo_icons.dart';
 
 /// Stars stop growing with Dynamic Type at xxxL (glyphs, Konzept 00 E-04).
 const double _starGrowthLimit = 23 / 17;
@@ -80,8 +81,9 @@ class _RecipeRatingRowState extends State<RecipeRatingRow> {
             SizedBox.square(
               dimension: AvoSizes.hitTarget,
               child: Center(
-                child: Icon(
-                  i <= shown ? CupertinoIcons.star_fill : CupertinoIcons.star,
+                child: AvoIcon(
+                  AvoIcons.star,
+                  filled: i <= shown,
                   size: _starSize * scale,
                   color: colors.tint,
                 ),

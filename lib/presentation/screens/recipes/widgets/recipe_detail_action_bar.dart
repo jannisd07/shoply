@@ -104,12 +104,12 @@ class RecipeDetailActionBar extends StatelessWidget {
         final cookButton = cookText
             ? AppButton.secondary(
                 label: cook,
-                icon: const Icon(CupertinoIcons.flame),
+                icon: const AvoIcon(AvoIcons.flame),
                 floating: true,
                 onPressed: onCook,
               )
             : GlassIconButton(
-                icon: const Icon(CupertinoIcons.flame),
+                icon: const AvoIcon(AvoIcons.flame),
                 semanticLabel: step == null
                     ? context.tr('recipe_detail_cook_start')
                     : cook,
