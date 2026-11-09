@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shoply/core/localization/app_translations.dart';
 import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/widgets/design/pro_gate.dart';
 
@@ -42,16 +43,31 @@ Future<({WidgetRef ref, GoRouter router, BuildContext context})> _pump(
 void main() {
   tearDown(() => ProFeatures.debugGatedOverride = null);
 
-  test('nothing is Pro until A9 is decided', () {
-    expect(ProFeatures.gated, isEmpty);
-    expect(ProFeatures.isGated('cook_mode'), isFalse);
+  test('variant B (A9): cooking mode, plan suggestions and stats are Pro', () {
+    expect(ProFeatures.gated, {'cook_mode', 'plan_suggestions', 'stats'});
+    expect(ProFeatures.isGated('avo_questions'), isFalse);
+    // Offers and the plan's "auf die Liste" stay free.
+    expect(ProFeatures.isGated('offers'), isFalse);
+    expect(ProFeatures.isGated('meal_plan'), isFalse);
+  });
+
+  test('every Pro feature has a paywall row with texts in both languages', () {
+    for (final id in ProFeatures.gated) {
+      final info = ProFeatures.info(id);
+      expect(info, isNotNull, reason: id);
+      for (final key in [info!.titleKey, info.bodyKey, info.continueKey!]) {
+        expect(AppTranslations.get(key, 'de'), isNot(key), reason: key);
+        expect(AppTranslations.get(key, 'en'), isNot(key), reason: key);
+      }
+    }
+    expect(ProFeatures.info('nope'), isNull);
   });
 
   testWidgets('a free feature runs without a paywall', (tester) async {
     final app = await _pump(tester, subscribed: false);
     var ran = 0;
     final result = await ProGate.run(app.context, app.ref,
-        feature: 'cook_mode', action: () => ran++);
+        feature: 'avo_questions', action: () => ran++);
     expect(result, isTrue);
     expect(ran, 1);
     await tester.pumpAndSettle();

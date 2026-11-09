@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shoply/core/design/design.dart';
 import 'package:shoply/core/modules/app_modules.dart';
@@ -9,6 +10,7 @@ import 'package:shoply/data/services/connectivity_service.dart';
 import 'package:shoply/presentation/screens/recipes/cooking_mode_screen.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_progress.dart';
 import 'package:shoply/presentation/screens/recipes/widgets/cooking_mode_timers.dart';
+import 'package:shoply/presentation/providers/subscription_provider.dart';
 import 'package:shoply/presentation/state/auth_provider.dart';
 import 'package:shoply/presentation/widgets/design/check_circle.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
@@ -70,7 +72,9 @@ List<Override> _overrides({
   _Alerts? alerts,
   _Clock? clock,
   List<int>? ratings,
+  bool pro = true,
 }) => [
+  isSubscribedProvider.overrideWithValue(pro),
   cookingKeepAwakeProvider.overrideWithValue(awake ?? _Awake()),
   cookingTimerAlertsProvider.overrideWithValue(alerts ?? _Alerts()),
   cookingClockProvider.overrideWithValue((clock ?? _Clock()).call),
@@ -197,6 +201,52 @@ void main() {
 
     // Swiping moves too.
     await tester.fling(find.byType(PageView), const Offset(-400, 0), 1500);
+    await _settle(tester);
+    expect(find.text('Step 1'), findsOneWidget);
+  });
+
+  _cookTest('without Pro, step 1 is the preview and step 2 opens the paywall', (
+    tester,
+  ) async {
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) =>
+              CookingModeScreen(recipe: _recipe, servings: 2),
+        ),
+        GoRoute(
+          path: '/pro',
+          builder: (context, state) =>
+              Text('paywall ${state.uri.queryParameters['feature']}'),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: _overrides(pro: false),
+        child: MaterialApp.router(
+          theme: ThemeData(platform: TargetPlatform.iOS),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await _settle(tester);
+    await _next(tester);
+    expect(find.text('Step 1'), findsOneWidget);
+
+    // "Weiter" carries the Pro badge and opens the paywall.
+    await _next(tester, 'Next, Pro feature');
+    expect(find.text('paywall cook_mode'), findsOneWidget);
+    router.pop();
+    await _settle(tester);
+    expect(find.text('Step 1'), findsOneWidget);
+
+    // A swipe cannot get past the gate either.
+    await tester.fling(find.byType(PageView), const Offset(-400, 0), 1500);
+    await _settle(tester);
+    expect(find.text('paywall cook_mode'), findsOneWidget);
+    router.pop();
     await _settle(tester);
     expect(find.text('Step 1'), findsOneWidget);
   });

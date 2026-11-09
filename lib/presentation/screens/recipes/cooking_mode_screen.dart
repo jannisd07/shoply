@@ -39,8 +39,9 @@ const Tolerance _pageTolerance = Tolerance(distance: 0.5, velocity: 10);
 /// turns the page.
 const double _flickVelocity = 300;
 
-/// The Pro id of the cooking mode ([ProGate.run]); not gated until the owner
-/// decides (A9).
+/// The Pro id of the cooking mode ([ProGate.run]). Avo Pro since A9
+/// (owner, 09.11.2026): the ingredients and step 1 stay free as a real
+/// preview, every later step needs Pro (Konzept 18 §9.2).
 const String kCookModeFeature = 'cook_mode';
 
 /// Keeps the screen on while the cooking mode is in front.
@@ -316,6 +317,10 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen>
   void _goTo(int page) {
     final target = page.clamp(0, _pageCount - 1);
     if (target == _page) return;
+    if (_lockedAt(target)) {
+      _unlock(() => _goTo(page));
+      return;
+    }
     _pageSeen(target);
     if (context.reduceMotion || !_pages.hasClients) return;
     final position = _pages.position;
@@ -356,6 +361,12 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen>
   /// A swipe settled on [page] (PageView).
   void _onPageChanged(int page) {
     if (_springing || page == _page) return;
+    if (_lockedAt(page)) {
+      // A swipe past step 1 without Pro: back to step 1, then the paywall.
+      if (_pages.hasClients) _pages.jumpToPage(_page);
+      _unlock(() => _goTo(page));
+      return;
+    }
     unawaited(AvoHaptics.selection());
     _pageSeen(page);
   }
@@ -372,23 +383,29 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen>
     _goTo(next);
   }
 
+  /// "Weiter" on step 1 carries the Pro badge (rebuilds on a purchase).
   bool get _proLocked =>
       _page == 1 && _stepCount > 1 && ProGate.isLocked(ref, kCookModeFeature);
+
+  /// Whether [page] is behind the Pro gate right now: every page after
+  /// step 1, while the person has no Pro and comes from step 1 or before.
+  bool _lockedAt(int page) =>
+      page > 1 &&
+      _page <= 1 &&
+      _stepCount > 1 &&
+      ProGate.isLockedNow(ref, kCookModeFeature);
+
+  /// Opens the paywall from the cooking mode and runs [then] after a
+  /// purchase; closing the paywall keeps the person on their step.
+  void _unlock(VoidCallback then) {
+    unawaited(
+      ProGate.run(context, ref, feature: kCookModeFeature, action: then),
+    );
+  }
 
   void _next() {
     if (_page >= _donePage) {
       unawaited(_finish());
-      return;
-    }
-    if (_proLocked) {
-      unawaited(
-        ProGate.run(
-          context,
-          ref,
-          feature: kCookModeFeature,
-          action: () => _goTo(_page + 1),
-        ),
-      );
       return;
     }
     _goTo(_page + 1);

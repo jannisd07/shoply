@@ -21,7 +21,6 @@ import 'package:shoply/presentation/state/last_list_provider.dart';
 import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/recipes_provider.dart';
 import 'package:shoply/presentation/state/saved_recipes_provider.dart';
-import 'package:shoply/presentation/widgets/design/pro_gate.dart';
 import 'package:shoply/presentation/widgets/slots/b_slots.dart';
 import 'package:shoply/routes/route_paths.dart';
 
@@ -121,20 +120,15 @@ class RecipeDetailActions {
   }
 
   /// The cooking mode with [recipe] as the person cooks it (adapted when
-  /// chosen); goes through the Pro gate (nothing gated until A9).
+  /// chosen). Opens for everyone: the ingredients and step 1 are the free
+  /// preview, the cooking mode itself gates the later steps ([kCookModeFeature]).
   Future<void> cook(
     BuildContext context,
     WidgetRef ref,
     Recipe recipe,
     int servings,
   ) async {
-    await ProGate.run(
-      context,
-      ref,
-      feature: kCookModeFeature,
-      action: () =>
-          openCookingMode(context, recipe: recipe, servings: servings),
-    );
+    await openCookingMode(context, recipe: recipe, servings: servings);
   }
 
   /// "Zutaten auf die Liste" as a full screen.
