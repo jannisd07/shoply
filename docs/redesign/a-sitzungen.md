@@ -1,6 +1,6 @@
 # Teil A: eine Sitzung je Arbeitspaket
 
-Stand 09.11.2026 (A11b erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
+Stand 09.11.2026 (S6 erledigt). Owner-Entscheidung 09.11.2026 (Wochenlimit): **jede Claude-Sitzung bearbeitet genau ein Paket** und
 endet dann. Eine lange Sitzung liest bei jeder Antwort ihren ganzen Verlauf neu (A5–A8 lief in einer Sitzung mit über
 600.000 Tokens Kontext). Wissen lebt nur in diesen Dateien, nicht in Sitzungen.
 
@@ -43,10 +43,10 @@ für die nächste Sitzung geben.
 | A12 Aufräumen und Analysen | erledigt | `a12-stand.md`, `feature-ideen.md` |
 | A11 Qualität, Teil 1 | erledigt | `a11-pruefplan.md`, `a11-stand.md` |
 | A11b Qualität, Teil 2 | erledigt | `a11b-stand.md` |
-| **S6 Gegenprüfung von B** | **Als Nächstes** | prompt §5 A11 „Gegenprüfung“, „Offen bei A“ in `a11b-stand.md` |
-| S5 Bereiche fertig | offen | prompt §11 |
+| S6 Gegenprüfung von B | erledigt (B6b/B7/B8 folgen in S5) | `s6-stand.md` |
+| **S5 Bereiche fertig** | **Als Nächstes** | prompt §11, „Offen bei A“ in `s6-stand.md` und `a11b-stand.md` |
 
-Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst S6, S5. Fragt die Sitzung den
+Reihenfolge: A9 oder A10, sobald der Owner entschieden hat, sonst S5. Fragt die Sitzung den
 Owner zu Beginn nach A9/A10, nur wenn eins davon „Als Nächstes“ ist.
 
 ### AB1 Anfragen von B: Komponenten und Daten
@@ -112,6 +112,17 @@ Quellen: prompt §5 A11 „Gegenprüfung“ und §9, `status-B.md` (Meilensteine
 Maßstäben wie die eigenen (Prüfmatrix, `bash tool/design_check.sh B`, harte Regel keine Sheets/Slider, Simulator-
 Stichproben nach Absprache), ändert B's Dateien nie und schreibt Funde als Wünsche in `s6-stand.md` „Von Teil B“
 und per Nachricht an B. Vorher fragen, ob der Owner im Simulator angemeldet ist.
+
+### S5 Bereiche fertig
+
+Quellen: prompt §11 („Fertig, wenn“), „Offen bei A“ in `s6-stand.md`, `a11b-stand.md`, `ab1-stand.md`, `ab2-stand.md`;
+vorher `status-B.md` „Anfragen an Teil A“ (gehen vor). **A-V9 (status-B 19):** sobald B8 (`feature/b8-history`) auf
+`main` kommt, lassen `shopping_mode_screen.dart` und `list_detail_screen.dart` ihren Erfolgsmoment nach
+`openCheckoutFlow == true` weg, im selben Push wie B (B meldet sich). Sind B6b, B7 oder B8 schon auf `main`, deren
+Screens wie in S6 gegenprüfen (Matrix, `design_check.sh B`, Sheets/Slider) und Funde an B. Rest aus „Offen bei A“
+(Filter-Chips mit `recipeShownDiet` nur nach Owner-Frage, Galerie-Einträge, `SwipeActions`-Reste,
+`ItemRow`-Vorschlagsvariante). Dann prompt §11 Punkt für Punkt prüfen und den Abschlussbericht für den Owner
+schreiben (`abschlussbericht-A.md`: gebaut, offen, Entscheidungen; A9/A10 als offen, falls weiter ohne Entscheidung).
 
 ### A12 Aufräumen und Analysen
 

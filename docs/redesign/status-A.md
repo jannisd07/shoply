@@ -4,6 +4,10 @@ Diese Datei schreibt nur Teil A. Teil B liest sie nach jedem `git pull`. Aufbau 
 
 ## Stand
 
+09.11.2026 (S6): Gegenprüfung von B's fertigen Screens (Angebote, Avo, Kalorien-Kern, B-Einstellungen): Matrix grün
+(2546 Fälle), keine Sheets/Slider, keine P1 im Code; im Simulator antwortet Avo nicht (P1 an B, evtl. Deploy `ai`).
+Wünsche an B in [`s6-stand.md`](s6-stand.md) „Von Teil B“. Als Nächstes: S5; A9/A10 warten auf den Owner.
+
 09.11.2026 (A11b): Qualität Teil 2 fertig: B's Wünsche (status-B 18, A-P1–A-P4, A-K10), Simulator-Rundgang mit
 Funden, keine `CupertinoIcons` mehr in A-Dateien, Fehlerzustand der Entwürfe; Ergebnis in
 [`a11b-stand.md`](a11b-stand.md). Als Nächstes: S6 (Gegenprüfung von B); A9/A10 warten auf den Owner.
@@ -65,7 +69,7 @@ Toolbar-Titel bei AX5 (`1f55b77`); offen: Wortumbruch mitten im Wort in schmalen
 | A11 Qualität, Teil 1 | **erledigt**: Prüfmatrix für alle A-Screens (außer Paywall), `tool/design_check.sh` (A: 0 Funde), Messtests `integration_test/perf/`, status-B 17 (1), 4 Fehler behoben; Simulator nur bis zur Abmeldung; Rest in `a11-stand.md` (→ A11b) | 09.11.2026 | `git log --grep A11` |
 | A11b Qualität, Teil 2 | **erledigt**: status-B 18, A-P1–A-P4, A-K10 (`AvoSubmenu`, Vorschau), Simulator-Rundgang hell/dunkel/AX3 (Rezept „vegan“ mit Eigelb, Datum ohne Jahr behoben), Flows Hinzufügen/Teilen, alle `CupertinoIcons` → `AvoIcons`, Fehlerzustand Entwürfe | 09.11.2026 | `git log --grep A11b` |
 | S5 Bereiche fertig (A) | offen | | |
-| S6 Gegenprüfung (A prüft B) | offen | | |
+| S6 Gegenprüfung (A prüft B) | **erledigt** für B's fertige Screens (Angebote, Avo, Kalorien-Kern, B-Einstellungen); B6b/B7/B8 folgen, wenn sie auf `main` sind; Funde in `s6-stand.md` | 09.11.2026 | `git log --grep S6` |
 
 ## Verträge aus S1 (für B verbindlich)
 
