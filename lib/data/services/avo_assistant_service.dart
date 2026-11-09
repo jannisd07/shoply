@@ -64,6 +64,7 @@ import 'package:shoply/presentation/state/lists_provider.dart';
 import 'package:shoply/presentation/state/nutrition_provider.dart';
 import 'package:shoply/presentation/state/theme_provider.dart';
 import 'package:shoply/presentation/state/trip_history_provider.dart';
+import 'package:shoply/presentation/widgets/design/pro_gate.dart';
 
 export 'package:shoply/data/services/avo_assistant_models.dart';
 
@@ -474,7 +475,7 @@ class AvoAssistantService {
         case 'set_module':
           return await _toolSetModule(args, ref, payloads);
         case 'get_app_info':
-          return _toolAppInfo(args, payloads);
+          return _toolAppInfo(args, ref, payloads);
         case 'show_settings_link':
           return toolSettingsLink(args, payloads);
         case 'search_offers':
@@ -917,6 +918,26 @@ class _AvoStreamFailure implements Exception {
   final int? retryAfterS;
   final int? httpStatus;
 }
+
+/// What Avo Pro holds (A9-4), from [ProFeatures.all] in [language]: title
+/// and one sentence each, as the paywall lists them. Nothing else is Pro
+/// (lists, sharing, recipes, AI categories, nutrition, offers stay free).
+@visibleForTesting
+List<Map<String, String>> avoProContents(String language) => [
+  for (final f in ProFeatures.all)
+    {
+      'title': AppTranslations.get(f.titleKey, language),
+      'detail': AppTranslations.get(f.bodyKey, language),
+    },
+];
+
+/// A store product as Avo may name it: the plan by its period and the
+/// App Store's price, never the store title (which may carry an old name).
+@visibleForTesting
+Map<String, String> avoProPrice(String productId, String price) => {
+  'plan': productId == SubscriptionProducts.yearlyId ? 'yearly' : 'monthly',
+  'price': price,
+};
 
 /// The log line of a failed Avo answer: server code and HTTP status only,
 /// never the question, the history or anything else of the person.

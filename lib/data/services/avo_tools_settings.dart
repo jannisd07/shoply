@@ -263,6 +263,7 @@ extension AvoSettingTools on AvoAssistantService {
   /// server's system prompt.
   Map<String, Object?> _toolAppInfo(
     Map<String, Object?> args,
+    WidgetRef ref,
     List<AvoWidgetPayload> payloads,
   ) {
     final subscription = SubscriptionService.instance;
@@ -285,10 +286,13 @@ extension AvoSettingTools on AvoAssistantService {
         );
         return {
           'plan_name': AppBrand.proName,
+          'contents': avoProContents(ref.read(languageProvider)),
+          'only_these_are_pro': true,
           'offers_are_never_pro': true,
           'prices_from_app_store': [
             for (final p in subscription.products)
-              {'title': p.title, 'price': p.price},
+              if (SubscriptionProducts.allIds.contains(p.id))
+                avoProPrice(p.id, p.price),
           ],
         };
       default:
