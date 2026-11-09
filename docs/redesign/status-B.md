@@ -84,7 +84,13 @@ Nach Dringlichkeit. Prio 1 entscheidet, wann ich die B-Screens bauen kann (die L
       selbst; ein vorausgewählter Markt im Editor wäre schöner.
     - **A-C4:** Nach der Rückkehr von `/stores/region` (Hinweis im Vorschlags-Panel) den Fokus wieder ins Eingabefeld.
     - **Onboarding:** `OffersSetupStep` zeichnet seine Gruppen ohne eigenen Seitenrand, weil `OnboardingStepPage` die
-      Kinder schon 16 pt einrückt.
+      Kinder schon 16 pt einrückt. Beim allerersten Start wartet der Schritt bis zu 3 s auf die App-Flags (bis dahin
+      leer), statt sich zu überspringen.
+    - **Test-Fund:** `test/screens/lists/list_settings_screen_test.dart` „all changes: sections per day“ schlägt
+      zwischen 0 und 2 Uhr fehl (der Eintrag „gestern“ liegt `now − 1 Tag 2 h` zurück, nachts also vorgestern).
+    - **Persönliche Daten:** Das PLZ-Feld in `personal_info_screen.dart` bitte entfernen. Die Region wohnt jetzt in
+      „Region“ (S11, `/settings/offers/region`, Zeile „Region“ in „Preise & Angebote“); das Feld dort speichert ohne
+      die Prüfung von S11 (`isKnownZip`, „Region entfernen“, Ortszeile).
 
 Erledigt von A: 1 Paywall ohne Angebote (`10f30c6`), 3 Ordner `screens/system` und `evals` für B (`4d5e8fc`),
 5 kein App-Remount (`91ecbc8`). Offen: 2 (`showAppBottomSheet` noch behalten), 4 (Kategorisierung umstellen, sobald

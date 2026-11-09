@@ -129,6 +129,8 @@ Riverpod-Provider. `ItemRepository.instance` / `ListRepository.instance` sind au
 - Region: `RegionController` (`region_provider.dart`). „Standort verwenden“ (`locate()`) fragt einmal nach der
   Erlaubnis, ortet mit 3 s Zeitlimit und speichert nichts; gespeichert wird erst mit „Fertig“ (`saveRegion`).
   „Region entfernen“ (`remove()`) setzt `offers_region_removed_v1`, damit der Hintergrund keine Region nachlädt.
+  Die Region liegt pro Gerät, nicht pro Konto (Owner-Frage in OPEN-ISSUES). Koordinaten werden nie gespeichert,
+  nur die Postleitzahl (und der Ort); die letzte Ortung bleibt höchstens 30 min im Speicher (Märkte in der Nähe).
 
 ## Backend (Supabase)
 
