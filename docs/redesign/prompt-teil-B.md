@@ -281,6 +281,9 @@ Screens ab S2.
 
 ## 7. Arbeitsweise mit ultracode (Workflows)
 
+- **Eine Sitzung je Arbeitspaket** (Owner, 09.11.2026, Wochenlimit): Jede Sitzung bearbeitet genau ein Paket, schreibt
+  das Ergebnis in `status-B.md` und `b-sitzungen.md`, pusht, erinnert den Owner an eine neue Sitzung und gibt ihm den
+  Start-Prompt für die nächste. Ablauf, Pakete, Arbeitsweise und Start-Prompt: [`b-sitzungen.md`](b-sitzungen.md).
 - **Workflows lohnen sich hier:**
   - KI-Services parallel umstellen (ein Agent pro Service, gemeinsamer Client zuerst)
   - Tool-Abdeckung von Avo gegen alle App-Funktionen prüfen
@@ -290,7 +293,9 @@ Screens ab S2.
   - unabhängige Reviews vor dem Push großer Pakete (Sicherheit der Edge Function, Recht und Wortlaut bei Angeboten, Barrierefreiheit, Regressionen)
 - **Dosierung:** Höchstens 4–6 Agenten gleichzeitig. Ihr teilt euch einen Claude-Account mit A.
 - **Worktree-Isolation** nur, wenn Agenten parallel Dateien ändern, höchstens 3 gleichzeitig. In Worktrees nur `flutter pub get` und `dart analyze`, nie iOS-Builds. Worktrees danach entfernen.
-- **Speicher:** vor jedem Build `df -h /System/Volumes/Data`. Unter 15 GB keine neuen Worktrees. Unter 10 GB keine Builds, stattdessen um Platz bitten. Lösche nie selbst Dinge außerhalb des Repos.
+- **Speicher:** vor jedem Build `df -h /System/Volumes/Data`. Unter 15 GB keine neuen Worktrees. Unter 10 GB keine Builds. Platz schaffen ist erlaubt (Owner, 09.11.2026), aber nur Regenerierbares (Xcode `iOS
+  DeviceSupport` und `DerivedData`, SwiftPM-Cache, Update-Reste, ungenutzte Simulatoren); nie Downloads, Papierkorb,
+  fremde Projekte oder das macOS-Update.
 
 ## 8. Git-Protokoll und Abstimmung mit Teil A
 

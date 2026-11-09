@@ -4,6 +4,16 @@ Aufbau laut [`arbeitsteilung.md`](arbeitsteilung.md) Abschnitt 5. Teil B schreib
 
 ## Stand
 
+**Regel ab 09.11.2026 (Owner, Wochenlimit): eine Sitzung je Arbeitspaket.** Jede B-Sitzung bearbeitet genau ein Paket,
+aktualisiert am Ende diese Datei und [`b-sitzungen.md`](b-sitzungen.md), pusht, erinnert den Owner an eine neue Sitzung
+und gibt ihm den Start-Prompt für die nächste. Pakete, Stand und „Als Nächstes“ stehen in `b-sitzungen.md`.
+
+2026-11-09: Auf `main` sind B2 Angebote komplett (Slots S1–S8 `d5aff5a`, Screens S9–S16 `e0b7a1b`), B5 Avo-Tab
+(`a3a25e2`) und Antwortkarten aller Werkzeuge mit „Foto an Avo“ (`e3a1023`), B6 Kalorien Tagebuch, Essen eintragen,
+Foto, Barcode, Menge, Manuell, Ziele (`639e04d`), dazu Apple-Anmeldung mit Nonce (`52da1d1`), Anmeldung per Code
+(`2022317`), die Abo-RPC-Sperre (`5314e0f`) und die Simulator-Funde von A (`ccf9895`). Angefangen, nicht auf `main`:
+A8-Wünsche (`feature/b-settings-a8`) und Wochenplan (`feature/b7-plan`).
+
 2026-11-08 abends: **S3 erreicht, Claude ist live.** Secret gesetzt (Owner), alle sechs B-Migrationen angewendet
 (App-Flags, KI-Kontingent, private Essensfotos, Markt pro Liste, Kalorien v2, Wochenplan), `ai` und
 `extract-shopping-list` deployt; beide antworten ohne Anmeldung mit 401. Neue Tabellen für A: `list_store_assignments_b`,
@@ -19,8 +29,8 @@ Widgets/Siri, Evals, Prüfmatrix.
 | S1 Struktur (A) | erledigt (laut status-A) | 07.11.2026 | `ab83f21`…`6112576` |
 | S2 Fundament (A) | S2a erreicht (laut status-A) | 08.11.2026 | `f16e071` |
 | S3 Claude live (B) | erreicht: Secret, 6 Migrationen, Deploy `ai` + `extract-shopping-list` | 08.11.2026 | `0721f38` |
-| S4 Angebote abgesichert (B) | Logik fertig (`26677f3`): keine Ersatz-Keys, Kill-Switch, Wortlaut, nur Listen-Markt; Slots noch Hüllen bis zum Zeichnen mit S2b | 08.11.2026 | `26677f3` |
-| S5 Bereiche fertig (B) | offen | | |
+| S4 Angebote abgesichert (B) | erreicht: Logik (`26677f3`), Slots mit Inhalt (`d5aff5a`), alle Angebots-Screens (`e0b7a1b`) | 09.11.2026 | `e0b7a1b` |
+| S5 Bereiche fertig (B) | in Arbeit: Angebote, Avo-Tab und -Karten, Kalorien-Kern fertig; offen siehe `b-sitzungen.md` | | |
 | S6 Gegenprüfung (B prüft A) | offen | | |
 
 ## Anfragen an Teil A
